@@ -44,6 +44,7 @@ from pyspark.sql.functions import (
     AnalyzeResult,
     OrderingColumn,
     PartitioningColumn,
+    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -273,20 +274,21 @@ class BaseUDTFTestsMixin:
         df = self.spark.sql("SELECT * FROM testUDTF(null)")
         self.assertEqual(df.collect(), [Row(a=None)])
 
+    # These are expected error message substrings to be used in test cases below.
+    tooManyPositionalArguments = "too many positional arguments"
+    missingARequiredArgument = "missing a required argument"
+    multipleValuesForArgument = "multiple values for argument"
+
     def test_udtf_with_wrong_num_input(self):
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a, a + 1
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) missing 1 required positional argument: 'a'"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.missingARequiredArgument):
             TestUDTF().collect()
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.tooManyPositionalArguments):
             TestUDTF(lit(1), lit(2)).collect()
 
     def test_udtf_init_with_additional_args(self):
@@ -298,9 +300,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a,
 
-        with self.assertRaisesRegex(
-            PythonException, r"__init__\(\) missing 1 required positional argument: 'a'"
-        ):
+        with self.assertRaisesRegex(PythonException, r".*constructor has more than one argument.*"):
             TestUDTF(lit(1)).show()
 
     def test_udtf_terminate_with_additional_args(self):
@@ -1581,8 +1581,9 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "Output of `analyze` static method of Python UDTFs expects "
-            "a pyspark.sql.udtf.AnalyzeResult but got: <class 'pyspark.sql.types.StringType'>",
+            "'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult, "
+            "but instead this method returned a value of type: "
+            "<class 'pyspark.sql.types.StringType'>",
         ):
             func().collect()
 
@@ -1621,25 +1622,16 @@ class BaseUDTFTestsMixin:
             def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
                 return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
 
-            def eval(self, a):
+            def eval(self, a, b):
                 yield a, a + 1
 
         func = udtf(TestUDTF)
 
-        with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) missing 1 required positional argument: 'b'"
-        ):
+        with self.assertRaisesRegex(AnalysisException, r"arguments"):
             func(lit(1)).collect()
 
-        with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 2 positional arguments but 3 were given"
-        ):
+        with self.assertRaisesRegex(AnalysisException, r"arguments"):
             func(lit(1), lit(2), lit(3)).collect()
-
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
-        ):
-            func(lit(1), lit(2)).collect()
 
     def test_udtf_with_analyze_taking_keyword_arguments(self):
         @udtf
@@ -1659,12 +1651,12 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf(a=>1)"), expected)
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 0 positional arguments but 1 was given"
+            AnalysisException, BaseUDTFTestsMixin.tooManyPositionalArguments
         ):
             TestUDTF(lit(1)).collect()
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 0 positional arguments but 2 were given"
+            AnalysisException, BaseUDTFTestsMixin.tooManyPositionalArguments
         ):
             self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
 
@@ -1923,14 +1915,10 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
             self.spark.sql("SELECT * FROM test_udtf(a => 10, 'x')").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) got an unexpected keyword argument 'c'"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.missingARequiredArgument):
             self.spark.sql("SELECT * FROM test_udtf(c => 'x')").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) got multiple values for argument 'a'"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.multipleValuesForArgument):
             self.spark.sql("SELECT * FROM test_udtf(10, a => 100)").show()
 
     def test_udtf_with_kwargs(self):
@@ -2465,6 +2453,56 @@ class BaseUDTFTestsMixin:
                 """
             ),
             [Row(count=20, buffer="abc")],
+        )
+
+    def test_udtf_with_skip_rest_of_input_table_exception(self):
+        @udtf(returnType="current: int, total: int")
+        class TestUDTF:
+            def __init__(self):
+                self._current = 0
+                self._total = 0
+
+            def eval(self, input: Row):
+                self._current = input["id"]
+                self._total += 1
+                if self._total >= 4:
+                    raise SkipRestOfInputTableException("Stop at self._total >= 4")
+
+            def terminate(self):
+                yield self._current, self._total
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows after the fourth input row is consumed.
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT current, total
+                FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY id)
+                """
+            ),
+            [Row(current=4, total=4)],
+        )
+
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows for each of the two partitions
+        # separately.
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT current, total
+                FROM test_udtf(TABLE(t) PARTITION BY floor(id / 10) ORDER BY id)
+                ORDER BY ALL
+                """
+            ),
+            [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
         )
 
 

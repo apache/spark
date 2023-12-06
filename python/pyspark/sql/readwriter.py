@@ -19,7 +19,7 @@ from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_C
 
 from py4j.java_gateway import JavaClass, JavaObject
 
-from pyspark import RDD, since
+from pyspark import RDD
 from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
@@ -380,22 +380,59 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        Write a DataFrame into a JSON file and read it back.
+        Example 1: Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
-        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...         [{"age": 100, "name": "Hyukjin"}]
         ...     ).write.mode("overwrite").format("json").save(d)
         ...
         ...     # Read the JSON file as a DataFrame.
         ...     spark.read.json(d).show()
-        +---+------------+
-        |age|        name|
-        +---+------------+
-        |100|Hyukjin Kwon|
-        +---+------------+
+        +---+-------+
+        |age|   name|
+        +---+-------+
+        |100|Hyukjin|
+        +---+-------+
+
+        Example 2: Read JSON from multiple files in a directory
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...         [{"age": 30, "name": "Bob"}]
+        ...     ).write.mode("overwrite").format("json").save(d1)
+        ...
+        ...     # Read the JSON files as a DataFrame.
+        ...     spark.createDataFrame(
+        ...         [{"age": 25, "name": "Alice"}]
+        ...     ).write.mode("overwrite").format("json").save(d2)
+        ...     spark.read.json([d1, d2]).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
+
+        Example 3: Read JSON with a custom schema
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...        [{"age": 30, "name": "Bob"}]
+        ...     ).write.mode("overwrite").format("json").save(d)
+        ...     custom_schema = "name STRING, age INT"
+        ...     spark.read.json(d, schema=custom_schema).show()
+        +----+---+
+        |name|age|
+        +----+---+
+        | Bob| 30|
+        +----+---+
         """
         self._set_opts(
             schema=schema,
@@ -2258,41 +2295,44 @@ class DataFrameWriterV2:
         self._spark = df.sparkSession
         self._jwriter = df._jdf.writeTo(table)
 
-    @since(3.1)
     def using(self, provider: str) -> "DataFrameWriterV2":
         """
         Specifies a provider for the underlying output data source.
         Spark's default catalog supports "parquet", "json", etc.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.using(provider)
         return self
 
-    @since(3.1)
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriterV2":
         """
         Add a write option.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.option(key, to_str(value))
         return self
 
-    @since(3.1)
     def options(self, **options: "OptionalPrimitiveType") -> "DataFrameWriterV2":
         """
         Add write options.
+
+        .. versionadded: 3.1.0
         """
         options = {k: to_str(v) for k, v in options.items()}
         self._jwriter.options(options)
         return self
 
-    @since(3.1)
     def tableProperty(self, property: str, value: str) -> "DataFrameWriterV2":
         """
         Add table property.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.tableProperty(property, value)
         return self
 
-    @since(3.1)
     def partitionedBy(self, col: Column, *cols: Column) -> "DataFrameWriterV2":
         """
         Partition the output table created by `create`, `createOrReplace`, or `replace` using
@@ -2319,33 +2359,35 @@ class DataFrameWriterV2:
         * :py:func:`pyspark.sql.functions.hours`
         * :py:func:`pyspark.sql.functions.bucket`
 
+        .. versionadded: 3.1.0
         """
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
         self._jwriter.partitionedBy(col, cols)
         return self
 
-    @since(3.1)
     def create(self) -> None:
         """
         Create a new table from the contents of the data frame.
 
         The new table's schema, partition layout, properties, and other configuration will be
         based on the configuration set on this writer.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.create()
 
-    @since(3.1)
     def replace(self) -> None:
         """
         Replace an existing table with the contents of the data frame.
 
         The existing table's schema, partition layout, properties, and other configuration will be
         replaced with the contents of the data frame and the configuration set on this writer.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.replace()
 
-    @since(3.1)
     def createOrReplace(self) -> None:
         """
         Create a new table or replace an existing table with the contents of the data frame.
@@ -2354,26 +2396,29 @@ class DataFrameWriterV2:
         and other configuration will be based on the contents of the data frame
         and the configuration set on this writer.
         If the table exists, its configuration and data will be replaced.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.createOrReplace()
 
-    @since(3.1)
     def append(self) -> None:
         """
         Append the contents of the data frame to the output table.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.append()
 
-    @since(3.1)
     def overwrite(self, condition: Column) -> None:
         """
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
+
+        .. versionadded: 3.1.0
         """
         condition = _to_java_column(condition)
         self._jwriter.overwrite(condition)
 
-    @since(3.1)
     def overwritePartitions(self) -> None:
         """
         Overwrite all partition for which the data frame contains at least one row with the contents
@@ -2381,6 +2426,8 @@ class DataFrameWriterV2:
 
         This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
         partitions dynamically depending on the contents of the data frame.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.overwritePartitions()
 

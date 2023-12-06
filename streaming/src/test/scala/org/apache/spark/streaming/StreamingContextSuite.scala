@@ -153,7 +153,7 @@ class StreamingContextSuite
     addInputStream(ssc).foreachRDD { rdd =>
       // Refer to this.appName from inside closure so that this closure refers to
       // the instance of StreamingContextSuite, and is therefore not serializable
-      rdd.count() + appName
+      s"${rdd.count()}$appName"
     }
 
     // Test whether start() fails early when checkpointing is enabled
@@ -268,7 +268,7 @@ class StreamingContextSuite
     ssc.start()
     ssc.stop(stopSparkContext = false)
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(sc.makeRDD(1 to 100).collect().size === 100)
+    assert(sc.makeRDD(1 to 100).collect().length === 100)
     sc.stop()
 
     // Implicitly do not stop SparkContext
@@ -278,7 +278,7 @@ class StreamingContextSuite
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop()
-    assert(sc.makeRDD(1 to 100).collect().size === 100)
+    assert(sc.makeRDD(1 to 100).collect().length === 100)
     sc.stop()
   }
 
@@ -286,7 +286,7 @@ class StreamingContextSuite
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop(stopSparkContext = false)
-    assert(ssc.sc.makeRDD(1 to 100).collect().size === 100)
+    assert(ssc.sc.makeRDD(1 to 100).collect().length === 100)
     ssc.stop(stopSparkContext = true)
     // Check that the SparkContext is actually stopped:
     intercept[Exception] {

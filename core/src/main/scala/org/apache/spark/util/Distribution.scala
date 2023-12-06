@@ -54,7 +54,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
   def showQuantiles(out: PrintStream = System.out): Unit = {
     // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
-    getQuantiles(defaultProbabilities).foreach{q => out.print(q + "\t")}
+    getQuantiles(defaultProbabilities).foreach{q => out.print(s"$q\t")}
     out.println
     // scalastyle:on println
   }
@@ -86,7 +86,7 @@ private[spark] object Distribution {
   def showQuantiles(out: PrintStream = System.out, quantiles: Iterable[Double]): Unit = {
     // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
-    quantiles.foreach{q => out.print(q + "\t")}
+    quantiles.foreach{q => out.print(s"$q\t")}
     out.println
     // scalastyle:on println
   }

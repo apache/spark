@@ -38,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils
   with BeforeAndAfterEach {
@@ -84,7 +85,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         child = child,
         ioschema = defaultIOSchema
       ),
-      rowsDf.collect())
+      rowsDf.collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
@@ -101,7 +102,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = ExceptionInjectingOperator(child),
           ioschema = defaultIOSchema
         ),
-        rowsDf.collect())
+        rowsDf.collect().toImmutableArraySeq)
     }
     assert(e.getMessage().contains("intentional exception"))
     // Before SPARK-25158, uncaughtExceptionHandler will catch IllegalArgumentException
@@ -137,7 +138,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         $"b".cast("string"),
         $"c".cast("string"),
         $"d".cast("string"),
-        $"e".cast("string")).collect())
+        $"e".cast("string")).collect().toImmutableArraySeq)
     }
   }
 
@@ -161,7 +162,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ),
         df.select(
           $"a".cast("string").as("key"),
-          $"b".cast("string").as("value")).collect())
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       checkAnswer(
         df.select($"a", $"b"),
@@ -175,7 +176,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ),
         df.select(
           $"a".cast("string").as("key"),
-          $"b".cast("string").as("value")).collect())
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       checkAnswer(
         df.select($"a"),
@@ -189,7 +190,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ),
         df.select(
           $"a".cast("string").as("key"),
-          lit(null)).collect())
+          lit(null)).collect().toImmutableArraySeq)
     }
   }
 
@@ -243,7 +244,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             ioschema = serde
           ),
           df.select($"a", $"b", $"c", $"d", $"e",
-            $"f", $"g", $"h", $"i", $"j").collect())
+            $"f", $"g", $"h", $"i", $"j").collect().toImmutableArraySeq)
       }
     }
   }
@@ -283,7 +284,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select($"a", $"b", $"c", $"d", $"e").collect())
+        df.select($"a", $"b", $"c", $"d", $"e").collect().toImmutableArraySeq)
     }
   }
 
@@ -305,7 +306,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
               |USING 'cat' AS (a timestamp, b date)
               |FROM v
             """.stripMargin)
-          checkAnswer(query, identity, df.select($"a", $"b").collect())
+          checkAnswer(query, identity, df.select($"a", $"b").collect().toImmutableArraySeq)
         }
       }
     }
@@ -344,7 +345,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string")).collect())
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // input/output with different delimit and show result
       checkAnswer(
@@ -367,7 +368,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             $"b".cast("string"),
             $"c".cast("string"),
             $"d".cast("string"),
-            $"e".cast("string"))).collect())
+            $"e".cast("string"))).collect().toImmutableArraySeq)
     }
   }
 
@@ -394,7 +395,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       df.select(
         $"a".cast("string").as("a"),
         $"b".cast("string").as("b"),
-        lit(null), lit(null)).collect())
+        lit(null), lit(null)).collect().toImmutableArraySeq)
   }
 
   test("SPARK-32106: TRANSFORM with non-existent command/file") {
@@ -485,7 +486,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema
         ),
         df.select($"a", $"b", $"c", $"d", $"e",
-          $"f", $"g").collect())
+          $"f", $"g").collect().toImmutableArraySeq)
     }
   }
 
@@ -517,7 +518,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string")).collect())
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // test '/path/to/script.py' with script not executable
       val e1 = intercept[TestFailedException] {
@@ -537,7 +538,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             $"b".cast("string"),
             $"c".cast("string"),
             $"d".cast("string"),
-            $"e".cast("string")).collect())
+            $"e".cast("string")).collect().toImmutableArraySeq)
       }.getMessage
       // Check with status exit code since in GA test, it may lose detail failed root cause.
       // Different root cause's exitcode is not same.
@@ -562,7 +563,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string")).collect())
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       scriptFilePath.setExecutable(false)
       sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
@@ -583,7 +584,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string")).collect())
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // test `python3 script.py` when file added
       checkAnswer(
@@ -601,7 +602,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           $"b".cast("string"),
           $"c".cast("string"),
           $"d".cast("string"),
-          $"e".cast("string")).collect())
+          $"e".cast("string")).collect().toImmutableArraySeq)
     }
   }
 
@@ -653,7 +654,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select($"ym", $"dt").collect())
+        df.select($"ym", $"dt").collect().toImmutableArraySeq)
     }
   }
 
@@ -668,7 +669,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         child = child,
         ioschema = defaultIOSchema
       ),
-      df.select($"col").collect())
+      df.select($"col").collect().toImmutableArraySeq)
   }
 }
 

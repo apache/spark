@@ -220,23 +220,23 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     // Driver accumulator updates don't belong to this execution should be filtered and no
     // exception will be thrown.
     listener.onOtherEvent(SparkListenerDriverAccumUpdates(0, Seq((999L, 2L))))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 0, 0, createAccumulatorInfos(accumulatorUpdates)),
-      (1L, 0, 0, createAccumulatorInfos(accumulatorUpdates.mapValues(_ * 2).toMap))
+      (1L, 0, 0, createAccumulatorInfos(accumulatorUpdates.transform((_, v) => v * 2)))
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 3).toMap)
+      accumulatorUpdates.transform((_, v) => v * 3))
 
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
@@ -250,7 +250,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     // Ignore the task end for the first attempt
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -258,12 +258,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       stageAttemptId = 0,
       taskType = "",
       reason = null,
-      createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 100).toMap),
+      createTaskInfo(0, 0, accums = accumulatorUpdates.transform((_, v) => v * 100)),
       new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     // Finish two tasks
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -271,7 +271,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       stageAttemptId = 1,
       taskType = "",
       reason = null,
-      createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 2).toMap),
+      createTaskInfo(0, 0, accums = accumulatorUpdates.transform((_, v) => v * 2)),
       new ExecutorMetrics,
       null))
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -279,12 +279,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       stageAttemptId = 1,
       taskType = "",
       reason = null,
-      createTaskInfo(1, 0, accums = accumulatorUpdates.mapValues(_ * 3).toMap),
+      createTaskInfo(1, 0, accums = accumulatorUpdates.transform((_, v) => v * 3)),
       new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 5).toMap)
+      accumulatorUpdates.transform((_, v) => v * 5))
 
     // Summit a new stage
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
@@ -298,7 +298,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 7).toMap)
+      accumulatorUpdates.transform((_, v) => v * 7))
 
     // Finish two tasks
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -306,7 +306,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       stageAttemptId = 0,
       taskType = "",
       reason = null,
-      createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 3).toMap),
+      createTaskInfo(0, 0, accums = accumulatorUpdates.transform((_, v) => v * 3)),
       new ExecutorMetrics,
       null))
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -314,12 +314,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       stageAttemptId = 0,
       taskType = "",
       reason = null,
-      createTaskInfo(1, 0, accums = accumulatorUpdates.mapValues(_ * 3).toMap),
+      createTaskInfo(1, 0, accums = accumulatorUpdates.transform((_, v) => v * 3)),
       new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 11).toMap)
+      accumulatorUpdates.transform((_, v) => v * 11))
 
     assertJobs(statusStore.execution(executionId), running = Seq(0))
 
@@ -334,7 +334,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     assertJobs(statusStore.execution(executionId), completed = Seq(0))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 11).toMap)
+      accumulatorUpdates.transform((_, v) => v * 11))
   }
 
   test("control a plan explain mode in listeners via SQLConf") {

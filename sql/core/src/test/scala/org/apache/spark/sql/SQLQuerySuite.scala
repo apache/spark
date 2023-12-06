@@ -1920,7 +1920,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           dfNoCols.select($"b.*")
         },
         errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
-        parameters = Map("targetString" -> "`b`", "columns" -> ""))
+        parameters = Map("targetString" -> "`b`", "columns" -> ""),
+        context = ExpectedContext(
+          fragment = "$",
+          callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 
@@ -3309,7 +3312,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("create temporary view t2 as select * from values ('val3a', 110L) as t2(t2a, t2b)")
         val df = sql("SELECT min, min from (SELECT (SELECT min(t2b) FROM t2) min " +
           "FROM t1 WHERE t1a = 'val1c')")
-        assert(df.collect().size == 0)
+        assert(df.collect().length == 0)
       }
     }
   }

@@ -21,7 +21,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -31,11 +31,12 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Lo
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, DataSource}
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Converts resolved v2 commands to v1 if the catalog is the session catalog. Since the v2 commands
@@ -240,19 +241,31 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ShowTables(DatabaseInSessionCatalog(db), pattern, output) if conf.useV1Command =>
       ShowTablesCommand(Some(db), pattern, output)
 
-    case ShowTableExtended(
+    case ShowTablesExtended(
         DatabaseInSessionCatalog(db),
         pattern,
-        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
         output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 4)
         output.head.withName("database") +: output.tail
       } else {
         output
       }
-      val tablePartitionSpec = partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec)
-      ShowTablesCommand(Some(db), Some(pattern), newOutput, true, tablePartitionSpec)
+      ShowTablesCommand(Some(db), Some(pattern), newOutput, isExtended = true)
+
+    case ShowTablePartition(
+        ResolvedTable(catalog, _, table: V1Table, _),
+        partitionSpec,
+        output) if isSessionCatalog(catalog) =>
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        output.head.withName("database") +: output.tail
+      } else {
+        output
+      }
+      val tablePartitionSpec = Option(partitionSpec).map(
+        _.asInstanceOf[UnresolvedPartitionSpec].spec)
+      ShowTablesCommand(table.catalogTable.identifier.database,
+        Some(table.catalogTable.identifier.table), newOutput,
+        isExtended = true, tablePartitionSpec)
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
@@ -532,7 +545,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     } else {
       CatalogTableType.MANAGED
     }
-    val (partitionColumns, maybeBucketSpec) = partitioning.convertTransforms
+    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) = partitioning.convertTransforms
 
     CatalogTable(
       identifier = table,
@@ -542,7 +555,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
-      properties = properties,
+      properties = properties ++
+        maybeClusterBySpec.map(
+          clusterBySpec => ClusterBySpec.toProperty(schema, clusterBySpec, conf.resolver)),
       comment = comment)
   }
 
@@ -579,7 +594,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
         if (ident.namespace().length != 1) {
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(ident.namespace())
+          throw QueryCompilationErrors
+            .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
         }
         Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
       case _ => None
@@ -596,23 +612,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private def isV2Provider(provider: String): Boolean = {
-    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
-    // `HiveFileFormat`, when running tests in sql/core.
-    if (DDLUtils.isHiveTable(Some(provider))) return false
-    DataSource.lookupDataSourceV2(provider, conf) match {
-      // TODO(SPARK-28396): Currently file source v2 can't work with tables.
-      case Some(_: FileDataSourceV2) => false
-      case Some(_) => true
-      case _ => false
-    }
+    DataSourceV2Utils.getTableProvider(provider, conf).isDefined
   }
 
   private object DatabaseInSessionCatalog {
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
-      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
-      case ResolvedNamespace(_, Seq()) =>
+      case ResolvedNamespace(catalog, _, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq(), _) =>
         throw QueryCompilationErrors.databaseFromV1SessionCatalogNotSpecifiedError()
-      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
+      case ResolvedNamespace(_, Seq(dbName), _) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
@@ -622,8 +630,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   private object DatabaseNameInSessionCatalog {
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
-      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
-      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
+      case ResolvedNamespace(catalog, _, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq(dbName), _) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.requiresSinglePartNamespaceError(resolved.namespace)

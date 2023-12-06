@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
+import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
@@ -57,6 +57,8 @@ private[spark] object PythonEvalType {
   val SQL_COGROUPED_MAP_PANDAS_UDF = 206
   val SQL_MAP_ARROW_ITER_UDF = 207
   val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
+  val SQL_GROUPED_MAP_ARROW_UDF = 209
+  val SQL_COGROUPED_MAP_ARROW_UDF = 210
 
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
@@ -74,6 +76,8 @@ private[spark] object PythonEvalType {
     case SQL_COGROUPED_MAP_PANDAS_UDF => "SQL_COGROUPED_MAP_PANDAS_UDF"
     case SQL_MAP_ARROW_ITER_UDF => "SQL_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
+    case SQL_GROUPED_MAP_ARROW_UDF => "SQL_GROUPED_MAP_ARROW_UDF"
+    case SQL_COGROUPED_MAP_ARROW_UDF => "SQL_COGROUPED_MAP_ARROW_UDF"
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
     case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
   }
@@ -109,7 +113,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val timelyFlushTimeoutNanos: Long = 0
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
-  private val faultHandlerEnabled = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
+  protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val simplifiedTraceback: Boolean = false
 
   // All the Python functions should have the same exec, version and envvars.
@@ -378,7 +382,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         resources.foreach { case (k, v) =>
           PythonRDD.writeUTF(k, dataOut)
           PythonRDD.writeUTF(v.name, dataOut)
-          dataOut.writeInt(v.addresses.size)
+          dataOut.writeInt(v.addresses.length)
           v.addresses.foreach { case addr =>
             PythonRDD.writeUTF(addr, dataOut)
           }
@@ -542,12 +546,19 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         logError("This may have been caused by a prior exception:", writer.exception.get)
         throw writer.exception.get
 
-      case eof: EOFException if faultHandlerEnabled && pid.isDefined &&
+      case e: IOException if faultHandlerEnabled && pid.isDefined &&
           JavaFiles.exists(BasePythonRunner.faultHandlerLogPath(pid.get)) =>
         val path = BasePythonRunner.faultHandlerLogPath(pid.get)
         val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
         JavaFiles.deleteIfExists(path)
-        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", eof)
+        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
+
+      case eof: EOFException if !faultHandlerEnabled =>
+        throw new SparkException(
+          s"Python worker exited unexpectedly (crashed). " +
+            "Consider setting 'spark.sql.execution.pyspark.udf.faulthandler.enabled' or" +
+            s"'${Python.PYTHON_WORKER_FAULTHANLDER_ENABLED.key}' configuration to 'true' for" +
+            "the better Python traceback.", eof)
 
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)

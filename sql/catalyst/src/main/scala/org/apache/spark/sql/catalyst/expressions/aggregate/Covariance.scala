@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Compute the covariance between two expressions.
@@ -48,7 +49,7 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
 
-  override val initialValues: Seq[Expression] = Array.fill(4)(Literal(0.0))
+  override val initialValues: Seq[Expression] = Array.fill(4)(Literal(0.0)).toImmutableArraySeq
 
   override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 
@@ -156,7 +157,7 @@ case class PandasCovar(
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === ddof, divideByZeroEvalResult, ck / (n - ddof)))
+      If(n === ddof.toDouble, divideByZeroEvalResult, ck / (n - ddof.toDouble)))
   }
   override def prettyName: String = "pandas_covar"
 

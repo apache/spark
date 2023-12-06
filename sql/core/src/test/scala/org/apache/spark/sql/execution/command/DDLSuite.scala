@@ -1437,7 +1437,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           "tableName" -> "spark_catalog.default.partitionedtable",
           "specifiedPartCols" -> "", "existingPartCols" -> "a, b")
       )
-      assert(sql("select * from partitionedTable").collect().size == 1)
+      assert(sql("select * from partitionedTable").collect().length == 1)
       // Inserts new data successfully when partition columns are correctly specified in
       // partitionBy(...).
       // TODO: Right now, partition columns are always treated in a case-insensitive way.
@@ -2184,12 +2184,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   test("Refresh table before drop database cascade") {
     withTempDir { tempDir =>
-      val file1 = new File(tempDir + "/first.csv")
+      val file1 = new File(s"$tempDir/first.csv")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("first")
       }
 
-      val file2 = new File(tempDir + "/second.csv")
+      val file2 = new File(s"$tempDir/second.csv")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("second")
       }

@@ -37,7 +37,6 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   with Matchers {
   import TestUtils.{assertNotSpilled, assertSpilled}
 
-  private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
   private def createCombiner[T](i: T) = ArrayBuffer[T](i)
   private def mergeValue[T](buffer: ArrayBuffer[T], i: T): ArrayBuffer[T] = buffer += i
   private def mergeCombiners[T](buf1: ArrayBuffer[T], buf2: ArrayBuffer[T]): ArrayBuffer[T] =
@@ -224,7 +223,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     // Keep track of which compression codec we're using to report in test failure messages
     var lastCompressionCodec: Option[String] = None
     try {
-      allCompressionCodecs.foreach { c =>
+      CompressionCodec.ALL_COMPRESSION_CODECS.foreach { c =>
         lastCompressionCodec = Some(c)
         testSimpleSpilling(Some(c), encrypt)
       }
@@ -453,7 +452,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val first50Keys = for ( _ <- 0 until 50) yield {
       val (k, vs) = it.next()
       val sortedVs = vs.sorted
-      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      assert(sortedVs == (0 until 10).map(10 * k + _))
       k
     }
     assert(map.numSpills == 0)
@@ -474,7 +473,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val next50Keys = for ( _ <- 0 until 50) yield {
       val (k, vs) = it.next()
       val sortedVs = vs.sorted
-      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      assert(sortedVs == (0 until 10).map(10 * k + _))
       k
     }
     assert(!it.hasNext)
@@ -506,7 +505,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val keys = it.map{
       case (k, vs) =>
         val sortedVs = vs.sorted
-        assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+        assert(sortedVs == (0 until 10).map(10 * k + _))
         k
     }
     .toList

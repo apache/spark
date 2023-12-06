@@ -71,7 +71,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   def consumer(): Consumer[K, V] = this.synchronized {
     if (null == kc) {
       kc = consumerStrategy.onStart(
-        currentOffsets.mapValues(l => java.lang.Long.valueOf(l)).toMap.asJava)
+        currentOffsets.transform((_, l) => java.lang.Long.valueOf(l)).asJava)
     }
     kc
   }
@@ -146,7 +146,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
           val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
           val backpressureRate = lag / totalLag.toDouble * rate
           tp -> (if (maxRateLimitPerPartition > 0) {
-            Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
+            Math.min(backpressureRate, maxRateLimitPerPartition.toDouble)} else backpressureRate)
         }
       case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp).toDouble }
     }

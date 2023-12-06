@@ -30,6 +30,7 @@ import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
@@ -41,12 +42,12 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
   test("basic pipe") {
     assume(TestUtils.testCommandAvailable("cat"))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
 
     val piped = nums.pipe(Seq("cat"))
 
     val c = piped.collect()
-    assert(c.size === 4)
+    assert(c.length === 4)
     assert(c(0) === "1")
     assert(c(1) === "2")
     assert(c(2) === "3")
@@ -55,12 +56,12 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
   test("basic pipe with tokenization") {
     assume(TestUtils.testCommandAvailable("wc"))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
 
     // verify that both RDD.pipe(command: String) and RDD.pipe(command: String, env) work good
     for (piped <- Seq(nums.pipe("wc -l"), nums.pipe("wc -l", Map[String, String]()))) {
       val c = piped.collect()
-      assert(c.size === 2)
+      assert(c.length === 2)
       assert(c(0).trim === "2")
       assert(c(1).trim === "2")
     }
@@ -69,7 +70,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
   test("failure in iterating over pipe input") {
     assume(TestUtils.testCommandAvailable("cat"))
     val nums =
-      sc.makeRDD(Array(1, 2, 3, 4), 2)
+      sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
         .mapPartitionsWithIndex((index, iterator) => {
         new Iterator[Int] {
           def hasNext = true
@@ -88,7 +89,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
   test("stdin writer thread should be exited when task is finished") {
     assume(TestUtils.testCommandAvailable("cat"))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 1).map { x =>
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 1).map { x =>
       val obj = new Object()
       obj.synchronized {
         obj.wait() // make the thread waits here.
@@ -116,7 +117,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
   test("advanced pipe") {
     assume(TestUtils.testCommandAvailable("cat"))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     val bl = sc.broadcast(List("0"))
 
     val piped = nums.pipe(Seq("cat"),
@@ -124,11 +125,11 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
       (f: String => Unit) => {
         bl.value.foreach(f); f("\u0001")
       },
-      (i: Int, f: String => Unit) => f(i + "_"))
+      (i: Int, f: String => Unit) => f(s"${i}_"))
 
     val c = piped.collect()
 
-    assert(c.size === 8)
+    assert(c.length === 8)
     assert(c(0) === "0")
     assert(c(1) === "\u0001")
     assert(c(2) === "1_")
@@ -150,7 +151,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
             f(e + "_")
           }
         }).collect()
-    assert(d.size === 8)
+    assert(d.length === 8)
     assert(d(0) === "0")
     assert(d(1) === "\u0001")
     assert(d(2) === "b\t2_")
@@ -178,7 +179,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
   test("pipe with env variable") {
     val executable = envCommand.split("\\s+", 2)(0)
     assume(TestUtils.testCommandAvailable(executable))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     val piped = nums.pipe(s"$envCommand MY_TEST_ENV", Map("MY_TEST_ENV" -> "LALALA"))
     val c = piped.collect()
     assert(c.length === 2)
@@ -190,7 +191,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
   test("pipe with process which cannot be launched due to bad command") {
     assume(!TestUtils.testCommandAvailable("some_nonexistent_command"))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     val command = Seq("some_nonexistent_command")
     val piped = nums.pipe(command)
     val exception = intercept[SparkException] {
@@ -201,7 +202,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
   test("pipe with process which is launched but fails with non-zero exit status") {
     assume(TestUtils.testCommandAvailable("cat"))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     val command = Seq("cat", "nonexistent_file")
     val piped = nums.pipe(command)
     val exception = intercept[SparkException] {
@@ -212,10 +213,10 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
 
   test("basic pipe with separate working directory") {
     assume(TestUtils.testCommandAvailable("cat"))
-    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2)
     val piped = nums.pipe(Seq("cat"), separateWorkingDir = true)
     val c = piped.collect()
-    assert(c.size === 4)
+    assert(c.length === 4)
     assert(c(0) === "1")
     assert(c(1) === "2")
     assert(c(2) === "3")

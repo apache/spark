@@ -882,7 +882,7 @@ class MultiStatefulOperatorsSuite
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get
     val stateOperators = progressWithData.stateOperators
-    assert(stateOperators.size === numTotalRows.size)
+    assert(stateOperators.length === numTotalRows.size)
     assert(stateOperators.map(_.numRowsTotal).toSeq === numTotalRows)
     true
   }
@@ -897,7 +897,7 @@ class MultiStatefulOperatorsSuite
       p.numInputRows == 0
     }.lastOption.get
     val stateOperators = progressWithData.stateOperators
-    assert(stateOperators.size === numRowsDroppedByWatermark.size)
+    assert(stateOperators.length === numRowsDroppedByWatermark.size)
     assert(stateOperators.map(_.numRowsDroppedByWatermark).toSeq === numRowsDroppedByWatermark)
     true
   }

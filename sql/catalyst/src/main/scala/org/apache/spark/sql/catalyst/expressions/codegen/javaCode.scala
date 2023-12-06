@@ -176,7 +176,7 @@ trait Block extends TreeNode[Block] with JavaCode {
 
     @inline def transform(e: ExprValue): ExprValue = {
       val newE = f lift e
-      if (!newE.isDefined || newE.get.equals(e)) {
+      if (newE.isEmpty || newE.get.equals(e)) {
         e
       } else {
         changed = true
@@ -230,7 +230,7 @@ object Block {
      * the code parts, and will not treat escapes in the input arguments.
      */
     def code(args: Any*): Block = {
-      sc.checkLengths(args)
+      StringContext.checkLengths(args, sc.parts)
       if (sc.parts.length == 0) {
         EmptyBlock
       } else {
@@ -255,7 +255,7 @@ object Block {
     val inputs = args.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
 
-    buf.append(StringContext.treatEscapes(strings.next()))
+    buf.append(StringContext.processEscapes(strings.next()))
     while (strings.hasNext) {
       val input = inputs.next()
       input match {
@@ -267,7 +267,7 @@ object Block {
         case _ =>
           buf.append(input)
       }
-      buf.append(StringContext.treatEscapes(strings.next()))
+      buf.append(StringContext.processEscapes(strings.next()))
     }
     codeParts += buf.toString
 

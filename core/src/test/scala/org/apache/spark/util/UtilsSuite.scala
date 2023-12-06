@@ -344,7 +344,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     }
     IOUtils.write(content, outputStream)
     outputStream.close()
-    content.size
+    content.length
   }
 
   private val workerConf = new SparkConf()
@@ -352,7 +352,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   def testOffsetBytes(isCompressed: Boolean): Unit = {
     withTempDir { tmpDir2 =>
       val suffix = getSuffix(isCompressed)
-      val f1Path = tmpDir2 + "/f1" + suffix
+      val f1Path = s"$tmpDir2/f1$suffix"
       writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
       val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 

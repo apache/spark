@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
+import scala.collection.immutable
 import scala.collection.mutable.ArrayBuilder
 import scala.util.Random
 
@@ -52,7 +53,8 @@ class VectorsSuite extends SparkMLFunSuite {
   }
 
   test("sparse vector construction with unordered elements") {
-    val vec = Vectors.sparse(n, indices.zip(values).reverse).asInstanceOf[SparseVector]
+    val vec = Vectors.sparse(n, immutable.ArraySeq.unsafeWrapArray(indices.zip(values).reverse))
+      .asInstanceOf[SparseVector]
     assert(vec.size === n)
     assert(vec.indices === indices)
     assert(vec.values === values)
@@ -392,7 +394,7 @@ class VectorsSuite extends SparkMLFunSuite {
 
   test("sparse vector only support non-negative length") {
     val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
-    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    val v2 = Vectors.sparse(0, immutable.ArraySeq.unsafeWrapArray(Array.empty[(Int, Double)]))
     assert(v1.size === 0)
     assert(v2.size === 0)
 
@@ -400,7 +402,7 @@ class VectorsSuite extends SparkMLFunSuite {
       Vectors.sparse(-1, Array(1), Array(2.0))
     }
     intercept[IllegalArgumentException] {
-      Vectors.sparse(-1, Array((1, 2.0)))
+      Vectors.sparse(-1, immutable.ArraySeq.unsafeWrapArray(Array((1, 2.0))))
     }
   }
 

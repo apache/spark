@@ -809,7 +809,7 @@ private[spark] class TaskSetManager(
 
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     if (speculationEnabled) {
-      successfulTaskDurations.insert(info.duration)
+      successfulTaskDurations.insert(info.duration.toDouble)
       taskProcessRateCalculator.foreach(_.updateAvgTaskProcessRate(tid, result))
     }
     removeRunningTask(tid)
@@ -1196,7 +1196,7 @@ private[spark] class TaskSetManager(
     val timeMs = clock.getTimeMillis()
     if (numSuccessfulTasks >= minFinishedForSpeculation) {
       val medianDuration = successfulTaskDurations.percentile()
-      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
+      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation.toDouble)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
@@ -1204,7 +1204,8 @@ private[spark] class TaskSetManager(
     } else if (isSpeculationThresholdSpecified && speculationTasksLessEqToSlots) {
       val threshold = speculationTaskDurationThresOpt.get
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
-      foundTasks = checkAndSubmitSpeculatableTasks(timeMs, threshold, customizedThreshold = true)
+      foundTasks = checkAndSubmitSpeculatableTasks(
+        timeMs, threshold.toDouble, customizedThreshold = true)
     }
     // avoid more warning logs.
     if (foundTasks) {

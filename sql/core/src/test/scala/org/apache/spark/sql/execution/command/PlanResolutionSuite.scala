@@ -233,7 +233,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
     val analyzer = new Analyzer(catalogManager) {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
-        new ResolveSessionCatalog(catalogManager))
+        new ResolveSessionCatalog(this.catalogManager))
     }
     // We don't check analysis here by default, as we expect the plan to be unresolved
     // such as `CreateTable`.
@@ -1275,7 +1275,7 @@ class PlanResolutionSuite extends AnalysisTest {
       },
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       parameters = Map(
-        "tableName" -> "`tab2`",
+        "tableName" -> "`testcat`.`tab2`",
         "tableColumns" -> "`i`, `x`",
         "dataColumns" -> "`col1`")
     )

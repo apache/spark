@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
@@ -321,19 +322,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
         ignore(s"${testCase.name} is skipped because " +
           s"[$pythonExec] and/or pyspark were not available.") {
           /* Do nothing */
         }
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
         }
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
@@ -401,7 +402,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
       queries.toSeq
     } else {
-      splitWithSemicolon(allCode).toSeq
+      splitWithSemicolon(allCode.toImmutableArraySeq).toSeq
     }
 
     // List of SQL queries to run
@@ -416,7 +417,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     })
 
     if (regenerateGoldenFiles) {
-      runQueries(queries, testCase, settings)
+      runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
       // A config dimension has multiple config sets, and a config set has multiple configs.
       // - config dim:     Seq[Seq[(String, String)]]
@@ -425,7 +426,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // We need to do cartesian product for all the config dimensions, to get a list of
       // config sets, and run the query once for each config set.
       val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
-      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).mapValues { lines =>
+      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).transform { (_, lines) =>
         lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
           val (conf, value) = kv.span(_ != '=')
           conf.trim -> value.substring(1).trim
@@ -438,7 +439,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
       configSets.foreach { configSet =>
         try {
-          runQueries(queries, testCase, settings ++ configSet)
+          runQueries(queries, testCase, (settings ++ configSet).toImmutableArraySeq)
         } catch {
           case e: Throwable =>
             val configs = configSet.map {
@@ -453,7 +454,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   def hasNoDuplicateColumns(schema: String): Boolean = {
     val columnAndTypes = schema.replaceFirst("^struct<", "").stripSuffix(">").split(",")
-    columnAndTypes.size == columnAndTypes.distinct.size
+    columnAndTypes.size == columnAndTypes.distinct.length
   }
 
   def expandCTEQueryAndCompareResult(
@@ -503,15 +504,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val localSparkSession = spark.newSession()
 
     testCase match {
-      case udfTestCase: UDFTest =>
+      case udfTestCase: SQLQueryTestSuite#UDFTest =>
         registerTestUDF(udfTestCase.udf, localSparkSession)
-      case udtfTestCase: UDTFSetTest =>
+      case udtfTestCase: SQLQueryTestSuite#UDTFSetTest =>
         registerTestUDTFs(udtfTestCase.udtfSet, localSparkSession)
       case _ =>
     }
 
     testCase match {
-      case _: PgSQLTest =>
+      case _: SQLQueryTestSuite#PgSQLTest =>
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
@@ -519,9 +520,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
-      case _: AnsiTest =>
+      case _: SQLQueryTestSuite#AnsiTest =>
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
-      case _: TimestampNTZTest =>
+      case _: SQLQueryTestSuite#TimestampNTZTest =>
         localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
           TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
@@ -581,19 +582,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // See also SPARK-29127. It is difficult to see the version information in the failed test
     // cases so the version information related to Python was also added.
     val clue = testCase match {
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && shouldTestPythonUDFs =>
         s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
-      case udfTestCase: UDFTest
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
-      case udtfTestCase: UDTFSetTest
+      case udtfTestCase: SQLQueryTestSuite#UDTFSetTest
           if udtfTestCase.udtfSet.udtfs.forall(_.isInstanceOf[TestPythonUDTF]) &&
             shouldTestPythonUDFs =>
         s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
@@ -644,25 +645,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udtf")) {
-        Seq(TestUDTFSet(Seq(
-          TestPythonUDTF("udtf"),
-          TestPythonUDTFCountSumLast,
-          TestPythonUDTFLastString,
-          TestPythonUDTFWithSinglePartition,
-          TestPythonUDTFPartitionBy,
-          InvalidPartitionByAndWithSinglePartition,
-          InvalidOrderByWithoutPartitionBy,
-          InvalidEvalReturnsNoneToNonNullableColumnScalarType,
-          InvalidEvalReturnsNoneToNonNullableColumnArrayType,
-          InvalidEvalReturnsNoneToNonNullableColumnArrayElementType,
-          InvalidEvalReturnsNoneToNonNullableColumnStructType,
-          InvalidEvalReturnsNoneToNonNullableColumnMapType,
-          InvalidTerminateReturnsNoneToNonNullableColumnScalarType,
-          InvalidTerminateReturnsNoneToNonNullableColumnArrayType,
-          InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
-          InvalidTerminateReturnsNoneToNonNullableColumnStructType,
-          InvalidTerminateReturnsNoneToNonNullableColumnMapType
-        ))).map { udtfSet =>
+        Seq(TestUDTFSet(AllTestUDTFs)).map { udtfSet =>
           UDTFSetTestCase(
             s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)
         }
@@ -700,7 +683,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    filteredFiles ++ dirs.flatMap(listFilesRecursively)
+    (filteredFiles ++ dirs.flatMap(listFilesRecursively)).toImmutableArraySeq
   }
 
   /** Load built-in test tables into the SparkSession. */

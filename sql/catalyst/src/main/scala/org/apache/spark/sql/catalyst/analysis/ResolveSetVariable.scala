@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, SetVaria
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.types.IntegerType
 

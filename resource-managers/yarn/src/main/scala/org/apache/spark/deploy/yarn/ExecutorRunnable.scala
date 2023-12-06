@@ -153,7 +153,7 @@ private[yarn] class ExecutorRunnable(
     val javaOpts = ListBuffer[String]()
 
     // Set the JVM memory
-    val executorMemoryString = executorMemory + "m"
+    val executorMemoryString = s"${executorMemory}m"
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
@@ -205,7 +205,7 @@ private[yarn] class ExecutorRunnable(
     val env = new HashMap[String, String]()
     Client.populateClasspath(null, conf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
-    System.getenv().asScala.view.filterKeys(_.startsWith("SPARK"))
+    System.getenv().asScala.filter { case (k, _) => k.startsWith("SPARK") }
       .foreach { case (k, v) => env(k) = v }
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>

@@ -18,7 +18,7 @@
 // scalastyle:off classforname
 package org.apache.spark.tools
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.reflect.runtime.{universe => unv}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
@@ -100,8 +100,10 @@ object GenerateMIMAIgnore {
    */
   def getInnerFunctions(classSymbol: unv.ClassSymbol): Seq[String] = {
     try {
-      Class.forName(classSymbol.fullName, false, classLoader).getMethods.map(_.getName)
+      val ret = Class.forName(classSymbol.fullName, false, classLoader)
+        .getMethods.map(_.getName)
         .filter(_.contains("$$")).map(classSymbol.fullName + "." + _)
+      immutable.ArraySeq.unsafeWrapArray(ret)
     } catch {
       case t: Throwable =>
         // scalastyle:off println

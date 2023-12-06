@@ -342,7 +342,7 @@ abstract class SparkFunSuite
       sqlState: Option[String] = None,
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
-      queryContext: Array[QueryContext] = Array.empty): Unit = {
+      queryContext: Array[ExpectedContext] = Array.empty): Unit = {
     assert(exception.getErrorClass === errorClass)
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
@@ -364,16 +364,25 @@ abstract class SparkFunSuite
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
     actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
-      assert(actual.objectType() === expected.objectType(),
-        "Invalid objectType of a query context Actual:" + actual.toString)
-      assert(actual.objectName() === expected.objectName(),
-        "Invalid objectName of a query context. Actual:" + actual.toString)
-      assert(actual.startIndex() === expected.startIndex(),
-        "Invalid startIndex of a query context. Actual:" + actual.toString)
-      assert(actual.stopIndex() === expected.stopIndex(),
-        "Invalid stopIndex of a query context. Actual:" + actual.toString)
-      assert(actual.fragment() === expected.fragment(),
-        "Invalid fragment of a query context. Actual:" + actual.toString)
+      assert(actual.contextType() === expected.contextType,
+        "Invalid contextType of a query context Actual:" + actual.toString)
+      if (actual.contextType() == QueryContextType.SQL) {
+        assert(actual.objectType() === expected.objectType,
+          "Invalid objectType of a query context Actual:" + actual.toString)
+        assert(actual.objectName() === expected.objectName,
+          "Invalid objectName of a query context. Actual:" + actual.toString)
+        assert(actual.startIndex() === expected.startIndex,
+          "Invalid startIndex of a query context. Actual:" + actual.toString)
+        assert(actual.stopIndex() === expected.stopIndex,
+          "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        assert(actual.fragment() === expected.fragment,
+          "Invalid fragment of a query context. Actual:" + actual.toString)
+      } else if (actual.contextType() == QueryContextType.DataFrame) {
+        assert(actual.fragment() === expected.fragment,
+          "Invalid code fragment of a query context. Actual:" + actual.toString)
+        assert(actual.callSite().matches(expected.callSitePattern),
+          "Invalid callSite of a query context. Actual:" + actual.toString)
+      }
     }
   }
 
@@ -389,21 +398,21 @@ abstract class SparkFunSuite
       errorClass: String,
       sqlState: String,
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, Some(sqlState), parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, None, parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
       sqlState: String,
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, None, Map.empty, false, Array(context))
 
   protected def checkError(
@@ -411,7 +420,7 @@ abstract class SparkFunSuite
       errorClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, sqlState, parameters,
       false, Array(context))
 
@@ -426,7 +435,7 @@ abstract class SparkFunSuite
       errorClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
-      context: QueryContext): Unit =
+      context: ExpectedContext): Unit =
     checkError(exception, errorClass, sqlState, parameters,
       matchPVals = true, Array(context))
 
@@ -453,15 +462,32 @@ abstract class SparkFunSuite
       parameters = Map("relationName" -> tableName))
 
   case class ExpectedContext(
+      contextType: QueryContextType,
       objectType: String,
       objectName: String,
       startIndex: Int,
       stopIndex: Int,
-      fragment: String) extends QueryContext
+      fragment: String,
+      callSitePattern: String
+  )
 
   object ExpectedContext {
     def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
       ExpectedContext("", "", start, stop, fragment)
+    }
+
+    def apply(
+        objectType: String,
+        objectName: String,
+        startIndex: Int,
+        stopIndex: Int,
+        fragment: String): ExpectedContext = {
+      new ExpectedContext(QueryContextType.SQL, objectType, objectName, startIndex, stopIndex,
+        fragment, "")
+    }
+
+    def apply(fragment: String, callSitePattern: String): ExpectedContext = {
+      new ExpectedContext(QueryContextType.DataFrame, "", "", -1, -1, fragment, callSitePattern)
     }
   }
 

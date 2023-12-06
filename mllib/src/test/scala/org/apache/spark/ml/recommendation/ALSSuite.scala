@@ -43,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
@@ -766,7 +767,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   }
 
   test("SPARK-18268: ALS with empty RDD should fail with better message") {
-    val ratings = sc.parallelize(Array.empty[Rating[Int]])
+    val ratings = sc.parallelize(Array.empty[Rating[Int]].toImmutableArraySeq)
     intercept[IllegalArgumentException] {
       ALS.train(ratings)
     }
@@ -855,7 +856,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
@@ -876,7 +877,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = getALSModel.recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
@@ -898,7 +899,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForUserSubset(userSubset, k)
       assert(topItems.count() == numUsersSubset)
       assert(topItems.columns.contains("user"))
@@ -920,7 +921,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = model.recommendForItemSubset(itemSubset, k)
       assert(topUsers.count() == numItemsSubset)
       assert(topUsers.columns.contains("item"))

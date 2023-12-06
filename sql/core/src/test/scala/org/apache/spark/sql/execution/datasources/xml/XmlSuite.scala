@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.xml
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
+import java.time.Instant
 import java.util.TimeZone
 
 import scala.collection.mutable
@@ -31,15 +32,17 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Encoders, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class XmlSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -47,9 +50,6 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   private val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
-
-  protected override def sparkConf = super.sparkConf
-    .set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "UTC")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -77,7 +77,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   test("DSL test with xml having unbalanced datatypes") {
     val results = spark.read
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .option("multiLine", "true")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
 
@@ -440,7 +440,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(getLines(xmlFile).count(_.contains("<foo>")) === 2)
   }
 
-  test("DSL save with nullValue and treatEmptyValuesAsNulls") {
+  test("DSL save with nullValue") {
     val copyFilePath = getEmptyTempDir().resolve("books-copy.xml")
 
     val books = spark.read
@@ -452,7 +452,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
     val booksCopy = spark.read
       .option("rowTag", "book")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(copyFilePath.toString)
 
     assert(booksCopy.count() === books.count())
@@ -741,7 +741,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       field("age", IntegerType))
     val results = spark.read.schema(schema)
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", true)
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "null-numbers.xml"))
       .select("name", "age")
       .collect()
@@ -950,10 +950,10 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       "requirement failed: 'valueTag' and 'attributePrefix' options should not be the same.")
   }
 
-  test("nullValue and treatEmptyValuesAsNulls test") {
+  test("nullValue test") {
     val resultsOne = spark.read
       .option("rowTag", "ROW")
-      .option("treatEmptyValuesAsNulls", "true")
+      .option("nullValue", "")
       .xml(getTestResourcePath(resDir + "gps-empty-field.xml"))
     assert(resultsOne.selectExpr("extensions.TrackPointExtension").head().getStruct(0) !== null)
     assert(resultsOne.selectExpr("extensions.TrackPointExtension")
@@ -1287,6 +1287,31 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(result.select("decoded").head().get(0) === Row(null, null))
   }
 
+  test("from_xml to to_xml round trip") {
+    val xmlData = Seq(
+      "<person><age>100</age><name>Alice</name></person>",
+      "<person><age>100</age><name>Alice</name></person>",
+      "<person><age>100</age><name>Alice</name></person>")
+    val df = xmlData.toDF("xmlString")
+    val xmlSchema = schema_of_xml(xmlData.head)
+
+    val df2 = df.withColumn("parsed",
+      from_xml(df.col("xmlString"), xmlSchema))
+    val df3 = df2.select(to_xml($"parsed", Map("rowTag" -> "person").asJava))
+    val xmlResult = df3.collect().map(_.getString(0).replaceAll("\\s+", ""))
+    assert(xmlData.sortBy(_.toString) === xmlResult.sortBy(_.toString))
+  }
+
+  test("to_xml to from_xml round trip") {
+    val df = spark.read.option("rowTag", "ROW").xml(getTestResourcePath(resDir + "cars.xml"))
+    val df1 = df.select(to_xml(struct("*")).as("xmlString"))
+    val schema = schema_of_xml(df1.select("xmlString").head().getString(0))
+    val df2 = df1.select(from_xml($"xmlString", schema).as("fromXML"))
+    val df3 = df2.select(col("fromXML.*"))
+    assert(df3.collect().length === 3)
+    checkAnswer(df3, df)
+  }
+
   test("decimals with scale greater than precision") {
     val spark = this.spark;
     import spark.implicits._
@@ -1486,7 +1511,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val expectedSchema =
       buildSchema(field("author"), field("date", TimestampType), field("date2", DateType))
     assert(df.schema === expectedSchema)
-    assert(df.collect().head.getAs[Timestamp](1).toString === "2021-01-31 16:00:00.0")
+    assert(df.collect().head.getAs[Timestamp](1) === Timestamp.valueOf("2021-02-01 00:00:00"))
     assert(df.collect().head.getAs[Date](2).toString === "2021-02-01")
   }
 
@@ -1531,7 +1556,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val res = df.collect()
     assert(res.head.get(1) === "2011-12-03T10:15:30Z")
     assert(res.head.get(2) === "12-03-2011 10:15:30 PST")
-    assert(res.head.getAs[Timestamp](3).getTime === 1322892930000L)
+    assert(res.head.getAs[Timestamp](3) === Timestamp.valueOf("2011-12-03 06:15:30"))
   }
 
   test("Test custom timestampFormat with offset") {
@@ -1759,17 +1784,21 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   test("Test XML Options Error Messages") {
     def checkXmlOptionErrorMessage(
       parameters: Map[String, String] = Map.empty,
-      msg: String): Unit = {
-      val e = intercept[IllegalArgumentException] {
+      msg: String,
+      exception: Throwable = new IllegalArgumentException().getCause): Unit = {
+      val e = intercept[Exception] {
         spark.read
           .options(parameters)
           .xml(getTestResourcePath(resDir + "ages.xml"))
           .collect()
       }
+      assert(e.getCause === exception)
       assert(e.getMessage.contains(msg))
     }
 
-    checkXmlOptionErrorMessage(Map.empty, "'rowTag' option is required.")
+    checkXmlOptionErrorMessage(Map.empty,
+      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading files in XML format.",
+      QueryCompilationErrors.xmlRowTagRequiredError(XmlOptions.ROW_TAG).getCause)
     checkXmlOptionErrorMessage(Map("rowTag" -> ""),
       "'rowTag' option should not be an empty string.")
     checkXmlOptionErrorMessage(Map("rowTag" -> " "),
@@ -1777,5 +1806,376 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     checkXmlOptionErrorMessage(Map("rowTag" -> "person",
       "declaration" -> s"<${XmlOptions.DEFAULT_DECLARATION}>"),
       "'declaration' should not include angle brackets")
+  }
+
+  def dataTypeTest(data: String,
+                   dt: DataType): Unit = {
+    val xmlString = s"""<ROW>$data</ROW>"""
+    val schema = new StructType().add(XmlOptions.VALUE_TAG, dt)
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .schema(schema)
+      .xml(spark.createDataset(Seq(xmlString)))
+  }
+
+  test("Primitive field casting") {
+    val ts = Seq("2002-05-30 21:46:54", "2002-05-30T21:46:54", "2002-05-30T21:46:54.1234",
+      "2002-05-30T21:46:54Z", "2002-05-30T21:46:54.1234Z", "2002-05-30T21:46:54-06:00",
+      "2002-05-30T21:46:54+06:00", "2002-05-30T21:46:54.1234-06:00",
+      "2002-05-30T21:46:54.1234+06:00", "2002-05-30T21:46:54+00:00", "2002-05-30T21:46:54.0000Z")
+
+    val tsXMLStr = ts.map(t => s"<TimestampType>$t</TimestampType>").mkString("\n")
+    val tsResult = ts.map(t =>
+      Timestamp.from(Instant.ofEpochSecond(0, DateTimeUtils.stringToTimestamp(
+        UTF8String.fromString(t), DateTimeUtils.getZoneId(conf.sessionLocalTimeZone)).get * 1000))
+    )
+
+    val primitiveFieldAndType: Dataset[String] =
+      spark.createDataset(spark.sparkContext.parallelize(
+        s"""<ROW>
+          <decimal>10.05</decimal>
+          <decimal>1,000.01</decimal>
+          <decimal>158,058,049.001</decimal>
+          <emptyString></emptyString>
+          <ByteType>10</ByteType>
+          <ShortType>10</ShortType>
+          <ShortType>+10</ShortType>
+          <ShortType>-10</ShortType>
+          <IntegerType>10</IntegerType>
+          <IntegerType>+10</IntegerType>
+          <IntegerType>-10</IntegerType>
+          <LongType>10</LongType>
+          <LongType>+10</LongType>
+          <LongType>-10</LongType>
+          <FloatType>1.00</FloatType>
+          <FloatType>+1.00</FloatType>
+          <FloatType>-1.00</FloatType>
+          <DoubleType>1.00</DoubleType>
+          <DoubleType>+1.00</DoubleType>
+          <DoubleType>-1.00</DoubleType>
+          <BooleanType>true</BooleanType>
+          <BooleanType>1</BooleanType>
+          <BooleanType>false</BooleanType>
+          <BooleanType>0</BooleanType>
+          $tsXMLStr
+          <DateType>2002-09-24</DateType>
+        </ROW>""".stripMargin :: Nil))(Encoders.STRING)
+
+    val decimalType = DecimalType(20, 3)
+
+    val schema = StructType(
+      StructField("decimal", ArrayType(decimalType), true) ::
+        StructField("emptyString", StringType, true) ::
+        StructField("ByteType", ByteType, true) ::
+        StructField("ShortType", ArrayType(ShortType), true) ::
+        StructField("IntegerType", ArrayType(IntegerType), true) ::
+        StructField("LongType", ArrayType(LongType), true) ::
+        StructField("FloatType", ArrayType(FloatType), true) ::
+        StructField("DoubleType", ArrayType(DoubleType), true) ::
+        StructField("BooleanType", ArrayType(BooleanType), true) ::
+        StructField("TimestampType", ArrayType(TimestampType), true) ::
+        StructField("DateType", DateType, true) :: Nil)
+
+    val df = spark.read.schema(schema).xml(primitiveFieldAndType)
+
+    checkAnswer(
+      df,
+      Seq(Row(Array(
+        Decimal(BigDecimal("10.05"), decimalType.precision, decimalType.scale).toJavaBigDecimal,
+        Decimal(BigDecimal("1000.01"), decimalType.precision, decimalType.scale).toJavaBigDecimal,
+        Decimal(BigDecimal("158058049.001"), decimalType.precision, decimalType.scale)
+          .toJavaBigDecimal),
+        "",
+        10.toByte,
+        Array(10.toShort, 10.toShort, -10.toShort),
+        Array(10, 10, -10),
+        Array(10L, 10L, -10L),
+        Array(1.0.toFloat, 1.0.toFloat, -1.0.toFloat),
+        Array(1.0, 1.0, -1.0),
+        Array(true, true, false, false),
+        tsResult,
+        Date.valueOf("2002-09-24")
+      ))
+    )
+  }
+
+  test("Nullable types are handled") {
+    val dataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
+      BooleanType, TimestampType, DateType, StringType)
+
+    val dataXMLString = dataTypes.map { dt =>
+      s"""<${dt.toString}>-</${dt.toString}>"""
+    }.mkString("\n")
+
+    val fields = dataTypes.map { dt =>
+      StructField(dt.toString, dt, true)
+    }
+    val schema = StructType(fields)
+
+    val res = dataTypes.map { dt => null }
+
+    val nullDataset: Dataset[String] =
+      spark.createDataset(spark.sparkContext.parallelize(
+        s"""<ROW>
+          $dataXMLString
+        </ROW>""".stripMargin :: Nil))(Encoders.STRING)
+
+    val df = spark.read.option("nullValue", "-").schema(schema).xml(nullDataset)
+    checkAnswer(df, Row.fromSeq(res))
+
+    val df2 = spark.read.xml(nullDataset)
+    checkAnswer(df2, Row.fromSeq(dataTypes.map { dt => "-" }))
+  }
+
+  test("Custom timestamp format is used to parse correctly") {
+    val schema = StructType(
+      StructField("ts", TimestampType, true) :: Nil)
+
+    Seq(
+      ("12-03-2011 10:15:30", "2011-12-03 10:15:30", "MM-dd-yyyy HH:mm:ss", "UTC"),
+      ("2011/12/03 10:15:30", "2011-12-03 10:15:30", "yyyy/MM/dd HH:mm:ss", "UTC"),
+      ("2011/12/03 10:15:30", "2011-12-03 10:15:30", "yyyy/MM/dd HH:mm:ss", "Asia/Shanghai")
+    ).foreach { case (ts, resTS, fmt, zone) =>
+      val tsDataset: Dataset[String] =
+        spark.createDataset(spark.sparkContext.parallelize(
+          s"""<ROW>
+          <ts>$ts</ts>
+        </ROW>""".stripMargin :: Nil))(Encoders.STRING)
+      val timestampResult = Timestamp.from(Instant.ofEpochSecond(0,
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(resTS),
+          DateTimeUtils.getZoneId(zone)).get * 1000))
+
+      val df = spark.read.option("timestampFormat", fmt).option("timezone", zone)
+        .schema(schema).xml(tsDataset)
+      checkAnswer(df, Row(timestampResult))
+    }
+  }
+
+  test("Schema Inference for primitive types") {
+    val dataset: Dataset[String] =
+      spark.createDataset(spark.sparkContext.parallelize(
+        s"""<ROW>
+          <bool1>true</bool1>
+          <double1>+10.1</double1>
+          <long1>-10</long1>
+          <long2>10</long2>
+          <string1>8E9D</string1>
+          <string2>8E9F</string2>
+          <ts1>2015-01-01 00:00:00</ts1>
+        </ROW>""".stripMargin :: Nil))(Encoders.STRING)
+
+    val expectedSchema = StructType(StructField("bool1", BooleanType, true) ::
+      StructField("double1", DoubleType, true) ::
+      StructField("long1", LongType, true) ::
+      StructField("long2", LongType, true) ::
+      StructField("string1", StringType, true) ::
+      StructField("string2", StringType, true) ::
+      StructField("ts1", TimestampType, true) :: Nil)
+
+    val df = spark.read.xml(dataset)
+    assert(df.schema.toSet === expectedSchema.toSet)
+    checkAnswer(df, Row(true, 10.1, -10, 10, "8E9D", "8E9F",
+      Timestamp.valueOf("2015-01-01 00:00:00")))
+  }
+
+  test("case sensitivity test - attributes-only object") {
+    val schemaCaseSensitive = new StructType()
+      .add("array", ArrayType(
+        new StructType()
+          .add("_Attr2", LongType)
+          .add("_VALUE", LongType)
+          .add("_aTTr2", LongType)
+          .add("_attr2", LongType)))
+      .add("struct", new StructType()
+        .add("_Attr1", LongType)
+        .add("_VALUE", LongType)
+        .add("_attr1", LongType))
+
+    val dfCaseSensitive = Seq(
+      Row(
+        Array(
+          Row(null, 2, null, 2),
+          Row(3, 3, null, null),
+          Row(null, 4, 4, null)),
+        Row(null, 1, 1)
+      ),
+      Row(
+        null,
+        Row(5, 5, null)
+      )
+    )
+    val schemaCaseInSensitive = new StructType()
+      .add("array", ArrayType(new StructType().add("_VALUE", LongType).add("_attr2", LongType)))
+      .add("struct", new StructType().add("_VALUE", LongType).add("_attr1", LongType))
+    val dfCaseInsensitive =
+      Seq(
+        Row(
+          Array(Row(2, 2), Row(3, 3), Row(4, 4)),
+          Row(1, 1)),
+        Row(null, Row(5, 5)))
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val df = spark.read
+          .option("rowTag", "ROW")
+          .xml(getTestResourcePath(resDir + "attributes-case-sensitive.xml"))
+        assert(df.schema == (if (caseSensitive) schemaCaseSensitive else schemaCaseInSensitive))
+        checkAnswer(
+          df,
+          if (caseSensitive) dfCaseSensitive else dfCaseInsensitive)
+      }
+    }
+  }
+
+  testCaseSensitivity(
+    "basic",
+    writeData = Seq(Row(1L, null), Row(null, 2L)),
+    writeSchema = new StructType()
+      .add("A1", LongType)
+      .add("a1", LongType),
+    expectedSchema = new StructType()
+      .add("A1", LongType),
+    readDataCaseInsensitive = Seq(Row(1L), Row(2L)))
+
+  testCaseSensitivity(
+    "nested struct",
+    writeData = Seq(Row(Row(1L), null), Row(null, Row(2L))),
+    writeSchema = new StructType()
+      .add("A1", new StructType().add("B1", LongType))
+      .add("a1", new StructType().add("b1", LongType)),
+    expectedSchema = new StructType()
+      .add("A1", new StructType().add("B1", LongType)),
+    readDataCaseInsensitive = Seq(Row(Row(1L)), Row(Row(2L)))
+  )
+
+  testCaseSensitivity(
+    "convert fields into array",
+    writeData = Seq(Row(1L, 2L)),
+    writeSchema = new StructType()
+      .add("A1", LongType)
+      .add("a1", LongType),
+    expectedSchema = new StructType()
+      .add("A1", ArrayType(LongType)),
+    readDataCaseInsensitive = Seq(Row(Array(1L, 2L))))
+
+  testCaseSensitivity(
+    "basic array",
+    writeData = Seq(Row(Array(1L, 2L), Array(3L, 4L))),
+    writeSchema = new StructType()
+      .add("A1", ArrayType(LongType))
+      .add("a1", ArrayType(LongType)),
+    expectedSchema = new StructType()
+      .add("A1", ArrayType(LongType)),
+    readDataCaseInsensitive = Seq(Row(Array(1L, 2L, 3L, 4L))))
+
+  testCaseSensitivity(
+    "nested array",
+    writeData =
+      Seq(Row(Array(Row(1L, 2L), Row(3L, 4L)), null), Row(null, Array(Row(5L, 6L), Row(7L, 8L)))),
+    writeSchema = new StructType()
+      .add("A1", ArrayType(new StructType().add("B1", LongType).add("d", LongType)))
+      .add("a1", ArrayType(new StructType().add("b1", LongType).add("c", LongType))),
+    expectedSchema = new StructType()
+      .add(
+        "A1",
+        ArrayType(
+          new StructType()
+            .add("B1", LongType)
+            .add("c", LongType)
+            .add("d", LongType))),
+    readDataCaseInsensitive = Seq(
+      Row(Array(Row(1L, null, 2L), Row(3L, null, 4L))),
+      Row(Array(Row(5L, 6L, null), Row(7L, 8L, null)))))
+
+  def testCaseSensitivity(
+      name: String,
+      writeData: Seq[Row],
+      writeSchema: StructType,
+      expectedSchema: StructType,
+      readDataCaseInsensitive: Seq[Row]): Unit = {
+    test(s"case sensitivity test - $name") {
+      withTempDir { dir =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          spark
+            .createDataFrame(writeData.asJava, writeSchema)
+            .repartition(1)
+            .write
+            .option("rowTag", "ROW")
+            .format("xml")
+            .mode("overwrite")
+            .save(dir.getCanonicalPath)
+        }
+
+        Seq(true, false).foreach { caseSensitive =>
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+            val df = spark.read.option("rowTag", "ROW").xml(dir.getCanonicalPath)
+            assert(df.schema == (if (caseSensitive) writeSchema else expectedSchema))
+            checkAnswer(df, if (caseSensitive) writeData else readDataCaseInsensitive)
+          }
+        }
+      }
+    }
+  }
+
+  def testWriteReadRoundTrip(df: DataFrame,
+                             options: Map[String, String] = Map.empty): Unit = {
+    withTempDir { dir =>
+      df.write
+        .options(options)
+        .option("rowTag", "ROW")
+        .mode("overwrite")
+        .xml(dir.getCanonicalPath)
+      val df2 = spark.read
+        .options(options)
+        .option("rowTag", "ROW")
+        .xml(dir.getCanonicalPath)
+      checkAnswer(df, df2)
+    }
+  }
+
+  def primitiveFieldAndType: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize("""
+      <ROW>
+        <string>this is a simple string.</string>
+        <integer>10</integer>
+        <long>21474836470</long>
+        <decimal>92233720368547758070</decimal>
+        <double>1.7976931348623157</double>
+        <boolean>true</boolean>
+        <null>null</null>
+      </ROW>""" :: Nil))(Encoders.STRING)
+
+  test("Primitive field and type inferring") {
+    val dfWithNodecimal = spark.read
+      .option("nullValue", "null")
+      .xml(primitiveFieldAndType)
+    assert(dfWithNodecimal.schema("decimal").dataType === DoubleType)
+
+    val df = spark.read
+      .option("nullValue", "null")
+      .option("prefersDecimal", "true")
+      .xml(primitiveFieldAndType)
+
+    val expectedSchema = StructType(
+      StructField("boolean", BooleanType, true) ::
+      StructField("decimal", DecimalType(20, 0), true) ::
+      StructField("double", DoubleType, true) ::
+      StructField("integer", LongType, true) ::
+      StructField("long", LongType, true) ::
+      StructField("null", StringType, true) ::
+      StructField("string", StringType, true) :: Nil)
+
+    assert(df.schema === expectedSchema)
+
+    checkAnswer(
+      df,
+      Row(true,
+        new java.math.BigDecimal("92233720368547758070"),
+        1.7976931348623157,
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
+    )
+    testWriteReadRoundTrip(df, Map("nullValue" -> "null", "prefersDecimal" -> "true"))
   }
 }

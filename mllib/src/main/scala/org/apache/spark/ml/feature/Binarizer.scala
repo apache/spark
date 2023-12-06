@@ -29,6 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Binarize a column of continuous features given a threshold.
@@ -104,18 +105,21 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val (inputColNames, outputColNames, tds) =
       if (isSet(inputCols)) {
         if (isSet(thresholds)) {
-          ($(inputCols).toSeq, $(outputCols).toSeq, $(thresholds).toSeq)
+          ($(inputCols).toImmutableArraySeq,
+            $(outputCols).toImmutableArraySeq, $(thresholds).toImmutableArraySeq)
         } else {
-          ($(inputCols).toSeq, $(outputCols).toSeq, Seq.fill($(inputCols).length)($(threshold)))
+          ($(inputCols).toImmutableArraySeq,
+            $(outputCols).toImmutableArraySeq, Seq.fill($(inputCols).length)($(threshold)))
         }
       } else {
         (Seq($(inputCol)), Seq($(outputCol)), Seq($(threshold)))
       }
 
-    val mappedOutputCols = inputColNames.zip(tds).map { case (inputColName, td) =>
-      val binarizerUDF = dataset.schema(inputColName).dataType match {
+    val mappedOutputCols = inputColNames.zip(tds).map { case (colName, td) =>
+      dataset.schema(colName).dataType match {
         case DoubleType =>
-          udf { in: Double => if (in > td) 1.0 else 0.0 }
+          when(!col(colName).isNaN && col(colName) > td, lit(1.0))
+            .otherwise(lit(0.0))
 
         case _: VectorUDT if td >= 0 =>
           udf { vector: Vector =>
@@ -124,27 +128,32 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
             vector.foreachNonZero { (index, value) =>
               if (value > td) {
                 indices += index
-                values +=  1.0
+                values += 1.0
               }
             }
-            Vectors.sparse(vector.size, indices.result(), values.result()).compressed
-          }
+
+            val idxArray = indices.result()
+            val valArray = values.result()
+            Vectors.sparse(vector.size, idxArray, valArray)
+              .compressedWithNNZ(idxArray.length)
+          }.apply(col(colName))
 
         case _: VectorUDT if td < 0 =>
           this.logWarning(s"Binarization operations on sparse dataset with negative threshold " +
             s"$td will build a dense output, so take care when applying to sparse input.")
           udf { vector: Vector =>
             val values = Array.fill(vector.size)(1.0)
+            var nnz = vector.size
             vector.foreachNonZero { (index, value) =>
               if (value <= td) {
                 values(index) = 0.0
+                nnz -= 1
               }
             }
-            Vectors.dense(values).compressed
-          }
-      }
 
-      binarizerUDF(col(inputColName))
+            Vectors.dense(values).compressedWithNNZ(nnz)
+          }.apply(col(colName))
+      }
     }
 
     val outputMetadata = outputColNames.map(outputSchema(_).metadata)
@@ -179,7 +188,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     }
 
     val (inputColNames, outputColNames) = if (isSet(inputCols)) {
-      ($(inputCols).toSeq, $(outputCols).toSeq)
+      ($(inputCols).toImmutableArraySeq, $(outputCols).toImmutableArraySeq)
     } else {
       (Seq($(inputCol)), Seq($(outputCol)))
     }

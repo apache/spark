@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object CatalogV2Util {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -151,7 +152,7 @@ private[sql] object CatalogV2Util {
                 Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
               addField(schema, fieldWithComment, add.position(), tableProvider, statementType, true)
             case names =>
-              replace(schema, names.init, parent => parent.dataType match {
+              replace(schema, names.init.toImmutableArraySeq, parent => parent.dataType match {
                 case parentType: StructType =>
                   val field = StructField(names.last, add.dataType, nullable = add.isNullable)
                   val fieldWithDefault: StructField = encodeDefaultValue(add.defaultValue(), field)
@@ -167,21 +168,21 @@ private[sql] object CatalogV2Util {
           }
 
         case rename: RenameColumn =>
-          replace(schema, rename.fieldNames, field =>
+          replace(schema, rename.fieldNames.toImmutableArraySeq, field =>
             Some(StructField(rename.newName, field.dataType, field.nullable, field.metadata)))
 
         case update: UpdateColumnType =>
-          replace(schema, update.fieldNames, field => {
+          replace(schema, update.fieldNames.toImmutableArraySeq, field => {
             Some(field.copy(dataType = update.newDataType))
           })
 
         case update: UpdateColumnNullability =>
-          replace(schema, update.fieldNames, field => {
+          replace(schema, update.fieldNames.toImmutableArraySeq, field => {
             Some(field.copy(nullable = update.nullable))
           })
 
         case update: UpdateColumnComment =>
-          replace(schema, update.fieldNames, field =>
+          replace(schema, update.fieldNames.toImmutableArraySeq, field =>
             Some(field.withComment(update.newComment)))
 
         case update: UpdateColumnPosition =>
@@ -198,7 +199,7 @@ private[sql] object CatalogV2Util {
             case Array(name) =>
               updateFieldPos(schema, name)
             case names =>
-              replace(schema, names.init, parent => parent.dataType match {
+              replace(schema, names.init.toImmutableArraySeq, parent => parent.dataType match {
                 case parentType: StructType =>
                   Some(parent.copy(dataType = updateFieldPos(parentType, names.last)))
                 case _ =>
@@ -207,7 +208,7 @@ private[sql] object CatalogV2Util {
           }
 
         case update: UpdateColumnDefaultValue =>
-          replace(schema, update.fieldNames, field =>
+          replace(schema, update.fieldNames.toImmutableArraySeq, field =>
             // The new DEFAULT value string will be non-empty for any DDL commands that set the
             // default value, such as "ALTER TABLE t ALTER COLUMN c SET DEFAULT ..." (this is
             // enforced by the parser). On the other hand, commands that drop the default value such
@@ -219,7 +220,7 @@ private[sql] object CatalogV2Util {
             })
 
         case delete: DeleteColumn =>
-          replace(schema, delete.fieldNames, _ => None, delete.ifExists)
+          replace(schema, delete.fieldNames.toImmutableArraySeq, _ => None, delete.ifExists)
 
         case _ =>
           // ignore non-schema changes

@@ -626,7 +626,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val expectedEvent: SparkListenerEnvironmentUpdate = {
       val e = JsonProtocol.environmentUpdateFromJson(environmentUpdateJsonString)
       e.copy(environmentDetails =
-        e.environmentDetails + ("Metrics Properties" -> Seq.empty[(String, String)]))
+        e.environmentDetails ++ Map("Metrics Properties" -> Seq.empty[(String, String)]))
     }
     val oldEnvironmentUpdateJson = environmentUpdateJsonString
       .removeField("Metrics Properties")
@@ -1292,7 +1292,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       assert(opt2.isDefined)
       assertEquals(opt1.get, opt2.get)
     } else {
-      assert(!opt2.isDefined)
+      assert(opt2.isEmpty)
     }
   }
 

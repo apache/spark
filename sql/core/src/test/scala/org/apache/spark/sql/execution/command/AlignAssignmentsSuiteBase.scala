@@ -191,7 +191,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
   protected def parseAndResolve(query: String): LogicalPlan = {
     val analyzer = new CustomAnalyzer(catalogManager) {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
-        new ResolveSessionCatalog(catalogManager))
+        new ResolveSessionCatalog(this.catalogManager))
     }
     val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
     analyzer.checkAnalysis(analyzed)

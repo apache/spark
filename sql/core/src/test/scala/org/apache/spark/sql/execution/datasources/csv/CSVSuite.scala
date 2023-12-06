@@ -39,7 +39,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -330,7 +330,7 @@ abstract class CSVSuite
          """.stripMargin.replaceAll("\n", " "))
 
       assert(
-        spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().size === 1)
+        spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().length === 1)
     }
   }
 
@@ -343,7 +343,7 @@ abstract class CSVSuite
           .options(Map("header" -> "true", "mode" -> "dropmalformed"))
           .load(testFile(carsFile))
 
-        assert(cars.select("year").collect().size === 2)
+        assert(cars.select("year").collect().length === 2)
       }
     }
   }
@@ -354,9 +354,9 @@ abstract class CSVSuite
       .options(Map("header" -> "true", "inferSchema" -> "true"))
       .load(testFile(carsBlankColName))
 
-    assert(cars.select("customer").collect().size == 2)
-    assert(cars.select("_c0").collect().size == 2)
-    assert(cars.select("_c1").collect().size == 2)
+    assert(cars.select("customer").collect().length == 2)
+    assert(cars.select("_c0").collect().length == 2)
+    assert(cars.select("_c1").collect().length == 2)
   }
 
   test("test for FAILFAST parsing mode") {
@@ -405,8 +405,8 @@ abstract class CSVSuite
       .schema(StructType(List(StructField("column", StringType, false))))
       .load(testFile(emptyFile))
 
-    assert(result.collect().size === 0)
-    assert(result.schema.fieldNames.size === 1)
+    assert(result.collect().length === 0)
+    assert(result.schema.fieldNames.length === 1)
   }
 
   test("DDL test with empty file") {
@@ -874,7 +874,7 @@ abstract class CSVSuite
       cars.coalesce(1).write
         .format("csv")
         .option("header", "true")
-        .option("compression", "none")
+        .option("compression", HadoopCompressionCodec.NONE.lowerCaseName())
         .options(extraOptions)
         .save(csvDir)
 
@@ -2697,7 +2697,9 @@ abstract class CSVSuite
                 readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
               },
               errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"),
+              context =
+                ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
           }
         }
       }

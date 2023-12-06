@@ -18,6 +18,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, ReplaceCharWithVarchar, ResolveSessionCatalog, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -120,6 +121,13 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
+   * Manages the registration of data sources
+   */
+  protected lazy val dataSourceManager: DataSourceManager = {
+    parentState.map(_.dataSourceManager.clone()).getOrElse(new DataSourceManager)
+  }
+
+  /**
    * Experimental methods that can be used to define custom optimization rules and custom planning
    * strategies.
    *
@@ -178,6 +186,12 @@ abstract class BaseSessionStateBuilder(
   protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
 
   /**
+   * A collection of method used for registering user-defined data sources.
+   */
+  protected def dataSourceRegistration: DataSourceRegistration =
+    new DataSourceRegistration(dataSourceManager)
+
+  /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    *
    * Note: this depends on the `conf` and `catalog` fields.
@@ -188,7 +202,7 @@ abstract class BaseSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(catalogManager) +:
+        new ResolveSessionCatalog(this.catalogManager) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         customResolutionRules
@@ -318,7 +332,8 @@ abstract class BaseSessionStateBuilder(
     new AdaptiveRulesHolder(
       extensions.buildQueryStagePrepRules(session),
       extensions.buildRuntimeOptimizerRules(session),
-      extensions.buildQueryStageOptimizerRules(session))
+      extensions.buildQueryStageOptimizerRules(session),
+      extensions.buildQueryPostPlannerStrategyRules(session))
   }
 
   protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
@@ -350,6 +365,12 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
+   * Resource manager that handles the storage of artifacts as well as preparing the artifacts for
+   * use.
+   */
+  protected def artifactManager: ArtifactManager = new ArtifactManager(session)
+
+  /**
    * Function used to make clones of the session state.
    */
   protected def createClone: (SparkSession, SessionState) => SessionState = {
@@ -369,6 +390,8 @@ abstract class BaseSessionStateBuilder(
       tableFunctionRegistry,
       udfRegistration,
       udtfRegistration,
+      dataSourceManager,
+      dataSourceRegistration,
       () => catalog,
       sqlParser,
       () => analyzer,
@@ -381,7 +404,8 @@ abstract class BaseSessionStateBuilder(
       createClone,
       columnarRules,
       adaptiveRulesHolder,
-      planNormalizationRules)
+      planNormalizationRules,
+      () => artifactManager)
   }
 }
 

@@ -25,6 +25,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Generate RDD(s) containing data for Matrix Factorization.
@@ -90,7 +91,7 @@ object MFDataGenerator {
 
     val omega = shuffled.slice(0, sampSize)
     val ordered = omega.sortWith(_ < _).toArray
-    val trainData: RDD[(Int, Int, Double)] = sc.parallelize(ordered)
+    val trainData: RDD[(Int, Int, Double)] = sc.parallelize(ordered.toImmutableArraySeq)
       .map(x => (x % m, x / m, fullData.values(x)))
 
     // optionally add gaussian noise
@@ -98,16 +99,16 @@ object MFDataGenerator {
       trainData.map(x => (x._1, x._2, x._3 + rand.nextGaussian() * sigma))
     }
 
-    trainData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
+    trainData.map(x => s"${x._1},${x._2},${x._3}").saveAsTextFile(outputPath)
 
     // optionally generate testing data
     if (test) {
       val testSampSize = math.min(math.round(sampSize * testSampFact).toInt, mn - sampSize)
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
-      val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)
+      val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered.toImmutableArraySeq)
         .map(x => (x % m, x / m, fullData.values(x)))
-      testData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
+      testData.map(x => s"${x._1},${x._2},${x._3}").saveAsTextFile(outputPath)
     }
 
     sc.stop()
