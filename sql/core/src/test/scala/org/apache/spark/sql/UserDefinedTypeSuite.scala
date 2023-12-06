@@ -284,14 +284,19 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
   }
 
-   test("UDT ordering") {
-     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-         SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
-       withTempView("v1") {
-         pointsRDD.createOrReplaceTempView("v1")
-         val df = sql("select label from v1 order by features")
-         checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)
-       }
-     }
-   }
+  test("SPARK-46289: UDT ordering") {
+    val settings = Seq(
+      ("true", CodegenObjectFactoryMode.CODEGEN_ONLY.toString),
+      ("false", CodegenObjectFactoryMode.NO_CODEGEN.toString))
+    withTempView("v1") {
+      pointsRDD.createOrReplaceTempView("v1")
+      for ((wsSetting, cgSetting) <- settings) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wsSetting,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> cgSetting) {
+          val df = sql("select label from v1 order by features")
+          checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)
+        }
+      }
+    }
+  }
 }

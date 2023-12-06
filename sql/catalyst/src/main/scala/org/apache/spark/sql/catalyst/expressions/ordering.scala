@@ -39,8 +39,7 @@ class BaseOrdering extends Ordering[InternalRow] {
 class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
   private lazy val physicalDataTypes = ordering.map { order =>
     val dt = order.dataType match {
-      case udt: UserDefinedType[_] =>
-        udt.sqlType
+      case udt: UserDefinedType[_] => udt.sqlType
       case _ => order.dataType
     }
     PhysicalDataType(dt)
