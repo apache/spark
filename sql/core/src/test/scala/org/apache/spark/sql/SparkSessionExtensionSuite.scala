@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.util.{Locale, UUID}
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 
@@ -541,6 +542,22 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
           case _: SortExec => true
         }.isDefined)
       }
+    }
+  }
+
+  test("SPARK-46240: Support inject executed plan prep rules in SparkSessionExtensions") {
+    val extensions = create {
+      extensions =>
+        extensions.injectExecutedPlanPrepRule(_ => MyExecutedPlanPrepRule)
+    }
+    withSession(extensions) { session =>
+      session.sql(
+        """
+          | select k, v
+          | from values ("key1", 1), ("key2", 2)
+          | as tbl(k, v)
+          |""".stripMargin).queryExecution.executedPlan
+      assert(MyExecutedPlanPrepRule.collectMap.get("LocalTableScan").contains(1))
     }
   }
 }
@@ -1226,5 +1243,19 @@ object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
       case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Final) =>
         SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
     }
+  }
+}
+
+object MyExecutedPlanPrepRule extends Rule[SparkPlan] {
+  var collectMap: mutable.HashMap[String, Long] = mutable.HashMap.empty
+
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan foreachUp {
+      node => {
+        val key = node.nodeName
+        collectMap.update(key, collectMap.getOrElseUpdate(key, 0) + 1)
+      }
+    }
+    plan
   }
 }
