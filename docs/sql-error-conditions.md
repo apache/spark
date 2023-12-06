@@ -1966,7 +1966,7 @@ Please specify the batch ID which is available for querying - you can query the 
 SQLSTATE: KD006
 
 Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`.
-The checkpoint seems to be only run with older Spark version(s). Run the streaming query with recent Spark version, so that Spark constructs the state metadata.
+The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata.
 
 ### STDS_REQUIRED_OPTION_UNSPECIFIED
 
