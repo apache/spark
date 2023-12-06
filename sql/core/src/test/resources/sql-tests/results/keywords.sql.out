@@ -99,7 +99,7 @@ ESCAPED	false
 EXCEPT	false
 EXCHANGE	false
 EXCLUDE	false
-EXECUTE	true
+EXECUTE	false
 EXISTS	false
 EXPLAIN	false
 EXPORT	false
@@ -345,4 +345,4 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 -- !query schema
 struct<keyword:string>
 -- !query output
-EXECUTE
+

@@ -1706,6 +1706,7 @@ nonReserved
     | ESCAPED
     | EXCHANGE
     | EXCLUDE
+    | EXECUTE
     | EXISTS
     | EXPLAIN
     | EXPORT
