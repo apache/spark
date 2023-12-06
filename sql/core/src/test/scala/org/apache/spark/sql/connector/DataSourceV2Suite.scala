@@ -740,6 +740,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       // Can be casted automatically
       sql("INSERT INTO test(y, x) VALUES (4L, 3L)")
       checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4)))
+      // Insert values by name
+      sql("INSERT INTO test BY NAME VALUES (5, 4) t(y, x)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4), Row(4, 5)))
       // Missing columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -795,8 +798,15 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       sql("INSERT INTO test PARTITION(x = 1) VALUES (2)")
       sql("INSERT INTO test PARTITION(x = 2) VALUES (3), (4)")
       checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(2, 4)))
-      sql("INSERT OVERWRITE test PARTITION(x = 1) VALUES (5)")
-      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 5), Row(2, 3), Row(2, 4)))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT OVERWRITE test PARTITION(x = 1) VALUES (5)")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "operation" -> "overwrite by filter in batch mode")
+      )
     }
   }
 }
