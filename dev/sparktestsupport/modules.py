@@ -1120,6 +1120,13 @@ pyspark_pandas_connect_part2 = Module(
         "pyspark.pandas.tests.connect.groupby.test_parity_describe",
         "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
         "pyspark.pandas.tests.connect.groupby.test_parity_groupby",
+        "pyspark.pandas.tests.connect.groupby.test_parity_grouping",
+        "pyspark.pandas.tests.connect.groupby.test_parity_missing",
+        "pyspark.pandas.tests.connect.groupby.test_parity_nlargest_nsmallest",
+        "pyspark.pandas.tests.connect.groupby.test_parity_raises",
+        "pyspark.pandas.tests.connect.groupby.test_parity_rank",
+        "pyspark.pandas.tests.connect.groupby.test_parity_size",
+        "pyspark.pandas.tests.connect.groupby.test_parity_value_counts",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
