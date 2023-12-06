@@ -2004,6 +2004,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
         self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
 
+    def test_is_empty_with_unsupported_types(self):
+        df = self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval")
+        self.assertEqual(df.count(), 1)
+        self.assertFalse(df.isEmpty())
+
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession)
 
