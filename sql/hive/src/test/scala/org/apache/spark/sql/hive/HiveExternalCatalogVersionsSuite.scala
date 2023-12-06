@@ -31,6 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.launcher.JavaModuleOptions
@@ -55,7 +56,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @SlowHiveTest
 @ExtendedHiveTest
-class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
+class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils with Logging {
   import HiveExternalCatalogVersionsSuite._
   override protected val defaultSparkSubmitTimeout: Span = 5.minutes
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
@@ -163,6 +164,16 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    val hiveExecFile = new File("/home/runner/.ivy2/cache/org.apache.hive/hive-exec")
+    if (hiveExecFile.exists()) {
+      logInfo("hive exec file existed.")
+      Utils.deleteRecursively(hiveExecFile)
+    }
+    val slf4jApiFile = new File("/home/runner/.ivy2/cache/org.slf4j/slf4j-api")
+    if (slf4jApiFile.exists()) {
+      logInfo("slf4j api file existed.")
+      Utils.deleteRecursively(slf4jApiFile)
+    }
 
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
