@@ -6,18 +6,20 @@ OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1051-azure
 AMD EPYC 7763 64-Core Processor
 1000 Workers:                                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------------
-ZooKeeperPersistenceEngine with JavaSerializer                     5402           5546         233          0.0     5402030.8       1.0X
-ZooKeeperPersistenceEngine with KryoSerializer                     4185           4220          32          0.0     4184623.1       1.3X
-FileSystemPersistenceEngine with JavaSerializer                    1591           1634          37          0.0     1590836.4       3.4X
-FileSystemPersistenceEngine with JavaSerializer (lz4)               611            623          14          0.0      611256.6       8.8X
-FileSystemPersistenceEngine with JavaSerializer (lzf)               626            640          13          0.0      626072.2       8.6X
-FileSystemPersistenceEngine with JavaSerializer (snappy)            595            628          29          0.0      594744.4       9.1X
-FileSystemPersistenceEngine with JavaSerializer (zstd)              755            774          21          0.0      754604.4       7.2X
-FileSystemPersistenceEngine with KryoSerializer                     479            489           8          0.0      479404.7      11.3X
-FileSystemPersistenceEngine with KryoSerializer (lz4)               392            406          12          0.0      392165.7      13.8X
-FileSystemPersistenceEngine with KryoSerializer (lzf)               525            536          14          0.0      524916.7      10.3X
-FileSystemPersistenceEngine with KryoSerializer (snappy)            519            533          14          0.0      518569.3      10.4X
-FileSystemPersistenceEngine with KryoSerializer (zstd)              627            663          31          0.0      627233.2       8.6X
-BlackHolePersistenceEngine                                            0              0           0          6.0         166.0   32541.8X
+ZooKeeperPersistenceEngine with JavaSerializer                     5863           6053         265          0.0     5862988.1       1.0X
+ZooKeeperPersistenceEngine with KryoSerializer                     4553           4612          54          0.0     4553477.9       1.3X
+FileSystemPersistenceEngine with JavaSerializer                    1619           1632          17          0.0     1618500.5       3.6X
+FileSystemPersistenceEngine with JavaSerializer (lz4)               619            631          10          0.0      619255.8       9.5X
+FileSystemPersistenceEngine with JavaSerializer (lzf)               623            640          20          0.0      623222.4       9.4X
+FileSystemPersistenceEngine with JavaSerializer (snappy)            553            596          37          0.0      553417.4      10.6X
+FileSystemPersistenceEngine with JavaSerializer (zstd)              747            767          26          0.0      747197.1       7.8X
+FileSystemPersistenceEngine with KryoSerializer                     394            460          57          0.0      393534.6      14.9X
+FileSystemPersistenceEngine with KryoSerializer (lz4)               368            406          33          0.0      367925.8      15.9X
+FileSystemPersistenceEngine with KryoSerializer (lzf)               509            532          35          0.0      509170.2      11.5X
+FileSystemPersistenceEngine with KryoSerializer (snappy)            515            540          28          0.0      515190.9      11.4X
+FileSystemPersistenceEngine with KryoSerializer (zstd)              632            656          32          0.0      631522.4       9.3X
+RocksDBPersistenceEngine with JavaSerializer                        265            266           1          0.0      265026.0      22.1X
+RocksDBPersistenceEngine with KryoSerializer                         93             94           2          0.0       92732.3      63.2X
+BlackHolePersistenceEngine                                            0              0           0          6.0         166.8   35151.7X
 
 

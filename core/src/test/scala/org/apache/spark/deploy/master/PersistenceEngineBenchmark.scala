@@ -110,6 +110,17 @@ object PersistenceEngineBenchmark extends BenchmarkBase {
         }
       }
 
+      serializers.foreach { serializer =>
+        val serializerName = serializer.getClass.getSimpleName
+        val name = s"RocksDBPersistenceEngine with $serializerName"
+        benchmark.addCase(name, numIters) { _ =>
+          val dir = Utils.createTempDir().getAbsolutePath
+          val engine = new RocksDBPersistenceEngine(dir, serializer)
+          writeAndRead(engine)
+          engine.close()
+        }
+      }
+
       benchmark.addCase("BlackHolePersistenceEngine", numIters) { _ =>
         val engine = new BlackHolePersistenceEngine()
         writeAndRead(engine)

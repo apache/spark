@@ -1910,6 +1910,17 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val IO_COMPRESSION_ZSTD_WORKERS =
+    ConfigBuilder("spark.io.compression.zstd.workers")
+      .doc("Thread size spawned to compress in parallel when using Zstd. When the value is 0, " +
+        "no worker is spawned, it works in single-threaded mode. When value > 0, it triggers " +
+        "asynchronous mode, corresponding number of threads are spawned. More workers improve " +
+        "performance, but also increase memory cost.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ >= 0, "The number of workers must not be negative.")
+      .createWithDefault(0)
+
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")
       .doc("Compression level for Zstd compression codec. Increasing the compression " +

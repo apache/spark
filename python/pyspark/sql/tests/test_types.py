@@ -26,7 +26,12 @@ import unittest
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
-from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    AnalysisException,
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkRuntimeError,
+)
 from pyspark.sql.types import (
     DataType,
     ByteType,
@@ -506,6 +511,19 @@ class TypesTestsMixin:
             row = self.spark.sql("select l, d from test").head()
             self.assertEqual(1, row.asDict()["l"][0].a)
             self.assertEqual(1.0, row.asDict()["d"]["key"].c)
+
+    def test_convert_list_to_str(self):
+        data = [[[123], 120]]
+        schema = StructType(
+            [
+                StructField("name", StringType(), True),
+                StructField("income", LongType(), True),
+            ]
+        )
+        df = self.spark.createDataFrame(data, schema)
+        self.assertEqual(df.schema, schema)
+        self.assertEqual(df.count(), 1)
+        self.assertEqual(df.head(), Row(name="[123]", income=120))
 
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
@@ -1187,14 +1205,32 @@ class TypesTestsMixin:
             "interval hour to second",
         )
 
-        with self.assertRaisesRegex(RuntimeError, "interval None to 3 is invalid"):
+        with self.assertRaises(PySparkRuntimeError) as pe:
             DayTimeIntervalType(endField=DayTimeIntervalType.SECOND)
 
-        with self.assertRaisesRegex(RuntimeError, "interval 123 to 123 is invalid"):
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "None", "end_field": "3"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
             DayTimeIntervalType(123)
 
-        with self.assertRaisesRegex(RuntimeError, "interval 0 to 321 is invalid"):
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "123", "end_field": "123"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
             DayTimeIntervalType(DayTimeIntervalType.DAY, 321)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "0", "end_field": "321"},
+        )
 
     def test_daytime_interval_type(self):
         # SPARK-37277: Support DayTimeIntervalType in createDataFrame
@@ -1256,14 +1292,32 @@ class TypesTestsMixin:
             "interval year to month",
         )
 
-        with self.assertRaisesRegex(RuntimeError, "interval None to 3 is invalid"):
+        with self.assertRaises(PySparkRuntimeError) as pe:
             YearMonthIntervalType(endField=3)
 
-        with self.assertRaisesRegex(RuntimeError, "interval 123 to 123 is invalid"):
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "None", "end_field": "3"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
             YearMonthIntervalType(123)
 
-        with self.assertRaisesRegex(RuntimeError, "interval 0 to 321 is invalid"):
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "123", "end_field": "123"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
             YearMonthIntervalType(YearMonthIntervalType.YEAR, 321)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "0", "end_field": "321"},
+        )
 
     def test_yearmonth_interval_type(self):
         schema1 = self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").schema
