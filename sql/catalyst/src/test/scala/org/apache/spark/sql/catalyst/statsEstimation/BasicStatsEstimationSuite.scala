@@ -177,7 +177,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
         expectedStatsCboOff = rangeStats, extraConfig)
   }
 
-test("range with invalid output") {
+test("range with invalid long value") {
   val numElements = BigInt(Long.MaxValue) - BigInt(Long.MinValue)
   val range = Range(Long.MinValue, Long.MaxValue, 1, None)
   val rangeAttrs = AttributeMap(range.output.map(attr =>
