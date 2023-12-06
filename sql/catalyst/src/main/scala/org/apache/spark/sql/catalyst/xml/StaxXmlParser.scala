@@ -730,7 +730,7 @@ class XmlTokenizer(
   }
 }
 
-object StaxXmlParser {
+object StaxXmlParser extends Logging {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
@@ -760,6 +760,8 @@ object StaxXmlParser {
         case NonFatal(e) =>
           ExceptionUtils.getRootCause(e) match {
             case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+              logWarning("Skipping the rest of" +
+                " the content in the corrupted file during schema inference", e)
               nextRecord = None
             case o => throw o
           }

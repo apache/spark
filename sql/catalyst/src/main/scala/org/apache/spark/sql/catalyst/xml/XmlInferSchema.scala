@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 package org.apache.spark.sql.catalyst.xml
-
-import java.io.StringReader
+import java.io.{CharConversionException, FileNotFoundException, IOException, StringReader}
+import java.nio.charset.MalformedInputException
 import java.util.Locale
-import javax.xml.stream.XMLEventReader
+import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
@@ -27,6 +27,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.Exception._
+import scala.util.control.NonFatal
+import scala.xml.SAXException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD

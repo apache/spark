@@ -39,9 +39,9 @@ private[xml] trait TestXmlData {
 
   def withCorruptedFile(dir: File, format: String = "gz", numBytesToCorrupt: Int = 50)(
       f: File => Unit): Unit = {
-    // find the gz file
-    val gzFiles = dir.listFiles().filter(file => file.isFile && file.getName.endsWith(format))
-    val raf = new RandomAccessFile(gzFiles.head.getPath, "rw")
+    // find the targeted files and corrupt the first one
+    val files = dir.listFiles().filter(file => file.isFile && file.getName.endsWith(format))
+    val raf = new RandomAccessFile(files.head.getPath, "rw")
 
     // disable checksum verification
     import org.apache.hadoop.fs.Path

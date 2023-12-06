@@ -226,8 +226,17 @@ class XmlSuite
   }
 
   test("DSL test for failing fast") {
-    val exceptionInParse = intercept[SparkException] {
+    val exceptionInSchemaInference = intercept[SparkException] {
       spark.read
+        .option("rowTag", "ROW")
+        .option("mode", FailFastMode.name)
+        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
+    }.getMessage
+    assert(exceptionInSchemaInference.contains(
+      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val exceptionInParsing = intercept[SparkException] {
+      spark.read
+        .schema("year string")
         .option("rowTag", "ROW")
         .option("mode", FailFastMode.name)
         .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
@@ -235,28 +244,37 @@ class XmlSuite
     }
     checkError(
       // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParse.getCause.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "badRecord" -> "[null,null,null]",
+        "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
     )
   }
 
   test("test FAILFAST with unclosed tag") {
-    val exceptionInParse = intercept[SparkException] {
+    val exceptionInSchemaInference = intercept[SparkException] {
       spark.read
         .option("rowTag", "book")
         .option("mode", FailFastMode.name)
         .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
+    }.getMessage
+    assert(exceptionInSchemaInference.contains(
+      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val exceptionInParsing = intercept[SparkException] {
+      spark.read
+        .schema("_id string")
+        .option("rowTag", "book")
+        .option("mode", FailFastMode.name)
+        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
         .show()
-    }
+    }.getCause.getCause
     checkError(
       // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParse.getCause.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "badRecord" -> "[empty row]",
+        "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
     )
   }
@@ -2191,7 +2209,11 @@ class XmlSuite
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
         val e = intercept[SparkException] {
-          spark.read.option("rowTag", "ROW").option("multiLine", false).xml(inputFile.toURI.toString).collect()
+          spark.read
+            .option("rowTag", "ROW")
+            .option("multiLine", false)
+            .xml(inputFile.toURI.toString)
+            .collect()
         }
         assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
         assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
@@ -2206,14 +2228,19 @@ class XmlSuite
         assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-          spark.read.option("rowTag", "ROW").option("multiLine", false).xml(inputFile.toURI.toString).collect()
+        spark.read
+          .option("rowTag", "ROW")
+          .option("multiLine", false)
+          .xml(inputFile.toURI.toString)
+          .collect()
         assert(
           spark.read
             .option("rowTag", "ROW")
             .option("multiLine", true)
             .xml(inputFile.toURI.toString)
             .collect()
-            .isEmpty)
+            .isEmpty
+        )
       }
     })
     withTempPath { dir =>
@@ -2249,7 +2276,8 @@ class XmlSuite
       val data =
         spark.sparkContext.parallelize(
           (0 until numRecords).map(i => Row(i.toString, (i * 2).toString)))
-      val df = spark.createDataFrame(data, buildSchema(field("a1"), field("a2")))
+      val schema = buildSchema(field("a1"), field("a2"))
+      val df = spark.createDataFrame(data, schema)
 
       df.coalesce(4)
         .write
@@ -2268,9 +2296,16 @@ class XmlSuite
             .option("rowTag", "row")
             .load(corruptedDir.getCanonicalPath)
           assert(!dfCorrupted.isEmpty)
+          val dfCorruptedWSchema = spark.read
+            .format(format)
+            .schema(schema)
+            .option("multiline", "true")
+            .option("compression", "gzip")
+            .option("rowTag", "row")
+            .load(corruptedDir.getCanonicalPath)
+          dfCorrupted.equals(dfCorruptedWSchema)
         }
       }
-
     }
   }
 }
