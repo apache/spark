@@ -4516,6 +4516,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+
+  val MAX_DYNAMIC_PARTITIONS_PERNODE = {
+    buildConf("spark.sql.max.dynamic.partitions.pernode")
+      .internal()
+      .doc("Maximum number of partitions inserted in a single dynamic partition")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(1000)
+  }
+
   /**
    * Holds information about keys that have been deprecated.
    *

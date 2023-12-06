@@ -2783,4 +2783,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "upper" -> size.toString,
         "invalidValue" -> pos.toString))
   }
+
+  def writePartitionExceedConfigSizeWhenDynamicPartitionError(current: Int, max: Int): Throwable = {
+    new SparkException(
+      s"Your current number of partitions inserted is  $current" +
+        s" .the current number of spark.sql.max.dynamic.partitions.pernode` is $max" +
+        s" ,It has exceeded the maximum value .We suggest that you insert multiple batches " +
+        s"Of course, you can also increase the maximum value by setting " +
+        s"`spark.sql.max.dynamic.partitions.pernode`,but we do not recommend doing so"
+    )
+  }
 }
