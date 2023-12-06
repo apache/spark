@@ -3613,6 +3613,13 @@ def user() -> Column:
 user.__doc__ = pysparkfuncs.user.__doc__
 
 
+def session_user() -> Column:
+    return _invoke_function("session_user")
+
+
+session_user.__doc__ = pysparkfuncs.session_user.__doc__
+
+
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)

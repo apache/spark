@@ -8915,6 +8915,25 @@ def user() -> Column:
 
 
 @_try_remote_functions
+def session_user() -> Column:
+    """Returns the user name of current execution context.
+
+    .. versionadded:: 4.0.0
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.session_user()).show() # doctest: +SKIP
+    +--------------+
+    |current_user()|
+    +--------------+
+    | ruifeng.zheng|
+    +--------------+
+    """
+    return _invoke_function("session_user")
+
+
+@_try_remote_functions
 def crc32(col: "ColumnOrName") -> Column:
     """
     Calculates the cyclic redundancy check value  (CRC32) of a binary column and

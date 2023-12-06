@@ -738,8 +738,9 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 )
 
             elif dataframes_in_group != 0:
-                raise ValueError(
-                    "Invalid number of pandas.DataFrames in group {0}".format(dataframes_in_group)
+                raise PySparkValueError(
+                    error_class="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    message_parameters={"dataframes_in_group": str(dataframes_in_group)},
                 )
 
 

@@ -260,7 +260,20 @@ class PySparkPicklingError(PySparkException, PicklingError):
     """
 
 
+class RetriesExceeded(PySparkException):
+    """
+    Represents an exception which is considered retriable, but retry limits
+    were exceeded
+    """
+
+
 class PySparkKeyError(PySparkException, KeyError):
     """
     Wrapper class for KeyError to support error classes.
+    """
+
+
+class PySparkImportError(PySparkException, ImportError):
+    """
+    Wrapper class for ImportError to support error classes.
     """

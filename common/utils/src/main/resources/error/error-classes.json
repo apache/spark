@@ -3066,6 +3066,81 @@
     ],
     "sqlState" : "42713"
   },
+  "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
+    "message" : [
+      "No committed batch found, checkpoint location: <checkpointLocation>. Ensure that the query has run and committed any microbatch before stopping."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_CONFLICT_OPTIONS" : {
+    "message" : [
+      "The options <options> cannot be specified together. Please specify the one."
+    ],
+    "sqlState" : "42613"
+  },
+  "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
+    "message" : [
+      "Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: <sourceOptions>.",
+      "Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
+  },
+  "STDS_INTERNAL_ERROR" : {
+    "message" : [
+      "Internal error: <message>",
+      "Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STDS_INVALID_OPTION_VALUE" : {
+    "message" : [
+      "Invalid value for source option '<optionName>':"
+    ],
+    "subClass" : {
+      "IS_EMPTY" : {
+        "message" : [
+          "cannot be empty."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "cannot be negative."
+        ]
+      },
+      "WITH_MESSAGE" : {
+        "message" : [
+          "<message>"
+        ]
+      }
+    },
+    "sqlState" : "42616"
+  },
+  "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
+    "message" : [
+      "The state does not have any partition. Please double check that the query points to the valid state. options: <sourceOptions>"
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_OFFSET_LOG_UNAVAILABLE" : {
+    "message" : [
+      "The offset log for <batchId> does not exist, checkpoint location: <checkpointLocation>.",
+      "Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_OFFSET_METADATA_LOG_UNAVAILABLE" : {
+    "message" : [
+      "Metadata is not available for offset log for <batchId>, checkpoint location: <checkpointLocation>.",
+      "The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_REQUIRED_OPTION_UNSPECIFIED" : {
+    "message" : [
+      "'<optionName>' must be specified."
+    ],
+    "sqlState" : "42601"
+  },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"

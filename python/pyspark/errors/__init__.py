@@ -39,12 +39,14 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     SparkNoSuchElementException,
     PySparkTypeError,
     PySparkValueError,
+    PySparkImportError,
     PySparkIndexError,
     PySparkAttributeError,
     PySparkRuntimeError,
     PySparkAssertionError,
     PySparkNotImplementedError,
     PySparkPicklingError,
+    RetriesExceeded,
     PySparkKeyError,
 )
 
@@ -70,11 +72,13 @@ __all__ = [
     "SparkNoSuchElementException",
     "PySparkTypeError",
     "PySparkValueError",
+    "PySparkImportError",
     "PySparkIndexError",
     "PySparkAttributeError",
     "PySparkRuntimeError",
     "PySparkAssertionError",
     "PySparkNotImplementedError",
     "PySparkPicklingError",
+    "RetriesExceeded",
     "PySparkKeyError",
 ]
