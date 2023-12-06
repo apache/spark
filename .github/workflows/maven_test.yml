@@ -151,6 +151,8 @@ jobs:
             java${{ matrix.java }}-maven-
       - name: Clear Ivy Cache
         run: |
+          ls -al /home/runner/work/spark/spark
+          ls -al /home/runner/work/spark
           ls -al ~
           rm -rf ~/.ivy2/cache/org.apache.hive/hive-exec
           rm -rf ~/.ivy2/cache/org.slf4j/slf4j-api
