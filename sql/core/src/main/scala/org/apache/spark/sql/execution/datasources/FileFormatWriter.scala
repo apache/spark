@@ -95,7 +95,8 @@ object FileFormatWriter extends Logging {
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String],
-      numStaticPartitionCols: Int = 0)
+      numStaticPartitionCols: Int = 0,
+      writePartitionColumns: Boolean = false)
     : Set[String] = {
     require(partitionColumns.size >= numStaticPartitionCols)
 
@@ -119,16 +120,20 @@ object FileFormatWriter extends Logging {
     val dataSchema = dataColumns.toStructType
     DataSourceUtils.verifySchema(fileFormat, dataSchema)
     DataSourceUtils.checkFieldNames(fileFormat, dataSchema)
+
+    val outputDataColumns =
+      if (writePartitionColumns) dataColumns ++ partitionColumns else dataColumns
+
     // Note: prepareWrite has side effect. It sets "job".
-    val outputWriterFactory =
-      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
+    val outputWriterFactory = fileFormat.prepareWrite(
+      sparkSession, job, caseInsensitiveOptions, outputDataColumns.toStructType)
 
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
       allColumns = finalOutputSpec.outputColumns,
-      dataColumns = dataColumns,
+      dataColumns = outputDataColumns,
       partitionColumns = partitionColumns,
       bucketSpec = writerBucketSpec,
       path = finalOutputSpec.outputPath,
