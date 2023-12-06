@@ -222,9 +222,10 @@ public class VectorizedColumnReader {
           // WritableColumnVector will throw an exception when trying to decode to an Int when the
           // dictionary is in fact initialized as Long
           LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
-          boolean castLongToInt = typeAnnotation instanceof DecimalLogicalTypeAnnotation &&
-            ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <=
-            Decimal.MAX_INT_DIGITS() && primitiveType.getPrimitiveTypeName() == INT64;
+          boolean castLongToInt =
+            typeAnnotation instanceof DecimalLogicalTypeAnnotation annotation &&
+            annotation.getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+            primitiveType.getPrimitiveTypeName() == INT64;
 
           // We require a long value, but we need to use dictionary to decode the original
           // signed int first

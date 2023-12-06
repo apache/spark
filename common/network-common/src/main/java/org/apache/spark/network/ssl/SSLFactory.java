@@ -132,9 +132,9 @@ public class SSLFactory {
   public void destroy() {
     if (trustManagers != null) {
       for (int i = 0; i < trustManagers.length; i++) {
-        if (trustManagers[i] instanceof ReloadingX509TrustManager) {
+        if (trustManagers[i] instanceof ReloadingX509TrustManager manager) {
           try {
-            ((ReloadingX509TrustManager) trustManagers[i]).destroy();
+            manager.destroy();
           } catch (InterruptedException ex) {
             logger.info("Interrupted while destroying trust manager: " + ex.toString(), ex);
           }

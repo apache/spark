@@ -258,9 +258,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public byte[] getBytes() {
     // avoid copy if `base` is `byte[]`
-    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[]
-      && ((byte[]) base).length == numBytes) {
-      return (byte[]) base;
+    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[] bytes
+      && bytes.length == numBytes) {
+      return bytes;
     } else {
       byte[] bytes = new byte[numBytes];
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
