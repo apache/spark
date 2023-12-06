@@ -1372,6 +1372,80 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       assert(numOutputPartitioning.size == 8)
     }
   }
+
+  test("SPARK-46219: Unwrap cast in join condition") {
+    val intExpr = Literal(1)
+    val longExpr = Literal(1L)
+    val smjExec = SortMergeJoinExec(
+      leftKeys = Cast(intExpr, LongType) :: Nil,
+      rightKeys = longExpr :: Nil,
+      joinType = Inner,
+      condition = None,
+      left = DummySparkPlan(outputPartitioning = HashPartitioning(intExpr:: Nil, 5)),
+      right = DummySparkPlan())
+
+    Seq(true, false).foreach { unwrapCast =>
+      withSQLConf(SQLConf.UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED.key -> unwrapCast.toString) {
+        val outputPlan = EnsureRequirements.apply(smjExec)
+        if (unwrapCast) {
+          outputPlan match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+              SortExec(_, _, _: DummySparkPlan, _),
+              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
+              assert(leftKeys === Seq(intExpr))
+              assert(rightKeys === Seq(Cast(longExpr, IntegerType, evalMode = EvalMode.TRY)))
+            case _ => fail(outputPlan.toString)
+          }
+        } else {
+          outputPlan match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _),
+              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
+              assert(leftKeys === smjExec.leftKeys)
+              assert(rightKeys === smjExec.rightKeys)
+            case _ => fail(outputPlan.toString)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-46219: Number of partitions may be inconsistent") {
+    val longExpr = Literal(1L)
+    val decimalExpr = Literal(Decimal(1L, 18, 0))
+    val smjExec = SortMergeJoinExec(
+      leftKeys = Cast(longExpr, DecimalType(20, 0)) :: Nil,
+      rightKeys = Cast(decimalExpr, DecimalType(20, 0)) :: Nil,
+      joinType = Inner,
+      condition = None,
+      left = DummySparkPlan(outputPartitioning = HashPartitioning(longExpr :: Nil, 10)),
+      right = DummySparkPlan(outputPartitioning = HashPartitioning(decimalExpr :: Nil, 5)))
+
+    Seq(true, false).foreach { unwrapCast =>
+      withSQLConf(SQLConf.UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED.key -> unwrapCast.toString) {
+        val outputPlan = EnsureRequirements.apply(smjExec)
+        if (unwrapCast) {
+          outputPlan match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+              SortExec(_, _, _: DummySparkPlan, _),
+              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
+              assert(leftKeys === Seq(longExpr))
+              assert(rightKeys === Seq(Cast(decimalExpr, LongType, evalMode = EvalMode.TRY)))
+            case _ => fail(outputPlan.toString)
+          }
+        } else {
+          outputPlan match {
+            case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _),
+              SortExec(_, _, ShuffleExchangeExec(_, _: DummySparkPlan, _, _), _), _) =>
+              assert(leftKeys === smjExec.leftKeys)
+              assert(rightKeys === smjExec.rightKeys)
+            case _ => fail(outputPlan.toString)
+          }
+        }
+      }
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements
