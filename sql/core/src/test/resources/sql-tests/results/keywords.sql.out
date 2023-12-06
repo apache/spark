@@ -134,7 +134,7 @@ IDENTIFIER	false
 IF	false
 IGNORE	false
 ILIKE	false
-IMMEDIATE	true
+IMMEDIATE	false
 IMPORT	false
 IN	false
 INCLUDE	false
@@ -346,4 +346,3 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 struct<keyword:string>
 -- !query output
 EXECUTE
-IMMEDIATE

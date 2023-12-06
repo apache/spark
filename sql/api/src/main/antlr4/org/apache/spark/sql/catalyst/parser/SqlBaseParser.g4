@@ -1414,6 +1414,7 @@ ansiNonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | INCLUDE
     | INDEX
@@ -1737,6 +1738,7 @@ nonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | IN
     | INCLUDE
