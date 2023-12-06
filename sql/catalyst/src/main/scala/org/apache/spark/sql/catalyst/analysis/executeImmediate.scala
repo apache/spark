@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.{Either, Left, Right}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -51,10 +52,40 @@ case class ExecuteImmediateQuery(
 class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     extends Rule[LogicalPlan] with ColumnResolutionHelper {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-    case ExecuteImmediateQuery(expressions, query, targetVariablesOpt) =>
-      val queryString = query match {
+  def resolveVariable(e: Expression) : Expression = {
+    /* We know that the expression is either UnresolvedAttribute or Alias,
+     * as passed from the parser.
+     * If it is an UnresolvedAttribute, we look it up in the catalog and return it.
+     * If it is an Alias, we resolve the child and return an Alias with the same name.
+     */
+    e match {
+      case u: UnresolvedAttribute =>
+        lookupVariable(u.nameParts) match {
+          case Some(variable) =>
+            variable.copy(canFold = false)
+          case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
+        }
+
+      case a: Alias =>
+        Alias(resolveVariable(a.child), a.name)()
+
+      case other => throw SparkException.internalError(
+        "Unexpected variable expression in ParametrizedQuery: " + other)
+    }
+  }
+
+  def resolveArguments(expressions : Seq[Expression]): Seq[Expression] = {
+    expressions.map { exp =>
+      if (exp.resolved) {
+        exp
+      } else {
+        resolveVariable(exp)
+      }
+    }
+  }
+
+  def extractQueryString(either : Either[String, UnresolvedAttribute]) : String = {
+    either match {
         case Left(v) => v
         case Right(u) =>
           val varReference = lookupVariable(u.nameParts) match {
@@ -74,15 +105,21 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           // be independent of row
           varReference.eval(null).toString
       }
+  }
 
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
+    case ExecuteImmediateQuery(expressions, query, targetVariablesOpt) =>
+      val queryString = extractQueryString(query)
       val plan = CatalystSqlParser.parsePlan(queryString);
+
       val posNodes = plan.collect {
         case p: LogicalPlan =>
-          p.expressions.map(_.collect { case n: PosParameter => n }).flatten
+          p.expressions.flatMap(_.collect { case n: PosParameter => n })
       }.flatten
       val namedNodes = plan.collect {
         case p: LogicalPlan =>
-          p.expressions.map(_.collect{ case n: NamedParameter => n }).flatten
+          p.expressions.flatMap(_.collect{ case n: NamedParameter => n })
       }.flatten
 
       val queryPlan = if (expressions.isEmpty || (posNodes.isEmpty && namedNodes.isEmpty)) {
@@ -92,11 +129,17 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           errorClass = "INVALID_PARAMETRIZED_QUERY",
           messageParameters = Map.empty)
       } else {
+        // parser does not distinguish between variables and columns.
+        // Make sure that we have either literal or variable in expressions.
+
         if (posNodes.nonEmpty) {
           // Add aggregation or a project.
           PosParameterizedQuery(
             plan,
-            expressions)
+            // we need to resolve arguments before Resolution batch to make sure
+            // that some rule does not accidently resolve our parameters.
+            // we do not want this as they can resolve some unsupported parameters
+            resolveArguments(expressions))
         } else {
           val namedExpressions = expressions.collect {
             case (e: NamedExpression) => e
@@ -105,7 +148,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           NameParameterizedQuery(
             plan,
             namedExpressions.map(_.name),
-            namedExpressions)
+            // we need to resolve arguments before Resolution batch to make sure
+            // that some rule does not accidently resolve our parameters.
+            // we do not want this as they can resolve some unsupported parameters
+            resolveArguments(namedExpressions))
         }
       }
 
