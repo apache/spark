@@ -73,7 +73,8 @@ else
         export JAVA_HOME=$(PYTHONPATH="$TEMP_DIR" python -c 'import jdk; print(jdk.install("17"))')
         RUNNER="${JAVA_HOME}/bin/java"
         echo "Java was installed to the path \"$JAVA_HOME.\""\
-        "You can avoid having to re-install it by running \`export JAVA_HOME=\"$JAVA_HOME\"\`."
+        "You can avoid needing to re-install JAVA by setting your JAVA_HOME environment variable"\
+        "to \"/root/.jdk/jdk-17.0.9+9.\""
     else
         echo "JDK installation skipped."\
         "You can manually install JDK (17 or later) and set JAVA_HOME in your environment."
