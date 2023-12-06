@@ -49,12 +49,15 @@ import org.apache.spark.unsafe.types.UTF8String
 class XmlSuite
     extends QueryTest
     with SharedSparkSession
+    with CommonFileDataSourceSuite
     with TestXmlData {
   import testImplicits._
 
   private val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
+
+  override protected def dataSourceFormat: String = "xml"
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -65,6 +68,9 @@ class XmlSuite
   private def getEmptyTempDir(): Path = {
     Files.createTempDirectory(tempDir, "test")
   }
+
+  override def excluded: Seq[String] = Seq(
+    s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system")
 
   // Tests
 
