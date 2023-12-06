@@ -155,6 +155,7 @@ jobs:
           ls -al /home/runner/work/spark
           pwd
           ls -al ~
+          ls -al /home/runner
           rm -rf /home/runner/.ivy2/cache/org.apache.hive/hive-exec
           rm -rf /home/runner/.ivy2/cache/org.slf4j/slf4j-api
           rm -rf /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
