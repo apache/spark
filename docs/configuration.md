@@ -1761,6 +1761,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.io.compression.zstd.bufferPool.enabled</code></td>
+  <td>true</td>
+  <td>
+    If true, enable buffer pool of ZSTD JNI library.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.io.compression.zstd.workers</code></td>
   <td>0</td>
   <td>
