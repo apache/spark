@@ -153,11 +153,12 @@ jobs:
         run: |
           ls -al /home/runner/work/spark/spark
           ls -al /home/runner/work/spark
+          pwd
           ls -al ~
-          rm -rf ~/.ivy2/cache/org.apache.hive/hive-exec
-          rm -rf ~/.ivy2/cache/org.slf4j/slf4j-api
-          rm -rf ~/.m2/repository/org/apache/hive/hive-exec/2.3.9
-          rm -rf ~/.m2/repository/org/slf4j/slf4j-api/1.7.30
+          rm -rf /home/runner/.ivy2/cache/org.apache.hive/hive-exec
+          rm -rf /home/runner/.ivy2/cache/org.slf4j/slf4j-api
+          rm -rf /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
+          rm -rf /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
