@@ -199,12 +199,14 @@ class SparkConnectSessionManager extends Logging {
     }
   }
 
-  // Visible for testing.
-  // For testing only: ignoreCustomTimeout lets the check ignore the custom timeout set by
-  // SessionHolder.setCustomInactiveTimeoutMs and use defaultInactiveTimeoutMs only.
-  private[connect] def periodicMaintenance(
+  // Visible for testing
+  private[connect] def periodicMaintenance(defaultInactiveTimeoutMs: Long): Unit =
+    periodicMaintenance(defaultInactiveTimeoutMs, ignoreCustomTimeout = false)
+
+  // Test only: ignoreCustomTimeout=true is used by invalidateAllSessions to force cleanup in tests.
+  private def periodicMaintenance(
       defaultInactiveTimeoutMs: Long,
-      ignoreCustomTimeout: Boolean = false): Unit = {
+      ignoreCustomTimeout: Boolean): Unit = {
     logInfo("Started periodic run of SparkConnectSessionManager maintenance.")
     // Find any sessions that expired and should be removed.
     val toRemove = new mutable.ArrayBuffer[SessionHolder]()
