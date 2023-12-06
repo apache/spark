@@ -149,6 +149,10 @@ jobs:
           key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             java${{ matrix.java }}-maven-
+      - name: Clear Ivy Cache
+        run: |
+          rm -rf ~/.ivy2/cache/org.apache.hive/hive-exec
+          rm -rf ~/.ivy2/cache/org.slf4j/slf4j-api
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
