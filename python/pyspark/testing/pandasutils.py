@@ -480,8 +480,8 @@ class PandasOnSparkTestUtils:
         check_row_order: bool = True,
     ):
         """
-        Asserts if two arbitrary objects are equal or not. If given objects are Koalas DataFrame
-        or Series, they are converted into pandas' and compared.
+        Asserts if two arbitrary objects are equal or not. If given objects are
+        Pandas-on-Spark DataFrame or Series, they are converted into pandas' and compared.
 
         :param left: object to compare
         :param right: object to compare
