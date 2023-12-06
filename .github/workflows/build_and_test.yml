@@ -269,6 +269,7 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
+        // SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
         if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "BRANCH" != "master" ]]; then 
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
         fi
