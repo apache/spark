@@ -130,7 +130,7 @@ class DataSource(ABC):
             message_parameters={"feature": "reader"},
         )
 
-    def writer(self, schema: StructType, saveMode: str) -> "DataSourceWriter":
+    def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
         """
         Returns a ``DataSourceWriter`` instance for writing data.
 
@@ -140,9 +140,8 @@ class DataSource(ABC):
         ----------
         schema : StructType
             The schema of the data to be written.
-        saveMode : str
-            A string identifies the save mode. It can be one of the following:
-            `append`, `overwrite`, `error`, `ignore`.
+        overwrite : bool
+            A flag indicating whether to overwrite existing data when writing to the data source.
 
         Returns
         -------
