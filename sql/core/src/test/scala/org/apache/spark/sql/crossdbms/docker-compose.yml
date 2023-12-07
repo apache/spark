@@ -1,6 +1,6 @@
 version: "3"
 services:
-  python-app:
+  generate_golden_files:
     build:
       context: ../../../../../../
       dockerfile: scala/org/apache/spark/sql/crossdbms/Dockerfile

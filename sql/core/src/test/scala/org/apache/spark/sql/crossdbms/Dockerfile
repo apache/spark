@@ -15,5 +15,3 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Run cross_dbms_sql_test_runner when the container launches
 CMD ["python", "-u" , "./cross_dbms_sql_test_runner.py"]
-
-# TODO: Copy back the golden files from the container
