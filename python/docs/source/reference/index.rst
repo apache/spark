@@ -23,7 +23,7 @@ API Reference
 This page lists an overview of all public PySpark modules, classes, functions and methods.
 
 .. note::
-   Spark SQL, DataFrame, Pandas API on Spark, Structured Streaming, and MLlib (DataFrame-based)
+   DataFrame, SQL, Pandas API on Spark, Structured Streaming, and MLlib (DataFrame-based)
    support Spark Connect.
 
 .. toctree::
