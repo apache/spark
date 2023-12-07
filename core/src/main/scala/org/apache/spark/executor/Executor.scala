@@ -40,6 +40,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.slf4j.MDC
 
 import org.apache.spark._
+import org.apache.spark.api.python.CachedArrowBatchServer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -347,6 +348,10 @@ private[spark] class Executor(
 
   metricsPoller.start()
 
+  val cachedArrowBatchServer = new CachedArrowBatchServer()
+
+  cachedArrowBatchServer.start()
+
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
   /**
@@ -418,6 +423,14 @@ private[spark] class Executor(
     if (!executorShutdown.getAndSet(true)) {
       ShutdownHookManager.removeShutdownHook(stopHookReference)
       env.metricsSystem.report()
+      try {
+        if (cachedArrowBatchServer != null) {
+          cachedArrowBatchServer.stop()
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Unable to stop arrow batch server", e)
+      }
       try {
         if (metricsPoller != null) {
           metricsPoller.stop()

@@ -4217,24 +4217,6 @@ class Dataset[T] private[sql](
     queryExecution.analyzed.semanticHash()
   }
 
-  def getCachedArrowBatchBlockIds(): Array[String] = {
-    val rdd = toArrowBatchRdd(queryExecution.executedPlan)
-    rdd.mapPartitions { iter: Iterator[Array[Byte]] =>
-      val blockManager = SparkEnv.get.blockManager
-
-      iter.map { blockData =>
-        val uuid = java.util.UUID.randomUUID()
-        val blockId = ArrowBatchBlockId(uuid)
-        // TODO: If the spark task failed at the half place of the iterator
-        //  clean cached blocks
-        blockManager.putSingle[Array[Byte]](
-          blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true
-        )
-        blockId.toString
-      }
-    }.collect()
-  }
-
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////

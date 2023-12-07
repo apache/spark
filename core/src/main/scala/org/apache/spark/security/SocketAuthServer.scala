@@ -40,8 +40,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  */
 private[spark] abstract class SocketAuthServer[T](
     authHelper: SocketAuthHelper,
-    threadName: String,
-    allowMultipleConnections: Boolean = false) extends Logging {
+    threadName: String) extends Logging {
 
   def this(env: SparkEnv, threadName: String) = this(new SocketAuthHelper(env.conf), threadName)
   def this(threadName: String) = this(SparkEnv.get, threadName)
@@ -78,44 +77,7 @@ private[spark] abstract class SocketAuthServer[T](
     (serverSocket.getLocalPort, authHelper.secret)
   }
 
-  private def startThreadingServer(): (Int, String) = {
-    logTrace("Creating listening socket")
-    val address = InetAddress.getLoopbackAddress()
-    val serverSocket = new ServerSocket(0, 1, address)
-
-    new Thread(s"$threadName-listener") {
-      setDaemon(true)
-
-      override def run(): Unit = {
-        var sock: Socket = null
-
-        var workerCount = 0
-        try {
-          sock = serverSocket.accept()
-          workerCount += 1
-          new Thread(s"$threadName-worker-$workerCount") {
-            setDaemon(true)
-            try {
-              authHelper.authClient(sock)
-              handleConnection(sock)
-            } finally {
-              JavaUtils.closeQuietly(sock)
-            }
-          }
-        } finally {
-          logTrace("Closing server")
-          JavaUtils.closeQuietly(serverSocket)
-        }
-      }
-    }
-    (serverSocket.getLocalPort, authHelper.secret)
-  }
-
-  val (port, secret) = if (allowMultipleConnections) {
-    startThreadingServer()
-  } else {
-    startServer()
-  }
+  val (port, secret) = startServer()
 
   /**
    * Handle a connection which has already been authenticated.  Any error from this function
@@ -129,16 +91,10 @@ private[spark] abstract class SocketAuthServer[T](
    * exception as a cause.
    */
   def getResult(): T = {
-    if (allowMultipleConnections) {
-      throw new UnsupportedOperationException()
-    }
     getResult(Duration.Inf)
   }
 
   def getResult(wait: Duration): T = {
-    if (allowMultipleConnections) {
-      throw new UnsupportedOperationException()
-    }
     ThreadUtils.awaitResult(promise.future, wait)
   }
 
