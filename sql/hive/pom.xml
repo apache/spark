@@ -193,7 +193,14 @@
       <artifactId>hive-exec</artifactId>
       <scope>test</scope>
       <version>2.3.9</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.pentaho</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
+
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
