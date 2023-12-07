@@ -1186,6 +1186,19 @@ private[spark] class Executor(
           }
         }
       }
+      if (!isDefaultState(state.sessionUUID)) {
+        for ((name, timestamp) <- defaultSessionState.currentJars) {
+          logInfo(s"foobar $name")
+          val localName = new URI(name).getPath.split("/").last
+          logInfo(s"foobar $localName")
+          val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
+          logInfo(s"foobar $url")
+          if (!state.urlClassLoader.getURLs().contains(url)) {
+            logInfo(s"foobar Adding common $url to class loader ${state.sessionUUID}")
+            state.urlClassLoader.addURL(url)
+          }
+        }
+      }
       if (renewClassLoader) {
         // Recreate the class loader to ensure all classes are updated.
         state.urlClassLoader = createClassLoader(state.urlClassLoader.getURLs, useStub = true)
