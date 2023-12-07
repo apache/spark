@@ -40,11 +40,10 @@ import org.apache.spark.util.AccumulatorContext.internOption
 class SQLMetric(val metricType: String,
                 initValue: Long = 0L,
                 zeroValue: Long = 0L) extends AccumulatorV2[Long, Long] {
-  // If a metric has value equal to its initValue, then it should be filtered out before
-  // aggregating with SQLMetrics.stringValue().
-  // zeroValue defines the lowest value considered valid. If a SQLMetric is invalid, it is set to
-  // zeroValue upon receiving any updates, and it also reports zeroValue as its value to avoid
-  // exposing it to the user programatically.
+  // initValue defines the initial value of the metric. zeroValue defines the lowest value
+  // considered valid. If a SQLMetric is invalid, it is set to zeroValue upon receiving any
+  // updates, and it also reports zeroValue as its value to avoid exposing it to the user
+  // programatically.
   //
   // For many SQLMetrics, we use initValue = -1 and zeroValue = 0 to indicate that the metric is
   // by default invalid. At the end of a task, we will update the metric making it valid, and the
@@ -70,10 +69,12 @@ class SQLMetric(val metricType: String,
       this.getClass.getName, other.getClass.getName)
   }
 
-  // This is used to decide whether the metric should be filtered.
+  // This is used to filter out metrics. Metrics with value equal to initValue should
+  // be filtered out, since they are either invalid or safe to filter without changing
+  // the aggregation defined in [[SQLMetrics.stringValue]].
   override def isZero: Boolean = _value == initValue
 
-  def isValid: Boolean = value >= zeroValue
+  def isValid: Boolean = _value >= zeroValue
 
   override def add(v: Long): Unit = {
     if (!isValid) _value = zeroValue
