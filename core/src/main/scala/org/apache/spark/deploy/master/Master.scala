@@ -604,8 +604,11 @@ private[deploy] class Master(
     workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
+  private var recoveryStartTimeNs = 0L
+
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
       storedWorkers: Seq[WorkerInfo]): Unit = {
+    recoveryStartTimeNs = System.nanoTime()
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -662,7 +665,8 @@ private[deploy] class Master(
 
     state = RecoveryState.ALIVE
     schedule()
-    logInfo("Recovery complete - resuming operations!")
+    val timeTakenNs = System.nanoTime() - recoveryStartTimeNs
+    logInfo(s"Recovery complete in ${timeTakenNs / 1000000000d}s - resuming operations!")
   }
 
   /**
