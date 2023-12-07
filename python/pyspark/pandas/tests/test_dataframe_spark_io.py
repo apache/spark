@@ -253,8 +253,6 @@ class DataFrameSparkIOTestsMixin:
                 expected_idx.sort_values(by="f").to_spark().toPandas(),
             )
 
-    # TODO(SPARK-40353): re-enabling the `test_read_excel`.
-    @unittest.skip("openpyxl")
     def test_read_excel(self):
         with self.temp_dir() as tmp:
             path1 = "{}/file1.xlsx".format(tmp)
@@ -266,15 +264,18 @@ class DataFrameSparkIOTestsMixin:
                 pd.read_excel(open(path1, "rb"), index_col=0),
             )
             self.assert_eq(
-                ps.read_excel(open(path1, "rb"), index_col=0, squeeze=True),
-                pd.read_excel(open(path1, "rb"), index_col=0, squeeze=True),
+                ps.read_excel(
+                    open(path1, "rb"),
+                    index_col=0,
+                ),
+                pd.read_excel(open(path1, "rb"), index_col=0),
             )
 
             self.assert_eq(ps.read_excel(path1), pd.read_excel(path1))
             self.assert_eq(ps.read_excel(path1, index_col=0), pd.read_excel(path1, index_col=0))
             self.assert_eq(
-                ps.read_excel(path1, index_col=0, squeeze=True),
-                pd.read_excel(path1, index_col=0, squeeze=True),
+                ps.read_excel(path1, index_col=0),
+                pd.read_excel(path1, index_col=0),
             )
 
             self.assert_eq(ps.read_excel(tmp), pd.read_excel(path1))
@@ -288,11 +289,11 @@ class DataFrameSparkIOTestsMixin:
                 ).sort_index(),
             )
             self.assert_eq(
-                ps.read_excel(tmp, index_col=0, squeeze=True).sort_index(),
+                ps.read_excel(tmp, index_col=0).sort_index(),
                 pd.concat(
                     [
-                        pd.read_excel(path1, index_col=0, squeeze=True),
-                        pd.read_excel(path2, index_col=0, squeeze=True),
+                        pd.read_excel(path1, index_col=0),
+                        pd.read_excel(path2, index_col=0),
                     ]
                 ).sort_index(),
             )
@@ -306,18 +307,14 @@ class DataFrameSparkIOTestsMixin:
             sheet_names = [["Sheet_name_1", "Sheet_name_2"], None]
 
             pdfs1 = pd.read_excel(open(path1, "rb"), sheet_name=None, index_col=0)
-            pdfs1_squeezed = pd.read_excel(
-                open(path1, "rb"), sheet_name=None, index_col=0, squeeze=True
-            )
+            pdfs1_squeezed = pd.read_excel(open(path1, "rb"), sheet_name=None, index_col=0)
 
             for sheet_name in sheet_names:
                 psdfs = ps.read_excel(open(path1, "rb"), sheet_name=sheet_name, index_col=0)
                 self.assert_eq(psdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
                 self.assert_eq(psdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
 
-                psdfs = ps.read_excel(
-                    open(path1, "rb"), sheet_name=sheet_name, index_col=0, squeeze=True
-                )
+                psdfs = ps.read_excel(open(path1, "rb"), sheet_name=sheet_name, index_col=0)
                 self.assert_eq(psdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
                 self.assert_eq(psdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
 
@@ -331,7 +328,7 @@ class DataFrameSparkIOTestsMixin:
                 self.assert_eq(psdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
                 self.assert_eq(psdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
 
-                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
+                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
                 self.assert_eq(psdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
                 self.assert_eq(psdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
 
@@ -341,16 +338,14 @@ class DataFrameSparkIOTestsMixin:
                 self.test_pdf[["i32"]].to_excel(writer, sheet_name="Sheet_name_2")
 
             pdfs2 = pd.read_excel(path2, sheet_name=None, index_col=0)
-            pdfs2_squeezed = pd.read_excel(path2, sheet_name=None, index_col=0, squeeze=True)
+            pdfs2_squeezed = pd.read_excel(path2, sheet_name=None, index_col=0)
 
             self.assert_eq(
                 ps.read_excel(tmp, sheet_name="Sheet_name_2", index_col=0).sort_index(),
                 pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
             )
             self.assert_eq(
-                ps.read_excel(
-                    tmp, sheet_name="Sheet_name_2", index_col=0, squeeze=True
-                ).sort_index(),
+                ps.read_excel(tmp, sheet_name="Sheet_name_2", index_col=0).sort_index(),
                 pd.concat(
                     [pdfs1_squeezed["Sheet_name_2"], pdfs2_squeezed["Sheet_name_2"]]
                 ).sort_index(),
@@ -367,7 +362,7 @@ class DataFrameSparkIOTestsMixin:
                     pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
                 )
 
-                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
+                psdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
                 self.assert_eq(
                     psdfs["Sheet_name_1"].sort_index(),
                     pd.concat(
