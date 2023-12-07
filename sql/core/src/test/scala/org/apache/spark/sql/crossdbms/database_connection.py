@@ -72,7 +72,7 @@ class PostgresConnection(DatabaseConnection):
     """
     POSTGRES_DRIVER_CLASS_NAME: str = "org.postgresql.Driver"
     DEFAULT_USER: str = "pg"
-    DEFAULT_CONNECTION_URL: str = "jdbc:postgresql://localhost:5432/postgres?user=" + DEFAULT_USER
+    DEFAULT_CONNECTION_URL: str = f"dbname=postgres user={DEFAULT_USER} password=password host=localhost port=5432"
 
     def __init__(self, connection_url: Optional[str] = None) -> None:
         self.url: str = connection_url or self.DEFAULT_CONNECTION_URL

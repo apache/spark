@@ -15,27 +15,27 @@
 # limitations under the License.
 #
 
-import os
+from dataclasses import dataclass
 from typing import List
 from itertools import tee, filterfalse
+from pathlib import Path
 
-def get_workspace_file_path(first, *more):
-    """
-    Get a path relative to the root project. It is assumed that a Spark home is set.
+@dataclass
+class TestCase:
+    name: str
+    input_file: str
+    result_file: str
 
-    Args:
-        first (str): The first part of the path.
-        *more (str): Additional parts of the path.
+@dataclass
+class ExecutionOutput:
+    sql: str
+    output: str
 
-    Returns:
-        str: The complete path.
-    """
-    if not ("spark.test.home" in os.environ or "SPARK_HOME" in os.environ):
-        raise ValueError("spark.test.home or SPARK_HOME is not set.")
+    def __str__(self):
+        return f"-- !query\n{self.sql}\n-- !query output\n{self.output}"
 
-    spark_home = os.environ.get("spark.test.home", os.environ["SPARK_HOME"])
-    return os.path.join(spark_home, first, *more)
-
+def get_workspace_file_path():
+    return Path.home () / "spark" / "sql" / "core" / "src" / "test" / "resources" / "sql-tests"
 
 def file_to_string(file_path, encoding='utf-8'):
     with open(file_path, 'rb') as file:
@@ -55,9 +55,9 @@ def split_comments_and_codes(input_string):
 
     return list(comments), list(codes)
 
-def get_queries(code: List[str], comments: List[str], list_test_cases):
+def get_queries(code: List[str], comments: List[str], list_test_cases: List[TestCase]):
     def split_with_semicolon(seq):
-        return "\n".join(seq).split("(?<=[^\\\\]);")
+        return "\n".join(seq).split(";")
 
     # If `--IMPORT` found, load code from another test case file, then insert them
     # into the head in this test.
@@ -98,7 +98,7 @@ def get_queries(code: List[str], comments: List[str], list_test_cases):
 
     # List of SQL queries to run
     return [
-        query.strip().split("\n")
+        query.strip()
         for query in temp_queries
-        if query.strip()
+        if query and not query.strip().startswith('--')
     ]
