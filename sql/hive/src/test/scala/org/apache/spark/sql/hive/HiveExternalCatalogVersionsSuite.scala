@@ -168,11 +168,15 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils with Logging
     if (hiveExecFile.exists()) {
       logInfo("hive exec file existed.")
       Utils.deleteRecursively(hiveExecFile)
+    } else {
+      logInfo("hive exec file non-exist.")
     }
     val slf4jApiFile = new File("/home/runner/.ivy2/cache/org.slf4j/slf4j-api")
     if (slf4jApiFile.exists()) {
       logInfo("slf4j api file existed.")
       Utils.deleteRecursively(slf4jApiFile)
+    } else {
+      logInfo("slf4j api file non-exist.")
     }
 
     val tempPyFile = File.createTempFile("test", ".py")

@@ -160,6 +160,7 @@ jobs:
           rm -rf /home/runner/.ivy2/cache/org.slf4j/slf4j-api
           rm -rf /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
           rm -rf /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
+          find . -name "hive-exec*"
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
