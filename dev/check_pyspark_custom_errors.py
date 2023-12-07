@@ -22,11 +22,6 @@ import sys
 sys.path.insert(0, "python")
 import os
 
-# No Spark Session or JVM-related initialization should be done here,
-# as Spark build is not assumed to be available at this point.
-from pyspark import errors as pyspark_errors
-from pyspark.errors.exceptions import connect as pyspark_connect_errors
-
 
 def find_py_files(path, exclude_paths):
     """
@@ -108,9 +103,70 @@ def check_pyspark_custom_errors(target_paths, exclude_paths):
 
 if __name__ == "__main__":
     # PySpark-specific errors
-    pyspark_error_list = [error for error in dir(pyspark_errors) if not error.startswith("__")]
+    pyspark_error_list = [
+        "AnalysisException",
+        "ArithmeticException",
+        "ArrayIndexOutOfBoundsException",
+        "DateTimeException",
+        "IllegalArgumentException",
+        "NumberFormatException",
+        "ParseException",
+        "PySparkAssertionError",
+        "PySparkAttributeError",
+        "PySparkException",
+        "PySparkImportError",
+        "PySparkIndexError",
+        "PySparkKeyError",
+        "PySparkNotImplementedError",
+        "PySparkPicklingError",
+        "PySparkRuntimeError",
+        "PySparkTypeError",
+        "PySparkValueError",
+        "PythonException",
+        "QueryExecutionException",
+        "RetriesExceeded",
+        "SessionNotSameException",
+        "SparkNoSuchElementException",
+        "SparkRuntimeException",
+        "SparkUpgradeException",
+        "StreamingQueryException",
+        "TempTableAlreadyExistsException",
+        "UnknownException",
+        "UnsupportedOperationException",
+    ]
     connect_error_list = [
-        error for error in dir(pyspark_connect_errors) if not error.startswith("__")
+        "AnalysisException",
+        "ArithmeticException",
+        "ArrayIndexOutOfBoundsException",
+        "BaseAnalysisException",
+        "BaseArithmeticException",
+        "BaseArrayIndexOutOfBoundsException",
+        "BaseDateTimeException",
+        "BaseIllegalArgumentException",
+        "BaseNoSuchElementException",
+        "BaseNumberFormatException",
+        "BaseParseException",
+        "BasePythonException",
+        "BaseQueryExecutionException",
+        "BaseSparkRuntimeException",
+        "BaseSparkUpgradeException",
+        "BaseStreamingQueryException",
+        "BaseUnsupportedOperationException",
+        "DateTimeException",
+        "IllegalArgumentException",
+        "NumberFormatException",
+        "ParseException",
+        "PySparkException",
+        "PythonException",
+        "QueryExecutionException",
+        "SparkConnectException",
+        "SparkConnectGrpcException",
+        "SparkException",
+        "SparkNoSuchElementException",
+        "SparkRuntimeException",
+        "SparkUpgradeException",
+        "StreamingQueryException",
+        "UnsupportedOperationException",
     ]
     internal_error_list = ["RetryException", "StopIteration"]
     pyspark_error_list += connect_error_list
