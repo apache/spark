@@ -73,7 +73,7 @@ class SQLMetric(val metricType: String,
   // This is used to decide whether the metric should be filtered.
   override def isZero: Boolean = _value == initValue
 
-  def isValid = value >= zeroValue
+  def isValid: Boolean = value >= zeroValue
 
   override def add(v: Long): Unit = {
     if (!isValid) _value = zeroValue
