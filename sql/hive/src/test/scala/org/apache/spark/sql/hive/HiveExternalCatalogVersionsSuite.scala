@@ -31,7 +31,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.launcher.JavaModuleOptions
@@ -56,7 +55,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @SlowHiveTest
 @ExtendedHiveTest
-class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils with Logging {
+class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   import HiveExternalCatalogVersionsSuite._
   override protected val defaultSparkSubmitTimeout: Span = 5.minutes
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
@@ -164,7 +163,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils with Logging
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    logInfo("Env : " + System.getenv())
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
