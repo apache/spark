@@ -30,14 +30,6 @@ from pyspark.pandas.typedef.typehints import (
 
 
 class SeriesAsTypeMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_astype(self):
         psers = [pd.Series([10, 20, 15, 30, 45], name="x")]
 
