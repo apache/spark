@@ -1265,8 +1265,12 @@ class WithColumnsRenamed(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.with_columns_renamed.input.CopyFrom(self._child.plan(session))
-        for k, v in self._colsMap.items():
-            plan.with_columns_renamed.rename_columns_map[k] = v
+        if len(self._colsMap) > 0:
+            for k, v in self._colsMap.items():
+                rename = proto.WithColumnsRenamed.Rename()
+                rename.col_name = k
+                rename.new_col_name = v
+                plan.with_columns_renamed.renames.append(rename)
         return plan
 
 
