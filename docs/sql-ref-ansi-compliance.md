@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -33,7 +33,7 @@ When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with
 |`spark.sql.ansi.enabled`|false| When true, Spark tries to conform to the ANSI SQL specification: <br/> 1. Spark SQL will throw runtime exceptions on invalid operations, including integer overflow errors, string parsing errors, etc. <br/> 2. Spark will use different type coercion rules for resolving conflicts among data types. The rules are consistently based on data type precedence.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |3.0.0|
 |`spark.sql.storeAssignmentPolicy`|ANSI| When inserting a value into a column with different data type, Spark will perform type conversion.  Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict.<br/> 1. With ANSI policy, Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.  It disallows certain unreasonable type conversions such as converting string to int or double to boolean. On inserting a numeric type column, an overflow error will be thrown if the value is out of the target data type's range.<br/>2. With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is very loose.  e.g. converting string to int or double to boolean is allowed.  It is also the only behavior in Spark 2.x and it is compatible with Hive.<br/>3. With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion, e.g. converting double to int or decimal to double is not allowed. |3.0.0|
 
-The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion. 
+The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion.
 
 ### Arithmetic Operations
 
@@ -100,7 +100,7 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Timestamp_NTZ/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
 * CAST(Timestamp AS Numeric): raise an overflow exception if the number of seconds since epoch is out of the target data type's range.
-* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type. 
+* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type.
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
@@ -259,9 +259,9 @@ Note, arithmetic operations have special rules to calculate the least common typ
 | e1 % e2    | min(p1 - s1, p2 - s2) + max(s1, s2)      | max(s1, s2)         |
 
 The truncation rule is also different for arithmetic operations: they retain at least 6 digits in the fractional part, which means we can only reduce `scale` to 6. Overflow may happen in this case.
-  
+
 ```sql
--- The coalesce function accepts any set of argument types as long as they share a least common type. 
+-- The coalesce function accepts any set of argument types as long as they share a least common type.
 -- The result type is the least common type of the arguments.
 > SET spark.sql.ansi.enabled=true;
 > SELECT typeof(coalesce(1Y, 1L, NULL));

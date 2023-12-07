@@ -1008,7 +1008,8 @@
   "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES" : {
     "message" : [
       "Using statement contains multiple arguments with same alias (<aliases>)."
-    ]
+    ],
+    "sqlState" : "42702"
   },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [

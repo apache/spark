@@ -601,7 +601,7 @@ Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<colum
 
 ### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
 
-SQLSTATE: none assigned
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Using statement contains multiple arguments with same alias (`<aliases>`).
 
