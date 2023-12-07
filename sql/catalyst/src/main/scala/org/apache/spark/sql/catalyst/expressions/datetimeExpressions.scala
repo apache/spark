@@ -26,9 +26,10 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.SparkDateTimeException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, UnresolvedReplacement}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -133,24 +134,47 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
+case class CurrentDate(timeZoneId: Option[String], replacement: Expression)
+  // TODO: Had to replace this to Unary since we now have replacement as a child?
+  // TODO: Check consequences of this change.
+  extends UnaryExpression
+  with RuntimeReplaceable with TimeZoneAwareExpression with InheritAnalysisRules {
 
-  def this() = this(None)
+  def this(timeZoneId: Option[String]) = this(timeZoneId, UnresolvedReplacement)
+  def this() = this(None, UnresolvedReplacement)
 
-  override def foldable: Boolean = true
+  override def foldable: Boolean = false
   override def nullable: Boolean = false
-
   override def dataType: DataType = DateType
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
+  final override def nodePatternsInternal(): Seq[TreePattern] =
+    Seq(CURRENT_LIKE, RUNTIME_REPLACEABLE)
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override def eval(input: InternalRow): Any = currentDate(zoneId)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
+    val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId)
+    copy(
+      timeZoneId = Option(timeZoneId),
+      replacement = StaticInvoke(
+        DateTimeUtils.getClass,
+        DateType,
+        "currentDate",
+        arguments = Seq(Literal.fromObject(zoneId)),
+        inputTypes = Seq(ObjectType(classOf[ZoneId])),
+        returnNullable = false)
+    )
+  }
 
   override def prettyName: String = "current_date"
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq()
+}
+
+object CurrentDate {
+  def apply(): CurrentDate = new CurrentDate(None)
+  def apply(timeZoneId: Option[String]): CurrentDate = new CurrentDate(timeZoneId)
 }
 
 // scalastyle:off line.size.limit
@@ -177,12 +201,19 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallback {
-  override def foldable: Boolean = true
+abstract class CurrentTimestampLike()
+  extends LeafExpression with RuntimeReplaceable {
+
+  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
-  override def eval(input: InternalRow): Any = currentTimestamp()
-  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE, RUNTIME_REPLACEABLE)
+
+  override lazy val replacement: Expression = StaticInvoke(
+    DateTimeUtils.getClass,
+    TimestampType,
+    "currentTimestamp",
+    returnNullable = false)
 }
 
 /**
