@@ -84,14 +84,14 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` cannot be None."
     ]
   },
-  "CANNOT_CONFIGURE_SPARK_CONNECT_MASTER": {
-    "message": [
-      "Spark Connect server and Spark master cannot be configured together: Spark master [<master_url>], Spark Connect [<connect_url>]."
-    ]
-  },
   "CANNOT_CONFIGURE_SPARK_CONNECT": {
     "message": [
       "Spark Connect server cannot be configured: Existing [<existing_url>], New [<new_url>]."
+    ]
+  },
+  "CANNOT_CONFIGURE_SPARK_CONNECT_MASTER": {
+    "message": [
+      "Spark Connect server and Spark master cannot be configured together: Spark master [<master_url>], Spark Connect [<connect_url>]."
     ]
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
