@@ -185,8 +185,8 @@ jobs:
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
           # Fix some corrupted jars
-          ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.apache.hive -DartifactId=hive-exec -Dversion=2.3.9 -Dtransitive=false --quiet
-          ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.slf4j -DartifactId=slf4j-api -Dversion=1.7.30 -Dtransitive=false --quiet
+          # ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.apache.hive -DartifactId=hive-exec -Dversion=2.3.9 -Dtransitive=false --quiet
+          # ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.slf4j -DartifactId=slf4j-api -Dversion=1.7.30 -Dtransitive=false --quiet
           ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
           ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
