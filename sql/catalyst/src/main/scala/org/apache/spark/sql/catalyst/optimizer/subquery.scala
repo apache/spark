@@ -113,16 +113,19 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, _, _, conditions)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, sub, LeftSemi, joinCond)
+          val join = buildJoin(outerPlan, sub, LeftSemi, joinCond)
+          Project(p.output, join)
         case (p, Not(Exists(sub, _, _, conditions))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, sub, LeftAnti, joinCond)
+          val join = buildJoin(outerPlan, sub, LeftAnti, joinCond)
+          Project(p.output, join)
         case (p, InSubquery(values, ListQuery(sub, _, _, _, conditions))) =>
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
-          Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint.NONE)
+          val join = Join(outerPlan, newSub, LeftSemi, joinCond, JoinHint.NONE)
+          Project(p.output, join)
         case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
