@@ -389,6 +389,24 @@ SPARK_WORKER_OPTS supports the following system properties:
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
+  <td><code>spark.worker.initialRegistrationRetries</code></td>
+  <td>6</td>
+  <td>
+    The number of retries to reconnect in short intervals (between 5 and 15 seconds).
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.maxRegistrationRetries</code></td>
+  <td>16</td>
+  <td>
+    The max number of retries to reconnect.
+    After <code>spark.worker.initialRegistrationRetries</code> attempts, the interval is between
+    30 and 90 seconds.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
   <td>
