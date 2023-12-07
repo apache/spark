@@ -32,7 +32,8 @@ class ExecutionOutput:
     output: str
 
     def __str__(self):
-        return f"-- !query\n{self.sql}\n-- !query output\n{self.output}"
+        output_str = "\n".join(["\t".join(row.split(",")) for row in self.output])
+        return f"-- !query\n{self.sql}\n-- !query output\n{output_str}"
 
 def get_workspace_file_path():
     return Path.home () / "spark" / "sql" / "core" / "src" / "test" / "resources" / "sql-tests"
@@ -97,8 +98,9 @@ def get_queries(code: List[str], comments: List[str], list_test_cases: List[Test
         temp_queries = split_with_semicolon(all_code)
 
     # List of SQL queries to run
+    striped_queries = [query.strip() for query in temp_queries]
     return [
-        query.strip()
-        for query in temp_queries
-        if query and not query.strip().startswith('--')
+        query
+        for query in striped_queries
+        if query and not query.startswith('--')
     ]
