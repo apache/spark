@@ -2177,7 +2177,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  VAR_POP(DISTINCT bonus),
         |  VAR_SAMP(bonus),
         |  VAR_SAMP(DISTINCT bonus)
-        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT""".stripMargin)
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     checkPushedInfo(df,
@@ -2199,7 +2199,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  STDDEV_POP(DISTINCT bonus),
         |  STDDEV_SAMP(bonus),
         |  STDDEV_SAMP(DISTINCT bonus)
-        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT""".stripMargin)
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     checkPushedInfo(df,
@@ -2215,7 +2215,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("scan with aggregate push-down: COVAR_POP COVAR_SAMP with filter and group by") {
     val df1 = sql("SELECT COVAR_POP(bonus, bonus), COVAR_SAMP(bonus, bonus)" +
-      " FROM h2.test.employee WHERE dept > 0 GROUP BY DePt")
+      " FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT")
     checkFiltersRemoved(df1)
     checkAggregateRemoved(df1)
     checkPushedInfo(df1,
@@ -2225,7 +2225,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df1, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
 
     val df2 = sql("SELECT COVAR_POP(DISTINCT bonus, bonus), COVAR_SAMP(DISTINCT bonus, bonus)" +
-      " FROM h2.test.employee WHERE dept > 0 GROUP BY DePt")
+      " FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT")
     checkFiltersRemoved(df2)
     checkAggregateRemoved(df2, false)
     checkPushedInfo(df2, "PushedFilters: [DEPT IS NOT NULL, DEPT > 0]")
@@ -2234,7 +2234,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("scan with aggregate push-down: CORR with filter and group by") {
     val df1 = sql("SELECT CORR(bonus, bonus) FROM h2.test.employee WHERE dept > 0" +
-      " GROUP BY DePt")
+      " GROUP BY DEPT")
     checkFiltersRemoved(df1)
     checkAggregateRemoved(df1)
     checkPushedInfo(df1,
@@ -2259,7 +2259,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  REGR_R2(bonus, bonus),
         |  REGR_SLOPE(bonus, bonus),
         |  REGR_SXY(bonus, bonus)
-        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT""".stripMargin)
     checkFiltersRemoved(df1)
     checkAggregateRemoved(df1)
     checkPushedInfo(df1,
@@ -2279,7 +2279,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  REGR_R2(DISTINCT bonus, bonus),
         |  REGR_SLOPE(DISTINCT bonus, bonus),
         |  REGR_SXY(DISTINCT bonus, bonus)
-        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT""".stripMargin)
     checkFiltersRemoved(df2)
     checkAggregateRemoved(df2, false)
     checkPushedInfo(df2,
@@ -2293,7 +2293,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |SELECT
         |  REGR_AVGX(bonus, bonus),
         |  REGR_AVGY(bonus, bonus)
-        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT""".stripMargin)
     checkFiltersRemoved(df3)
     checkAggregateRemoved(df3)
     checkPushedInfo(df3,
@@ -2309,7 +2309,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |SELECT
         |  REGR_AVGX(DISTINCT bonus, bonus),
         |  REGR_AVGY(DISTINCT bonus, bonus)
-        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT""".stripMargin)
     checkFiltersRemoved(df4)
     checkAggregateRemoved(df4)
     checkPushedInfo(df4,
