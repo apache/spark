@@ -2622,11 +2622,12 @@ package object config {
       .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
 
   private[spark] val LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS =
-    ConfigBuilder("spark.legacy.scheduler.stage.abortAfterCancelTasks")
+    ConfigBuilder("spark.scheduler.stage.legacyAbortAfterCancelTasks")
       .doc("Whether to abort a stage after TaskScheduler.cancelTasks(). This is used to restore " +
         "the original behavior in case there are any regressions after abort stage is removed " +
         "from TaskScheduler.cancelTasks()")
       .version("4.0.0")
+      .internal()
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 }
