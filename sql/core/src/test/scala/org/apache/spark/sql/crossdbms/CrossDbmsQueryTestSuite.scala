@@ -20,13 +20,9 @@ package org.apache.spark.sql.crossdbms
 import java.io.File
 import java.util.Locale
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
-import org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite.DBMS_TO_DIALECT_CONVERTER
-import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 // scalastyle:off line.size.limit
 /**
@@ -82,8 +78,6 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       s"$selectedDbms is not currently supported.")
     selectedDbms
   }
-  private def customConnectionUrl: String = System.getenv(
-    CrossDbmsQueryTestSuite.REF_DBMS_CONNECTION_URL)
 
   override protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
     val input = fileToString(new File(testCase.inputFile))
@@ -91,21 +85,17 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     val queries = getQueries(code, comments)
     val settings = getSparkSettings(comments)
 
-    if (regenerateGoldenFiles) {
-      val dbmsConfig = comments.filter(_.startsWith(s"--${
-        CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE} ")).map(_.substring(31))
-      // If `--DBMS_TO_GENERATE_GOLDEN_FILE` is not found, skip the test.
-      if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
-        log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
-          s"testing with $crossDbmsToGenerateGoldenFiles")
-        return
-      }
-      runQueries(queries, testCase, settings.toImmutableArraySeq)
-    } else {
-      val configSets = getSparkConfigDimensions(comments)
-      runQueriesWithSparkConfigDimensions(
-        queries, testCase, settings, configSets)
+    val dbmsConfig = comments.filter(_.startsWith(s"--${
+      CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE} ")).map(_.substring(31))
+    // If `--DBMS_TO_GENERATE_GOLDEN_FILE` is not found, skip the test.
+    if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
+      log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
+        s"testing with $crossDbmsToGenerateGoldenFiles")
+      return
     }
+    val configSets = getSparkConfigDimensions(comments)
+    runQueriesWithSparkConfigDimensions(
+      queries, testCase, settings, configSets)
   }
 
   override protected def runQueries(
@@ -113,69 +103,22 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
       testCase: TestCase,
       sparkConfigSet: Seq[(String, String)]): Unit = {
     val localSparkSession = spark.newSession()
-    var runner: Option[SQLQueryTestRunner] = None
 
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
-      val convertedSql = if (DBMS_TO_DIALECT_CONVERTER.contains(crossDbmsToGenerateGoldenFiles)) {
-        DBMS_TO_DIALECT_CONVERTER(crossDbmsToGenerateGoldenFiles).preprocessQuery(sql)
-      } else {
-        sql
-      }
       val output = {
-        // Use the runner when generating golden files, and Spark when running the test against
-        // the already generated golden files.
-        if (regenerateGoldenFiles) {
-          val connectionUrl = Option(customConnectionUrl).filter(_.nonEmpty)
-          runner = runner.orElse(
-            Some(CrossDbmsQueryTestSuite.DBMS_TO_CONNECTION_MAPPING(
-              crossDbmsToGenerateGoldenFiles)(connectionUrl)))
-          try {
-            // Either of the below two lines can error. If we go into the catch statement, then it
-            // is likely one of the following scenarios:
-            // 1. Error thrown in Spark analysis:
-            //    a. The query is either incompatible between Spark and the other DBMS
-            //    b. There is issue with the schema in Spark.
-            //    c. The error is expected - it errors on both systems, but only the Spark error
-            //       will be printed to the golden file, because it errors first.
-            // 2. Error thrown in other DBMS execution:
-            //    a. The query is either incompatible between Spark and the other DBMS
-            //    b. Some test table/view is not created on the other DBMS.
-
-            // Use the original SQL query to run on Spark.
-            val sparkDf = localSparkSession.sql(sql)
-            // Use the converted SQL query to run on the DBMS.
-            val output = runner.map(_.runQuery(convertedSql)).get
-            // Use Spark analyzed plan to check if the query result is already semantically sorted.
-            if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
-              output
-            } else {
-              // Sort the answer manually if it isn't sorted.
-              output.sorted
-            }
-          } catch {
-            case NonFatal(e) => Seq(e.getClass.getName, e.getMessage)
-          }
-        } else {
-          // Use Spark.
-          // Execute the list of set operation in order to add the desired configs
-          val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
-          setOperations.foreach(localSparkSession.sql)
-          // Use the original SQL query to run on Spark.
-          val (_, output) = handleExceptions(
-            getNormalizedQueryExecutionResult(localSparkSession, sql))
-          output
-        }
+        // Execute the list of set operation in order to add the desired configs
+        val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
+        setOperations.foreach(localSparkSession.sql)
+        // Use the original SQL query to run on Spark.
+        val (_, output) = handleExceptions(
+          getNormalizedQueryExecutionResult(localSparkSession, sql))
+        output
       }
       ExecutionOutput(
-        sql = s"Original SQL: \n$sql\n" +
-          s"Converted SQL for $crossDbmsToGenerateGoldenFiles: \n$convertedSql",
+        sql = s"Original SQL: \n$sql\n",
         // Don't care about the schema for this test. Only care about correctness.
         schema = None,
         output = normalizeTestResults(output.mkString("\n")))
-    }
-    if (runner.isDefined) {
-      runner.foreach(_.cleanUp())
-      runner = None
     }
 
     if (regenerateGoldenFiles) {
@@ -234,19 +177,10 @@ object CrossDbmsQueryTestSuite {
 
   // System argument to indicate which reference DBMS is being used.
   private final val REF_DBMS_ARGUMENT = "REF_DBMS"
-  // System argument to indicate a custom connection URL to the reference DBMS.
-  private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
   // Argument in input files to indicate that golden file should be generated with a reference DBMS
   private final val DBMS_TO_GENERATE_GOLDEN_FILE = "DBMS_TO_GENERATE_GOLDEN_FILE"
 
   private final val POSTGRES = "postgres"
   private final val SUPPORTED_DBMS = Seq(POSTGRES)
   private final val DEFAULT_DBMS = POSTGRES
-  private final val DBMS_TO_CONNECTION_MAPPING = Map(
-    POSTGRES -> ((connection_url: Option[String]) =>
-      JdbcSQLQueryTestRunner(PostgresConnection(connection_url)))
-  )
-  private final val DBMS_TO_DIALECT_CONVERTER: Map[String, DialectConverter] = Map(
-    POSTGRES -> PostgresDialectConverter
-  )
 }
