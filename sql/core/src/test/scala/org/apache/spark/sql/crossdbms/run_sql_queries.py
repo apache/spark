@@ -1,0 +1,125 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+from dataclasses import dataclass
+from typing import List, Tuple, Optional, Callable, Dict
+from pathlib import Path
+import sqlglot
+
+from sql_query_test_runner import SQLQueryTestRunner
+from database_connection import PostgresConnection
+from helper import get_workspace_file_path, file_to_string, split_comments_and_codes, get_queries
+
+# System argument to indicate which reference DBMS is being used.
+REF_DBMS_ARGUMENT = "REF_DBMS"
+# System argument to indicate a custom connection URL to the reference DBMS.
+REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
+# Argument in input files to indicate that the golden file should be generated with a reference DBMS.
+DBMS_TO_GENERATE_GOLDEN_FILE = "DBMS_TO_GENERATE_GOLDEN_FILE"
+
+SPARK = "spark"
+POSTGRES = "postgres"
+SUPPORTED_DBMS = [POSTGRES]
+DEFAULT_DBMS = POSTGRES
+
+# Mapping from DBMS to connection creation function
+DBMS_TO_CONNECTION_MAPPING: Dict[str, Callable[[Optional[str]], SQLQueryTestRunner]] = {
+    POSTGRES: lambda connection_url: SQLQueryTestRunner(PostgresConnection(connection_url))
+}
+
+@dataclass
+class TestCase:
+    name: str
+    input_file: str
+    result_file: str
+
+@dataclass
+class ExecutionOutput:
+    sql: str
+    output: str
+
+    def __str__(self):
+        return f"-- !query\n{self.sql}\n-- !query output\n{self.output}"
+
+class CrossDbmsSQLQueryTestRunner:
+
+    def __init__(self, cross_dbms_to_generate_golden_files, test_runner: SQLQueryTestRunner):
+        self.test_runner = test_runner
+        self.base_resource_path = get_workspace_file_path("sql", "core", "src", "test", "resources", "sql-tests")
+        self.input_file_path = (self.base_resource_path / "inputs").resolve().absolute()
+        self.cross_dbms_to_generate_golden_files = cross_dbms_to_generate_golden_files
+
+    def _result_file_for_input_file(self, file: Path) -> str:
+        default_results_dir = Path(self.base_resource_path, "results")
+        golden_file_path = Path(default_results_dir,
+            f"{self.cross_dbms_to_generate_golden_files}-results").resolve().absolute()
+        return str(file.resolve().absolute()).replace(
+            str(self.input_file_path), str(golden_file_path)) + ".out"
+
+    def _list_test_cases(self) -> List[TestCase]:
+        def list_files_recursively(directory: Path) -> List[Path]:
+            return [f for f in directory.rglob('*') if f.is_file()]
+
+        test_cases = []
+        for file in list_files_recursively(Path(self.input_file_path)):
+            result_file = self._result_file_for_input_file(file)
+            abs_path = file.resolve().absolute()
+            test_case_name = abs_path.relative_to(self.input_file_path).as_posix()
+            test_cases.append(TestCase(test_case_name, str(abs_path), result_file))
+
+        return sorted(test_cases, key=lambda x: x.name)
+
+    def translate_queries(self, query: str) -> str:
+        return sqlglot.transpile(
+            query, read=SPARK, write=self.cross_dbms_to_generate_golden_files)[0]
+
+    def run_sql_test_case(self, test_case: TestCase):
+        input = file_to_string(test_case.input_file)
+        comments, code = split_comments_and_codes(input)
+        dbms = [comment for comment in comments if comment.startswith(
+            f"--{DBMS_TO_GENERATE_GOLDEN_FILE}")]
+        assert len(dbms) == 1
+        if self.cross_dbms_to_generate_golden_files not in dbms:
+            return
+
+        queries = get_queries(code, comments)
+        self._run_queries_and_generate_golden_files(queries, test_case)
+
+    def _run_queries_and_generate_golden_files(self, queries: List[str], test_case: TestCase):
+        runner: SQLQueryTestRunner = DBMS_TO_CONNECTION_MAPPING(self.cross_dbms_to_generate_golden_files)()
+        results = []
+        for query in queries:
+            translated_query = self.translate_queries(query)
+            try:
+                output = runner.run_query(translated_query)
+            except Exception as e:
+                output = [str(e)]
+            sql_str = f"Original query: {query}\nTranslated query: {translated_query}"
+            results.append(ExecutionOutput(sql=sql_str, output=output))
+
+        outputs = [str(s) for s in results].join('\n')
+        golden_output = f"-- Automatically generated by {type(self).__name__} with {self.cross_dbms_to_generate_golden_files}\n"
+        golden_output += '\n\n\n'.join(outputs) + '\n'
+
+        result_file = Path(test_case.result_file)
+        parent = result_file.parent
+
+        if not parent.exists():
+            parent.mkdir(parents=True, exist_ok=True)
+
+        with open(result_file, 'w', encoding='utf-8') as file:
+            file.write(golden_output)
