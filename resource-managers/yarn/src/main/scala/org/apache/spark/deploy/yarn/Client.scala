@@ -62,6 +62,7 @@ import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHa
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1379,7 +1380,7 @@ private[spark] class Client(
 
   private def findPySparkArchives(): Seq[String] = {
     sys.env.get("PYSPARK_ARCHIVES_PATH")
-      .map(_.split(",").toSeq)
+      .map(_.split(",").toImmutableArraySeq)
       .getOrElse {
         val pyLibPath = Seq(sys.env("SPARK_HOME"), "python", "lib").mkString(File.separator)
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
@@ -1458,21 +1459,21 @@ private[spark] object Client extends Logging {
 
   private def getYarnAppClasspath(conf: Configuration): Seq[String] =
     Option(conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) match {
-      case Some(s) => s.toSeq
+      case Some(s) => s.toImmutableArraySeq
       case None => getDefaultYarnApplicationClasspath
     }
 
   private def getMRAppClasspath(conf: Configuration): Seq[String] =
     Option(conf.getStrings("mapreduce.application.classpath")) match {
-      case Some(s) => s.toSeq
+      case Some(s) => s.toImmutableArraySeq
       case None => getDefaultMRApplicationClasspath
     }
 
   private[yarn] def getDefaultYarnApplicationClasspath: Seq[String] =
-    YarnConfiguration.DEFAULT_YARN_APPLICATION_CLASSPATH.toSeq
+    YarnConfiguration.DEFAULT_YARN_APPLICATION_CLASSPATH.toImmutableArraySeq
 
   private[yarn] def getDefaultMRApplicationClasspath: Seq[String] =
-    StringUtils.getStrings(MRJobConfig.DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH).toSeq
+    StringUtils.getStrings(MRJobConfig.DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH).toImmutableArraySeq
 
   /**
    * Populate the classpath entry in the given environment map.

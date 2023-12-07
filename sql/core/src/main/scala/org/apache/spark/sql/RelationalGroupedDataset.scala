@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -432,7 +433,7 @@ class RelationalGroupedDataset protected[sql](
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
       .collect()
       .map(_.get(0))
-      .toSeq
+      .toImmutableArraySeq
 
     if (values.length > maxValues) {
       throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
@@ -556,7 +557,7 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
     require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-      "Must pass a grouped map udf")
+      "Must pass a grouped map pandas udf")
     require(expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
 
@@ -575,6 +576,38 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
+   * Applies a grouped vectorized python user-defined function to each group of data.
+   * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.
+   * For each group, all elements in the group are passed as a `pandas.DataFrame` and the results
+   * for all groups are combined into a new [[DataFrame]].
+   *
+   * This function does not support partial aggregation, and requires shuffling all the data in
+   * the [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def flatMapGroupsInArrow(expr: PythonUDF): DataFrame = {
+    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+      "Must pass a grouped map arrow udf")
+    require(expr.dataType.isInstanceOf[StructType],
+      s"The returnType of the udf must be a ${StructType.simpleString}")
+
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val child = df.logicalPlan
+    val project = df.sparkSession.sessionState.executePlan(
+      Project(groupingNamedExpressions ++ child.output, child)).analyzed
+    val groupingAttributes = project.output.take(groupingNamedExpressions.length)
+    val output = toAttributes(expr.dataType.asInstanceOf[StructType])
+    val plan = FlatMapGroupsInArrow(groupingAttributes, expr, output, project)
+
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  /**
    * Applies a vectorized python user-defined function to each cogrouped data.
    * The user-defined function defines a transformation:
    * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
@@ -588,7 +621,7 @@ class RelationalGroupedDataset protected[sql](
       r: RelationalGroupedDataset,
       expr: PythonUDF): DataFrame = {
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-      "Must pass a cogrouped map udf")
+      "Must pass a cogrouped map pandas udf")
     require(this.groupingExprs.length == r.groupingExprs.length,
       "Cogroup keys must have same size: " +
         s"${this.groupingExprs.length} != ${r.groupingExprs.length}")
@@ -615,6 +648,52 @@ class RelationalGroupedDataset protected[sql](
 
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapCoGroupsInPandas(
+      leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
+      expr, output, left, right)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  /**
+   * Applies a vectorized python user-defined function to each cogrouped data.
+   * The user-defined function defines a transformation:
+   * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
+   *  For each group in the cogrouped data, all elements in the group are passed as a
+   * `pandas.DataFrame` and the results for all cogroups are combined into a new [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def flatMapCoGroupsInArrow(
+      r: RelationalGroupedDataset,
+      expr: PythonUDF): DataFrame = {
+    require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+      "Must pass a cogrouped map arrow udf")
+    require(this.groupingExprs.length == r.groupingExprs.length,
+      "Cogroup keys must have same size: " +
+        s"${this.groupingExprs.length} != ${r.groupingExprs.length}")
+    require(expr.dataType.isInstanceOf[StructType],
+      s"The returnType of the udf must be a ${StructType.simpleString}")
+
+    val leftGroupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val rightGroupingNamedExpressions = r.groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val leftChild = df.logicalPlan
+    val rightChild = r.df.logicalPlan
+
+    val left = df.sparkSession.sessionState.executePlan(
+      Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)).analyzed
+    val right = r.df.sparkSession.sessionState.executePlan(
+      Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
+
+    val output = toAttributes(expr.dataType.asInstanceOf[StructType])
+    val plan = FlatMapCoGroupsInArrow(
       leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
       expr, output, left, right)
     Dataset.ofRows(df.sparkSession, plan)

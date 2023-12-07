@@ -57,7 +57,7 @@ class AnalyzeArgument:
     ----------
     dataType : :class:`DataType`
         The argument's data type
-    value : Optional[Any]
+    value : any, optional
         The calculated value if the argument is foldable; otherwise None
     isTable : bool
         If True, the argument is a table argument.
@@ -71,7 +71,14 @@ class AnalyzeArgument:
 @dataclass(frozen=True)
 class PartitioningColumn:
     """
-    Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
+    Represents an expression that the UDTF is specifying for Catalyst to partition the input table
+    by. This can be either the name of a single column from the input table (such as "columnA"), or
+    a SQL expression based on the column names of the input table (such as "columnA + columnB").
+
+    Parameters
+    ----------
+    name : str
+        The contents of the partitioning column name or expression represented as a SQL string.
     """
 
     name: str
@@ -80,15 +87,24 @@ class PartitioningColumn:
 @dataclass(frozen=True)
 class OrderingColumn:
     """
-    Represents a single ordering column name for purposes of returning metadata from the 'analyze'
-    method.
+    Represents an expression that the UDTF is specifying for Catalyst to order the input partition
+    by. This can be either the name of a single column from the input table (such as "columnA"),
+    or a SQL expression based on the column names of the input table (such as "columnA + columnB").
+
+    Parameters
+    ----------
+    name : str
+        The contents of the ordering column name or expression represented as a SQL string.
+    ascending : bool, default True
+        This is if this expression specifies an ascending sorting order.
+    overrideNullsFirst : str, optional
+        If this is None, use the default behavior to sort NULL values first when sorting in
+        ascending order, or last when sorting in descending order. Otherwise, if this is
+        True or False, we override the default behavior accordingly.
     """
 
     name: str
     ascending: bool = True
-    # If this is None, use the default behavior to sort NULL values first when sorting in ascending
-    # order, or last when sorting in descending order. Otherwise, if this is True or False, override
-    # the default behavior accordingly.
     overrideNullsFirst: Optional[bool] = None
 
 
@@ -108,13 +124,13 @@ class AnalyzeResult:
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partitionBy : Sequence[PartitioningColumn]
-        If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
+    partitionBy : sequence of :class:`PartitioningColumn`
+        If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
         mutually exclusive with 'withSinglePartition'.
-    orderBy: Sequence[OrderingColumn]
-        If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
+    orderBy: sequence of :class:`OrderingColumn`
+        If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
     """

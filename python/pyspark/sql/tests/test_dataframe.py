@@ -163,6 +163,15 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
         )
 
+    def test_ordering_of_with_columns_renamed(self):
+        df = self.spark.range(10)
+
+        df1 = df.withColumnsRenamed({"id": "a", "a": "b"})
+        self.assertEqual(df1.columns, ["b"])
+
+        df2 = df.withColumnsRenamed({"a": "b", "id": "a"})
+        self.assertEqual(df2.columns, ["a"])
+
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
@@ -995,9 +1004,9 @@ class DataFrameTestsMixin:
         self.assertEqual(unnamed_observation.get, dict(rows=3))
 
         # observation requires name (if given) to be non empty string
-        with self.assertRaisesRegex(TypeError, "name should be a string"):
+        with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):
             Observation(123)
-        with self.assertRaisesRegex(ValueError, "name should not be empty"):
+        with self.assertRaisesRegex(ValueError, "`name` must be a non empty string, got ''."):
             Observation("")
 
         # dataframe.observe requires at least one expr

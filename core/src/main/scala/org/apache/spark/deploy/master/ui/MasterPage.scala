@@ -83,13 +83,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       .flatMap(_.iterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-      rName -> rInfoArr.map(_._2.addresses.size).sum
+      rName -> rInfoArr.map(_._2.addresses.length).sum
     }
     val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
       .flatMap(_.iterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-      rName -> rInfoArr.map(_._2.addresses.size).sum
+      rName -> rInfoArr.map(_._2.addresses.length).sum
     }
     formatResourcesUsed(totalInfo, usedInfo)
   }
@@ -144,7 +144,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                   </li>
                 }.getOrElse { Seq.empty }
               }
-              <li><strong>Alive Workers:</strong> {aliveWorkers.length}</li>
+              <li><strong>Workers:</strong> {aliveWorkers.length} Alive,
+                {workers.count(_.state == WorkerState.DEAD)} Dead,
+                {workers.count(_.state == WorkerState.DECOMMISSIONED)} Decommissioned,
+                {workers.count(_.state == WorkerState.UNKNOWN)} Unknown
+              </li>
               <li><strong>Cores in use:</strong> {aliveWorkers.map(_.cores).sum} Total,
                 {aliveWorkers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory in use:</strong>

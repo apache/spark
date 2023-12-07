@@ -163,6 +163,14 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because schema i
 
 Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` is not in defined values for enum: `<enumString>`.
 
+### [CANNOT_CREATE_DATA_SOURCE_TABLE](sql-error-conditions-cannot-create-data-source-table-error-class.html)
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create data source table `<tableName>`:
+
+For more details see [CANNOT_CREATE_DATA_SOURCE_TABLE](sql-error-conditions-cannot-create-data-source-table-error-class.html)
+
 ### CANNOT_DECODE_URL
 
 [SQLSTATE: 22546](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -587,6 +595,18 @@ The event time `<eventName>` has the invalid type `<eventType>`, but expected "T
 
 Exceeds char/varchar type length limitation: `<limit>`.
 
+### EXCEPT_NESTED_COLUMN_INVALID_TYPE
+
+[SQLSTATE: 428H2](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+EXCEPT column `<columnName>` was resolved and expected to be StructType, but found type `<dataType>`.
+
+### EXCEPT_OVERLAPPING_COLUMNS
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
+
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -631,7 +651,7 @@ Column expression `<expr>` cannot be sorted because its type `<exprType>` is not
 
 [SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
 
-Failed to execute user defined function (`<functionName>`: (`<signature>`) => `<result>`).
+User defined function (`<functionName>`: (`<signature>`) => `<result>`) failed due to: `<reason>`.
 
 ### FAILED_FUNCTION_CALL
 
@@ -1112,6 +1132,14 @@ The index 0 is invalid. An index shall be either `< 0 or >` 0 (the first element
 Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
+
+### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+SQLSTATE: ID001
+
+Invalid inverse distribution function `<funcName>`.
+
+For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1850,6 +1878,12 @@ The seed expression `<seedExpr>` of the expression `<exprWithSeed>` must be fold
 
 sortBy must be used together with bucketBy.
 
+### SPARK_JOB_CANCELLED
+
+[SQLSTATE: XXKDA](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Job `<jobId>` cancelled `<reason>`
+
 ### SPECIFY_BUCKETING_IS_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1895,6 +1929,66 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 [SQLSTATE: 42713](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Static partition column `<staticName>` is also specified in the column list.
+
+### STDS_COMMITTED_BATCH_UNAVAILABLE
+
+SQLSTATE: KD006
+
+No committed batch found, checkpoint location: `<checkpointLocation>`. Ensure that the query has run and committed any microbatch before stopping.
+
+### STDS_CONFLICT_OPTIONS
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The options `<options>` cannot be specified together. Please specify the one.
+
+### STDS_FAILED_TO_READ_STATE_SCHEMA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: `<sourceOptions>`.
+Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists.
+
+### STDS_INTERNAL_ERROR
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Internal error: `<message>`
+Please, report this bug to the corresponding communities or vendors, and provide the full stack trace.
+
+### [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+[SQLSTATE: 42616](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for source option '`<optionName>`':
+
+For more details see [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+### STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE
+
+SQLSTATE: KD006
+
+The state does not have any partition. Please double check that the query points to the valid state. options: `<sourceOptions>`
+
+### STDS_OFFSET_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+The offset log for `<batchId>` does not exist, checkpoint location: `<checkpointLocation>`.
+Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source.
+
+### STDS_OFFSET_METADATA_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`.
+The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata.
+
+### STDS_REQUIRED_OPTION_UNSPECIFIED
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+'`<optionName>`' must be specified.
 
 ### STREAM_FAILED
 
@@ -1975,6 +2069,12 @@ CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part 
 The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.
 Expected `<aliasesSize>` aliases, but got `<aliasesNames>`.
 Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
+
+### UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 

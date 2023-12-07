@@ -74,7 +74,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
   private def show(now: Long, stages: Seq[StageData]): Unit = {
-    val width = TerminalWidth / stages.size
+    val width = TerminalWidth / stages.length
     val bar = stages.map { s =>
       val total = s.numTasks
       val header = s"[Stage ${s.stageId}:"

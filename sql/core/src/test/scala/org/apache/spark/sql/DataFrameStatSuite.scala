@@ -347,7 +347,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       val columnNames = crosstab.schema.fieldNames
       assert(columnNames(0) === "a_b")
       // reduce by key
-      val expected = data.map(t => (t, 1)).groupBy(_._1).view.mapValues(_.length)
+      val expected = data.map(t => (t, 1)).groupBy(_._1).transform((_, v) => v.length)
       val rows = crosstab.collect()
       rows.foreach { row =>
         val i = row.getString(0).toInt

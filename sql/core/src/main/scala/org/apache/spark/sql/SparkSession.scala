@@ -233,7 +233,7 @@ class SparkSession private(
   /**
    * A collection of methods for registering user-defined data sources.
    */
-  private[sql] def dataSource: DataSourceRegistration = sharedState.dataSourceRegistration
+  private[sql] def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
@@ -700,7 +700,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.view.mapValues(lit(_).expr).toMap)
+          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
         } else {
           parsedPlan
         }

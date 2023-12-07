@@ -426,7 +426,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // We need to do cartesian product for all the config dimensions, to get a list of
       // config sets, and run the query once for each config set.
       val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
-      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).view.mapValues { lines =>
+      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).transform { (_, lines) =>
         lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
           val (conf, value) = kv.span(_ != '=')
           conf.trim -> value.substring(1).trim
@@ -454,7 +454,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   def hasNoDuplicateColumns(schema: String): Boolean = {
     val columnAndTypes = schema.replaceFirst("^struct<", "").stripSuffix(">").split(",")
-    columnAndTypes.size == columnAndTypes.distinct.size
+    columnAndTypes.size == columnAndTypes.distinct.length
   }
 
   def expandCTEQueryAndCompareResult(
@@ -645,25 +645,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udtf")) {
-        Seq(TestUDTFSet(Seq(
-          TestPythonUDTF("udtf"),
-          TestPythonUDTFCountSumLast,
-          TestPythonUDTFLastString,
-          TestPythonUDTFWithSinglePartition,
-          TestPythonUDTFPartitionBy,
-          InvalidPartitionByAndWithSinglePartition,
-          InvalidOrderByWithoutPartitionBy,
-          InvalidEvalReturnsNoneToNonNullableColumnScalarType,
-          InvalidEvalReturnsNoneToNonNullableColumnArrayType,
-          InvalidEvalReturnsNoneToNonNullableColumnArrayElementType,
-          InvalidEvalReturnsNoneToNonNullableColumnStructType,
-          InvalidEvalReturnsNoneToNonNullableColumnMapType,
-          InvalidTerminateReturnsNoneToNonNullableColumnScalarType,
-          InvalidTerminateReturnsNoneToNonNullableColumnArrayType,
-          InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
-          InvalidTerminateReturnsNoneToNonNullableColumnStructType,
-          InvalidTerminateReturnsNoneToNonNullableColumnMapType
-        ))).map { udtfSet =>
+        Seq(TestUDTFSet(AllTestUDTFs)).map { udtfSet =>
           UDTFSetTestCase(
             s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)
         }

@@ -544,7 +544,7 @@ class CodegenContext extends Logging {
         s"private $className $classInstance = new $className();"
     }
 
-    val declareNestedClasses = classFunctions.view.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filter { case (k, _) => k != outerClassName }.map {
       case (className, functions) =>
         s"""
            |private class $className {
@@ -1641,7 +1641,7 @@ object CodeGenerator extends Logging {
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
         case PhysicalStringType => s"$input.getUTF8String($ordinal)"
-        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.size})"
+        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"
       }

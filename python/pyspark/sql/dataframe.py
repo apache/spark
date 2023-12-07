@@ -43,7 +43,12 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkIndexError,
+    PySparkAttributeError,
+)
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -594,7 +599,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        level : int, optional, default None
+        level : int, optional
             How many levels to print for nested schemas.
 
             .. versionadded:: 3.5.0
@@ -3222,9 +3227,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         _cols = []
         for c in cols:
             if isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 if c < 1:
-                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
                 # ordinal is 1-based
                 _cols.append(self[c - 1])
             else:
@@ -3256,7 +3262,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 elif c < 0:
                     _c = self[-c - 1].desc()
                 else:
-                    raise IndexError("Column ordinal must not be zero!")
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
             else:
                 _c = c  # type: ignore[assignment]
             jcols.append(_to_java_column(cast("ColumnOrName", _c)))
@@ -3610,8 +3618,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+
         """
         if name not in self.columns:
-            raise AttributeError(
-                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         jc = self._jdf.apply(name)
         return Column(jc)
@@ -4202,6 +4210,102 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jgd = self._jdf.cube(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
+        return GroupedData(jgd, self)
+
+    def groupingSets(
+        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+    ) -> "GroupedData":
+        """
+        Create multi-dimensional aggregation for the current `class`:DataFrame using the specified
+        grouping sets, so we can run aggregation on them.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        groupingSets : sequence of sequence of columns or str
+            Individual set of columns to group on.
+        cols : :class:`Column` or str
+            Addional grouping columns specified by users.
+            Those columns are shown as the output columns after aggregation.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Grouping sets of the data based on the specified columns.
+
+        Examples
+        --------
+        Example 1: Group by city and car_model, city, and all, and calculate the sum of quantity.
+
+        >>> from pyspark.sql import functions as sf
+        >>> df = spark.createDataFrame([
+        ...     (100, 'Fremont', 'Honda Civic', 10),
+        ...     (100, 'Fremont', 'Honda Accord', 15),
+        ...     (100, 'Fremont', 'Honda CRV', 7),
+        ...     (200, 'Dublin', 'Honda Civic', 20),
+        ...     (200, 'Dublin', 'Honda Accord', 10),
+        ...     (200, 'Dublin', 'Honda CRV', 3),
+        ...     (300, 'San Jose', 'Honda Civic', 5),
+        ...     (300, 'San Jose', 'Honda Accord', 8)
+        ... ], schema="id INT, city STRING, car_model STRING, quantity INT")
+
+        >>> df.groupingSets(
+        ...     [("city", "car_model"), ("city",), ()],
+        ...     "city", "car_model"
+        ... ).agg(sf.sum(sf.col("quantity")).alias("sum")).sort("city", "car_model").show()
+        +--------+------------+---+
+        |    city|   car_model|sum|
+        +--------+------------+---+
+        |    NULL|        NULL| 78|
+        |  Dublin|        NULL| 33|
+        |  Dublin|Honda Accord| 10|
+        |  Dublin|   Honda CRV|  3|
+        |  Dublin| Honda Civic| 20|
+        | Fremont|        NULL| 32|
+        | Fremont|Honda Accord| 15|
+        | Fremont|   Honda CRV|  7|
+        | Fremont| Honda Civic| 10|
+        |San Jose|        NULL| 13|
+        |San Jose|Honda Accord|  8|
+        |San Jose| Honda Civic|  5|
+        +--------+------------+---+
+
+        Example 2: Group by multiple columns and calculate both average and sum.
+
+        >>> df.groupingSets(
+        ...     [("city", "car_model"), ("city",), ()],
+        ...     "city", "car_model"
+        ... ).agg(
+        ...     sf.avg(sf.col("quantity")).alias("avg_quantity"),
+        ...     sf.sum(sf.col("quantity")).alias("sum_quantity")
+        ... ).sort("city", "car_model").show()
+        +--------+------------+------------------+------------+
+        |    city|   car_model|      avg_quantity|sum_quantity|
+        +--------+------------+------------------+------------+
+        |    NULL|        NULL|              9.75|          78|
+        |  Dublin|        NULL|              11.0|          33|
+        |  Dublin|Honda Accord|              10.0|          10|
+        |  Dublin|   Honda CRV|               3.0|           3|
+        |  Dublin| Honda Civic|              20.0|          20|
+        | Fremont|        NULL|10.666666666666666|          32|
+        | Fremont|Honda Accord|              15.0|          15|
+        | Fremont|   Honda CRV|               7.0|           7|
+        | Fremont| Honda Civic|              10.0|          10|
+        |San Jose|        NULL|               6.5|          13|
+        |San Jose|Honda Accord|               8.0|           8|
+        |San Jose| Honda Civic|               5.0|           5|
+        +--------+------------+------------------+------------+
+
+        See Also
+        --------
+        GroupedData
+        """
+        from pyspark.sql.group import GroupedData
+
+        jgrouping_sets = _to_seq(self._sc, [self._jcols(*inner) for inner in groupingSets])
+
+        jgd = self._jdf.groupingSets(jgrouping_sets, self._jcols(*cols))
         return GroupedData(jgd, self)
 
     def unpivot(
@@ -4940,7 +5044,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        subset : List of column names, optional
+        subset : list of column names, optional
             List of columns to use for duplicate comparison (default All columns).
 
         Returns
@@ -6168,7 +6272,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
-        return DataFrame(self._jdf.withColumnsRenamed(colsMap), self.sparkSession)
+        col_names: List[str] = []
+        new_col_names: List[str] = []
+        for k, v in colsMap.items():
+            col_names.append(k)
+            new_col_names.append(v)
+
+        return DataFrame(
+            self._jdf.withColumnsRenamed(
+                _to_seq(self._sc, col_names), _to_seq(self._sc, new_col_names)
+            ),
+            self.sparkSession,
+        )
 
     def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
         """Returns a new :class:`DataFrame` by updating an existing column with metadata.
@@ -6656,7 +6771,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        index_col: str or list of str, optional, default: None
+        index_col: str or list of str, optional
             Index column of table in Spark.
 
         Returns

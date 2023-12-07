@@ -48,11 +48,40 @@ import org.apache.spark.sql.types.DataType;
  */
 public class V2ExpressionSQLBuilder {
 
+  /**
+   * Escape the special chars for like pattern.
+   *
+   * Note: This method adopts the escape representation within Spark and is not bound to any JDBC
+   * dialect. JDBC dialect should overwrite this API if the underlying database have more special
+   * chars other than _ and %.
+   */
+  protected String escapeSpecialCharsForLikePattern(String str) {
+    StringBuilder builder = new StringBuilder();
+
+    for (char c : str.toCharArray()) {
+      switch (c) {
+        case '_':
+          builder.append("\\_");
+          break;
+        case '%':
+          builder.append("\\%");
+          break;
+        case '\'':
+          builder.append("\\\'");
+          break;
+        default:
+          builder.append(c);
+      }
+    }
+
+    return builder.toString();
+  }
+
   public String build(Expression expr) {
-    if (expr instanceof Literal) {
-      return visitLiteral((Literal<?>) expr);
-    } else if (expr instanceof NamedReference) {
-      return visitNamedReference((NamedReference) expr);
+    if (expr instanceof Literal literal) {
+      return visitLiteral(literal);
+    } else if (expr instanceof NamedReference namedReference) {
+      return visitNamedReference(namedReference);
     } else if (expr instanceof Cast cast) {
       return visitCast(build(cast.expression()), cast.dataType());
     } else if (expr instanceof Extract extract) {
@@ -194,16 +223,13 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Avg avg) {
       return visitAggregateFunction("AVG", avg.isDistinct(),
         expressionsToStringArray(avg.children()));
-    } else if (expr instanceof GeneralAggregateFunc) {
-      GeneralAggregateFunc f = (GeneralAggregateFunc) expr;
+    } else if (expr instanceof GeneralAggregateFunc f) {
       return visitAggregateFunction(f.name(), f.isDistinct(),
         expressionsToStringArray(f.children()));
-    } else if (expr instanceof UserDefinedScalarFunc) {
-      UserDefinedScalarFunc f = (UserDefinedScalarFunc) expr;
+    } else if (expr instanceof UserDefinedScalarFunc f) {
       return visitUserDefinedScalarFunction(f.name(), f.canonicalName(),
         expressionsToStringArray(f.children()));
-    } else if (expr instanceof UserDefinedAggregateFunc) {
-      UserDefinedAggregateFunc f = (UserDefinedAggregateFunc) expr;
+    } else if (expr instanceof UserDefinedAggregateFunc f) {
       return visitUserDefinedAggregateFunction(f.name(), f.canonicalName(), f.isDistinct(),
         expressionsToStringArray(f.children()));
     } else {
@@ -238,21 +264,21 @@ public class V2ExpressionSQLBuilder {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '" + value + "%'";
+    return l + " LIKE '" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
   protected String visitEndsWith(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "' ESCAPE '\\'";
   }
 
   protected String visitContains(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "%'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
   private String inputToSQL(Expression input) {

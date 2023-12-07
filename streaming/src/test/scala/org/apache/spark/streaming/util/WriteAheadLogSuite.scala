@@ -615,9 +615,9 @@ object WriteAheadLogSuite {
     val writer = HdfsUtils.getOutputStream(file, hadoopConf)
     def writeToStream(bytes: Array[Byte]): Unit = {
       val offset = writer.getPos
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
-      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.size)
+      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.length)
     }
     if (allowBatching) {
       writeToStream(wrapArrayArrayByte(data.toArray[String]).array())

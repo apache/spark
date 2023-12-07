@@ -66,7 +66,6 @@ class FunctionsTestsMixin:
             "random",  # namespace conflict with python built-in module
             "uuid",  # namespace conflict with python built-in module
             "chr",  # namespace conflict with python built-in function
-            "session_user",  # Scala only for now, needs implementation
             "partitioning$",  # partitioning expressions for DSv2
         ]
 
@@ -903,7 +902,7 @@ class FunctionsTestsMixin:
             (3, "c"),
         ]
 
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
     def test_window_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])

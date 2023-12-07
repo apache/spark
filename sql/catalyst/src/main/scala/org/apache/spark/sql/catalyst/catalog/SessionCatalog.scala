@@ -45,6 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
@@ -908,7 +909,7 @@ class SessionCatalog(
       val viewName = metadata.identifier.unquotedString
       val viewText = metadata.viewText.get
       val userSpecifiedColumns =
-        if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
+        if (metadata.schema.fieldNames.toImmutableArraySeq == metadata.viewQueryColumnNames) {
           " "
         } else {
           s" (${metadata.schema.fieldNames.mkString(", ")}) "
@@ -947,7 +948,7 @@ class SessionCatalog(
       val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
         // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
         // output is the same with the view output.
-        metadata.schema.fieldNames.toSeq
+        metadata.schema.fieldNames.toImmutableArraySeq
       } else {
         assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
         metadata.viewQueryColumnNames
@@ -968,7 +969,7 @@ class SessionCatalog(
       } else {
         _.toLowerCase(Locale.ROOT)
       }
-      val nameToCounts = viewColumnNames.groupBy(normalizeColName).view.mapValues(_.length)
+      val nameToCounts = viewColumnNames.groupBy(normalizeColName).transform((_, v) => v.length)
       val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
       val viewDDL = buildViewDDL(metadata, isTempView)
 

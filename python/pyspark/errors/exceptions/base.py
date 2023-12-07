@@ -190,9 +190,15 @@ class SparkUpgradeException(PySparkException):
     """
 
 
+class SparkNoSuchElementException(PySparkException):
+    """
+    Exception thrown for `java.util.NoSuchElementException`.
+    """
+
+
 class UnknownException(PySparkException):
     """
-    None of the above exceptions.
+    None of the other exceptions.
     """
 
 
@@ -205,6 +211,12 @@ class PySparkValueError(PySparkException, ValueError):
 class PySparkTypeError(PySparkException, TypeError):
     """
     Wrapper class for TypeError to support error classes.
+    """
+
+
+class PySparkIndexError(PySparkException, IndexError):
+    """
+    Wrapper class for IndexError to support error classes.
     """
 
 
@@ -245,4 +257,23 @@ class PySparkNotImplementedError(PySparkException, NotImplementedError):
 class PySparkPicklingError(PySparkException, PicklingError):
     """
     Wrapper class for pickle.PicklingError to support error classes.
+    """
+
+
+class RetriesExceeded(PySparkException):
+    """
+    Represents an exception which is considered retriable, but retry limits
+    were exceeded
+    """
+
+
+class PySparkKeyError(PySparkException, KeyError):
+    """
+    Wrapper class for KeyError to support error classes.
+    """
+
+
+class PySparkImportError(PySparkException, ImportError):
+    """
+    Wrapper class for ImportError to support error classes.
     """

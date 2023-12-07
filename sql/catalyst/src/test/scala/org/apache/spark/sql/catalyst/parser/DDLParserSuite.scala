@@ -2172,13 +2172,13 @@ class DDLParserSuite extends AnalysisTest {
   test("show views") {
     comparePlans(
       parsePlan("SHOW VIEWS"),
-      ShowViews(UnresolvedNamespace(Seq.empty[String]), None))
+      ShowViews(CurrentNamespace, None))
     comparePlans(
       parsePlan("SHOW VIEWS '*test*'"),
-      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowViews(CurrentNamespace, Some("*test*")))
     comparePlans(
       parsePlan("SHOW VIEWS LIKE '*test*'"),
-      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowViews(CurrentNamespace, Some("*test*")))
     comparePlans(
       parsePlan("SHOW VIEWS FROM testcat.ns1.ns2.tbl"),
       ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
@@ -2273,6 +2273,8 @@ class DDLParserSuite extends AnalysisTest {
   test("SPARK-33687: analyze tables statistics") {
     comparePlans(parsePlan("ANALYZE TABLES IN a.b.c COMPUTE STATISTICS"),
       AnalyzeTables(UnresolvedNamespace(Seq("a", "b", "c")), noScan = false))
+    comparePlans(parsePlan("ANALYZE TABLES COMPUTE STATISTICS"),
+      AnalyzeTables(CurrentNamespace, noScan = false))
     comparePlans(parsePlan("ANALYZE TABLES FROM a COMPUTE STATISTICS NOSCAN"),
       AnalyzeTables(UnresolvedNamespace(Seq("a")), noScan = true))
 

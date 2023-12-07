@@ -133,7 +133,7 @@ class HiveDDLSuite
       createTime = 0L,
       lastAccessTime = 0L,
       owner = "",
-      properties = table.properties.view.filterKeys(!nondeterministicProps.contains(_)).toMap,
+      properties = table.properties.filter { case (k, _) => !nondeterministicProps.contains(k) },
       // View texts are checked separately
       viewText = None
     )
@@ -1089,7 +1089,7 @@ class HiveDDLSuite
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assert(oldPart.storage.properties.view.filterKeys(expectedSerdeProps.contains) !=
+    assert(oldPart.storage.properties.filter { case (k, _) => expectedSerdeProps.contains(k) } !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -1097,7 +1097,7 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assert(newPart.storage.properties.view.filterKeys(expectedSerdeProps.contains).toMap ==
+    assert(newPart.storage.properties.filter { case (k, _) => expectedSerdeProps.contains(k) } ==
       expectedSerdeProps)
   }
 
@@ -1699,7 +1699,7 @@ class HiveDDLSuite
       "minFileSize"
     )
     assert(
-      targetTable.properties.view.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
+      targetTable.properties.forall { case (k, _) => metastoreGeneratedProperties.contains(k) },
       "the table properties of source tables should not be copied in the created table")
 
     provider match {
@@ -3270,7 +3270,7 @@ class HiveDDLSuite
       val jarName = "TestUDTF.jar"
       val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
       spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
-        .foreach(spark.sparkContext.addedJars("default").remove)
+        .foreach(k => spark.sparkContext.addedJars.get("default").foreach(_.remove(k)))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +

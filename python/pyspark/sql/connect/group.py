@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import warnings
 
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import warnings
 from typing import (
     Any,
     Dict,
@@ -49,6 +49,8 @@ if TYPE_CHECKING:
         PandasGroupedMapFunction,
         GroupedMapPandasUserDefinedFunction,
         PandasCogroupedMapFunction,
+        ArrowCogroupedMapFunction,
+        ArrowGroupedMapFunction,
         PandasGroupedMapFunctionWithState,
     )
     from pyspark.sql.connect.dataframe import DataFrame
@@ -63,13 +65,20 @@ class GroupedData:
         grouping_cols: Sequence["Column"],
         pivot_col: Optional["Column"] = None,
         pivot_values: Optional[Sequence["LiteralType"]] = None,
+        grouping_sets: Optional[Sequence[Sequence["Column"]]] = None,
     ) -> None:
         from pyspark.sql.connect.dataframe import DataFrame
 
         assert isinstance(df, DataFrame)
         self._df = df
 
-        assert isinstance(group_type, str) and group_type in ["groupby", "rollup", "cube", "pivot"]
+        assert isinstance(group_type, str) and group_type in [
+            "groupby",
+            "rollup",
+            "cube",
+            "pivot",
+            "grouping_sets",
+        ]
         self._group_type = group_type
 
         assert isinstance(grouping_cols, list) and all(isinstance(g, Column) for g in grouping_cols)
@@ -82,6 +91,11 @@ class GroupedData:
             assert pivot_values is None or isinstance(pivot_values, list)
             self._pivot_col = pivot_col
             self._pivot_values = pivot_values
+
+        self._grouping_sets: Optional[Sequence[Sequence["Column"]]] = None
+        if group_type == "grouping_sets":
+            assert grouping_sets is None or isinstance(grouping_sets, list)
+            self._grouping_sets = grouping_sets
 
     def __repr__(self) -> str:
         # the expressions are not resolved here,
@@ -97,6 +111,8 @@ class GroupedData:
             type_str = "RollUp"
         elif self._group_type == "cube":
             type_str = "Cube"
+        elif self._group_type == "grouping_sets":
+            type_str = "GroupingSets"
         else:
             type_str = "Pivot"
 
@@ -122,7 +138,7 @@ class GroupedData:
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             aggregate_cols = cast(List[Column], list(exprs))
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -130,6 +146,7 @@ class GroupedData:
                 aggregate_cols=aggregate_cols,
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
+                grouping_sets=self._grouping_sets,
             ),
             session=self._df._session,
         )
@@ -163,7 +180,7 @@ class GroupedData:
             # if no column is provided, then all numerical columns are selected
             agg_cols = numerical_cols
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -171,6 +188,7 @@ class GroupedData:
                 aggregate_cols=[_invoke_function(function, col(c)) for c in agg_cols],
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
+                grouping_sets=self._grouping_sets,
             ),
             session=self._df._session,
         )
@@ -282,7 +300,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -321,7 +339,7 @@ class GroupedData:
             stateStructType.json() if isinstance(stateStructType, StructType) else stateStructType
         )
 
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.ApplyInPandasWithState(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -336,6 +354,30 @@ class GroupedData:
         )
 
     applyInPandasWithState.__doc__ = PySparkGroupedData.applyInPandasWithState.__doc__
+
+    def applyInArrow(
+        self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        )
+
+        return DataFrame(
+            plan.GroupMap(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInArrow.__doc__ = PySparkGroupedData.applyInArrow.__doc__
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
         return PandasCogroupedOps(self, other)
@@ -364,20 +406,43 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
-        return DataFrame.withPlan(
+        return DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
                 other=self._gd2._df._plan,
                 other_grouping_cols=self._gd2._grouping_cols,
                 function=udf_obj,
-                cols=all_cols,
             ),
             session=self._gd1._df._session,
         )
 
     applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
+
+    def applyInArrow(
+        self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+        )
+
+        return DataFrame(
+            plan.CoGroupMap(
+                input=self._gd1._df._plan,
+                input_grouping_cols=self._gd1._grouping_cols,
+                other=self._gd2._df._plan,
+                other_grouping_cols=self._gd2._grouping_cols,
+                function=udf_obj,
+            ),
+            session=self._gd1._df._session,
+        )
+
+    applyInArrow.__doc__ = PySparkPandasCogroupedOps.applyInArrow.__doc__
 
     @staticmethod
     def _extract_cols(gd: "GroupedData") -> List[Column]:

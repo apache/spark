@@ -45,7 +45,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case Some(namedExpr) =>
         namedExpr.asInstanceOf[T]
       case None =>
-        val name = ref.fieldNames.toSeq.quoted
+        val name = ref.fieldNames.toImmutableArraySeq.quoted
         val outputString = plan.output.map(_.name).mkString(",")
         throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
     }
@@ -153,7 +153,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def resolveScalarFunction(
       scalarFunc: ScalarFunction[_],
       arguments: Seq[Expression]): Expression = {
-    val declaredInputTypes = scalarFunc.inputTypes().toSeq
+    val declaredInputTypes = scalarFunc.inputTypes().toImmutableArraySeq
     val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
       case Some(m) if Modifier.isStatic(m.getModifiers) =>

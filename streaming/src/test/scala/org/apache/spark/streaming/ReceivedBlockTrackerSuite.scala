@@ -395,7 +395,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     val writer = HdfsUtils.getOutputStream(filePath, hadoopConf)
     events.foreach { event =>
       val bytes = Utils.serialize(event)
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
     }
     writer.close()

@@ -96,7 +96,7 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
     Parameters
     ----------
     name Name of the function to be called.
-    args The list of arguments.
+        args The list of arguments.
 
     Returns
     -------
@@ -3611,6 +3611,13 @@ def user() -> Column:
 
 
 user.__doc__ = pysparkfuncs.user.__doc__
+
+
+def session_user() -> Column:
+    return _invoke_function("session_user")
+
+
+session_user.__doc__ = pysparkfuncs.session_user.__doc__
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
