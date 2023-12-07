@@ -568,7 +568,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if len(key) != len(result_index):
                 # Since the result Index size is expected to be small,
                 # we can collect data for checking missing key to follow the behavior of Pandas.
-                result_index_list = psdf_or_psser.index.tolist()
+                result_index_list = result_index.index.tolist()
                 for item in key:
                     if item not in result_index_list:
                         raise KeyError(f"{item} not in index")
