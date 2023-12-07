@@ -158,6 +158,10 @@ jobs:
           mkdir -p /home/runner/.ivy2/cache
           ls -al /home/runner
           ls -al /home/runner/.ivy2
+          ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.apache.hive -DartifactId=hive-exec -Dversion=2.3.9 -Dtransitive=false --quiet
+          ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.slf4j -DartifactId=slf4j-api -Dversion=1.7.30 -Dtransitive=false --quiet
+          ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
+          ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
@@ -204,6 +208,11 @@ jobs:
           else
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} test -fae
           fi
+      - name: List Ivy Cache
+        run: |
+          ls -al /home/runner
+          ls -al /home/runner/.ivy2
+          find /home/runner/.ivy2 -name "hive-exec*"
       - name: Clean up local Maven repository
         run: |  
           rm -rf ~/.m2/repository/org/apache/spark
