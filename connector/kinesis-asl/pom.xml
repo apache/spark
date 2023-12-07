@@ -59,6 +59,10 @@
       <version>${aws.kinesis.client.version}</version>
       <exclusions>
         <exclusion>
+          <groupId>com.github.luben</groupId>
+          <artifactId>zstd-jni</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>com.kjetland</groupId>
           <artifactId>mbknor-jackson-jsonschema_2.12</artifactId>
         </exclusion>
