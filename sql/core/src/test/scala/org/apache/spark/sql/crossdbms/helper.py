@@ -16,9 +16,9 @@
 #
 
 from dataclasses import dataclass
-from typing import List
 from itertools import tee, filterfalse
 from pathlib import Path
+from typing import List
 
 @dataclass
 class TestCase:
@@ -32,8 +32,7 @@ class ExecutionOutput:
     output: str
 
     def __str__(self):
-        output_str = "\n".join(["\t".join(row.split(",")) for row in self.output])
-        return f"-- !query\n{self.sql}\n-- !query output\n{output_str}"
+        return f"-- !query\n{self.sql}\n-- !query output\n{self.output}"
 
 def get_workspace_file_path():
     return Path.home () / "spark" / "sql" / "core" / "src" / "test" / "resources" / "sql-tests"

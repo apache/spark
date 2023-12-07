@@ -115,7 +115,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         output
       }
       ExecutionOutput(
-        sql = s"Original SQL: \n$sql\n",
+        sql = sql,
         // Don't care about the schema for this test. Only care about correctness.
         schema = None,
         output = normalizeTestResults(output.mkString("\n")))
