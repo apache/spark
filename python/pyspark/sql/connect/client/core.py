@@ -544,25 +544,6 @@ class ConfigResult:
         )
 
 
-class ForbidRecursion:
-    def __init__(self):
-        self._local = threading.local()
-        self._local.in_recursion = False
-
-    @property
-    def can_enter(self):
-        return self._local.in_recursion
-
-    def __enter__(self):
-        if self._local.in_recursion:
-            raise RecursionError
-
-        self._local.in_recursion = True
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._local.in_recursion = False
-
-
 class SparkConnectClient(object):
     """
     Conceptually the remote spark session that communicates with the server
