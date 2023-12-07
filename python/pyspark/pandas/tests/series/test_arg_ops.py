@@ -25,14 +25,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesArgOpsMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_argsort(self):
         # Without null values
         pser = pd.Series([0, -100, 50, 100, 20], index=["A", "B", "C", "D", "E"])
