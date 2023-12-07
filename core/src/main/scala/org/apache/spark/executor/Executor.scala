@@ -1188,13 +1188,10 @@ private[spark] class Executor(
       }
       if (!isDefaultState(state.sessionUUID)) {
         for ((name, timestamp) <- defaultSessionState.currentJars) {
-          logInfo(s"foobar $name")
           val localName = new URI(name).getPath.split("/").last
-          logInfo(s"foobar $localName")
           val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
-          logInfo(s"foobar $url")
           if (!state.urlClassLoader.getURLs().contains(url)) {
-            logInfo(s"foobar Adding common $url to class loader ${state.sessionUUID}")
+            logInfo(s"Adding common $url to class loader ${state.sessionUUID}")
             state.urlClassLoader.addURL(url)
           }
         }
