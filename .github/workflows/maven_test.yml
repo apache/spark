@@ -151,7 +151,9 @@ jobs:
             java${{ matrix.java }}-maven-
       - name: Clear Ivy Cache
         run: |
-          find . -name "hive-exec*"
+          pwd
+          find /home/runner -name "hive-exec*"
+          pwd
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
