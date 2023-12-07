@@ -4097,6 +4097,27 @@ class Dataset[T] private[sql](
     new DataFrameWriterV2[T](table, this)
   }
 
+  /**
+   * Create a [[DataFrameWriterV2]] for mergeInto action.
+   *
+   * Scala Examples:
+   * {{{
+   *   spark.table("source")
+   *     .mergeInto("target")
+   *     .on($"source.id" === $"target.id")
+   *     .whenMatched($"salary" === 100)
+   *     .delete()
+   *     .whenNotMatched()
+   *     .insertAll()
+   *     .whenNotMatchedBySource($"salary" === 100)
+   *     .update(Map(
+   *       "salary" -> lit(200)
+   *     ))
+   *     .merge()
+   * }}}
+   *
+   * @since 4.0.0
+   */
   def mergeInto(table: String): DataFrameWriterV2[T] = {
     // TODO: streaming could be adapted to use this interface
     if (isStreaming) {

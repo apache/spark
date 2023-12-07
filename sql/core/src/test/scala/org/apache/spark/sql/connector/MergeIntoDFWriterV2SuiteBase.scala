@@ -376,7 +376,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       spark.table("source")
         .mergeInto(tableNameAsString)
-        .on($"source.pk" ===col(tableNameAsString + ".pk"))
+        .on($"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .delete()
         .whenNotMatchedBySource($"salary" === 100)
@@ -406,7 +406,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       spark.table("source")
         .mergeInto(tableNameAsString)
-        .on($"source.pk" ===col(tableNameAsString + ".pk"))
+        .on($"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatched()
         .insert(Map(
           "pk" -> col("pk"),
