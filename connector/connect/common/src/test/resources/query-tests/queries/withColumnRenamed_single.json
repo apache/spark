@@ -11,8 +11,9 @@
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
     },
-    "renameColumnsMap": {
-      "id": "nid"
-    }
+    "renames": [{
+      "colName": "id",
+      "newColName": "nid"
+    }]
   }
 }
