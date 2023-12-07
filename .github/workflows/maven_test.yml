@@ -151,8 +151,9 @@ jobs:
             java${{ matrix.java }}-maven-
       - name: List Maven repository some jars - Before
         run: |
-          ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
-          ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
+          ls -al /home/runner
+          # ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
+          # ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
@@ -187,8 +188,8 @@ jobs:
           # Fix some corrupted jars
           # ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.apache.hive -DartifactId=hive-exec -Dversion=2.3.9 -Dtransitive=false --quiet
           # ./build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.slf4j -DartifactId=slf4j-api -Dversion=1.7.30 -Dtransitive=false --quiet
-          ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
-          ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
+          # ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
+          # ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} clean install
