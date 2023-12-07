@@ -587,6 +587,7 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool
             Enable reattachable execution.
         """
+
         class ClientThreadLocals(threading.local):
             tags: set = set()
             inside_error_handling: bool = False
