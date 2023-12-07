@@ -136,10 +136,10 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
-    if (request instanceof RequestMessage) {
-      requestHandler.handle((RequestMessage) request);
-    } else if (request instanceof ResponseMessage) {
-      responseHandler.handle((ResponseMessage) request);
+    if (request instanceof RequestMessage msg) {
+      requestHandler.handle(msg);
+    } else if (request instanceof ResponseMessage msg) {
+      responseHandler.handle(msg);
     } else {
       ctx.fireChannelRead(request);
     }

@@ -16,7 +16,7 @@
 #
 
 import re
-from typing import Dict
+from typing import Dict, Match
 
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
@@ -40,9 +40,14 @@ class ErrorClassesReader:
             f"Undefined error message parameter for error class: {error_class}. "
             f"Parameters: {message_parameters}"
         )
-        table = str.maketrans("<>", "{}")
 
-        return message_template.translate(table).format(**message_parameters)
+        def replace_match(match: Match[str]) -> str:
+            return match.group().translate(str.maketrans("<>", "{}"))
+
+        # Convert <> to {} only when paired.
+        message_template = re.sub(r"<([^<>]*)>", replace_match, message_template)
+
+        return message_template.format(**message_parameters)
 
     def get_message_template(self, error_class: str) -> str:
         """

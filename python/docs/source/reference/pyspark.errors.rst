@@ -44,9 +44,11 @@ Classes
     PySparkRuntimeError
     PySparkTypeError
     PySparkValueError
+    PySparkImportError
     PySparkIndexError
     PythonException
     QueryExecutionException
+    RetriesExceeded
     SessionNotSameException
     SparkRuntimeException
     SparkUpgradeException

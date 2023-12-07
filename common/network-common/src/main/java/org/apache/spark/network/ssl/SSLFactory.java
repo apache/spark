@@ -106,7 +106,7 @@ public class SSLFactory {
       .build();
 
     nettyServerSslContext = SslContextBuilder
-      .forServer(b.certChain, b.privateKey, b.keyPassword)
+      .forServer(b.certChain, b.privateKey, b.privateKeyPassword)
       .sslProvider(getSslProvider(b))
       .build();
   }
@@ -132,9 +132,9 @@ public class SSLFactory {
   public void destroy() {
     if (trustManagers != null) {
       for (int i = 0; i < trustManagers.length; i++) {
-        if (trustManagers[i] instanceof ReloadingX509TrustManager) {
+        if (trustManagers[i] instanceof ReloadingX509TrustManager manager) {
           try {
-            ((ReloadingX509TrustManager) trustManagers[i]).destroy();
+            manager.destroy();
           } catch (InterruptedException ex) {
             logger.info("Interrupted while destroying trust manager: " + ex.toString(), ex);
           }
@@ -160,6 +160,7 @@ public class SSLFactory {
     private File keyStore;
     private String keyStorePassword;
     private File privateKey;
+    private String privateKeyPassword;
     private String keyPassword;
     private File certChain;
     private File trustStore;
@@ -215,13 +216,24 @@ public class SSLFactory {
     }
 
     /**
-     * Sets the Key password
+     * Sets the key password
      *
-     * @param keyPassword The password for the private key
+     * @param keyPassword The password for the private key in the key store
      * @return The builder object
      */
     public Builder keyPassword(String keyPassword) {
       this.keyPassword = keyPassword;
+      return this;
+    }
+
+    /**
+     * Sets the private key password
+     *
+     * @param privateKeyPassword The password for the private key
+     * @return The builder object
+     */
+    public Builder privateKeyPassword(String privateKeyPassword) {
+      this.privateKeyPassword = privateKeyPassword;
       return this;
     }
 

@@ -29,6 +29,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` is required when <condition>."
     ]
   },
+  "ARROW_LEGACY_IPC_FORMAT": {
+    "message": [
+      "Arrow legacy IPC format is not supported in PySpark, please unset ARROW_PRE_0_15_IPC_FORMAT."
+    ]
+  },
   "ATTRIBUTE_NOT_CALLABLE" : {
     "message" : [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
@@ -77,6 +82,16 @@ ERROR_CLASSES_JSON = """
   "CANNOT_BE_NONE": {
     "message": [
       "Argument `<arg_name>` cannot be None."
+    ]
+  },
+  "CANNOT_CONFIGURE_SPARK_CONNECT": {
+    "message": [
+      "Spark Connect server cannot be configured with Spark master; however, found URL for Spark master [<url>]."
+    ]
+  },
+  "CANNOT_CONFIGURE_SPARK_MASTER": {
+    "message": [
+      "Spark master cannot be configured with Spark Connect server; however, found URL for Spark Connect [<url>]."
     ]
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
@@ -149,9 +164,24 @@ ERROR_CLASSES_JSON = """
       "returnType can not be specified when `<arg_name>` is a user-defined function, but got <return_type>."
     ]
   },
+  "CANNOT_WITHOUT": {
+    "message": [
+      "Cannot <condition1> without <condition2>."
+    ]
+  },
   "COLUMN_IN_LIST": {
     "message": [
       "`<func_name>` does not allow a Column in a list."
+    ]
+  },
+  "CONNECT_URL_ALREADY_DEFINED" : {
+    "message" : [
+      "Only one Spark Connect client URL can be set; however, got a different URL [<new_url>] from the existing [<existing_url>]."
+    ]
+  },
+  "CONNECT_URL_NOT_SET" : {
+    "message" : [
+      "Cannot create a Spark Connect session because the Spark Connect remote URL has not been set. Please define the remote URL by setting either the 'spark.remote' option or the 'SPARK_REMOTE' environment variable."
     ]
   },
   "CONTEXT_ONLY_VALID_ON_DRIVER" : {
@@ -231,6 +261,11 @@ ERROR_CLASSES_JSON = """
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
+  "ERROR_OCCURRED_WHILE_CALLING" : {
+    "message" : [
+      "An error occurred while calling <func_name>: <error_msg>."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -270,6 +305,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_CONNECT_URL" : {
     "message" : [
       "Invalid URL for Spark Connect: <detail>"
+    ]
+  },
+  "INVALID_INTERVAL_CASTING": {
+    "message": [
+      "Interval <start_field> to <end_field> is invalid."
     ]
   },
   "INVALID_ITEM_FOR_CONTAINER": {
@@ -657,6 +697,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
+  "NO_ACTIVE_EXCEPTION" : {
+    "message" : [
+      "No active exception."
+    ]
+  },
   "NO_ACTIVE_OR_DEFAULT_SESSION" : {
     "message" : [
       "No active or default Spark session found. Please create a new Spark session before running the code."
@@ -680,6 +725,16 @@ ERROR_CLASSES_JSON = """
   "ONLY_ALLOW_SINGLE_TRIGGER" : {
     "message" : [
       "Only a single trigger is allowed."
+    ]
+  },
+  "ONLY_SUPPORTED_WITH_SPARK_CONNECT" : {
+    "message" : [
+      "<feature> is only supported with Spark Connect; however, the current Spark session does not use Spark Connect."
+    ]
+  },
+  "PACKAGE_NOT_INSTALLED" : {
+    "message" : [
+      "<package_name> >= <minimum_version> must be installed; however, it was not found."
     ]
   },
   "PIPE_FUNCTION_EXITED" : {
@@ -723,6 +778,16 @@ ERROR_CLASSES_JSON = """
       "transformation. For more information, see SPARK-5063."
     ]
   },
+  "READ_ONLY" : {
+    "message" : [
+      "<object> is read-only."
+    ]
+  },
+  "RESPONSE_ALREADY_RECEIVED" : {
+    "message" : [
+      "OPERATION_NOT_FOUND on the server but responses were already received from it."
+    ]
+  },
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF" : {
     "message" : [
       "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
@@ -748,6 +813,11 @@ ERROR_CLASSES_JSON = """
       "Columns do not match in their data type: <mismatch>."
     ]
   },
+  "RETRIES_EXCEEDED" : {
+    "message" : [
+      "The maximum number of retries has been exceeded."
+    ]
+  },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
@@ -771,6 +841,11 @@ ERROR_CLASSES_JSON = """
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
+  "SESSION_OR_CONTEXT_NOT_EXISTS" : {
+    "message" : [
+      "SparkContext or SparkSession should be created first.."
     ]
   },
   "SHOULD_NOT_DATAFRAME": {
@@ -801,6 +876,11 @@ ERROR_CLASSES_JSON = """
   "STREAMING_CONNECT_SERIALIZATION_ERROR" : {
     "message" : [
       "Cannot serialize the function `<name>`. If you accessed the Spark session, or a DataFrame defined outside of the function, or any object that contains a Spark session, please be aware that they are not allowed in Spark Connect. For `foreachBatch`, please access the Spark session using `df.sparkSession`, where `df` is the first parameter in your `foreachBatch` function. For `StreamingQueryListener`, please access the Spark session using `self.spark`. For details please check out the PySpark doc for `foreachBatch` and `StreamingQueryListener`."
+    ]
+  },
+  "TEST_CLASS_NOT_COMPILED" : {
+    "message" : [
+      "<test_class_path> doesn't exist. Spark sql test classes are not compiled."
     ]
   },
   "TOO_MANY_VALUES" : {
@@ -928,6 +1008,11 @@ ERROR_CLASSES_JSON = """
       "Unsupported Literal '<literal>'."
     ]
   },
+  "UNSUPPORTED_LOCAL_CONNECTION_STRING" : {
+    "message" : [
+      "Creating new SparkSessions with `local` connection string is not supported."
+    ]
+  },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
     "message" : [
       "The type of array scalar '<dtype>' is not supported."
@@ -936,6 +1021,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operation> is not supported."
+    ]
+  },
+  "UNSUPPORTED_PACKAGE_VERSION" : {
+    "message" : [
+      "<package_name> >= <minimum_version> must be installed; however, your version is <current_version>."
     ]
   },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {

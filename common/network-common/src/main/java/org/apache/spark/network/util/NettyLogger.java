@@ -40,15 +40,14 @@ public class NettyLogger {
 
     @Override
     protected String format(ChannelHandlerContext ctx, String eventName, Object arg) {
-      if (arg instanceof ByteBuf) {
-        return format(ctx, eventName) + " " + ((ByteBuf) arg).readableBytes() + "B";
-      } else if (arg instanceof ByteBufHolder) {
-        return format(ctx, eventName) + " " +
-          ((ByteBufHolder) arg).content().readableBytes() + "B";
-      } else if (arg instanceof InputStream) {
+      if (arg instanceof ByteBuf byteBuf) {
+        return format(ctx, eventName) + " " + byteBuf.readableBytes() + "B";
+      } else if (arg instanceof ByteBufHolder byteBufHolder) {
+        return format(ctx, eventName) + " " + byteBufHolder.content().readableBytes() + "B";
+      } else if (arg instanceof InputStream inputStream) {
         int available = -1;
         try {
-          available = ((InputStream) arg).available();
+          available = inputStream.available();
         } catch (IOException ex) {
           // Swallow, but return -1 to indicate an error happened
         }
