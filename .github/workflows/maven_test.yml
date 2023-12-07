@@ -149,6 +149,10 @@ jobs:
           key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             java${{ matrix.java }}-maven-
+      - name: List Maven repository some jars - Before
+        run: |
+          ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
+          ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
@@ -198,6 +202,10 @@ jobs:
           else
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} test -fae
           fi
+      - name: List Maven repository some jars - After
+        run: |
+          ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
+          ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Clean up local Maven repository
         run: |  
           rm -rf ~/.m2/repository/org/apache/spark
