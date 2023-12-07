@@ -1,13 +1,18 @@
 version: "3"
 services:
   python-app:
-    build: .
+    build:
+      context: ../../../../../../
+      dockerfile: scala/org/apache/spark/sql/crossdbms/Dockerfile
     depends_on:
       - postgres
+    ports:
+      - "8000:8000"
   postgres:
     image: postgres:latest
+    ports:
+      - "8001:5432"
     environment:
       POSTGRES_USER: pg
       POSTGRES_PASSWORD: pg
-      POSTGRES_DB: postgres_db
-
+      POSTGRES_DB: pg

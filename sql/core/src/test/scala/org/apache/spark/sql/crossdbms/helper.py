@@ -35,8 +35,7 @@ class ExecutionOutput:
         return f"-- !query\n{self.sql}\n-- !query output\n{self.output}"
 
 def get_workspace_file_path():
-    # TODO
-    return Path.home () / "spark" / "sql" / "core" / "src" / "test" / "resources" / "sql-tests"
+    return Path.cwd()
 
 def file_to_string(file_path, encoding='utf-8'):
     with open(file_path, 'rb') as file:

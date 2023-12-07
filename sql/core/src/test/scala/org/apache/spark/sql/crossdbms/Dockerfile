@@ -4,12 +4,16 @@ FROM python:3.8-slim
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
-# Copy the current directory contents into the container at /usr/src/app
-COPY . .
+# Copy the `crossdbms` directory contents into the container at /usr/src/app
+COPY scala/org/apache/spark/sql/crossdbms/ .
+
+# Copy the SQL input files into the container at /usr/src/app/inputs
+COPY resources/sql-tests/inputs ./inputs
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run app.py when the container launches
-CMD ["python", "./run_sql_queries.py"]
+# Run cross_dbms_sql_test_runner when the container launches
+CMD ["python", "-u" , "./cross_dbms_sql_test_runner.py"]
 
+# TODO: Copy back the golden files from the container

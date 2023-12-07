@@ -96,7 +96,7 @@ class PostgresConnection(DatabaseConnection):
     Represents a connection (session) to a PostgreSQL database using JDBC.
     """
     DEFAULT_USER: str = "pg"
-    DEFAULT_CONNECTION_URL: str = f"dbname=postgres user={DEFAULT_USER} password=password host=localhost port=5432"
+    DEFAULT_CONNECTION_URL: str = f"dbname=pg user={DEFAULT_USER} password=pg host=postgres port=5432"
 
     def __init__(self, connection_url: Optional[str] = None) -> None:
         self.url: str = connection_url or self.DEFAULT_CONNECTION_URL

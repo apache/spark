@@ -38,7 +38,7 @@ DBMS_TO_CONNECTION_PROVIDER_MAPPING: Dict[str, Callable[[Optional[str]], SQLQuer
 }
 
 # Mapping from DBMS to output formatter
-DBMS_TO_OUTPUT_FORMATTER_MAPPING: Dict[str, Callable[List[str], str]] = {
+DBMS_TO_OUTPUT_FORMATTER_MAPPING: Dict[str, Callable[[List[str]], str]] = {
     POSTGRES: lambda s: format_postgres_output(s)
 }
 
