@@ -28,6 +28,7 @@ import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_API_WATCHER
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.cluster.k8s.watch.AbstractExecutorPodsWatch
 import org.apache.spark.util.Utils
 
 /**
@@ -42,7 +43,7 @@ import org.apache.spark.util.Utils
 class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     kubernetesClient: KubernetesClient,
-    conf: SparkConf) extends Logging {
+    conf: SparkConf) extends AbstractExecutorPodsWatch with Logging {
 
   private var watchConnection: Closeable = _
   private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
@@ -55,7 +56,7 @@ class ExecutorPodsWatchSnapshotSource(
   }
 
   @Since("3.1.3")
-  def start(applicationId: String): Unit = {
+  override def start(applicationId: String): Unit = {
     if (enableWatching) {
       require(watchConnection == null, "Cannot start the watcher twice.")
       logDebug(s"Starting to watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
@@ -69,7 +70,7 @@ class ExecutorPodsWatchSnapshotSource(
   }
 
   @Since("3.1.3")
-  def stop(): Unit = {
+  override def stop(): Unit = {
     if (watchConnection != null) {
       Utils.tryLogNonFatalError {
         watchConnection.close()

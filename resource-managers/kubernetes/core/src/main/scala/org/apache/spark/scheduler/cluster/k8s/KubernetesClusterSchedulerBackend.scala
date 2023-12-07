@@ -22,8 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.HashMap
 import scala.concurrent.Future
 
-import io.fabric8.kubernetes.api.model.Pod
-import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkContext
@@ -35,10 +34,10 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
-  TaskSchedulerImpl}
+import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
+import org.apache.spark.scheduler.cluster.k8s.watch.AbstractExecutorPodsWatch
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -50,7 +49,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: AbstractPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
-    watchEvents: ExecutorPodsWatchSnapshotSource,
+    watchEvents: AbstractExecutorPodsWatch,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
   private val appId = KubernetesConf.getKubernetesAppId()

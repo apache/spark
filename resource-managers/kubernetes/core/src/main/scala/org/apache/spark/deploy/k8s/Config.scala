@@ -139,6 +139,12 @@ private[spark] object Config extends Logging {
       .version("2.3.0")
       .fallbackConf(CONTAINER_IMAGE)
 
+  val WATCH_CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.watch.container.image")
+      .doc("Container image to use for the watcher.")
+      .version("4.0.0")
+      .fallbackConf(CONTAINER_IMAGE)
+
   val CONTAINER_IMAGE_PULL_POLICY =
     ConfigBuilder("spark.kubernetes.container.image.pullPolicy")
       .doc("Kubernetes image pull policy. Valid values are Always, Never, and IfNotPresent.")
@@ -221,6 +227,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
+  val KUBERNETES_AUTH_WATCH_CONF_PREFIX = "spark.kubernetes.authenticate.watch"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"
   val KUBERNETES_AUTH_CLIENT_MODE_PREFIX = "spark.kubernetes.authenticate"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
@@ -275,6 +282,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_WATCH_SERVICE_ACCOUNT_NAME =
+    ConfigBuilder(s"$KUBERNETES_AUTH_WATCH_CONF_PREFIX.serviceAccountName")
+      .doc("Service account that is used when running the watcher pod." +
+        "If this parameter is not setup, the fallback logic will use the driver's service account.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.driver.limit.cores")
       .doc("Specify the hard cpu limit for the driver pod")
@@ -289,12 +304,32 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_WATCH_REQUEST_CORES =
+    ConfigBuilder("spark.kubernetes.watch.request.cores")
+      .doc("Specify the cpu request for the watch pod")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("1")
+
+  val KUBERNETES_WATCH_LIMIT_CORES =
+    ConfigBuilder("spark.kubernetes.watch.limit.cores")
+      .doc("Specify the hard cpu limit for the watch pod")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_SUBMIT_CHECK =
     ConfigBuilder("spark.kubernetes.submitInDriver")
     .internal()
     .version("2.4.0")
     .booleanConf
     .createWithDefault(false)
+
+  val KUBERNETES_WATCH_PORT = ConfigBuilder("spark.watch.port")
+    .doc("Port to use for the watch when a more specific setting is not provided.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(DEFAULT_WATCH_PORT)
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
@@ -314,6 +349,13 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.driver.scheduler.name")
       .doc("Specify the scheduler name for driver pod")
       .version("3.3.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_WATCH_SCHEDULER_NAME =
+    ConfigBuilder("spark.kubernetes.watch.scheduler.name")
+      .doc("Specify the scheduler name for watch pod")
+      .version("4.0.0")
       .stringConf
       .createOptional
 
@@ -403,6 +445,18 @@ private[spark] object Config extends Logging {
         "step can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor " +
         "config is also available.")
       .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  val KUBERNETES_WATCH_POD_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.watch.pod.featureSteps")
+      .doc("Class names of an extra watch pod feature step implementing " +
+        "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
+        "Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature " +
+        "step can implement `KubernetesDriverCustomFeatureConfigStep` where the driver " +
+        "config is also available.")
+      .version("4.0.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -505,6 +559,12 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_EXECUTOR_API_WATCHER_TYPE =
+    ConfigBuilder("spark.kubernetes.watch.type")
+      .doc("What type of watcher should we use?")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefaultString(WATCH_TYPE_INTERNAL)
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
@@ -635,6 +695,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  // TOOD: hannah descriiption
+  val KUBERNETES_WATCH_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.watch.podTemplateFile")
+      .doc("File containing a template pod spec for the external watcher")
+      .version("3.0.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME =
     ConfigBuilder("spark.kubernetes.driver.podTemplateContainerName")
       .doc("container name to be used as a basis for the driver in the given pod template")
@@ -645,6 +713,13 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME =
     ConfigBuilder("spark.kubernetes.executor.podTemplateContainerName")
       .doc("container name to be used as a basis for executors in the given pod template")
+      .version("3.0.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_WATCH_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.watch.podTemplateContainerName")
+      .doc("container name to be used as a basis for watch in the given pod template")
       .version("3.0.0")
       .stringConf
       .createOptional
@@ -664,6 +739,8 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX = "spark.kubernetes.driver.node.selector."
 
   val KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX = "spark.kubernetes.executor.node.selector."
+
+  val KUBERNETES_WATCH_NODE_SELECTOR_PREFIX = "spark.kubernetes.watch.node.selector."
 
   val KUBERNETES_DELETE_EXECUTORS =
     ConfigBuilder("spark.kubernetes.executor.deleteOnTermination")
@@ -754,6 +831,10 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX = "spark.kubernetes.executor.secretKeyRef."
   val KUBERNETES_EXECUTOR_VOLUMES_PREFIX = "spark.kubernetes.executor.volumes."
 
+  val KUBERNETES_WATCH_ANNOTATION_PREFIX = "spark.kubernetes.watch.annotation."
+  val KUBERNETES_WATCH_SECRET_KEY_REF_PREFIX = "spark.kubernetes.watch.secretKeyRef."
+  val KUBERNETES_WATCH_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
+
   val KUBERNETES_VOLUMES_HOSTPATH_TYPE = "hostPath"
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
   val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
@@ -769,6 +850,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
+  val KUBERNETES_WATCH_ENV_PREFIX = "spark.kubernetes.watchEnv."
 
   val KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH = 253
   val KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH = 63

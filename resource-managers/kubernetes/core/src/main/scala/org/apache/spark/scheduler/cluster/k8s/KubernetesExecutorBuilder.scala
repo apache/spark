@@ -52,6 +52,8 @@ private[spark] class KubernetesExecutorBuilder {
           // raise SparkException with wrong type feature step
           case _: KubernetesDriverCustomFeatureConfigStep =>
             None
+          case _: KubernetesWatchCustomFeatureConfigStep =>
+            None
           // Since 3.2, allow user to implement feature without config
           case f: KubernetesFeatureConfigStep =>
             Some(f)

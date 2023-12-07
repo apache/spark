@@ -78,7 +78,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
 
 private[spark] class KubernetesDriverConf(
     sparkConf: SparkConf,
-    val appId: String,
+    override val appId: String,
     val mainAppResource: MainAppResource,
     val mainClass: String,
     val appArgs: Array[String],
@@ -149,7 +149,7 @@ private[spark] class KubernetesDriverConf(
 
 private[spark] class KubernetesExecutorConf(
     sparkConf: SparkConf,
-    val appId: String,
+    override val appId: String,
     val executorId: String,
     val driverPod: Option[Pod],
     val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
@@ -224,6 +224,63 @@ private[spark] class KubernetesExecutorConf(
 
 }
 
+/**
+ * This is the configuration for the external watcher Kubernetes spec. It is used to build the
+ * K8s configuration for the watcher.
+ */
+private[spark] class KubernetesWatchConf(
+    sparkConf: SparkConf,
+    override val appId: String,
+    val driverPod: Option[Pod])
+  extends KubernetesConf(sparkConf) with Logging {
+
+  override val resourceNamePrefix: String = "watcher"
+
+  def watchNodeSelector: Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_WATCH_NODE_SELECTOR_PREFIX)
+
+  override def labels: Map[String, String] = {
+    val presetLabels = Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
+      SPARK_APP_ID_LABEL -> appId,
+      SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
+      SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
+    val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
+
+    presetLabels.keys.foreach { key =>
+      require(
+        !driverCustomLabels.contains(key),
+        s"Label with key $key is not allowed as it is reserved for Spark bookkeeping operations.")
+    }
+
+    driverCustomLabels ++ presetLabels
+  }
+
+  override def environment: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_WATCH_ENV_PREFIX)
+  }
+
+  override def annotations: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_WATCH_ANNOTATION_PREFIX)
+      .map { case (k, v) => (k, Utils.substituteAppNExecIds(v, appId, "")) }
+  }
+
+  override def secretEnvNamesToKeyRefs: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_WATCH_SECRET_KEY_REF_PREFIX)
+  }
+
+  override def secretNamesToMountPaths: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_WATCH_SECRETS_PREFIX)
+  }
+
+  override def volumes: Seq[KubernetesVolumeSpec] = Seq.empty
+
+  override def schedulerName: Option[String] = {
+    Option(get(KUBERNETES_WATCH_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).orNull))
+  }
+}
+
 private[spark] object KubernetesConf {
   def createDriverConf(
       sparkConf: SparkConf,
@@ -251,6 +308,13 @@ private[spark] object KubernetesConf {
       driverPod: Option[Pod],
       resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID): KubernetesExecutorConf = {
     new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod, resourceProfileId)
+  }
+
+  def createWatchConf(
+     sparkConf: SparkConf,
+     appId: String,
+     driverPod: Option[Pod]): KubernetesWatchConf = {
+    new KubernetesWatchConf(sparkConf, appId, driverPod)
   }
 
   def getKubernetesAppId(): String =

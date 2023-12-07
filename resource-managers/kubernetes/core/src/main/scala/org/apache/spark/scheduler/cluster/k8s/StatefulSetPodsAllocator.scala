@@ -21,8 +21,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{PersistentVolumeClaim,
-  PersistentVolumeClaimBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec}
+import io.fabric8.kubernetes.api.model.{PersistentVolumeClaim, PersistentVolumeClaimBuilder, Pod, PodSpec, PodSpecBuilder, PodTemplateSpec}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -51,7 +50,7 @@ class StatefulSetPodsAllocator(
   protected val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
 
-  val driverPod = kubernetesDriverPodName
+  override val driverPod: Option[Pod] = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
       .inNamespace(namespace)
       .withName(name)

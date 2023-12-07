@@ -120,4 +120,16 @@ private[spark] object Constants {
   val APP_RESOURCE_TYPE_JAVA = "java"
   val APP_RESOURCE_TYPE_PYTHON = "python"
   val APP_RESOURCE_TYPE_R = "r"
+
+  // Watch stuff
+  val WATCH_TYPE_INTERNAL = "interal"
+  val WATCH_TYPE_EXTERNAL = "external"
+  val WATCH_ENDPOINT_NAME = "RemoteWatch"
+  val STORE_ENDPOINT_NAME = "RemoteStore"
+  val DEFAULT_WATCH_PORT = 1
+  val WATCH_PORT_NAME = "watch-rpc-port"
+  val ENV_WATCH_POD_IP = "SPARK_WATCH_POD_IP"
+  val ENV_WATCH_POD_NAME = "SPARK_WATCH_POD_NAME"
+  val ENV_WATCH_DIRS = "SPARK_WATCH_DIRS"
+  val DEFAULT_WATCH_CONTAINER_NAME = "spark-kubernetes-watch"
 }

@@ -27,11 +27,11 @@ import scala.util.control.NonFatal
 import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.ExecutorFailureTracker
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesStepUtil}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -39,6 +39,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.util.SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES
+
 
 class ExecutorPodsAllocator(
     conf: SparkConf,
@@ -83,21 +84,13 @@ class ExecutorPodsAllocator(
 
   protected val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
 
-  protected val namespace = conf.get(KUBERNETES_NAMESPACE)
+  protected val namespace = KubernetesStepUtil.namespace(conf)
 
-  protected val kubernetesDriverPodName = conf
-    .get(KUBERNETES_DRIVER_POD_NAME)
+  protected val kubernetesDriverPodName = KubernetesStepUtil.kubernetesDriverPodName(conf)
 
   protected val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
-  val driverPod = kubernetesDriverPodName
-    .map(name => Option(kubernetesClient.pods()
-      .inNamespace(namespace)
-      .withName(name)
-      .get())
-      .getOrElse(throw new SparkException(
-        s"No pod was found named $name in the cluster in the " +
-          s"namespace $namespace (this was supposed to be the driver pod.).")))
+  override val driverPod: Option[Pod] = KubernetesStepUtil.driverPod(conf, kubernetesClient)
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the (ResourceProfile id, timestamp) when they were created.

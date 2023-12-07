@@ -18,16 +18,16 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
 
-import io.fabric8.kubernetes.client.Config
-import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.{Config, KubernetesClient}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{Constants, KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.TASK_MAX_FAILURES
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
+import org.apache.spark.scheduler.cluster.k8s.watch.{AbstractExecutorPodsWatch, SnapshotStoreRpc, WatchCreator}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
@@ -128,6 +128,21 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         "kubernetes-executor-snapshots-subscribers", 2)
     val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor, conf = sc.conf)
 
+    val watcherType = sc.conf.get(KUBERNETES_EXECUTOR_API_WATCHER_TYPE)
+
+    // If we want the executors watch to be an external node
+    val maybeWatcherHostname = if (watcherType == Constants.WATCH_TYPE_EXTERNAL) {
+      // Set up the remote store endpoint so the external pods watcher can update the store
+      sc.env.rpcEnv.setupEndpoint(Constants.WATCH_ENDPOINT_NAME,
+        SnapshotStoreRpc.createBackendEndpoint(sc.env.rpcEnv, snapshotsStore))
+
+      // Spin up the remote pods watcher in a separate node
+      Some(WatchCreator.create(sc.conf, kubernetesClient, sc.applicationId))
+    } else {
+      // We don't have an external watcher so we don't need a watcher hostname
+      None
+    }
+
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
       kubernetesClient,
@@ -135,10 +150,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     val executorPodsAllocator = makeExecutorPodsAllocator(sc, kubernetesClient, snapshotsStore)
 
-    val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
+    val podsWatchEventSource = AbstractExecutorPodsWatch.create(
+      watcherType,
       snapshotsStore,
       kubernetesClient,
-      sc.conf)
+      sc,
+      maybeWatcherHostname)
 
     val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
       "kubernetes-executor-pod-polling-sync")

@@ -291,6 +291,27 @@ object SparkEnv extends Logging {
       hostname, numCores, ioEncryptionKey, isLocal)
   }
 
+  private[spark] def createWatchEnv(
+      conf: SparkConf,
+      bindAddress: String,
+      hostname: String,
+      numCores: Int,
+      ioEncryptionKey: Option[Array[Byte]],
+      isLocal: Boolean): SparkEnv = {
+    val env = create(
+      conf,
+      executorId = "watch",
+      bindAddress,
+      hostname,
+      None,
+      isLocal,
+      numCores,
+      ioEncryptionKey
+    )
+    SparkEnv.set(env)
+    env
+  }
+
   /**
    * Helper method to create a SparkEnv for a driver or an executor.
    */

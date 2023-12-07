@@ -107,6 +107,19 @@ case "$1" in
       --podName $SPARK_EXECUTOR_POD_NAME
     )
     ;;
+  executor)
+      shift 1
+      CMD=(
+        ${JAVA_HOME}/bin/java
+        -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
+        org.apache.spark.scheduler.cluster.k8s.watch.KubernetesWatchBackend
+        --driver-url $SPARK_DRIVER_URL
+        --cores $SPARK_WATCH_CORES
+        --app-id $SPARK_APPLICATION_ID
+        --hostname $SPARK_WATCH_POD_IP
+        --namespace $SPARK_WATCH_NAMESPACE
+      )
+      ;;
 
   *)
     echo "Non-spark-on-k8s command provided, proceeding in pass-through mode..."

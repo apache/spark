@@ -28,8 +28,6 @@ import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile}
-import org.apache.spark.rpc.RpcEndpointAddress
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
 private[spark] class BasicExecutorFeatureStep(
@@ -51,10 +49,7 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
-  private val driverUrl = RpcEndpointAddress(
-    kubernetesConf.get(DRIVER_HOST_ADDRESS),
-    kubernetesConf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT),
-    CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+  private val driverUrl = KubernetesStepUtil.driverEndpoint(kubernetesConf).toString
 
   private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
@@ -241,15 +236,7 @@ private[spark] class BasicExecutorFeatureStep(
           .endLifecycle()
           .build()
       }
-    val ownerReference = kubernetesConf.driverPod.map { pod =>
-      new OwnerReferenceBuilder()
-        .withController(true)
-        .withApiVersion(pod.getApiVersion)
-        .withKind(pod.getKind)
-        .withName(pod.getMetadata.getName)
-        .withUid(pod.getMetadata.getUid)
-        .build()
-    }
+    val ownerReference = kubernetesConf.driverPod.map(KubernetesStepUtil.driverOwnerReference)
 
     val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
       case "statefulset" => "Always"
