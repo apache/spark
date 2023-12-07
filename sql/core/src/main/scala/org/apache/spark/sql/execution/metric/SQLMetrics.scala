@@ -40,14 +40,16 @@ import org.apache.spark.util.AccumulatorContext.internOption
 class SQLMetric(val metricType: String,
                 initValue: Long = 0L,
                 zeroValue: Long = 0L) extends AccumulatorV2[Long, Long] {
-  // If a metric has value equal to its initValue, then it should be filtered out before aggregating with
-  // SQLMetrics.stringValue().
-  // zeroValue defines the lowest value considered valid. If a SQLMetric is invalid, it is set to zeroValue upon
-  // receiving any updates, and it also reports zeroValue as its value to avoid exposing it to the user programatically.
+  // If a metric has value equal to its initValue, then it should be filtered out before
+  // aggregating with SQLMetrics.stringValue().
+  // zeroValue defines the lowest value considered valid. If a SQLMetric is invalid, it is set to
+  // zeroValue upon receiving any updates, and it also reports zeroValue as its value to avoid
+  // exposing it to the user programatically.
   //
-  // For many SQLMetrics, we use initValue = -1 and zeroValue = 0 to indicate that the metric is by default invalid.
-  // At the end of a task, we will update the metric making it valid, and the invalid metrics will be filtered out
-  // when calculating min, max, etc. as a workaround for SPARK-11013.
+  // For many SQLMetrics, we use initValue = -1 and zeroValue = 0 to indicate that the metric is
+  // by default invalid. At the end of a task, we will update the metric making it valid, and the
+  // invalid metrics will be filtered out when calculating min, max, etc. as a workaround for
+  // SPARK-11013.
   private var _value = initValue
 
   override def copy(): SQLMetric = {
@@ -86,11 +88,8 @@ class SQLMetric(val metricType: String,
 
   def +=(v: Long): Unit = add(v)
 
-  // We may use -1 as initial value of the accumulator, so that the SQL UI can filter out
-  // invalid accumulator values (0 is a valid metric value) when calculating min, max, etc.
-  // However, users can also access the SQL metrics values programmatically via this method.
-  // We should be consistent with the SQL UI and don't expose -1 to users.
-  // See `SQLMetrics.stringValue`. If this is invalid, returns zeroValue.
+  // _value may be invalid, in many cases being -1. We should not expose it to the user
+  // and instead return zeroValue.
   override def value: Long = if (!isValid) zeroValue else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
