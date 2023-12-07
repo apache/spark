@@ -31,7 +31,7 @@ function exit_with_usage {
   echo "lint-python - linter for Python"
   echo ""
   echo "usage:"
-  cl_options="[--compile] [--black] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
+  cl_options="[--compile] [--black] [--custom-pyspark-error] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
   echo "lint-python $cl_options"
   echo ""
   exit 1
