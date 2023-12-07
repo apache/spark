@@ -57,8 +57,7 @@ class ExecutionOutput:
 
 class CrossDbmsSQLQueryTestRunner:
 
-    def __init__(self, cross_dbms_to_generate_golden_files, test_runner: SQLQueryTestRunner):
-        self.test_runner = test_runner
+    def __init__(self, cross_dbms_to_generate_golden_files):
         self.base_resource_path = get_workspace_file_path("sql", "core", "src", "test", "resources", "sql-tests")
         self.input_file_path = (self.base_resource_path / "inputs").resolve().absolute()
         self.cross_dbms_to_generate_golden_files = cross_dbms_to_generate_golden_files
@@ -123,3 +122,8 @@ class CrossDbmsSQLQueryTestRunner:
 
         with open(result_file, 'w', encoding='utf-8') as file:
             file.write(golden_output)
+
+        runner.clean_up()
+
+if __name__ == "__main__":
+    CrossDbmsSQLQueryTestRunner('postgres')

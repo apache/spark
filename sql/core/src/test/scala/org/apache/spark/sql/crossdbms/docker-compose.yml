@@ -1,0 +1,13 @@
+version: "3"
+services:
+  python-app:
+    build: .
+    depends_on:
+      - postgres
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: pg
+      POSTGRES_PASSWORD: pg
+      POSTGRES_DB: postgres_db
+

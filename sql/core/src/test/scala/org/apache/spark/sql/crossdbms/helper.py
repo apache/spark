@@ -16,7 +16,7 @@
 #
 
 import os
-from pathlib import Path
+from typing import List
 from itertools import tee, filterfalse
 
 def get_workspace_file_path(first, *more):

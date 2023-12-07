@@ -58,17 +58,6 @@ class DatabaseConnection(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
     @abstractmethod
-    def load_data(self, df, table_name: str) -> None:
-        """
-        Loads data from the given DataFrame into the table with the specified name.
-
-        Args:
-            df: The DataFrame containing the data to be loaded.
-            table_name (str): The name of the table to which data is loaded.
-        """
-        raise NotImplementedError("Subclasses must implement this method")
-
-    @abstractmethod
     def close(self) -> None:
         """
         Closes the JDBC connection.
@@ -107,9 +96,6 @@ class PostgresConnection(DatabaseConnection):
         create_table_sql: str = f"CREATE TABLE {table_name} ({schema_string})"
         self.cursor.execute(create_table_sql)
         self.conn.commit()
-
-    def load_data(self, df: pd.DataFrame, table_name: str) -> None:
-        raise NotImplementedError("TODO")
 
     def close(self) -> None:
         if not self.conn.closed:
