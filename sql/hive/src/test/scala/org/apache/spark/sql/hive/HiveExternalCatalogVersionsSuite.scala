@@ -163,6 +163,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
