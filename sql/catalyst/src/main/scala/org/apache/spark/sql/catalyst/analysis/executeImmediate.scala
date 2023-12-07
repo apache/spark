@@ -33,10 +33,9 @@ import org.apache.spark.sql.types.StringType
 /**
  * Logical plan representing execute immediate query.
  *
- * @param args Expressions to be replaced inplace of parameters of queryText/queryVariable
- * @param queryText Query text as string literal as an option
- * @param queryVariable Unresolved query attribute used as query in execute immediate
- * @param targetVariable Variable to store result into if specified
+ * @param args parameters of query
+ * @param query query string or variable
+ * @param targetVariables variables to store the result of the query
  */
 case class ExecuteImmediateQuery(
     args: Seq[Expression],
@@ -126,7 +125,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
         plan
       } else if (posNodes.nonEmpty && namedNodes.nonEmpty) {
         throw new AnalysisException(
-          errorClass = "INVALID_PARAMETRIZED_QUERY",
+          errorClass = "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT",
           messageParameters = Map.empty)
       } else {
         // parser does not distinguish between variables and columns.
@@ -136,7 +135,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           // Add aggregation or a project.
           PosParameterizedQuery(
             plan,
-            // we need to resolve arguments before Resolution batch to make sure
+            // We need to resolve arguments before Resolution batch to make sure
             // that some rule does not accidently resolve our parameters.
             // we do not want this as they can resolve some unsupported parameters
             resolveArguments(expressions))
@@ -148,7 +147,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           NameParameterizedQuery(
             plan,
             namedExpressions.map(_.name),
-            // we need to resolve arguments before Resolution batch to make sure
+            // We need to resolve arguments before Resolution batch to make sure
             // that some rule does not accidently resolve our parameters.
             // we do not want this as they can resolve some unsupported parameters
             resolveArguments(namedExpressions))

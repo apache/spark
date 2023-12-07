@@ -176,22 +176,26 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     val targetVars = Option(ctx.targetVariable)
       .map(v => visitMultipartIdentifierList(v))
-    val exprs = visitExecuteImmediateArgumentSeq(ctx.params)
+    val exprs = Option(ctx.executeImmediateUsing)
+      .map(ctx => visitExecuteImmediateUsing(ctx)).getOrElse(Seq.empty)
 
-    validateExecImmediateArguments(exprs, ctx.params)
     ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
+  }
+
+  override def visitExecuteImmediateUsing(ctx: ExecuteImmediateUsingContext): Seq[Expression] = {
+    val exprs = visitExecuteImmediateArgumentSeq(ctx.params)
+    validateExecImmediateArguments(exprs, ctx.params)
+    exprs
   }
 
   private def validateExecImmediateArguments(
     expressions: Seq[Expression],
     ctx : ExecuteImmediateArgumentSeqContext) : Unit = {
     val duplicateAliases = expressions
-      .filter {
-        case a: Alias => true
-        case _ => false
-      }.groupBy {
-      case Alias(arg, name) => name
-    }.filter(group => group._2.size > 1)
+      .filter(_.isInstanceOf[Alias])
+      .groupBy {
+        case Alias(arg, name) => name
+      }.filter(group => group._2.size > 1)
 
     if (duplicateAliases.nonEmpty) {
       throw QueryParsingErrors.duplicateArgumentNamesError(duplicateAliases.keys.toSeq, ctx)

@@ -789,7 +789,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "EXEC IMMEDIATE - both positional and named used",
     CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'SELECT 42 where ? = :first'" +
       " USING 1, 2 as first"),
-    "INVALID_PARAMETRIZED_QUERY",
+    "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT",
     Map.empty);
 
   test("EXEC IMMEDIATE - non string variable as sqlString parameter") {

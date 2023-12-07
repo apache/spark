@@ -72,7 +72,7 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
-    | executeImmediate                                                 # visitExecuteImmediate
+    | executeImmediate                                                 #visitExecuteImmediate
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
@@ -232,7 +232,12 @@ statement
     ;
 
 executeImmediate
-    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO LEFT_PAREN targetVariable=multipartIdentifierList RIGHT_PAREN)? (USING params=executeImmediateArgumentSeq)?
+    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO targetVariable=multipartIdentifierList)? executeImmediateUsing?
+    ;
+
+executeImmediateUsing
+    : USING params=executeImmediateArgumentSeq
+    | USING LEFT_PAREN params=executeImmediateArgumentSeq RIGHT_PAREN
     ;
 
 executeImmediateQueryParam

@@ -147,6 +147,19 @@ Project [id#x, name#x, data#x]
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, "name2")
+-- !query analysis
+Project [id#x, name#x, data#x]
++- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x,name#x,data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
@@ -273,7 +286,7 @@ CreateVariable defaultvalueexpression(null, null), false
 
 
 -- !query
-EXECUTE IMMEDIATE sql_string INTO (res_id) USING "name7" as first
+EXECUTE IMMEDIATE sql_string INTO res_id USING "name7" as first
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))]
 +- GlobalLimit 2
@@ -296,7 +309,7 @@ Project [variablereference(system.session.res_id=70) AS res_id#x]
 
 
 -- !query
-EXECUTE IMMEDIATE sql_string INTO (res_id) USING a as first
+EXECUTE IMMEDIATE sql_string INTO res_id USING a as first
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=70)]
 +- GlobalLimit 2
@@ -327,7 +340,7 @@ SetVariable [variablereference(system.session.sql_string='SELECT id from tbl_vie
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT 42' INTO (res_id)
+EXECUTE IMMEDIATE 'SELECT 42' INTO res_id
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=10)]
 +- Project [42 AS 42#x]
@@ -342,7 +355,7 @@ Project [variablereference(system.session.res_id=42) AS res_id#x]
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (b, a) USING 10
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO b, a USING 10
 -- !query analysis
 SetVariable [variablereference(system.session.b=40), variablereference(system.session.a='name1')]
 +- GlobalLimit 2
@@ -378,7 +391,7 @@ Project [id#x, name#x, data#x]
 
 
 -- !query
-EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO (res_id) USING 1
+EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=42)]
 +- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
@@ -405,8 +418,8 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PARAMETRIZED_QUERY",
-  "sqlState" : "42609"
+  "errorClass" : "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT",
+  "sqlState" : "42613"
 }
 
 
@@ -471,7 +484,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO a, b USING 10
 -- !query analysis
 org.apache.spark.SparkNumberFormatException
 {
@@ -487,9 +500,23 @@ org.apache.spark.SparkNumberFormatException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 83,
-    "fragment" : "EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10"
+    "stopIndex" : 81,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO a, b USING 10"
   } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
 }
 
 

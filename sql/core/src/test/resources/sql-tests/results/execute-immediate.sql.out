@@ -116,6 +116,15 @@ struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, "name2")
+-- !query schema
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
+-- !query output
+10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
+20	name2	{"f1":2,"s2":{"f2":202,"f3":"b"}}
+
+
+-- !query
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1
 -- !query schema
 struct<>
@@ -224,7 +233,7 @@ struct<>
 
 
 -- !query
-EXECUTE IMMEDIATE sql_string INTO (res_id) USING "name7" as first
+EXECUTE IMMEDIATE sql_string INTO res_id USING "name7" as first
 -- !query schema
 struct<>
 -- !query output
@@ -240,7 +249,7 @@ struct<res_id:int>
 
 
 -- !query
-EXECUTE IMMEDIATE sql_string INTO (res_id) USING a as first
+EXECUTE IMMEDIATE sql_string INTO res_id USING a as first
 -- !query schema
 struct<>
 -- !query output
@@ -264,7 +273,7 @@ struct<>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT 42' INTO (res_id)
+EXECUTE IMMEDIATE 'SELECT 42' INTO res_id
 -- !query schema
 struct<>
 -- !query output
@@ -280,7 +289,7 @@ struct<res_id:int>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (b, a) USING 10
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO b, a USING 10
 -- !query schema
 struct<>
 -- !query output
@@ -304,7 +313,7 @@ struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 
 
 -- !query
-EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO (res_id) USING 1
+EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
 -- !query schema
 struct<>
 -- !query output
@@ -334,8 +343,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PARAMETRIZED_QUERY",
-  "sqlState" : "42609"
+  "errorClass" : "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT",
+  "sqlState" : "42613"
 }
 
 
@@ -406,7 +415,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO a, b USING 10
 -- !query schema
 struct<>
 -- !query output
@@ -424,9 +433,25 @@ org.apache.spark.SparkNumberFormatException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 83,
-    "fragment" : "EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10"
+    "stopIndex" : 81,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO a, b USING 10"
   } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
 }
 
 

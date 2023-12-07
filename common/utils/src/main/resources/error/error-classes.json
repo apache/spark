@@ -1009,7 +1009,7 @@
     "message" : [
       "Using statement contains multiple arguments with same alias (<aliases>)."
     ],
-    "sqlState" : "42702"
+    "sqlState" : "42701"
   },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
@@ -2091,12 +2091,6 @@
     },
     "sqlState" : "22023"
   },
-  "INVALID_PARAMETRIZED_QUERY" : {
-    "message" : [
-      "Parametrize query must either use positional, or named parameters, but not both."
-    ],
-    "sqlState" : "42609"
-  },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
       "The partition command is invalid."
@@ -2126,6 +2120,12 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT" : {
+    "message" : [
+      "Parameterized query must either use positional, or named parameters, but not both."
+    ],
+    "sqlState" : "42613"
   },
   "INVALID_SCHEMA" : {
     "message" : [
@@ -2275,7 +2275,7 @@
   },
   "INVALID_STATEMENT_FOR_EXECUTE_INTO" : {
     "message" : [
-      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: <sqlString> ."
+      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: <sqlString>."
     ],
     "sqlState" : "42606"
   },
@@ -2358,9 +2358,9 @@
   },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
-      "Variable type must be \"STRING\" but got <varType>"
+      "Variable type must be string type but got <varType>."
     ],
-    "sqlState" : "42609"
+    "sqlState" : "42K09"
   },
   "INVALID_VIEW_TEXT" : {
     "message" : [

@@ -601,7 +601,7 @@ Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<colum
 
 ### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
 
-[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Using statement contains multiple arguments with same alias (`<aliases>`).
 
@@ -1213,12 +1213,6 @@ The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
 For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-parameter-value-error-class.html)
 
-### INVALID_PARAMETRIZED_QUERY
-
-[SQLSTATE: 42609](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Parametrize query must either use positional, or named parameters, but not both.
-
 ### [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation-error-class.html)
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1238,6 +1232,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `<value>` is an invalid property value, please use quotes, e.g. SET `<key>`=`<value>`
+
+### INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Parameterized query must either use positional, or named parameters, but not both.
 
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
@@ -1277,7 +1277,7 @@ For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-synta
 
 [SQLSTATE: 42606](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: `<sqlString>` .
+The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: `<sqlString>`.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1333,9 +1333,9 @@ Invalid usage of `<elem>` in `<prettyName>`.
 
 ### INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE
 
-[SQLSTATE: 42609](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Variable type must be "STRING" but got `<varType>`
+Variable type must be string type but got `<varType>`.
 
 ### INVALID_VIEW_TEXT
 

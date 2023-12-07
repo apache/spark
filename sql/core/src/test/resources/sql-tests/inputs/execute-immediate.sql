@@ -26,6 +26,7 @@ EXECUTE IMMEDIATE sql_string USING "name1", "name3";
 EXECUTE IMMEDIATE sql_string USING a, "name2";
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING "name1", "name3";
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, "name2";
+EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, "name2");
 -- test positonal command
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1;
 SELECT * from x;
@@ -47,18 +48,18 @@ SELECT sql_string;
 
 -- test into
 DECLARE res_id INT;
-EXECUTE IMMEDIATE sql_string INTO (res_id) USING "name7" as first;
+EXECUTE IMMEDIATE sql_string INTO res_id USING "name7" as first;
 SELECT res_id;
-EXECUTE IMMEDIATE sql_string INTO (res_id) USING a as first;
+EXECUTE IMMEDIATE sql_string INTO res_id USING a as first;
 SELECT res_id;
 
 -- test into without using
 SET VAR sql_string = 'SELECT * from tbl_view where name = :first or id = :second';
-EXECUTE IMMEDIATE 'SELECT 42' INTO (res_id);
+EXECUTE IMMEDIATE 'SELECT 42' INTO res_id;
 SELECT res_id;
 
 -- multiple INTOs
-EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (b, a) USING 10;
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO b, a USING 10;
 SELECT b, a;
 
 -- use AS for using positional params
@@ -66,7 +67,7 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as 
 
 -- test errors
 -- require query when using INTO
-EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO (res_id) USING 1;
+EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1;
 
 -- use column in using - should fail as we expect variable here
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id;
@@ -86,6 +87,9 @@ SET VAR a = "na";
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first;
 
 -- INTO variables not matching scalar types
+EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO a, b USING 10;
+
+-- INTO does not support braces - parser error
 EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10;
 
 

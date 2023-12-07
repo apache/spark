@@ -33,15 +33,14 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
   }
 
   test("EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES: duplicate aliases provided in using statement") {
+    val query = "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
+      ", 2 as first, 3 as second, 4 as second, 5 as third"
     checkError(
-      exception = parseException(
-        "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
-          ", 2 as first, 3 as second, 4 as second, 5 as third"),
+      exception = parseException(query),
       errorClass = "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
       parameters = Map("aliases"-> "`second`, `first`"),
       context = ExpectedContext(
-        "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
-          ", 2 as first, 3 as second, 4 as second, 5 as third",
+        query,
         start = 0,
         stop = 109)
     )
