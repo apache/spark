@@ -82,7 +82,7 @@ class ProtobufCatalystDataConversionSuite
 
     checkEvaluation(
       ProtobufDataToCatalyst(binary, badSchema, Some(descBytes), Map("mode" -> "PERMISSIVE")),
-      null)
+      expected = null)
   }
 
   protected def prepareExpectedResult(expected: Any): Any = expected match {
