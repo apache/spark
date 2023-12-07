@@ -161,6 +161,7 @@ Package                    Supported version Note
 `numpy`                    >=1.21                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
 `grpcio`                   >=1.59.3                  Required for Spark Connect
 `grpcio-status`            >=1.59.3                  Required for Spark Connect
+`protobuf`                 ==4.25.1                  Required for Spark Connect
 `googleapis-common-protos` >=1.56.4                  Required for Spark Connect
 ========================== ========================= ======================================================================================
 
