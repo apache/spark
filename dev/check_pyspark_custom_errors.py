@@ -1,7 +1,29 @@
+#!/usr/bin/env python3
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 import sys
 
 sys.path.insert(0, "python")
 import os
+
+# No Spark Session or JVM-related initialization should be done here,
+# as Spark build is not assumed to be available at this point.
 from pyspark import errors as pyspark_errors
 from pyspark.errors.exceptions import connect as pyspark_connect_errors
 
@@ -42,12 +64,18 @@ def check_errors_in_file(file_path, pyspark_error_list):
         Path to the file to check.
     pyspark_error_list : list of str
         List of PySpark-specific error names.
+
+    Returns
+    -------
+    list of str
+        A list of strings describing the errors found in the file, with line numbers.
     """
     errors_found = []
     with open(file_path, "r") as file:
         for line_num, line in enumerate(file, start=1):
             if line.strip().startswith("raise"):
                 parts = line.split()
+                # Check for 'raise' statement and ensure the error raised is a capitalized word.
                 if len(parts) > 1 and parts[1][0].isupper():
                     if not any(pyspark_error in line for pyspark_error in pyspark_error_list):
                         errors_found.append(f"{file_path}:{line_num}: {line.strip()}")
@@ -64,6 +92,11 @@ def check_pyspark_custom_errors(target_paths, exclude_paths):
         List of paths to check for PySpark-specific errors.
     exclude_paths : list of str
         List of paths to exclude from the check.
+
+    Returns
+    -------
+    list of str
+        A list of strings describing the errors found, with file paths and line numbers.
     """
     all_errors = []
     for path in target_paths:
@@ -93,8 +126,8 @@ if __name__ == "__main__":
     # Check errors
     errors_found = check_pyspark_custom_errors(TARGET_PATHS, EXCLUDE_PATHS)
     if errors_found:
-        print("\nPySpark custom errors check found issues in the following files:")
+        print("\nPySpark custom errors check found issues in the following files:", file=sys.stderr)
         for error in errors_found:
-            print(error)
-        print("\nPlease use PySpark custom errors defined in pyspark.errors.")
+            print(error, file=sys.stderr)
+        print("\nUse existing or create a new custom error from pyspark.errors.", file=sys.stderr)
         sys.exit(1)
