@@ -20,10 +20,35 @@ from typing import List, Optional
 
 import psycopg2
 
-# Represents a connection (session) to a database using JDBC.
+class SQLQueryTestRunner:
+    """
+    A wrapper around a connection to a system that can run SQL queries, to run queries from
+    SQLQueryTestSuite.
+    """
+    def __init__(self, connection):
+        self.connection = connection
+
+    def run_query(self, query: str) -> List[str]:
+        """
+        Runs a given query using the JDBC connection and returns the result as a list of strings.
+
+        Args:
+            query (str): The SQL query to be executed.
+
+        Returns:
+            A list of strings representing the output, where each element represents a single row.
+        """
+        return self.connection.run_query(query)
+
+    def clean_up(self) -> None:
+        """
+        Closes the JDBC connection.
+        """
+        self.connection.close()
+
 class DatabaseConnection(ABC):
     """
-    Executes SQL queries, performs table operations, and loads data using JDBC.
+    Represents a connection (session) to a database using JDBC.
     """
     @abstractmethod
     def run_query(self, query: str) -> List[str]:
@@ -70,7 +95,6 @@ class PostgresConnection(DatabaseConnection):
     """
     Represents a connection (session) to a PostgreSQL database using JDBC.
     """
-    POSTGRES_DRIVER_CLASS_NAME: str = "org.postgresql.Driver"
     DEFAULT_USER: str = "pg"
     DEFAULT_CONNECTION_URL: str = f"dbname=postgres user={DEFAULT_USER} password=password host=localhost port=5432"
 

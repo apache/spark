@@ -20,12 +20,11 @@ from typing import List, Tuple, Optional, Callable, Dict
 
 import sqlglot
 
-from sql_query_test_runner import SQLQueryTestRunner
-from database_connection import PostgresConnection
-from helper import get_workspace_file_path, file_to_string, split_comments_and_codes, get_queries, TestCase, ExecutionOutput
-from output_formatter import format_postgres_output
+from sql_test_runner import SQLQueryTestRunner, PostgresConnection
+from helper import get_workspace_file_path, file_to_string, split_comments_and_codes, get_queries, TestCase, ExecutionOutput, format_postgres_output
 
-# Argument in input files to indicate that the golden file should be generated with a reference DBMS.
+# Argument in input files to indicate that the golden file should also be generated with a reference
+# DBMS.
 DBMS_TO_GENERATE_GOLDEN_FILE = "DBMS_TO_GENERATE_GOLDEN_FILE"
 
 SPARK = "spark"
@@ -45,7 +44,7 @@ DBMS_TO_OUTPUT_FORMATTER_MAPPING: Dict[str, Callable[List[str], str]] = {
 
 class CrossDbmsSQLQueryTestRunner:
 
-    def __init__(self, cross_dbms_to_generate_golden_files):
+    def __init__(self, cross_dbms_to_generate_golden_files: str):
         self.base_resource_path = get_workspace_file_path()
         self.input_file_path = (self.base_resource_path / "inputs").resolve().absolute()
         self.cross_dbms_to_generate_golden_files = cross_dbms_to_generate_golden_files
@@ -85,7 +84,7 @@ class CrossDbmsSQLQueryTestRunner:
         if self.cross_dbms_to_generate_golden_files not in dbms:
             return
 
-        print(f'Running testcase\t{test_case}')
+        print(f'Running testcase\t{test_case.name}')
         queries = get_queries(code, comments, list_test_cases)
         self._run_queries_and_generate_golden_files(queries, test_case)
 

@@ -35,6 +35,7 @@ class ExecutionOutput:
         return f"-- !query\n{self.sql}\n-- !query output\n{self.output}"
 
 def get_workspace_file_path():
+    # TODO
     return Path.home () / "spark" / "sql" / "core" / "src" / "test" / "resources" / "sql-tests"
 
 def file_to_string(file_path, encoding='utf-8'):
@@ -103,3 +104,8 @@ def get_queries(code: List[str], comments: List[str], list_test_cases: List[Test
         for query in striped_queries
         if query and not query.startswith('--')
     ]
+
+def format_postgres_output(output: List[str]) -> List[str]:
+    NO_RESULT = 'no results to fetch'
+    format_no_result_output = ['' if s == NO_RESULT else s for s in output]
+    return "\n".join(["\t".join(row.split(",")) for row in format_no_result_output])
