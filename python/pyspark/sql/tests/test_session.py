@@ -20,10 +20,11 @@ import unittest
 import unittest.mock
 
 from pyspark import SparkConf, SparkContext
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
 
 class SparkSessionTests(ReusedSQLTestCase):
@@ -259,7 +260,7 @@ class SparkSessionTests5(unittest.TestCase):
         self.assertIs(SQLContext.getOrCreate(self.sc)._sc, self.sc)
 
 
-class SparkSessionBuilderTests(unittest.TestCase):
+class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_create_spark_context_first_then_spark_session(self):
         sc = None
         session = None
@@ -353,20 +354,29 @@ class SparkSessionBuilderTests(unittest.TestCase):
                 session.stop()
 
     def test_create_spark_context_with_invalid_configs(self):
-        with self.assertRaisesRegex(
-            RuntimeError,
-            "Spark master cannot be configured with Spark "
-            "Connect server; however, found URL for Spark Connect",
-        ):
+        with self.assertRaises(PySparkRuntimeError) as pe1:
             SparkSession.builder.config(map={"spark.master": "x", "spark.remote": "y"})
+
+        self.check_error(
+            exception=pe1.exception,
+            error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
+            message_parameters={"master_url": "x", "connect_url": "y"},
+        )
 
         with unittest.mock.patch.dict(
             "os.environ", {"SPARK_REMOTE": "remote_url", "SPARK_LOCAL_REMOTE": "true"}
         ):
-            with self.assertRaisesRegex(
-                RuntimeError, "Only one Spark Connect client URL can be set"
-            ):
+            with self.assertRaises(PySparkRuntimeError) as pe2:
                 SparkSession.builder.config("spark.remote", "different_remote_url")
+
+            self.check_error(
+                exception=pe2.exception,
+                error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
+                message_parameters={
+                    "existing_url": "remote_url",
+                    "new_url": "different_remote_url",
+                },
+            )
 
 
 class SparkExtensionsTest(unittest.TestCase):

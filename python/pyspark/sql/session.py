@@ -306,22 +306,16 @@ class SparkSession(SparkConversionMixin):
             Helper function that validates the combination of startup URLs and raises an exception
             if incompatible options are selected.
             """
-            if "spark.master" in self._options and (
+            if ("spark.master" in self._options or "MASTER" in os.environ) and (
                 "spark.remote" in self._options or "SPARK_REMOTE" in os.environ
             ):
                 raise PySparkRuntimeError(
-                    error_class="CANNOT_CONFIGURE_SPARK_MASTER",
+                    error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
                     message_parameters={
-                        "url": self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
-                    },
-                )
-            if "spark.remote" in self._options and (
-                "spark.master" in self._options or "MASTER" in os.environ
-            ):
-                raise PySparkRuntimeError(
-                    error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
-                    message_parameters={
-                        "url": self._options.get("spark.master", os.environ.get("MASTER"))
+                        "master_url": self._options.get("spark.master", os.environ.get("MASTER")),
+                        "connect_url": self._options.get(
+                            "spark.remote", os.environ.get("SPARK_REMOTE")
+                        ),
                     },
                 )
 
@@ -333,8 +327,8 @@ class SparkSession(SparkConversionMixin):
                     raise PySparkRuntimeError(
                         error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
                         message_parameters={
-                            "new_url": os.environ["SPARK_REMOTE"],
-                            "existing_url": remote,
+                            "existing_url": os.environ["SPARK_REMOTE"],
+                            "new_url": remote,
                         },
                     )
 
