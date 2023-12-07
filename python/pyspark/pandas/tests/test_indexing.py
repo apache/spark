@@ -333,20 +333,11 @@ class IndexingTest(ComparisonTestBase):
         self.assert_eq(psdf.loc[[5]], pdf.loc[[5]])
         self.assert_eq(psdf.loc[:], pdf.loc[:])
 
-        # TODO?: self.assert_eq(psdf.loc[[3, 4, 1, 8]], pdf.loc[[3, 4, 1, 8]])
-        # TODO?: self.assert_eq(psdf.loc[[3, 4, 1, 9]], pdf.loc[[3, 4, 1, 9]])
-        # TODO?: self.assert_eq(psdf.loc[np.array([3, 4, 1, 9])], pdf.loc[np.array([3, 4, 1, 9])])
-
         self.assert_eq(psdf.a.loc[5:5], pdf.a.loc[5:5])
         self.assert_eq(psdf.a.loc[3:8], pdf.a.loc[3:8])
         self.assert_eq(psdf.a.loc[:8], pdf.a.loc[:8])
         self.assert_eq(psdf.a.loc[3:], pdf.a.loc[3:])
         self.assert_eq(psdf.a.loc[[5]], pdf.a.loc[[5]])
-
-        # TODO?: self.assert_eq(psdf.a.loc[[3, 4, 1, 8]], pdf.a.loc[[3, 4, 1, 8]])
-        # TODO?: self.assert_eq(psdf.a.loc[[3, 4, 1, 9]], pdf.a.loc[[3, 4, 1, 9]])
-        # TODO?: self.assert_eq(psdf.a.loc[np.array([3, 4, 1, 9])],
-        #                       pdf.a.loc[np.array([3, 4, 1, 9])])
 
         self.assert_eq(psdf.a.loc[[]], pdf.a.loc[[]])
         self.assert_eq(psdf.a.loc[np.array([])], pdf.a.loc[np.array([])])
@@ -361,6 +352,8 @@ class IndexingTest(ComparisonTestBase):
 
         self.assertRaises(KeyError, lambda: psdf.loc[10])
         self.assertRaises(KeyError, lambda: psdf.a.loc[10])
+        self.assertRaises(KeyError, lambda: psdf.loc[[3, 4, 1, 8]])
+        self.assertRaises(KeyError, lambda: psdf.a.loc[[3, 4, 1, 8]])
 
         # monotonically increasing index test
         pdf = pd.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]}, index=[0, 1, 1, 2, 2, 2, 4, 5, 6])

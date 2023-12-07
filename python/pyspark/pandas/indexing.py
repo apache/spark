@@ -563,6 +563,16 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         else:
             psdf_or_psser = psdf
 
+        if isinstance(key, list):
+            result_index = psdf_or_psser.index
+            if len(key) != len(result_index):
+                # Since the result Index size is expected to be small,
+                # we can collect data for checking missing key to follow the behavior of Pandas.
+                result_index_list = psdf_or_psser.index.tolist()
+                for item in key:
+                    if item not in result_index_list:
+                        raise KeyError(f"{item} not in index")
+
         if remaining_index is not None and remaining_index == 0:
             pdf_or_pser = psdf_or_psser.head(2)._to_pandas()
             length = len(pdf_or_pser)
