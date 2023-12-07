@@ -200,9 +200,10 @@ class GroupByTestsMixin:
         self.assert_eq(
             psdf.groupby("a").shift().sort_index(), pdf.groupby("a").shift().sort_index()
         )
-        # TODO: seems like a pandas' bug when fill_value is not None?
-        # self.assert_eq(psdf.groupby(['a', 'b']).shift(periods=-1, fill_value=0).sort_index(),
-        #                pdf.groupby(['a', 'b']).shift(periods=-1, fill_value=0).sort_index())
+        self.assert_eq(
+            psdf.groupby(["a", "b"]).shift(periods=-1, fill_value=0).sort_index(),
+            pdf.groupby(["a", "b"]).shift(periods=-1, fill_value=0).sort_index(),
+        )
         self.assert_eq(
             psdf.groupby(["b"])["a"].shift().sort_index(),
             pdf.groupby(["b"])["a"].shift().sort_index(),
@@ -247,11 +248,10 @@ class GroupByTestsMixin:
             psdf.groupby(("x", "a")).shift().sort_index(),
             pdf.groupby(("x", "a")).shift().sort_index(),
         )
-        # TODO: seems like a pandas' bug when fill_value is not None?
-        # self.assert_eq(psdf.groupby([('x', 'a'), ('x', 'b')]).shift(periods=-1,
-        #                                                            fill_value=0).sort_index(),
-        #                pdf.groupby([('x', 'a'), ('x', 'b')]).shift(periods=-1,
-        #                                                            fill_value=0).sort_index())
+        self.assert_eq(
+            psdf.groupby([("x", "a"), ("x", "b")]).shift(periods=-1, fill_value=0).sort_index(),
+            pdf.groupby([("x", "a"), ("x", "b")]).shift(periods=-1, fill_value=0).sort_index(),
+        )
 
     @staticmethod
     def test_is_multi_agg_with_relabel():
