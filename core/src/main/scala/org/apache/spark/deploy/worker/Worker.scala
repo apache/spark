@@ -96,12 +96,13 @@ private[deploy] class Worker(
   private val HEARTBEAT_MILLIS = conf.get(WORKER_TIMEOUT) * 1000 / 4
 
   // Model retries to connect to the master, after Hadoop's model.
-  // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
-  // Afterwards, the next 10 attempts are between 30 and 90 seconds.
+  // The first WORKER_INITIAL_REGISTRATION_RETRIES attempts to reconnect are in shorter intervals
+  // (between 5 and 15 seconds). Afterwards, the next attempts are between 30 and 90 seconds while
+  // The total number of retries are less than or equal to WORKER_MAX_REGISTRATION_RETRIES.
   // A bit of randomness is introduced so that not all of the workers attempt to reconnect at
   // the same time.
-  private val INITIAL_REGISTRATION_RETRIES = 6
-  private val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
+  private val INITIAL_REGISTRATION_RETRIES = conf.get(WORKER_INITIAL_REGISTRATION_RETRIES)
+  private val TOTAL_REGISTRATION_RETRIES = conf.get(WORKER_MAX_REGISTRATION_RETRIES)
   private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
   private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
