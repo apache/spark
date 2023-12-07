@@ -164,7 +164,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils with Logging
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    logger.info("Env : " + System.getenv())
+    logInfo("Env : " + System.getenv())
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
