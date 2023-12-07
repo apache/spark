@@ -186,6 +186,20 @@
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- For HiveExternalCatalogVersionsSuite -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-exec</artifactId>
+      <scope>test</scope>
+      <version>2.3.9</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <scope>test</scope>
+      <version>1.7.30</version>
+    </dependency>
   </dependencies>
   <profiles>
     <profile>
