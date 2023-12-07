@@ -426,6 +426,12 @@ Data source options of Parquet can be set via:
     <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, uncompressed, snappy, gzip, lzo, brotli, lz4, lz4_raw, and zstd). This will override <code>spark.sql.parquet.compression.codec</code>.</td>
     <td>write</td>
   </tr>
+  <tr>
+    <td><code>writePartitionColumns</code></td>
+    <td><code>false</code></td>
+    <td>Write partition columns to parquet files</td>
+    <td>write</td>
+  </tr>
 </table>
 Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic Files Source Options</a>
 
