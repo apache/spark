@@ -1997,40 +1997,6 @@ class FunctionExists(LogicalPlan):
         return plan
 
 
-class CreateExternalTable(LogicalPlan):
-    def __init__(
-        self,
-        table_name: str,
-        path: str,
-        source: Optional[str] = None,
-        schema: Optional[DataType] = None,
-        options: Mapping[str, str] = {},
-    ) -> None:
-        super().__init__(None)
-        self._table_name = table_name
-        self._path = path
-        self._source = source
-        self._schema = schema
-        self._options = options
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = self._create_proto_relation()
-        plan.catalog.create_external_table.table_name = self._table_name
-        if self._path is not None:
-            plan.catalog.create_external_table.path = self._path
-        if self._source is not None:
-            plan.catalog.create_external_table.source = self._source
-        if self._schema is not None:
-            plan.catalog.create_external_table.schema.CopyFrom(
-                pyspark_types_to_proto_types(self._schema)
-            )
-        for k in self._options.keys():
-            v = self._options.get(k)
-            if v is not None:
-                plan.catalog.create_external_table.options[k] = v
-        return plan
-
-
 class CreateTable(LogicalPlan):
     def __init__(
         self,
