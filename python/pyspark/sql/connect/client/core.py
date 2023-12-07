@@ -587,7 +587,11 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool
             Enable reattachable execution.
         """
-        self.thread_local = threading.local()
+        class ClientThreadLocals(threading.local):
+            tags: set = set()
+            inside_error_handling: bool = False
+
+        self.thread_local = ClientThreadLocals()
 
         # Parse the connection string.
         self._builder = (
@@ -630,8 +634,6 @@ class SparkConnectClient(object):
         # Capture the server-side session ID and set it to None initially. It will
         # be updated on the first response received.
         self._server_session_id: Optional[str] = None
-
-        self._inside_error_handling: bool = False
 
     def _retrying(self) -> "Retrying":
         return Retrying(self._retry_policies)
@@ -1497,14 +1499,13 @@ class SparkConnectClient(object):
         Throws the appropriate internal Python exception.
         """
 
-        if not self._inside_error_handling:
+        if self.thread_local.inside_error_handling:
             # We are already inside error handling routine,
             # avoid recursive error processing (with potentially infinite recursion)
             raise error
 
         try:
-            self._inside_error_handling = True
-
+            self.thread_local.inside_error_handling = True
             if isinstance(error, grpc.RpcError):
                 self._handle_rpc_error(error)
             elif isinstance(error, ValueError):
@@ -1514,7 +1515,7 @@ class SparkConnectClient(object):
                     ) from None
             raise error
         finally:
-            self._inside_error_handling = False
+            self.thread_local.inside_error_handling = False
 
     def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
         if "errorId" not in info.metadata:
