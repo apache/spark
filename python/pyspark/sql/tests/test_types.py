@@ -883,6 +883,18 @@ class TypesTestsMixin:
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
         self.assertEqual("v", df.select(df.d.getItem("k")).first()[0])
 
+        # Deprecated behaviors
+        map_col = F.create_map(F.lit(0), F.lit(100), F.lit(1), F.lit(200))
+        self.assertEqual(
+            self.spark.range(1).withColumn("mapped", map_col.getItem(F.col("id"))).first()[1], 100
+        )
+
+        struct_col = F.struct(F.lit(0), F.lit(100), F.lit(1), F.lit(200))
+        self.assertEqual(
+            self.spark.range(1).withColumn("struct", struct_col.getField(F.lit("col1"))).first()[1],
+            0,
+        )
+
     def test_infer_long_type(self):
         longrow = [Row(f1="a", f2=100000000000000)]
         df = self.sc.parallelize(longrow).toDF()

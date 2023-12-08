@@ -241,12 +241,12 @@ jobs:
           ./dev/free_disk_space
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.9
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -432,7 +432,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -542,7 +542,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -590,7 +590,7 @@ jobs:
         input: connector/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
     - name: Install Python 3.9
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
     - name: Install dependencies for Python CodeGen check
@@ -665,7 +665,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -831,7 +831,7 @@ jobs:
         restore-keys: |
           java${{ matrix.java }}-maven-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -886,7 +886,7 @@ jobs:
         restore-keys: |
           tpcds-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -993,7 +993,7 @@ jobs:
         restore-keys: |
           docker-integration-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1053,7 +1053,7 @@ jobs:
           restore-keys: |
             k8s-integration-coursier-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}

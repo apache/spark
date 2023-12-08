@@ -86,12 +86,12 @@ ERROR_CLASSES_JSON = """
   },
   "CANNOT_CONFIGURE_SPARK_CONNECT": {
     "message": [
-      "Spark Connect server cannot be configured with Spark master; however, found URL for Spark master [<url>]."
+      "Spark Connect server cannot be configured: Existing [<existing_url>], New [<new_url>]."
     ]
   },
-  "CANNOT_CONFIGURE_SPARK_MASTER": {
+  "CANNOT_CONFIGURE_SPARK_CONNECT_MASTER": {
     "message": [
-      "Spark master cannot be configured with Spark Connect server; however, found URL for Spark Connect [<url>]."
+      "Spark Connect server and Spark master cannot be configured together: Spark master [<master_url>], Spark Connect [<connect_url>]."
     ]
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
