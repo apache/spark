@@ -163,7 +163,9 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
+    Utils.deleteRecursively(new File("/home/runner/work/spark/spark/sql/hive/target/tmp/hive-ivy-cache"))
+    Utils.deleteRecursively(new File("/home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9"))
+    Utils.deleteRecursively(new File("/home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30"))
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
@@ -216,8 +218,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       if (!sparkHome.exists()) {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
-      val ivyHome = Utils.createTempDir(root = sparkTestingDir.getCanonicalPath,
-        namePrefix = s"ivy2-$version")
       // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
       val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
       val args = Seq(
@@ -227,26 +227,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
         "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
-        "--conf", s"${JAR_IVY_REPO_PATH.key}=$ivyHome",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
           JavaModuleOptions.defaultModuleOptions(),
         tempPyFile.getCanonicalPath)
-      // scalastyle:off println
-      println("-----------------")
-      val tmpDirName = System.getProperty("java.io.tmpdir")
-      val ivyCacheDir = System.getProperty("ivy.cache.dir")
-      val defaultIvyHome = System.getProperty("ivy.home")
-      val ivyDefaultOvyUserDir = System.getProperty("ivy.default.ivy.user.dir")
-      Utils.recursiveList(new File(System.getProperty("java.io.tmpdir"))).foreach(f => {
-        print(f.getCanonicalPath)
-      })
-      println(s"tmpDirName: $tmpDirName, ivyCacheDir: $ivyCacheDir, " +
-        s"defaultIvyHome: $defaultIvyHome, ivyHome: $ivyHome, " +
-        s"ivyDefaultOvyUserDir: $ivyDefaultOvyUserDir")
-      println("-----------------")
-      // scalastyle:on println
       runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
     }
 
