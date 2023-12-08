@@ -57,12 +57,6 @@ else
   if [ "$(command -v java)" ]; then
     RUNNER="java"
   else
-    if ! command -v python &> /dev/null || ! command -v pip &> /dev/null; then
-        echo "Python or pip is not installed or not in the PATH."\
-        "You can manually install python and pip and retry."
-        exit 1
-    fi
-
     echo -n "JAVA_HOME is not set. Would you like to install JDK 17 and set JAVA_HOME? (Y/N) " >&2
 
     read -r input
