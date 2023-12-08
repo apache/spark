@@ -34,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class uses Kafka's own [[Admin]] API to read data offsets from Kafka.
@@ -418,7 +419,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
           val end = splitOffsetRanges.last.copy(untilOffset = untilOffsetsMap(tp))
           Seq(first) ++ splitOffsetRanges.drop(1).dropRight(1) :+ end
         }
-      }.toArray.toSeq
+      }.toArray.toImmutableArraySeq
     } else {
       offsetRangesBase
     }
@@ -488,7 +489,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList)
+    rangeCalculator.getRanges(ranges, getSortedExecutorList.toImmutableArraySeq)
   }
 
   private def partitionsAssignedToAdmin(

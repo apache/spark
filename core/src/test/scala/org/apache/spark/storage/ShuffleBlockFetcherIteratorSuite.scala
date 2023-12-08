@@ -988,7 +988,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer()
     )
 
-    configureMockTransfer(blocks.view.mapValues(_ => createMockManagedBuffer(0)).toMap)
+    configureMockTransfer(blocks.transform((_, _) => createMockManagedBuffer(0)))
 
     val iterator = createShuffleBlockIteratorWithDefaults(
       Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0))

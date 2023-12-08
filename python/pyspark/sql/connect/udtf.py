@@ -78,7 +78,7 @@ def _create_py_udtf(
                 == "true"
             )
         except PySparkRuntimeError as e:
-            if e.error_class == "NO_ACTIVE_OR_DEFAULT_SESSION":
+            if e.getErrorClass() == "NO_ACTIVE_OR_DEFAULT_SESSION":
                 pass  # Just uses the default if no session found.
             else:
                 raise e
@@ -167,7 +167,7 @@ class UserDefinedTableFunction:
         session = SparkSession.active()
 
         plan = self._build_common_inline_user_defined_table_function(*args, **kwargs)
-        return DataFrame.withPlan(plan, session)
+        return DataFrame(plan, session)
 
     def asDeterministic(self) -> "UserDefinedTableFunction":
         self.deterministic = True

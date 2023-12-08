@@ -38,7 +38,7 @@ After that, the PySpark test cases can be run via using ``python/run-tests``. Fo
 
 Note that you may set ``OBJC_DISABLE_INITIALIZE_FORK_SAFETY`` environment variable to ``YES`` if you are running tests on Mac OS.
 
-Please see the guidance on how to `build Spark <https://github.com/apache/spark#building-spark>`_,
+Please see the guidance on how to |building_spark|_,
 `run tests for a module, or individual tests <https://spark.apache.org/developer-tools.html>`_.
 
 
@@ -86,4 +86,4 @@ For the Apache Spark release:
 
 .. code-block:: bash
 
-    bin/pyspark --remote "local[*]" --packages org.apache.spark:spark-connect_2.12:3.4.0
+    bin/pyspark --remote "local[*]" --packages org.apache.spark:spark-connect_2.13:$SPARK_VERSION

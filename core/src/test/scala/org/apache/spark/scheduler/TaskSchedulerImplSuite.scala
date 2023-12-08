@@ -1815,10 +1815,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     var has1Gpu = 0
     for (tDesc <- taskDescriptions) {
       assert(tDesc.resources.contains(GPU))
-      if (tDesc.resources(GPU).addresses.size == 2) {
+      if (tDesc.resources(GPU).addresses.length == 2) {
         has2Gpus += 1
       }
-      if (tDesc.resources(GPU).addresses.size == 1) {
+      if (tDesc.resources(GPU).addresses.length == 1) {
         has1Gpu += 1
       }
     }
@@ -1836,7 +1836,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskDescriptions = taskScheduler.resourceOffers(workerOffers3).flatten
     assert(2 === taskDescriptions.length)
     assert(taskDescriptions.head.resources.contains(GPU))
-    assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+    assert(2 == taskDescriptions.head.resources(GPU).addresses.length)
   }
 
   test("Scheduler works with task resource profiles") {
@@ -1875,10 +1875,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     var has1Gpu = 0
     for (tDesc <- taskDescriptions) {
       assert(tDesc.resources.contains(GPU))
-      if (tDesc.resources(GPU).addresses.size == 2) {
+      if (tDesc.resources(GPU).addresses.length == 2) {
         has2Gpus += 1
       }
-      if (tDesc.resources(GPU).addresses.size == 1) {
+      if (tDesc.resources(GPU).addresses.length == 1) {
         has1Gpu += 1
       }
     }
@@ -1896,7 +1896,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskDescriptions = taskScheduler.resourceOffers(workerOffers3).flatten
     assert(2 === taskDescriptions.length)
     assert(taskDescriptions.head.resources.contains(GPU))
-    assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
+    assert(2 == taskDescriptions.head.resources(GPU).addresses.length)
   }
 
   test("Calculate available tasks slots for task resource profiles") {

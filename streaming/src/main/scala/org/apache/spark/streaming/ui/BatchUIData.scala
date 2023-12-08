@@ -98,7 +98,8 @@ private[ui] object BatchUIData {
 
   def apply(batchInfo: BatchInfo): BatchUIData = {
     val outputOperations = mutable.HashMap[OutputOpId, OutputOperationUIData]()
-    outputOperations ++= batchInfo.outputOperationInfos.view.mapValues(OutputOperationUIData.apply)
+    outputOperations ++= batchInfo.outputOperationInfos
+      .transform((_, v) => OutputOperationUIData(v))
     new BatchUIData(
       batchInfo.batchTime,
       batchInfo.streamIdToInputInfo,

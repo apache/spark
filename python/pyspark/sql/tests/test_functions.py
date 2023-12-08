@@ -66,7 +66,7 @@ class FunctionsTestsMixin:
             "random",  # namespace conflict with python built-in module
             "uuid",  # namespace conflict with python built-in module
             "chr",  # namespace conflict with python built-in function
-            "session_user",  # Scala only for now, needs implementation
+            "partitioning$",  # partitioning expressions for DSv2
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
@@ -346,7 +346,7 @@ class FunctionsTestsMixin:
 
         df = self.spark.createDataFrame([["nick"]], schema=["name"])
         with self.assertRaises(PySparkTypeError) as pe:
-            df.select(F.col("name").substr(0, F.lit(1)))
+            F.col("name").substr(0, F.lit(1))
 
         self.check_error(
             exception=pe.exception,
@@ -356,6 +356,18 @@ class FunctionsTestsMixin:
                 "arg_name2": "length",
                 "arg_type1": "int",
                 "arg_type2": "Column",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.col("name").substr("", "")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INT",
+            message_parameters={
+                "arg_name": "startPos",
+                "arg_type": "str",
             },
         )
 
@@ -902,7 +914,7 @@ class FunctionsTestsMixin:
             (3, "c"),
         ]
 
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
     def test_window_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
@@ -1363,6 +1375,14 @@ class FunctionsTestsMixin:
         res = df.select(r, r, r2, r2, r3, r3).collect()
         for i in range(3):
             self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
+
+    def test_current_timestamp(self):
+        df = self.spark.range(1).select(F.current_timestamp())
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+        self.assertEqual(df.schema.names[0], "current_timestamp()")
+        df = self.spark.range(1).select(F.now())
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+        self.assertEqual(df.schema.names[0], "now()")
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

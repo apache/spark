@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Text}
+import scala.xml.{Node, Text, Unparsed}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
@@ -82,7 +82,13 @@ private[ui] class ExecutorThreadDumpPage(
         {
           // scalastyle:off
           <p></p>
-          <div style="display: flex; align-items: center;">
+          <span class="collapse-thead-stack-trace-table collapse-table" onClick="collapseTableAndButton('collapse-thead-stack-trace-table', 'thead-stack-trace-table')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Thread Stack Trace</a>
+            </h4>
+          </span>
+          <div class="thead-stack-trace-table-button" style="display: flex; align-items: center;">
             <a class="expandbutton" onClick="expandAllThreadStackTrace(true)">Expand All</a>
             <a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">Collapse All</a>
             <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
@@ -98,9 +104,8 @@ private[ui] class ExecutorThreadDumpPage(
             </div>
           </div>
           <p></p>
-          // scalastyle:on
         }
-        <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
+        <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thead-stack-trace-table collapsible-table"}>
           <thead>
             <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
             <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
@@ -118,18 +123,34 @@ private[ui] class ExecutorThreadDumpPage(
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(request, s"Thread dump for executor $executorId", content, parent)
+    // scalastyle:on
   }
 
   // scalastyle:off
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
+    val js =
+      s"""
+         |import {drawFlamegraph} from "/static/flamegraph.js";
+         |
+         |drawFlamegraph();
+         |""".stripMargin
     <div>
+      <div>
+        <script type="module">{Unparsed("import {toggleFlamegraph} from '/static/flamegraph.js';")}</script>
+        <span style="cursor: pointer;" onclick="toggleFlamegraph();">
+          <h4>
+            <span id="executor-flamegraph-arrow" class="arrow-open"></span>
+            <a>Flame Graph</a>
+          </h4>
+        </span>
+      </div>
       <div id="executor-flamegraph-data" class="d-none">{FlamegraphNode(thread).toJsonString}</div>
       <div id="executor-flamegraph-chart">
         <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
         <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
-        <script src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
-        <script>drawFlamegraph()</script>
+        <script type="module" src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
+        <script type="module">{Unparsed(js)}</script>
       </div>
     </div>
   }

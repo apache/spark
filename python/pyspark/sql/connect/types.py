@@ -49,7 +49,7 @@ from pyspark.sql.types import (
     NullType,
     UserDefinedType,
 )
-from pyspark.errors import PySparkAssertionError
+from pyspark.errors import PySparkAssertionError, PySparkValueError
 
 import pyspark.sql.connect.proto as pb2
 
@@ -205,7 +205,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         data_type_string = data_type.data_type_string
         ret.unparsed.data_type_string = data_type_string
     else:
-        raise Exception(f"Unsupported data type {data_type}")
+        raise PySparkValueError(
+            error_class="UNSUPPORTED_OPERATION",
+            message_parameters={"operation": f"data type {data_type}"},
+        )
     return ret
 
 
@@ -303,4 +306,7 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             json_value["serializedClass"] = schema.udt.serialized_python_class
         return UserDefinedType.fromJson(json_value)
     else:
-        raise Exception(f"Unsupported data type {schema}")
+        raise PySparkValueError(
+            error_class="UNSUPPORTED_OPERATION",
+            message_parameters={"operation": f"data type {schema}"},
+        )

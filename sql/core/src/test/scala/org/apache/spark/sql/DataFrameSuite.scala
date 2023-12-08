@@ -24,6 +24,7 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.immutable.ListMap
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
@@ -54,6 +55,7 @@ import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStrin
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -510,13 +512,13 @@ class DataFrameSuite extends QueryTest
       testData.select("key").coalesce(0)
     }
 
-    assert(testData.select("key").coalesce(1).rdd.partitions.size === 1)
+    assert(testData.select("key").coalesce(1).rdd.partitions.length === 1)
 
     checkAnswer(
       testData.select("key").coalesce(1).select("key"),
       testData.select("key").collect().toSeq)
 
-    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.length === 1)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -780,7 +782,7 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-36642: withMetadata: replace metadata of a column") {
     val metadata = new MetadataBuilder().putLong("key", 1L).build()
-    val df1 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df1 = sparkContext.parallelize(Array(1, 2, 3).toImmutableArraySeq).toDF("x")
     val df2 = df1.withMetadata("x", metadata)
     assert(df2.schema(0).metadata === metadata)
 
@@ -794,7 +796,7 @@ class DataFrameSuite extends QueryTest
   }
 
   test("replace column using withColumn") {
-    val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = sparkContext.parallelize(Array(1, 2, 3).toImmutableArraySeq).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
     checkAnswer(
       df3.select("x"),
@@ -913,7 +915,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df2.drop("a.b").select("a.b"), Row(3))
 
     // "`" is treated as a normal char here with no interpreting, "`a`b" is a valid column name.
-    assert(df2.drop("`a.b`").columns.size == 2)
+    assert(df2.drop("`a.b`").columns.length == 2)
   }
 
   test("drop(name: String) search and drop all top level columns that matches the name") {
@@ -984,6 +986,12 @@ class DataFrameSuite extends QueryTest
       },
       errorClass = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`age`"))
+  }
+
+  test("SPARK-46260: withColumnsRenamed should respect the Map ordering") {
+    val df = spark.range(10).toDF()
+    assert(df.withColumnsRenamed(ListMap("id" -> "a", "a" -> "b")).columns === Array("b"))
+    assert(df.withColumnsRenamed(ListMap("a" -> "b", "id" -> "a")).columns === Array("a"))
   }
 
   test("SPARK-20384: Value class filter") {
@@ -1182,8 +1190,9 @@ class DataFrameSuite extends QueryTest
   }
 
   test("summary advanced") {
+    import org.apache.spark.util.ArrayImplicits._
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
-    val orderMatters = person2.summary(stats: _*)
+    val orderMatters = person2.summary(stats.toImmutableArraySeq: _*)
     assert(orderMatters.collect().map(_.getString(0)) === stats)
 
     val onlyPercentiles = person2.summary("0.1%", "99.9%")
@@ -2501,7 +2510,7 @@ class DataFrameSuite extends QueryTest
     val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
     val sampleDf = df.sample(true, 2.00)
     val d = sampleDf.withColumn("c", monotonically_increasing_id()).select($"c").collect()
-    assert(d.size == d.distinct.size)
+    assert(d.length == d.distinct.length)
   }
 
   private def verifyNullabilityInFilterExec(

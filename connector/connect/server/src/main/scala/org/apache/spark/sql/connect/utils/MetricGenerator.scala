@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
@@ -29,10 +30,13 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
  */
 private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
 
-  def createMetricsResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
+  def createMetricsResponse(
+      sessionHolder: SessionHolder,
+      rows: DataFrame): ExecutePlanResponse = {
     ExecutePlanResponse
       .newBuilder()
-      .setSessionId(sessionId)
+      .setSessionId(sessionHolder.sessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
       .build()
   }
@@ -45,6 +49,12 @@ private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
 
   private def transformChildren(p: SparkPlan): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
     allChildren(p).flatMap(c => transformPlan(c, p.id))
+  }
+
+  private[connect] def transformPlan(
+      rows: DataFrame): Seq[ExecutePlanResponse.Metrics.MetricObject] = {
+    val executedPlan = rows.queryExecution.executedPlan
+    transformPlan(executedPlan, executedPlan.id)
   }
 
   private def transformPlan(

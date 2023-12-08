@@ -544,7 +544,7 @@ class CodegenContext extends Logging {
         s"private $className $classInstance = new $className();"
     }
 
-    val declareNestedClasses = classFunctions.view.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filter { case (k, _) => k != outerClassName }.map {
       case (className, functions) =>
         s"""
            |private class $className {
@@ -1475,6 +1475,7 @@ object CodeGenerator extends Logging {
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
+      classOf[VariantVal].getName,
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
@@ -1640,7 +1641,8 @@ object CodeGenerator extends Logging {
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
         case PhysicalStringType => s"$input.getUTF8String($ordinal)"
-        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.size})"
+        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
+        case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"
       }
     }
@@ -1928,6 +1930,7 @@ object CodeGenerator extends Logging {
       case PhysicalShortType => JAVA_SHORT
       case PhysicalStringType => "UTF8String"
       case _: PhysicalStructType => "InternalRow"
+      case _: PhysicalVariantType => "VariantVal"
       case _ => "Object"
     }
   }
@@ -1951,6 +1954,7 @@ object CodeGenerator extends Logging {
     case _: MapType => classOf[MapData]
     case udt: UserDefinedType[_] => javaClass(udt.sqlType)
     case ObjectType(cls) => cls
+    case VariantType => classOf[VariantVal]
     case _ => classOf[Object]
   }
 

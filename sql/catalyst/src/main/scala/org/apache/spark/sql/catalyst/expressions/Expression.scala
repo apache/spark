@@ -507,6 +507,16 @@ trait Nondeterministic extends Expression {
  */
 trait ConditionalExpression extends Expression {
   final override def foldable: Boolean = children.forall(_.foldable)
+
+  /**
+   * Return the children expressions which can always be hit at runtime.
+   */
+  def alwaysEvaluatedInputs: Seq[Expression]
+
+  /**
+   * Return a copy of itself with a new `alwaysEvaluatedInputs`.
+   */
+  def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): ConditionalExpression
 }
 
 /**

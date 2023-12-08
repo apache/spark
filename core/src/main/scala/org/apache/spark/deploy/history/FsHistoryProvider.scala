@@ -50,6 +50,7 @@ import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.kvstore._
 
 /**
@@ -316,7 +317,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Split a comma separated String, filter out any empty items, and return a Sequence of strings
    */
   private def stringToSeq(list: String): Seq[String] = {
-    list.split(',').map(_.trim).filter(!_.isEmpty)
+    list.split(',').map(_.trim).filter(_.nonEmpty).toImmutableArraySeq
   }
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
@@ -456,7 +457,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // right after this check and before the check for stale entities will be identified as stale
       // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
-      val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      val updated = Option(fs.listStatus(new Path(logDir)))
+        .map(_.toImmutableArraySeq).getOrElse(Nil)
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry =>
           if (isProcessing(entry.getPath)) {

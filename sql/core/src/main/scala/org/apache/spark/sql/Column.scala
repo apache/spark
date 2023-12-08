@@ -32,6 +32,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object Column {
 
@@ -1131,7 +1132,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Array[String]): Column = withExpr { MultiAlias(expr, aliases) }
+  def as(aliases: Array[String]): Column = withExpr {
+    MultiAlias(expr, aliases.toImmutableArraySeq)
+  }
 
   /**
    * Gives the column an alias.

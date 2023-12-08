@@ -710,7 +710,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
         }
       }
 
-      to.rewind().asInstanceOf[ByteBuffer]
+      to.rewind()
     }
   }
 
@@ -817,7 +817,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
         }
       }
 
-      to.rewind().asInstanceOf[ByteBuffer]
+      to.rewind()
     }
   }
 

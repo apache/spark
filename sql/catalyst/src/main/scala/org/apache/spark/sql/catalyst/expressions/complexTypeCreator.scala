@@ -34,6 +34,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
@@ -729,7 +730,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
     }
     val fieldsWithIndex = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex
     val existingFieldExprs: Seq[(StructField, Expression)] =
-      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }
+      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }.toImmutableArraySeq
     fieldOps.foldLeft(existingFieldExprs)((exprs, op) => op(exprs))
   }
 

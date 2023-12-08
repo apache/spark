@@ -189,6 +189,10 @@ case class SchemaOfXml(
   private lazy val xmlFactory = xmlOptions.buildXmlFactory()
 
   @transient
+  private lazy val xmlInferSchema =
+    new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
+
+  @transient
   private lazy val xml = child.eval().asInstanceOf[UTF8String]
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -209,16 +213,16 @@ case class SchemaOfXml(
   }
 
   override def eval(v: InternalRow): Any = {
-    val dataType = XmlInferSchema.infer(xml.toString, xmlOptions).get match {
+    val dataType = xmlInferSchema.infer(xml.toString).get match {
       case st: StructType =>
-        XmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
+        xmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
       case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-        XmlInferSchema
+        xmlInferSchema
           .canonicalizeType(at.elementType)
           .map(ArrayType(_, containsNull = at.containsNull))
           .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
       case other: DataType =>
-        XmlInferSchema.canonicalizeType(other).getOrElse(StringType)
+        xmlInferSchema.canonicalizeType(other).getOrElse(StringType)
     }
 
     UTF8String.fromString(dataType.sql)

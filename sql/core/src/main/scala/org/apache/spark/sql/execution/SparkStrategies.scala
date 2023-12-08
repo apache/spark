@@ -24,7 +24,6 @@ import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -444,7 +443,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             AggUtils.planStreamingAggregationForSession(
               normalizedGroupingExpressions,
               sessionWindow,
-              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              aggregateExpressions,
               rewrittenResultExpressions,
               stateVersion,
               conf.streamingSessionWindowMergeSessionInLocalPartition,
@@ -455,7 +454,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
             AggUtils.planStreamingAggregation(
               normalizedGroupingExpressions,
-              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              aggregateExpressions,
               rewrittenResultExpressions,
               stateVersion,
               planLater(child))
@@ -827,8 +826,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, p, b, is, ot, planLater(child)) :: Nil
       case logical.FlatMapGroupsInPandas(grouping, func, output, child) =>
         execution.python.FlatMapGroupsInPandasExec(grouping, func, output, planLater(child)) :: Nil
+      case logical.FlatMapGroupsInArrow(grouping, func, output, child) =>
+        execution.python.FlatMapGroupsInArrowExec(grouping, func, output, planLater(child)) :: Nil
       case f @ logical.FlatMapCoGroupsInPandas(_, _, func, output, left, right) =>
         execution.python.FlatMapCoGroupsInPandasExec(
+          f.leftAttributes, f.rightAttributes,
+          func, output, planLater(left), planLater(right)) :: Nil
+      case f @ logical.FlatMapCoGroupsInArrow(_, _, func, output, left, right) =>
+        execution.python.FlatMapCoGroupsInArrowExec(
           f.leftAttributes, f.rightAttributes,
           func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child, isBarrier) =>

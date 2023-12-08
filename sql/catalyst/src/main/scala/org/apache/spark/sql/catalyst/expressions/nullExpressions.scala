@@ -65,6 +65,15 @@ case class Coalesce(children: Seq[Expression])
     }
   }
 
+  /**
+   * We should only return the first child, because others may not get accessed.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): Coalesce = {
+    withNewChildrenInternal(alwaysEvaluatedInputs.toIndexedSeq ++ children.drop(1))
+  }
+
   override def eval(input: InternalRow): Any = {
     var result: Any = null
     val childIterator = children.iterator
@@ -270,6 +279,16 @@ case class NaNvl(left: Expression, right: Expression)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, FloatType), TypeCollection(DoubleType, FloatType))
+
+  /**
+   * We can only guarantee the left child can be always accessed. If we hit the left child,
+   * the right child will not be accessed.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = left :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): NaNvl = {
+    copy(left = alwaysEvaluatedInputs.head)
+  }
 
   override def eval(input: InternalRow): Any = {
     val value = left.eval(input)

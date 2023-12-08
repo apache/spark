@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrder}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning a micro-batch of data from a data source.
@@ -43,7 +44,8 @@ case class MicroBatchScanExec(
 
   override def hashCode(): Int = stream.hashCode()
 
-  override lazy val inputPartitions: Seq[InputPartition] = stream.planInputPartitions(start, end)
+  override lazy val inputPartitions: Seq[InputPartition] =
+    stream.planInputPartitions(start, end).toImmutableArraySeq
 
   override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 

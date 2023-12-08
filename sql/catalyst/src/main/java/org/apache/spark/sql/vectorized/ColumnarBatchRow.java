@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
@@ -70,8 +71,8 @@ public final class ColumnarBatchRow extends InternalRow {
           row.update(i, getBinary(i));
         } else if (pdt instanceof PhysicalDecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
-        } else if (pdt instanceof PhysicalStructType) {
-          row.update(i, getStruct(i, ((PhysicalStructType) pdt).fields().length).copy());
+        } else if (pdt instanceof PhysicalStructType t) {
+          row.update(i, getStruct(i, t.fields().length).copy());
         } else if (pdt instanceof PhysicalArrayType) {
           row.update(i, getArray(i).copy());
         } else if (pdt instanceof PhysicalMapType) {
@@ -134,6 +135,11 @@ public final class ColumnarBatchRow extends InternalRow {
   }
 
   @Override
+  public VariantVal getVariant(int ordinal) {
+    return columns[ordinal].getVariant(rowId);
+  }
+
+  @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
     return columns[ordinal].getStruct(rowId);
   }
@@ -178,10 +184,12 @@ public final class ColumnarBatchRow extends InternalRow {
       return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType)dataType).fields().length);
+    } else if (dataType instanceof StructType structType) {
+      return getStruct(ordinal, structType.fields().length);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof VariantType) {
+      return getVariant(ordinal);
     } else {
       throw new UnsupportedOperationException("Datatype not supported " + dataType);
     }

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -86,8 +87,7 @@ abstract class OffsetWindowFunctionFrameBase(
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    offset: Int,
-    ignoreNulls: Boolean)
+    offset: Int)
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
@@ -111,7 +111,7 @@ abstract class OffsetWindowFunctionFrameBase(
   protected val projection = {
     // Collect the expressions and bind them.
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
-      expressions.toSeq.map(_.input), inputAttrs)
+      expressions.toImmutableArraySeq.map(_.input), inputAttrs)
 
     // Create the projection.
     newMutableProjection(boundExpressions, Nil).target(target)
@@ -120,7 +120,7 @@ abstract class OffsetWindowFunctionFrameBase(
   /** Create the projection used when the offset row DOES NOT exists. */
   protected val fillDefaultValue = {
     // Collect the expressions and bind them.
-    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
+    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toImmutableArraySeq.map { e =>
       if (e.default == null || e.default.foldable && e.default.eval() == null) {
         // The default value is null.
         Literal.create(null, e.dataType)
@@ -140,8 +140,6 @@ abstract class OffsetWindowFunctionFrameBase(
   // The number of rows skipped to get the next UnsafeRow where the input operator by function
   // is not null.
   protected var skippedNonNullCount = 0
-
-  protected val absOffset = Math.abs(offset)
 
   // Reset the states by the data of the new partition.
   protected def resetStates(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
@@ -178,31 +176,6 @@ abstract class OffsetWindowFunctionFrameBase(
     }
   }
 
-  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    if (absOffset > rows.length) {
-      fillDefaultValue(EmptyRow)
-    } else {
-      resetStates(rows)
-      if (ignoreNulls) {
-        prepareForIgnoreNulls()
-      } else {
-        prepareForRespectNulls()
-      }
-    }
-  }
-
-  protected def prepareForIgnoreNulls(): Unit = findNextRowWithNonNullInput()
-
-  protected def prepareForRespectNulls(): Unit
-
-  override def write(index: Int, current: InternalRow): Unit = {
-    if (input != null) {
-      doWrite(index, current)
-    }
-  }
-
-  protected def doWrite(index: Int, current: InternalRow): Unit
-
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
 
   override def currentUpperBound(): Int = throw new UnsupportedOperationException()
@@ -224,15 +197,24 @@ class FrameLessOffsetWindowFunctionFrame(
     offset: Int,
     ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
-    target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
-  override def prepareForRespectNulls(): Unit = {
-    // drain the first few rows if offset is larger than zero
-    while (inputIndex < offset) {
-      if (inputIterator.hasNext) inputIterator.next()
-      inputIndex += 1
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    resetStates(rows)
+    if (ignoreNulls) {
+      if (Math.abs(offset) > rows.length) {
+        fillDefaultValue(EmptyRow)
+      } else {
+        findNextRowWithNonNullInput()
+      }
+    } else {
+      // drain the first few rows if offset is larger than zero
+      while (inputIndex < offset) {
+        if (inputIterator.hasNext) inputIterator.next()
+        inputIndex += 1
+      }
+      inputIndex = offset
     }
-    inputIndex = offset
   }
 
   private val doWrite = if (ignoreNulls && offset > 0) {
@@ -279,6 +261,7 @@ class FrameLessOffsetWindowFunctionFrame(
     // 7. current row -> z, next selected row -> y, output: y;
     // 8. current row -> v, next selected row -> z, output: z;
     // 9. current row -> null, next selected row -> v, output: v;
+    val absOffset = Math.abs(offset)
     (current: InternalRow) =>
       if (skippedNonNullCount == absOffset) {
         nextSelectedRow = EmptyRow
@@ -312,7 +295,7 @@ class FrameLessOffsetWindowFunctionFrame(
       inputIndex += 1
   }
 
-  protected def doWrite(index: Int, current: InternalRow): Unit = {
+  override def write(index: Int, current: InternalRow): Unit = {
     doWrite(current)
   }
 }
@@ -335,30 +318,35 @@ class UnboundedOffsetWindowFunctionFrame(
     offset: Int,
     ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
-    target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
   assert(offset > 0)
 
-  override def prepareForIgnoreNulls(): Unit = {
-    findNextRowWithNonNullInput()
-    if (nextSelectedRow == EmptyRow) {
-      // Use default values since the offset row whose input value is not null does not exist.
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    if (offset > rows.length) {
       fillDefaultValue(EmptyRow)
     } else {
-      projection(nextSelectedRow)
+      resetStates(rows)
+      if (ignoreNulls) {
+        findNextRowWithNonNullInput()
+        if (nextSelectedRow == EmptyRow) {
+          // Use default values since the offset row whose input value is not null does not exist.
+          fillDefaultValue(EmptyRow)
+        } else {
+          projection(nextSelectedRow)
+        }
+      } else {
+        var selectedRow: UnsafeRow = null
+        // drain the first few rows if offset is larger than one
+        while (inputIndex < offset) {
+          selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+          inputIndex += 1
+        }
+        projection(selectedRow)
+      }
     }
   }
 
-  override def prepareForRespectNulls(): Unit = {
-    var selectedRow: UnsafeRow = null
-    // drain the first few rows if offset is larger than one
-    while (inputIndex < offset) {
-      selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputIndex += 1
-    }
-    projection(selectedRow)
-  }
-
-  protected def doWrite(index: Int, current: InternalRow): Unit = {
+  override def write(index: Int, current: InternalRow): Unit = {
     // The results are the same for each row in the partition, and have been evaluated in prepare.
     // Don't need to recalculate here.
   }
@@ -383,18 +371,27 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
     offset: Int,
     ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
-    target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
   assert(offset > 0)
 
-  override def prepareForRespectNulls(): Unit = {
-    // drain the first few rows if offset is larger than one
-    while (inputIndex < offset) {
-      nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputIndex += 1
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    if (offset > rows.length) {
+      fillDefaultValue(EmptyRow)
+    } else {
+      resetStates(rows)
+      if (ignoreNulls) {
+        findNextRowWithNonNullInput()
+      } else {
+        // drain the first few rows if offset is larger than one
+        while (inputIndex < offset) {
+          nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+          inputIndex += 1
+        }
+      }
     }
   }
 
-  protected def doWrite(index: Int, current: InternalRow): Unit = {
+  override def write(index: Int, current: InternalRow): Unit = {
     if (index >= inputIndex - 1 && nextSelectedRow != null) {
       projection(nextSelectedRow)
     } else {

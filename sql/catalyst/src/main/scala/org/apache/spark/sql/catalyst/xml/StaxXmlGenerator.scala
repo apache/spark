@@ -26,7 +26,8 @@ import com.sun.xml.txw2.output.IndentingXMLStreamWriter
 import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -39,6 +40,19 @@ class StaxXmlGenerator(
   require(options.attributePrefix.nonEmpty,
     "'attributePrefix' option should not be empty string.")
   private val indentDisabled = options.indent == ""
+
+  private val timestampFormatter = TimestampFormatter(
+    options.timestampFormatInWrite,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
+
+  private val dateFormatter = DateFormatter(
+    options.dateFormatInWrite,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
 
   private val gen = {
     val factory = XMLOutputFactory.newInstance()
@@ -149,11 +163,11 @@ class StaxXmlGenerator(
     case (StringType, v: UTF8String) => gen.writeCharacters(v.toString)
     case (StringType, v: String) => gen.writeCharacters(v)
     case (TimestampType, v: Timestamp) =>
-      gen.writeCharacters(options.timestampFormatterInWrite.format(v.toInstant()))
+      gen.writeCharacters(timestampFormatter.format(v.toInstant()))
     case (TimestampType, v: Long) =>
-      gen.writeCharacters(options.timestampFormatterInWrite.format(v))
+      gen.writeCharacters(timestampFormatter.format(v))
     case (DateType, v: Int) =>
-      gen.writeCharacters(options.dateFormatterInWrite.format(v))
+      gen.writeCharacters(dateFormatter.format(v))
     case (IntegerType, v: Int) => gen.writeCharacters(v.toString)
     case (ShortType, v: Short) => gen.writeCharacters(v.toString)
     case (FloatType, v: Float) => gen.writeCharacters(v.toString)
