@@ -848,11 +848,6 @@ ERROR_CLASSES_JSON = """
       "SparkContext or SparkSession should be created first.."
     ]
   },
-  "SHOULD_NOT_DATAFRAME": {
-    "message": [
-      "Argument `<arg_name>` should not be a DataFrame."
-    ]
-  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
