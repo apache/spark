@@ -2763,8 +2763,10 @@ class DataSourceV2SQLSuiteV1Filter
       exception = intercept[CatalogNotFoundException] {
         sql("SET CATALOG not_exist_catalog")
       },
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`not_exist_catalog`",
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
   }
 
   test("SPARK-35973: ShowCatalogs") {
