@@ -6838,15 +6838,16 @@ def now() -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.range(1)
-    >>> df.select(now()).show(truncate=False) # doctest: +SKIP
-    +-----------------------+
-    |now()    |
-    +-----------------------+
-    |2022-08-26 21:23:22.716|
-    +-----------------------+
+    >>> df.select(sf.now()).show(truncate=False) # doctest: +SKIP
+    +--------------------------+
+    |now()                     |
+    +--------------------------+
+    |2023-12-08 15:18:18.482269|
+    +--------------------------+
     """
-    return _invoke_function("current_timestamp")
+    return _invoke_function("now")
 
 
 @_try_remote_functions
