@@ -154,6 +154,8 @@ jobs:
           ls -al /home/runner
           find /home/runner -name "*hive-exec*"
           find /home/runner -name "*ivy*"
+          find /home/runner -name "slf4j-api-*"
+          find /home/runner -name "cache"
           # ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
           # ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Install Java ${{ matrix.java }}
