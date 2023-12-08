@@ -63,18 +63,18 @@ else
         exit 1
     fi
 
-    echo "JAVA_HOME is not set. Would you like to install JDK 17 and set JAVA_HOME? (Y/N)" >&2
+    echo -n "JAVA_HOME is not set. Would you like to install JDK 17 and set JAVA_HOME? (Y/N) " >&2
 
     read -r input
 
     if [[ "${input,,}" == "y" ]]; then
         TEMP_DIR=$(mktemp -d)
         $PYSPARK_DRIVER_PYTHON -m pip install --target="$TEMP_DIR" install-jdk
-        export JAVA_HOME=$(PYTHONPATH="$TEMP_DIR" python -c 'import jdk; print(jdk.install("17"))')
+        export JAVA_HOME=$(PYTHONPATH="$TEMP_DIR" $PYSPARK_DRIVER_PYTHON -c 'import jdk; print(jdk.install("17"))')
         RUNNER="${JAVA_HOME}/bin/java"
-        echo "Java was installed to the path \"$JAVA_HOME.\""\
-        "You can avoid needing to re-install JAVA by setting your JAVA_HOME environment variable"\
-        "to \"/root/.jdk/jdk-17.0.9+9.\""
+        echo "JDK was installed to the path \"$JAVA_HOME\""
+        echo "You can avoid needing to re-install JDK by setting your JAVA_HOME environment variable"\
+        "to \"$JAVA_HOME\""
     else
         echo "JDK installation skipped."\
         "You can manually install JDK (17 or later) and set JAVA_HOME in your environment."
