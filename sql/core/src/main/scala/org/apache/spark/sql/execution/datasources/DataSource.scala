@@ -105,19 +105,14 @@ case class DataSource(
     // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
     // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
     // instead of `providingClass`.
-    cls.getDeclaredConstructor().newInstance() match {
+    DataSource.newDataSourceInstance(className, cls) match {
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
   }
 
-  private[sql] def providingInstance(): Any = {
-    providingClass match {
-      case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
-        cls.getConstructor().newInstance(className)
-      case cls => cls.getConstructor().newInstance()
-    }
-  }
+  private[sql] def providingInstance(): Any =
+    DataSource.newDataSourceInstance(className, providingClass)
 
   private def newHadoopConfiguration(): Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(options)
@@ -628,6 +623,15 @@ object DataSource extends Logging {
     "org.apache.spark.sql.sources.HadoopFsRelationProvider",
     "org.apache.spark.Logging")
 
+  /** Create the instance of the datasource */
+  def newDataSourceInstance(provider: String, providingClass: Class[_]): Any = {
+    providingClass match {
+      case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
+        cls.getDeclaredConstructor(classOf[String]).newInstance(provider)
+      case cls => cls.getDeclaredConstructor().newInstance()
+    }
+  }
+
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
@@ -729,11 +733,7 @@ object DataSource extends Logging {
       .split(",").map(_.trim)
     val providingClass = lookupDataSource(provider, conf)
     val instance = try {
-      providingClass match {
-        case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
-          cls.getConstructor(classOf[String]).newInstance(provider)
-        case cls => cls.getDeclaredConstructor().newInstance()
-      }
+      newDataSourceInstance(provider, providingClass)
     } catch {
       // Throw the original error from the data source implementation.
       case e: java.lang.reflect.InvocationTargetException => throw e.getCause

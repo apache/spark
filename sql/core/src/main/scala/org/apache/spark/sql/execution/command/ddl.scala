@@ -1022,11 +1022,9 @@ object DDLUtils extends Logging {
 
   def checkDataColNames(provider: String, schema: StructType): Unit = {
     val source = try {
-      DataSource.lookupDataSource(provider, SQLConf.get) match {
-        case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
-          cls.getConstructor(classOf[String]).newInstance(provider)
-        case cls => cls.getDeclaredConstructor().newInstance()
-      }
+      DataSource.newDataSourceInstance(
+        provider,
+        DataSource.lookupDataSource(provider, SQLConf.get))
     } catch {
       case e: Throwable =>
         logError(s"Failed to find data source: $provider when check data column names.", e)
