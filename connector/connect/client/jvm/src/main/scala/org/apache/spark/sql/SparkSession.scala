@@ -592,17 +592,19 @@ class SparkSession private[sql] (
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
-   * specified by `target` under the session's working directory of that particular file extension.
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
    *
    * Supported target file extensions are .jar and .class.
    *
-   * Example:
+   * ==Example==
+   * {{{
    *  addArtifact(bytesBar, "foo/bar.class")
    *  addArtifact(bytesFlat, "flat.class")
-   *
-   *  The directory structure of the session's working directory for JAR files would look like:
-   *  ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
-   *  ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
    *
    * @since 4.0.0
    */
@@ -611,17 +613,19 @@ class SparkSession private[sql] (
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
-   * specified by `target` under the session's working directory of that particular file extension.
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
    *
    * Supported target file extensions are .jar and .class.
    *
-   * Example:
+   * ==Example==
+   * {{{
    *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
    *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
-   *
-   *  The directory structure of the session's working directory for JAR files would look like:
-   *  ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
-   *  ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
    *
    * @since 4.0.0
    */
