@@ -1376,6 +1376,14 @@ class FunctionsTestsMixin:
         for i in range(3):
             self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
 
+    def test_current_timestamp(self):
+        df = self.spark.range(1).select(F.current_timestamp())
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+        self.assertEqual(df.schema.names[0], "current_timestamp()")
+        df = self.spark.range(1).select(F.now())
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+        self.assertEqual(df.schema.names[0], "now()")
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass
