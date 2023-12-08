@@ -163,7 +163,14 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
+    // scalastyle:off println
+    println("-----------------")
+    val tmpDirName = System.getProperty("java.io.tmpdir")
+    val ivyCacheDir = System.getProperty("ivy.cache.dir")
+    val ivyHome = System.getProperty("ivy.home")
+    println(s"tmpDirName: $tmpDirName, ivyCacheDir: $ivyCacheDir, ivyHome: $ivyHome")
+    println("-----------------")
+    // scalastyle:on println
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
