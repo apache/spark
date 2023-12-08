@@ -44,7 +44,7 @@ class ResponseValidator extends Logging {
             throw new IllegalStateException(s"Server side session ID changed from $id to $value")
           case _ if value != "" =>
             synchronized {
-              serverSideSessionId = Some(value.toString)
+              serverSideSessionId = Some(value)
             }
           case _ => // No-op
         }

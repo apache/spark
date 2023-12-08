@@ -175,8 +175,8 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * removes them after a timeout.
    */
   private def schedulePeriodicChecks(): Unit = executionsLock.synchronized {
-    val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL).toLong
-    val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT).toLong
+    val interval = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL)
+    val timeout = SparkEnv.get.conf.get(CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT)
 
     scheduledExecutor match {
       case Some(_) => // Already running.

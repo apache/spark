@@ -285,7 +285,7 @@ case class TableCacheQueryStageExec(
       sparkContext.submitJob(
         rdd,
         (_: Iterator[CachedBatch]) => (),
-        (0 until rdd.getNumPartitions).toSeq,
+        (0 until rdd.getNumPartitions),
         (_: Int, _: Unit) => (),
         ()
       )
