@@ -325,4 +325,12 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(singleChunkArtifact.getName.equals(s"classes/$target"))
     assert(singleChunkArtifact.getData.getData == ByteString.copyFrom(artifactBytes))
   }
+
+  test("When both source and target paths are given, extension conditions are checked " +
+    "on target path") {
+    val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    assertThrows[UnsupportedOperationException] {
+      artifactManager.addArtifact(artifactPath.toString, "dummy.extension")
+    }
+  }
 }

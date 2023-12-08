@@ -144,12 +144,11 @@ class ArtifactManager(
    *
    */
   def addArtifact(source: String, target: String): Unit = {
-    val sourcePath = Paths.get(source)
     val targetPath = Paths.get(target)
     val artifact = Artifact.newArtifactFromExtension(
-      sourcePath.getFileName.toString,
+      targetPath.getFileName.toString,
       targetPath,
-      new LocalFile(sourcePath))
+      new LocalFile(Paths.get(source)))
     addArtifacts(artifact :: Nil)
   }
 
