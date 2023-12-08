@@ -160,7 +160,8 @@ private[deploy] class Master(
 
     if (restServerEnabled) {
       val port = conf.get(MASTER_REST_SERVER_PORT)
-      restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
+      val host = conf.get(MASTER_REST_SERVER_HOST).getOrElse(address.host)
+      restServer = Some(new StandaloneRestServer(host, port, conf, self, masterUrl))
     }
     restServerBoundPort = restServer.map(_.start())
 
