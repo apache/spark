@@ -407,6 +407,12 @@
     ],
     "sqlState" : "22003"
   },
+  "CATALOG_NOT_FOUND" : {
+    "message" : [
+      "The catalog <catalogName> not found. Consider to set the SQL config \"spark.sql.catalog.<catalogName>\" to a catalog plugin."
+    ],
+    "sqlState" : "42P08"
+  },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
       "Checkpoint block <rddBlockId> not found!",
