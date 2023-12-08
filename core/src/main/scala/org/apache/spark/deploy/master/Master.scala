@@ -666,7 +666,7 @@ private[deploy] class Master(
     state = RecoveryState.ALIVE
     schedule()
     val timeTakenNs = System.nanoTime() - recoveryStartTimeNs
-    logInfo(s"Recovery complete in ${timeTakenNs / 1000000000d}s - resuming operations!")
+    logInfo(f"Recovery complete in ${timeTakenNs / 1000000000d}%.3fs - resuming operations!")
   }
 
   /**
