@@ -19,7 +19,6 @@ import os
 import unittest
 import unittest.mock
 from io import StringIO
-
 from lxml import etree
 
 from pyspark import SparkConf, SparkContext
