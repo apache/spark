@@ -288,9 +288,6 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
   group = "misc_funcs")
 // scalastyle:on line.size.limit
 case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
-  override def nullable: Boolean = false
-  override def foldable: Boolean = false
-  override def dataType: DataType = StringType
   override def prettyName: String = "version"
 
   override lazy val replacement: Expression = StaticInvoke(

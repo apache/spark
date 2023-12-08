@@ -146,14 +146,17 @@ public class ExpressionImplUtils {
     );
   }
 
-  // TODO: Find proper place for this method. It shouldn't be combined with AES stuff.
+  /**
+   * Function to return the Spark version.
+   * @return
+   *  Space separated version and revision.
+   */
   public static UTF8String GetSparkVersion()
   {
     String shortVersion = VersionUtils.shortVersion(SparkBuildInfo.spark_version());
     String revision = SparkBuildInfo.spark_revision();
     return UTF8String.fromString(shortVersion + " " + revision);
   }
-
 
   private static SecretKeySpec getSecretKeySpec(byte[] key) {
     return switch (key.length) {
