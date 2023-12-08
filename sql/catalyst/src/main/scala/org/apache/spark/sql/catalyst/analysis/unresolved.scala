@@ -830,16 +830,6 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
 }
 
 /**
- * A place holder expression used when replacements are only available after
- * later phases of analysis.
- */
-case object UnresolvedReplacement extends LeafExpression with Unevaluable {
-    override def nullable: Boolean = throw new UnresolvedException("nullable")
-    override def dataType: DataType = throw new UnresolvedException("dataType")
-    override lazy val resolved = false
-}
-
-/**
  * An intermediate expression to hold a resolved (nested) column. Some rules may need to undo the
  * column resolution and use this expression to keep the original column name, or redo the column
  * resolution with a different priority if the analyzer has tried to resolve it with the default
