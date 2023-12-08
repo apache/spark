@@ -339,7 +339,7 @@ Fail to assign a value of `<sourceType>` type to the `<targetType>` type column 
 
 [SQLSTATE: 42P08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The catalog `<catalogName>` not found. Consider to set the SQL config "spark.sql.catalog.`<catalogName>`" to a catalog plugin.
+The catalog `<catalogName>` not found. Consider to set the SQL config `<config>` to a catalog plugin.
 
 ### CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND
 
