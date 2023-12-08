@@ -170,7 +170,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
     // because of parsing rules, we know that either queryParam or targetVariable is set
     // hence use Either to represent this
-    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(stringLitToStr(sl)))
+    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(string(visitStringLit(x))))
     val queryVariable = Option(ctx.queryParam.multipartIdentifier)
       .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
 
@@ -3965,11 +3965,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
     }
   }
-
-  /**
-   * Converts a string literal to a string.
-   */
-  protected def stringLitToStr(x: StringLitContext) = string(visitStringLit(x))
 
   /**
    * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelect]] logical plan.
