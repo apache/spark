@@ -1002,7 +1002,7 @@ class FunctionsTestsMixin:
             [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)], ["date", "val"]
         )
 
-        w = df.groupBy(F.window("date", "5 seconds")).agg(F.sum("val").alias("sum"))
+        w = df.groupBy(F.window("date", "5 seconds", "5 seconds")).agg(F.sum("val").alias("sum"))
         r = w.select(
             w.window.end.cast("string").alias("end"),
             F.window_time(w.window).cast("string").alias("window_time"),
@@ -1364,6 +1364,37 @@ class FunctionsTestsMixin:
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
+
+    def test_to_timestamp_ltz(self):
+        df = self.spark.createDataFrame([("2016-12-31",)], ["e"])
+        df = df.select(F.to_timestamp_ltz(df.e, F.lit("yyyy-MM-dd")).alias("r"))
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+
+        df = self.spark.createDataFrame([("2016-12-31",)], ["e"])
+        df = df.select(F.to_timestamp_ltz(df.e).alias("r"))
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+
+    def test_to_timestamp_ntz(self):
+        df = self.spark.createDataFrame([("2016-12-31",)], ["e"])
+        df = df.select(F.to_timestamp_ntz(df.e).alias("r"))
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+
+    def test_convert_timezone(self):
+        df = self.spark.createDataFrame([("2015-04-08",)], ["dt"])
+        df = df.select(
+            F.convert_timezone(F.lit("America/Los_Angeles"), F.lit("Asia/Hong_Kong"), "dt")
+        )
+        self.assertIsInstance(df.first()[0], datetime.datetime)
+
+    def test_map_concat(self):
+        df = self.spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c') as map2")
+        self.assertEqual(
+            df.select(F.map_concat(["map1", "map2"]).alias("map3")).first()[0],
+            {1: "a", 2: "b", 3: "c"},
+        )
+
+    def test_version(self):
+        self.assertIsInstance(self.spark.range(1).select(F.version()).first()[0], str)
 
     # SPARK-45216: Fix non-deterministic seeded Dataset APIs
     def test_non_deterministic_with_seed(self):
