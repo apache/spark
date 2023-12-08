@@ -8906,7 +8906,7 @@ def user() -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.user()).show() # doctest: +SKIP
     +--------------+
-    |current_user()|
+    |        user()|
     +--------------+
     | ruifeng.zheng|
     +--------------+
@@ -8925,7 +8925,7 @@ def session_user() -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.session_user()).show() # doctest: +SKIP
     +--------------+
-    |current_user()|
+    |session_user()|
     +--------------+
     | ruifeng.zheng|
     +--------------+
