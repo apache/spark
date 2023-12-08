@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -71,7 +72,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
         // Overwrite the previous value, as the policy is last wins.
         values(index) = value
       } else {
-        throw new IllegalStateException("Unknown map key dedup policy: " + mapKeyDedupPolicy)
+        throw SparkException.internalError("Unknown map key dedup policy: " + mapKeyDedupPolicy)
       }
     }
   }
