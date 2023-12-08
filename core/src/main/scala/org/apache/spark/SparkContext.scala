@@ -41,6 +41,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
+import org.apache.spark.api.python.CachedArrowBatchServer
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -379,6 +380,12 @@ class SparkContext(config: SparkConf) extends Logging {
     override protected def initialValue(): Properties = new Properties()
   }
 
+  private var _cachedArrowBatchServerPort: Option[Int] = None
+  private[spark] def cachedArrowBatchServerPort = _cachedArrowBatchServerPort.get
+
+  private var _cachedArrowBatchServerSecret: Option[String] = None
+  private[spark] def cachedArrowBatchServerSecret = _cachedArrowBatchServerSecret.get
+
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |
    | All internal fields holding state are initialized here, and any error prompts the     |
@@ -484,6 +491,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
+
+    val cachedArrowBatchServer = new CachedArrowBatchServer()
+    val cachedArrowBatchServerInfo = cachedArrowBatchServer.start()
+
+    _cachedArrowBatchServerPort = Some(cachedArrowBatchServerInfo._1)
+    _cachedArrowBatchServerSecret = Some(cachedArrowBatchServerInfo._2)
+
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.

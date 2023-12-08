@@ -107,6 +107,20 @@ private[spark] class PythonWorkerFactory(
     }
   }
 
+  private def appendCachedArrowBatchServerEnvVars(
+    workerEnv: java.util.Map[String, String]
+  ): Unit = {
+    val env = SparkEnv.get
+    workerEnv.put(
+      "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT",
+      env.cachedArrowBatchServerPort.get.toString
+    )
+    workerEnv.put(
+      "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET",
+      env.cachedArrowBatchServerSecret.get
+    )
+  }
+
   /**
    * Connect to a worker launched through pyspark/daemon.py (by default), which forks python
    * processes itself to avoid the high cost of forking from Java. This currently only works
@@ -170,6 +184,7 @@ private[spark] class PythonWorkerFactory(
       }
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
+      appendCachedArrowBatchServerEnvVars(workerEnv)
       workerEnv.put("PYTHONPATH", pythonPath)
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
@@ -247,6 +262,7 @@ private[spark] class PythonWorkerFactory(
         }
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
+        appendCachedArrowBatchServerEnvVars(workerEnv)
         workerEnv.put("PYTHONPATH", pythonPath)
         workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
         if (Utils.preferIPv6) {

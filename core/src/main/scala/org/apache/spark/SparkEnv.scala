@@ -99,6 +99,10 @@ class SparkEnv (
 
   private[spark] var executorBackend: Option[ExecutorBackend] = None
 
+  private[spark] var cachedArrowBatchServerPort: Option[Int] = None
+
+  private[spark] var cachedArrowBatchServerSecret: Option[String] = None
+
   private[spark] def stop(): Unit = {
 
     if (!isStopped) {

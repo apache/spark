@@ -74,7 +74,7 @@ class CachedArrowBatchServer extends Logging {
     }
   }
 
-  def start(): Unit = {
+  def start(): (Int, String) = {
     logTrace("Creating listening socket")
 
     val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
@@ -106,8 +106,6 @@ class CachedArrowBatchServer extends Logging {
         }
       }
     }
-
-    System.seten
     (serverSocket.getLocalPort, authHelper.secret)
   }
 

@@ -350,7 +350,11 @@ private[spark] class Executor(
 
   val cachedArrowBatchServer = new CachedArrowBatchServer()
 
-  cachedArrowBatchServer.start()
+  val (cachedArrowBatchServerPort: Int, cachedArrowBatchServerSecret: String) =
+    cachedArrowBatchServer.start()
+
+  env.cachedArrowBatchServerPort = Some(cachedArrowBatchServerPort)
+  env.cachedArrowBatchServerSecret = Some(cachedArrowBatchServerSecret)
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 

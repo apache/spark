@@ -294,6 +294,12 @@ class SparkContext:
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
+
+        os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"] = \
+            self._jsc.cachedArrowBatchServerPort()
+        os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"] = \
+            self._jsc.cachedArrowBatchServerSecret()
+
         # Reset the SparkConf to the one actually used by the SparkContext in JVM.
         self._conf = SparkConf(_jconf=self._jsc.sc().conf())
 
