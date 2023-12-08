@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 
+import os
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
 
 def persist_dataframe_as_chunks(dataframe: DataFrame) -> list[str]:
@@ -42,3 +44,12 @@ def unpersist_chunks(chunk_ids: list[str]) -> None:
 
 
 def read_chunk(chunk_id):
+    """
+    Read chunk by id, return arrow batch data of this chunk.
+    You can call this function from spark driver, spark python UDF python,
+    descendant process of spark driver, or descendant process of spark python UDF worker.
+    """
+
+    port = int(os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"])
+    secret = os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"]
+    serializer = ArrowStreamSerializer()

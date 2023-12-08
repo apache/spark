@@ -25,8 +25,9 @@ import java.net.{InetAddress, ServerSocket, Socket}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId}
 
-import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream}
+import java.io.{BufferedOutputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
+import scala.collection.mutable.ArrayBuffer
 
 
 class CachedArrowBatchServer extends Logging {
@@ -52,26 +53,34 @@ class CachedArrowBatchServer extends Logging {
   }
 
   def handleConnection(sock: Socket): Unit = {
-
-    val op = readUtf8(sock)
-    assert(Array("get", "drop").contains(op))
-
     val blockId = BlockId(readUtf8(sock))
     assert(blockId.isInstanceOf[ArrowBatchBlockId])
 
     val blockManager = SparkEnv.get.blockManager
 
-    if (op == "get") {
-      val blockData =
-        blockManager.get[Array[Byte]](blockId).get.data.next().asInstanceOf[Array[Byte]]
-      val out = new BufferedOutputStream(sock.getOutputStream())
-      out.write(blockData)
-      out.flush()
-    } else if (op == "drop") {
-      // TODO: remove remote block.
-      blockManager.removeBlock(blockId, tellMaster = true)
-      writeUtf8("ok", sock)
-    }
+    ByteArrayOutputStream
+    val blockData =
+      blockManager.get[Array[Byte]](blockId).get.data.next().asInstanceOf[Array[Byte]]
+    val outputStream = new BufferedOutputStream(sock.getOutputStream())
+
+    val out = new DataOutputStream(outputStream)
+    val batchWriter =
+      new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
+
+    // Batches ordered by (index of partition, batch index in that partition) tuple
+    val batchOrder = ArrayBuffer.empty[(Int, Int)]
+
+    // Handler to eagerly write batches to Python as they arrive, un-ordered
+    val handlePartitionBatches = (index: Int, arrowBatches: Array[Array[Byte]]) =>
+      if (arrowBatches.nonEmpty) {
+        // Write all batches (can be more than 1) in the partition, store the batch order tuple
+        batchWriter.writeBatches(arrowBatches.iterator)
+        arrowBatches.indices.foreach {
+          partitionBatchIndex => batchOrder.append((index, partitionBatchIndex))
+        }
+      }
+
+    out.flush()
   }
 
   def start(): (Int, String) = {

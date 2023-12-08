@@ -296,7 +296,7 @@ class SparkContext:
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
 
         os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"] = \
-            self._jsc.cachedArrowBatchServerPort()
+            str(self._jsc.cachedArrowBatchServerPort())
         os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"] = \
             self._jsc.cachedArrowBatchServerSecret()
 
