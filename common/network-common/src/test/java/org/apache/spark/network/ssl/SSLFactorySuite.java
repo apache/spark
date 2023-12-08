@@ -17,17 +17,9 @@
 package org.apache.spark.network.ssl;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.security.KeyPair;
-import java.security.KeyStore;
-import java.security.cert.X509Certificate;
-import java.util.HashMap;
-import java.util.Map;
 
 import io.netty.buffer.ByteBufAllocator;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
