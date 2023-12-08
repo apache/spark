@@ -1814,7 +1814,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def catalogNotFoundError(name: String): Throwable = {
     new CatalogNotFoundException(
       errorClass = "CATALOG_NOT_FOUND",
-      messageParameters = Map("catalogName" -> toSQLId(name)))
+      messageParameters = Map(
+        "catalogName" -> toSQLId(name),
+        "config" -> toSQLConf(s"spark.sql.catalog.$name")))
   }
 
   def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {

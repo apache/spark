@@ -409,7 +409,7 @@
   },
   "CATALOG_NOT_FOUND" : {
     "message" : [
-      "The catalog <catalogName> not found. Consider to set the SQL config \"spark.sql.catalog.<catalogName>\" to a catalog plugin."
+      "The catalog <catalogName> not found. Consider to set the SQL config <config> to a catalog plugin."
     ],
     "sqlState" : "42P08"
   },
