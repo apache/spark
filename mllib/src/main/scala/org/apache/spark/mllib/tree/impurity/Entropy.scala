@@ -112,7 +112,7 @@ private[spark] class EntropyAggregator(numClasses: Int)
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): EntropyCalculator = {
-    new EntropyCalculator(allStats.view.slice(offset, offset + statsSize - 1).toArray,
+    new EntropyCalculator(allStats.slice(offset, offset + statsSize - 1),
       allStats(offset + statsSize - 1).toLong)
   }
 }

@@ -18,12 +18,15 @@
 import os
 import unittest
 import unittest.mock
+from io import StringIO
+from lxml import etree
 
 from pyspark import SparkConf, SparkContext
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
 
 class SparkSessionTests(ReusedSQLTestCase):
@@ -73,8 +76,17 @@ class SparkSessionTests2(PySparkTestCase):
             spark.stop()
 
 
-class SparkSessionTests3(unittest.TestCase):
+class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
     def test_active_session(self):
+        with self.assertRaises(PySparkRuntimeError) as pe1:
+            SparkSession.active()
+
+        self.check_error(
+            exception=pe1.exception,
+            error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
+            message_parameters={},
+        )
+
         spark = SparkSession.builder.master("local").getOrCreate()
         try:
             activeSession = SparkSession.getActiveSession()
@@ -107,6 +119,11 @@ class SparkSessionTests3(unittest.TestCase):
             spark.sql("CREATE TABLE table1 (name STRING, age INT) USING parquet")
             self.assertEqual(spark.table("table1").columns, ["name", "age"])
             self.assertEqual(spark.range(3).count(), 3)
+
+            try:
+                etree.parse(StringIO(spark._repr_html_()), etree.HTMLParser(recover=False))
+            except Exception as e:
+                self.fail(f"Generated HTML from `_repr_html_` was invalid: {e}")
 
             # SPARK-37516: Only plain column references work as variable in SQL.
             self.assertEqual(
@@ -162,6 +179,10 @@ class SparkSessionTests3(unittest.TestCase):
         finally:
             newSession.stop()
 
+    def test_create_new_session_with_statement(self):
+        with SparkSession.builder.master("local").getOrCreate() as session:
+            session.range(5).collect()
+
     def test_active_session_with_None_and_not_None_context(self):
         from pyspark.context import SparkContext
         from pyspark.conf import SparkConf
@@ -192,6 +213,30 @@ class SparkSessionTests3(unittest.TestCase):
         with unittest.mock.patch.dict(os.environ, {"SPARK_CONNECT_MODE_ENABLED": "1"}):
             with self.assertRaisesRegex(RuntimeError, "Cannot create a Spark Connect session"):
                 SparkSession.builder.appName("test").getOrCreate()
+
+    def test_unsupported_api(self):
+        with SparkSession.builder.master("local").getOrCreate() as session:
+            unsupported = [
+                (lambda: session.client, "client"),
+                (session.addArtifacts, "addArtifact(s)"),
+                (lambda: session.copyFromLocalToFs("", ""), "copyFromLocalToFs"),
+                (lambda: session.interruptTag(""), "interruptTag"),
+                (lambda: session.interruptOperation(""), "interruptOperation"),
+                (lambda: session.addTag(""), "addTag"),
+                (lambda: session.removeTag(""), "removeTag"),
+                (session.getTags, "getTags"),
+                (session.clearTags, "clearTags"),
+            ]
+
+            for func, name in unsupported:
+                with self.assertRaises(PySparkRuntimeError) as pe1:
+                    func()
+
+                self.check_error(
+                    exception=pe1.exception,
+                    error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+                    message_parameters={"feature": f"SparkSession.{name}"},
+                )
 
 
 class SparkSessionTests4(ReusedSQLTestCase):
@@ -259,7 +304,7 @@ class SparkSessionTests5(unittest.TestCase):
         self.assertIs(SQLContext.getOrCreate(self.sc)._sc, self.sc)
 
 
-class SparkSessionBuilderTests(unittest.TestCase):
+class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_create_spark_context_first_then_spark_session(self):
         sc = None
         session = None
@@ -351,6 +396,69 @@ class SparkSessionBuilderTests(unittest.TestCase):
         finally:
             if session is not None:
                 session.stop()
+
+    def test_create_spark_context_with_invalid_configs(self):
+        with self.assertRaises(PySparkRuntimeError) as pe1:
+            SparkSession.builder.config(map={"spark.master": "x", "spark.remote": "y"})
+
+        self.check_error(
+            exception=pe1.exception,
+            error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
+            message_parameters={"master_url": "x", "connect_url": "y"},
+        )
+
+        with unittest.mock.patch.dict(
+            "os.environ", {"SPARK_REMOTE": "remote_url", "SPARK_LOCAL_REMOTE": "true"}
+        ):
+            with self.assertRaises(PySparkRuntimeError) as pe2:
+                SparkSession.builder.config("spark.remote", "different_remote_url")
+
+            self.check_error(
+                exception=pe2.exception,
+                error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
+                message_parameters={
+                    "existing_url": "remote_url",
+                    "new_url": "different_remote_url",
+                },
+            )
+
+    def test_master_remote_conflicts(self):
+        with self.assertRaises(PySparkRuntimeError) as pe2:
+            SparkSession.builder.config("spark.master", "1").config("spark.remote", "2")
+
+        self.check_error(
+            exception=pe2.exception,
+            error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
+            message_parameters={"connect_url": "2", "master_url": "1"},
+        )
+
+        try:
+            os.environ["SPARK_REMOTE"] = "2"
+            os.environ["SPARK_LOCAL_REMOTE"] = "2"
+            with self.assertRaises(PySparkRuntimeError) as pe2:
+                SparkSession.builder.config("spark.remote", "1")
+
+            self.check_error(
+                exception=pe2.exception,
+                error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
+                message_parameters={
+                    "new_url": "1",
+                    "existing_url": "2",
+                },
+            )
+        finally:
+            del os.environ["SPARK_REMOTE"]
+            del os.environ["SPARK_LOCAL_REMOTE"]
+
+    def test_invalid_create(self):
+        with self.assertRaises(PySparkRuntimeError) as pe2:
+            SparkSession.builder.config("spark.remote", "local").create()
+
+        self.check_error(
+            exception=pe2.exception,
+            error_class="UNSUPPORTED_LOCAL_CONNECTION_STRING",
+            message_parameters={},
+        )
 
 
 class SparkExtensionsTest(unittest.TestCase):

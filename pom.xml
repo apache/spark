@@ -138,8 +138,8 @@
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.4.1</kafka.version>
-    <!-- After 10.15.1.3, the minimum required version is JDK9 -->
-    <derby.version>10.14.2.0</derby.version>
+    <!-- After 10.17.1.0, the minimum required version is JDK19 -->
+    <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
@@ -193,7 +193,7 @@
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.25.0</commons-compress.version>
-    <commons-io.version>2.15.0</commons-io.version>
+    <commons-io.version>2.15.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -220,7 +220,7 @@
     <htmlunit.version>2.70.0</htmlunit.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.5.0</commons-cli.version>
+    <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.70</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <netty.version>4.1.100.Final</netty.version>
@@ -960,6 +960,11 @@
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
+        <version>${derby.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derbytools</artifactId>
         <version>${derby.version}</version>
       </dependency>
       <dependency>

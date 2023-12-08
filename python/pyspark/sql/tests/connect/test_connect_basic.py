@@ -31,10 +31,11 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
+    RetriesExceeded,
 )
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
-from pyspark.sql.connect.client.retries import RetryPolicy, RetriesExceeded
+from pyspark.sql.connect.client.retries import RetryPolicy
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -2003,6 +2004,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # SPARK-41212: Test is empty
         self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
         self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
+
+    def test_is_empty_with_unsupported_types(self):
+        df = self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval")
+        self.assertEqual(df.count(), 1)
+        self.assertFalse(df.isEmpty())
 
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession)

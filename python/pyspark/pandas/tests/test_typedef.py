@@ -25,6 +25,8 @@ import pandas
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 import numpy as np
+
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -360,8 +362,8 @@ class TypeHintTestsMixin:
                 (np.dtype("object"), ArrayType(spark_type)),
             )
 
-            # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-            if sys.version_info >= (3, 8):
+            # For NumPy typing, NumPy version should be 1.21+
+            if LooseVersion(np.__version__) >= LooseVersion("1.21"):
                 import numpy.typing as ntp
 
                 self.assertEqual(

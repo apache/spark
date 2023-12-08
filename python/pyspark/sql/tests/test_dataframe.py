@@ -163,6 +163,15 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
         )
 
+    def test_ordering_of_with_columns_renamed(self):
+        df = self.spark.range(10)
+
+        df1 = df.withColumnsRenamed({"id": "a", "a": "b"})
+        self.assertEqual(df1.columns, ["b"])
+
+        df2 = df.withColumnsRenamed({"a": "b", "id": "a"})
+        self.assertEqual(df2.columns, ["a"])
+
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
@@ -1903,6 +1912,35 @@ class DataFrameTestsMixin:
 
         self.assertEqual(df.schema, schema)
         self.assertEqual(df.collect(), data)
+
+    def test_partial_inference_failure(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.createDataFrame([(None, 1)])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_DETERMINE_TYPE",
+            message_parameters={},
+        )
+
+    def test_invalid_argument_create_dataframe(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([(1, 2)], schema=123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame(self.spark.range(1))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE",
+            message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+        )
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

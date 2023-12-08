@@ -191,8 +191,8 @@ public final class MutableColumnarRow extends InternalRow {
       return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType)dataType).fields().length);
+    } else if (dataType instanceof StructType structType) {
+      return getStruct(ordinal, structType.fields().length);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
     } else {

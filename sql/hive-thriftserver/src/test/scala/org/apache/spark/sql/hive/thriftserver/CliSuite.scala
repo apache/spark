@@ -812,7 +812,7 @@ class CliSuite extends SparkFunSuite {
     val catalogUrl =
       s"spark.sql.catalog.$catalogName.url=jdbc:derby:memory:$catalogName;create=true"
     val catalogDriver =
-      s"spark.sql.catalog.$catalogName.driver=org.apache.derby.jdbc.AutoloadedDriver"
+      s"spark.sql.catalog.$catalogName.driver=org.apache.derby.iapi.jdbc.AutoloadedDriver"
     val catalogConfigs =
       Seq(catalogImpl, catalogDriver, catalogUrl, "spark.sql.catalogImplementation=in-memory")
         .flatMap(Seq("--conf", _))

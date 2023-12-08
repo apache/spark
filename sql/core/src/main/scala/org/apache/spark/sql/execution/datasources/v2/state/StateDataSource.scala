@@ -85,8 +85,7 @@ class StateDataSource extends TableProvider with DataSourceRegister {
         .add("value", valueSchema)
     } catch {
       case NonFatal(e) =>
-        throw new IllegalArgumentException("Failed to read the state schema. Either the file " +
-          s"does not exist, or the file is corrupted. options: $sourceOptions", e)
+        throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)
     }
   }
 
@@ -96,8 +95,7 @@ class StateDataSource extends TableProvider with DataSourceRegister {
     offsetLog.get(batchId) match {
       case Some(value) =>
         val metadata = value.metadata.getOrElse(
-          throw new IllegalStateException(s"Metadata is not available for offset log for " +
-            s"$batchId, checkpoint location $checkpointLocation")
+          throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation)
         )
 
         val clonedRuntimeConf = new RuntimeConfig(session.sessionState.conf.clone())
@@ -105,8 +103,7 @@ class StateDataSource extends TableProvider with DataSourceRegister {
         StateStoreConf(clonedRuntimeConf.sqlConf)
 
       case _ =>
-        throw new IllegalStateException(s"The offset log for $batchId does not exist, " +
-          s"checkpoint location $checkpointLocation")
+        throw StateDataSourceErrors.offsetLogUnavailable(batchId, checkpointLocation)
     }
   }
 
@@ -120,6 +117,11 @@ case class StateSourceOptions(
     storeName: String,
     joinSide: JoinSideValues) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
+
+  override def toString: String = {
+    s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide)"
+  }
 }
 
 object StateSourceOptions extends DataSourceOptions {
@@ -146,7 +148,7 @@ object StateSourceOptions extends DataSourceOptions {
       hadoopConf: Configuration,
       options: CaseInsensitiveStringMap): StateSourceOptions = {
     val checkpointLocation = Option(options.get(PATH)).orElse {
-      throw new IllegalArgumentException(s"'$PATH' must be specified.")
+      throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
     }.get
 
     val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
@@ -156,14 +158,14 @@ object StateSourceOptions extends DataSourceOptions {
     }.get
 
     if (batchId < 0) {
-      throw new IllegalArgumentException(s"'$BATCH_ID' cannot be negative.")
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(BATCH_ID)
     }
 
     val operatorId = Option(options.get(OPERATOR_ID)).map(_.toInt)
       .orElse(Some(0)).get
 
     if (operatorId < 0) {
-      throw new IllegalArgumentException(s"'$OPERATOR_ID' cannot be negative.")
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(OPERATOR_ID)
     }
 
     val storeName = Option(options.get(STORE_NAME))
@@ -171,7 +173,7 @@ object StateSourceOptions extends DataSourceOptions {
       .getOrElse(StateStoreId.DEFAULT_STORE_NAME)
 
     if (storeName.isEmpty) {
-      throw new IllegalArgumentException(s"'$STORE_NAME' cannot be an empty string.")
+      throw StateDataSourceErrors.invalidOptionValueIsEmpty(STORE_NAME)
     }
 
     val joinSide = try {
@@ -179,14 +181,12 @@ object StateSourceOptions extends DataSourceOptions {
         .map(JoinSideValues.withName).getOrElse(JoinSideValues.none)
     } catch {
       case _: NoSuchElementException =>
-        // convert to IllegalArgumentException
-        throw new IllegalArgumentException(s"Incorrect value of the option " +
-          s"'$JOIN_SIDE'. Valid values are ${JoinSideValues.values.mkString(",")}")
+        throw StateDataSourceErrors.invalidOptionValue(JOIN_SIDE,
+          s"Valid values are ${JoinSideValues.values.mkString(",")}")
     }
 
     if (joinSide != JoinSideValues.none && storeName != StateStoreId.DEFAULT_STORE_NAME) {
-      throw new IllegalArgumentException(s"The options '$JOIN_SIDE' and " +
-        s"'$STORE_NAME' cannot be specified together. Please specify either one.")
+      throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
 
     StateSourceOptions(resolvedCpLocation, batchId, operatorId, storeName, joinSide)
@@ -205,8 +205,7 @@ object StateSourceOptions extends DataSourceOptions {
       new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
     commitLog.getLatest() match {
       case Some((lastId, _)) => lastId
-      case None => throw new IllegalStateException("No committed batch found, " +
-        s"checkpoint location: $checkpointLocation")
+      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
   }
 }
