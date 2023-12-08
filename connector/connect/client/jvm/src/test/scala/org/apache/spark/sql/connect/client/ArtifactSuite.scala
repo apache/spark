@@ -32,7 +32,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.connect.proto.AddArtifactsRequest
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.test.ConnectFunSuite
-import org.apache.spark.util.{IvyTestUtils, SparkFileUtils}
+import org.apache.spark.util.IvyTestUtils
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
@@ -285,11 +285,10 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   }
 
-  test("in-memory artifact with sub-directory target") {
+  test("artifact with custom target") {
     val artifactPath = artifactFilePath.resolve("smallClassFile.class")
-    val artifactBytes = Files.readAllBytes(artifactPath)
-    val targetPath = Paths.get("sub/package/smallClassFile.class")
-    artifactManager.addArtifact(new URI("file:/sub/package/smallClassFile.class"), artifactBytes)
+    val target = "sub/package/smallClassFile.class"
+    artifactManager.addArtifact(artifactPath.toString, target)
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
     // Single `AddArtifactRequest`
     assert(receivedRequests.size == 1)
@@ -302,7 +301,28 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(batch.getArtifactsList.size() == 1)
 
     val singleChunkArtifact = batch.getArtifacts(0)
-    assert(singleChunkArtifact.getName.equals(s"classes/$targetPath"))
+    assert(singleChunkArtifact.getName.equals(s"classes/$target"))
+    assertFileDataEquality(singleChunkArtifact.getData, artifactPath)
+  }
+
+  test("in-memory artifact with custom target") {
+    val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    val artifactBytes = Files.readAllBytes(artifactPath)
+    val target = "sub/package/smallClassFile.class"
+    artifactManager.addArtifact(artifactBytes, target)
+    val receivedRequests = service.getAndClearLatestAddArtifactRequests()
+    // Single `AddArtifactRequest`
+    assert(receivedRequests.size == 1)
+
+    val request = receivedRequests.head
+    assert(request.hasBatch)
+
+    val batch = request.getBatch
+    // Single artifact in batch
+    assert(batch.getArtifactsList.size() == 1)
+
+    val singleChunkArtifact = batch.getArtifacts(0)
+    assert(singleChunkArtifact.getName.equals(s"classes/$target"))
     assert(singleChunkArtifact.getData.getData == ByteString.copyFrom(artifactBytes))
   }
 }

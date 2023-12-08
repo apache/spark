@@ -83,14 +83,10 @@ class ArtifactManager(
     uri.getScheme match {
       case "file" =>
         val path = Paths.get(uri)
-        val artifact = path.getFileName.toString match {
-          case jar if jar.endsWith(".jar") =>
-            newJarArtifact(path.getFileName, new LocalFile(path))
-          case cf if cf.endsWith(".class") =>
-            newClassArtifact(path.getFileName, new LocalFile(path))
-          case other =>
-            throw new UnsupportedOperationException(s"Unsupported file format: $other")
-        }
+        val artifact = Artifact.newArtifactFromExtension(
+          path.getFileName.toString,
+          path.getFileName,
+          new LocalFile(path))
         Seq[Artifact](artifact)
 
       case "ivy" =>
@@ -109,27 +105,52 @@ class ArtifactManager(
   def addArtifact(uri: URI): Unit = addArtifacts(parseArtifacts(uri))
 
   /**
-   * Add a single in-memory artifact to the session.
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file extension.
    *
-   * Currently it supports files with extensions .jar and .class.
+   * Supported target file extensions are .jar and .class.
+   *
+   * Example:
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *
+   *  The directory structure of the session's working directory for JAR files would look like:
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   *
    */
-  def addArtifact(target: URI, bytes: Array[Byte]): Unit = {
-    target.getScheme match {
-      case "file" =>
-        val path = Paths.get(target)
-        val artifact = path.getFileName.toString match {
-          case jar if jar.endsWith(".jar") =>
-            newJarArtifact(path, new InMemory(bytes))
-          case cf if cf.endsWith(".class") =>
-            newClassArtifact(path, new InMemory(bytes))
-          case other =>
-            throw new UnsupportedOperationException(s"Unsupported file format: $other")
-        }
-        addArtifacts(artifact :: Nil)
+  def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new InMemory(bytes))
+    addArtifacts(artifact :: Nil)
+  }
 
-      case other =>
-        throw new UnsupportedOperationException(s"Unsupported scheme: $other")
-    }
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * Example:
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *
+   *  The directory structure of the session's working directory for JAR files would look like:
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   *
+   */
+  def addArtifact(source: String, target: String): Unit = {
+    val sourcePath = Paths.get(source)
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      sourcePath.getFileName.toString,
+      targetPath,
+      new LocalFile(sourcePath))
+    addArtifacts(artifact :: Nil)
   }
 
   /**
@@ -386,12 +407,26 @@ object Artifact {
   val JAR_PREFIX: Path = Paths.get("jars")
   val CACHE_PREFIX: Path = Paths.get("cache")
 
-  def newJarArtifact(fileName: Path, storage: LocalData): Artifact = {
-    newArtifact(JAR_PREFIX, ".jar", fileName, storage)
+  def newArtifactFromExtension(
+      fileName: String,
+      targetFilePath: Path,
+      storage: LocalData): Artifact = {
+    fileName match {
+      case jar if jar.endsWith(".jar") =>
+        newJarArtifact(targetFilePath, storage)
+      case cf if cf.endsWith(".class") =>
+        newClassArtifact(targetFilePath, storage)
+      case other =>
+        throw new UnsupportedOperationException(s"Unsupported file format: $other")
+    }
   }
 
-  def newClassArtifact(fileName: Path, storage: LocalData): Artifact = {
-    newArtifact(CLASS_PREFIX, ".class", fileName, storage)
+  def newJarArtifact(targetFilePath: Path, storage: LocalData): Artifact = {
+    newArtifact(JAR_PREFIX, ".jar", targetFilePath, storage)
+  }
+
+  def newClassArtifact(targetFilePath: Path, storage: LocalData): Artifact = {
+    newArtifact(CLASS_PREFIX, ".class", targetFilePath, storage)
   }
 
   def newCacheArtifact(id: String, storage: LocalData): Artifact = {

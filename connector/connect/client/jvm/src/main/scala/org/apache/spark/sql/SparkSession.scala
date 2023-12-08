@@ -591,14 +591,42 @@ class SparkSession private[sql] (
   def addArtifact(uri: URI): Unit = client.addArtifact(uri)
 
   /**
-   * Add a single in-memory artifact to the client session with a specified target URI.
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file extension.
    *
-   * Supported files extensions are .jar and .class.
+   * Supported target file extensions are .jar and .class.
+   *
+   * Example:
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *
+   *  The directory structure of the session's working directory for JAR files would look like:
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
    *
    * @since 4.0.0
    */
   @Experimental
-  def addArtifact(target: URI, bytes: Array[Byte]): Unit = client.addArtifact(target, bytes)
+  def addArtifact(bytes: Array[Byte], target: String): Unit = client.addArtifact(bytes, target)
+
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * Example:
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *
+   *  The directory structure of the session's working directory for JAR files would look like:
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(source: String, target: String): Unit = client.addArtifact(source, target)
 
   /**
    * Add one or more artifacts to the session.
