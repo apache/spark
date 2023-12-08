@@ -151,8 +151,9 @@ jobs:
             java${{ matrix.java }}-maven-
       - name: List Maven repository some jars - Before
         run: |
-          find local -name "*" -type f
           ls -al /home/runner
+          find /home/runner -name "*hive-exec*"
+          find /home/runner -name "*ivy*"
           # ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
           # ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
       - name: Install Java ${{ matrix.java }}
