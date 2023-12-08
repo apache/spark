@@ -4103,10 +4103,7 @@ test_that("catalog APIs, listCatalogs, setCurrentCatalog, currentCatalog", {
   expect_equal(currentCatalog(), "spark_catalog")
   expect_error(setCurrentCatalog("spark_catalog"), NA)
   expect_error(setCurrentCatalog("zxwtyswklpf"),
-               paste0("Error in setCurrentCatalog : ",
-               "org.apache.spark.sql.connector.catalog.CatalogNotFoundException: ",
-               "Catalog 'zxwtyswklpf' plugin class not found: ",
-               "spark.sql.catalog.zxwtyswklpf is not defined"))
+               "[CATALOG_NOT_FOUND]*`zxwtyswklpf`*")
   catalogs <- collect(listCatalogs())
 })
 
