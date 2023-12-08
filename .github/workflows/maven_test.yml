@@ -151,8 +151,7 @@ jobs:
             java${{ matrix.java }}-maven-
       - name: List Maven repository some jars - Before
         run: |
-          find / -name "hive-exec*"
-          find / -name "*ivy2*"
+          find local -name "*" -type f
           ls -al /home/runner
           # ls -al /home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9
           # ls -al /home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30
