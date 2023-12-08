@@ -104,7 +104,10 @@ def get_queries(code: List[str], comments: List[str], list_test_cases: List[Test
         if query and not query.startswith('--')
     ]
 
+def golden_file_formatting(output: List[str]) -> List[str]:
+    return "\n".join(["\t".join(row.split(",")) for row in output])
+
 def format_postgres_output(output: List[str]) -> List[str]:
     NO_RESULT = 'no results to fetch'
     format_no_result_output = ['' if s == NO_RESULT else s for s in output]
-    return "\n".join(["\t".join(row.split(",")) for row in format_no_result_output])
+    return golden_file_formatting(format_no_result_output)

@@ -89,14 +89,20 @@ class DatabaseConnection(ABC):
         """
         raise NotImplementedError("Subclasses must implement this method")
 
+    def format_output(self, output):
+        # Replace None with NULL
+        replaced_nones = [['NULL' if element is None else element for element in row] for row in output]
+        # Replace True/False with true/false
+        lowercased_boolean_output = [[str(s).lower() if isinstance(s, bool) else s for s in row] for row in replaced_nones]
+        return lowercased_boolean_output
 
 # Represents a connection (session) to a PostgreSQL database.
 class PostgresConnection(DatabaseConnection):
     """
     Represents a connection (session) to a PostgreSQL database using JDBC.
     """
-    DEFAULT_USER: str = "pg"
-    DEFAULT_CONNECTION_URL: str = f"dbname=pg user={DEFAULT_USER} password=pg host=postgres port=5432"
+    DEFAULT_USER = DEFAULT_PASSWORD = DEFAULT_DATABASE = "pg"
+    DEFAULT_CONNECTION_URL: str = f"dbname={DEFAULT_DATABASE} user={DEFAULT_USER} password={DEFAULT_PASSWORD} host=postgres port=5432"
 
     def __init__(self, connection_url: Optional[str] = None) -> None:
         self.url: str = connection_url or self.DEFAULT_CONNECTION_URL
@@ -106,8 +112,9 @@ class PostgresConnection(DatabaseConnection):
     def run_query(self, query: str) -> List[str]:
         try:
             self.cursor.execute(query)
-            rows: List[str] = [",".join(map(str, row)) for row in self.cursor.fetchall()]
-            return rows
+            rows = self.cursor.fetchall()
+            formatted_output = self.format_output(rows)
+            return [",".join(map(str, row)) for row in formatted_output]
         except Exception as e:
             return [str(e)]
 
