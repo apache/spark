@@ -147,15 +147,15 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(query.where(Literal.FalseLiteral).maxRowsPerPartition.contains(0))
   }
 
-  test("SPARK-46285: foreachWithSubqueries") {
+  test(" SPARK-46285: foreachWithSubqueries") {
     val input = UnresolvedRelation(Seq("subquery_table"))
     val input2 = UnresolvedRelation(Seq("t"))
-    val plan = Project(Seq(Alias(ScalarSubquery(input), "s")()), input2)
-    val cache = scala.collection.mutable.Set[String]()
+    val plan = Filter(Exists(input), input2)
+    val tableNames = scala.collection.mutable.Set[String]()
     plan.foreachWithSubqueries {
-      case UnresolvedRelation(iden, _, _) => cache.add(iden.mkString("."))
+      case UnresolvedRelation(name, _, _) => tableNames.add(name.mkString("."))
       case _ =>
     }
-    assert(cache.contains("subquery_table"))
+    assert(tableNames.contains("subquery_table"))
   }
 }
