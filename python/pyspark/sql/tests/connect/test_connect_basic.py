@@ -515,6 +515,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf7.schema, sdf7.schema)
         self.assertEqual(cdf7.collect(), sdf7.collect())
 
+    def test_join_with_cte(self):
+        sdf1 = self.spark.range(10)
+        sdf2 = self.spark.sql("with dt as (select 1 as ida) select ida as id from dt")
+        sdf3 = sdf1.join(sdf2, sdf1.id == sdf2.id)
+
+        cdf1 = self.connect.range(10)
+        cdf2 = self.connect.sql("with dt as (select 1 as ida) select ida as id from dt")
+        cdf3 = cdf1.join(cdf2, cdf1.id == cdf2.id)
+
+        self.assertEqual(sdf3.schema, cdf3.schema)
+        self.assertEqual(sdf3.collect(), cdf3.collect())
+
     def test_invalid_column(self):
         # SPARK-41812: fail df1.select(df2.col)
         data1 = [Row(a=1, b=2, c=3)]
