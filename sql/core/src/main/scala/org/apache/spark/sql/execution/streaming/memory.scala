@@ -23,7 +23,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -90,15 +89,15 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
   }
 
   override def initialOffset(): OffsetV2 = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 
   override def deserializeOffset(json: String): OffsetV2 = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 
   override def commit(end: OffsetV2): Unit = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 }
 
@@ -106,7 +105,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
 // memory stream is for test only and we never look it up by name.
 object MemoryStreamTableProvider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw SparkException.internalError("MemoryStreamTableProvider should not be used.")
+    throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
   }
 }
 
@@ -213,7 +212,7 @@ case class MemoryStream[A : Encoder](
   }
 
   override def latestOffset(): OffsetV2 = {
-    throw SparkException.internalError("Should not reach here!")
+    throw new IllegalStateException("Should not reach here!")
   }
 
   override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
@@ -276,7 +275,7 @@ case class MemoryStream[A : Encoder](
     val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
     if (offsetDiff < 0) {
-      throw SparkException.internalError(
+      throw new IllegalStateException(
         s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 

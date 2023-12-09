@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
@@ -287,7 +287,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     override def compute(s: Partition, context: TaskContext): Iterator[V] = {
       val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
       if (partitions(0).index != partitions(1).index) {
-        throw SparkException.internalError(s"Partition ID should be same in both side: " +
+        throw new IllegalStateException(s"Partition ID should be same in both side: " +
           s"left ${partitions(0).index} , right ${partitions(1).index}")
       }
 

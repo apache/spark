@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -80,11 +79,11 @@ class RateStreamMicroBatchStream(
               validateVersion(content.substring(0, indexOfNewLine), VERSION)
               LongOffset(SerializedOffset(content.substring(indexOfNewLine + 1)))
             } else {
-              throw SparkException.internalError(
+              throw new IllegalStateException(
                 s"Log file was malformed: failed to detect the log file version line.")
             }
           } else {
-            throw SparkException.internalError(
+            throw new IllegalStateException(
               s"Log file was malformed: failed to detect the log file version line.")
           }
         }

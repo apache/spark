@@ -21,7 +21,6 @@ import java.{util => jutil}
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.SparkPlan
@@ -173,7 +172,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       nodeToOutputWatermark: mutable.Map[Int, Option[Long]]): Seq[Long] = {
     node.children.flatMap { child =>
       nodeToOutputWatermark.getOrElse(child.id, {
-        throw SparkException.internalError(
+        throw new IllegalStateException(
           s"watermark for the node ${child.id} should be registered")
       })
       // Since we use flatMap here, this will exclude children from watermark calculation
@@ -278,7 +277,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
             // all operators would have the input watermark as 0L.
             0L
           } else {
-            throw SparkException.internalError(s"Watermark for batch ID $batchId and " +
+            throw new IllegalStateException(s"Watermark for batch ID $batchId and " +
               s"stateOpId $stateOpId is not yet set!")
           }
       }

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -67,7 +67,7 @@ trait StatefulOperator extends SparkPlan {
 
   def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
-      throw SparkException.internalError("State location not present for execution")
+      throw new IllegalStateException("State location not present for execution")
     }
   }
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.types.StructType
@@ -68,14 +67,14 @@ trait Source extends SparkDataStream {
   def commit(end: Offset) : Unit = {}
 
   override def initialOffset(): OffsetV2 = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 
   override def deserializeOffset(json: String): OffsetV2 = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 
   override def commit(end: OffsetV2): Unit = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 }

@@ -24,7 +24,6 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -372,7 +371,7 @@ class StreamingQueryManager private[sql] (
             s"runId=${oldQuery.runId}], as a new run is being started.")
           Some(oldQuery)
         } else {
-          throw SparkException.internalError(
+          throw new IllegalStateException(
             s"Cannot start query with id ${query.id} as another query with same id is " +
               s"already active. Perhaps you are attempting to restart a query from checkpoint " +
               s"that is already active. You may stop the old query by setting the SQL " +

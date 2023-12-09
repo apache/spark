@@ -25,7 +25,7 @@ import scala.collection.mutable.ListBuffer
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.{Encoder, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -155,7 +155,7 @@ class ContinuousMemoryStreamPartitionReader(
   // processing. We hope that some unit test will end up instantiating a continuous memory stream
   // in such cases.
   if (TaskContext.get() == null) {
-    throw SparkException.internalError("Task context was not set!")
+    throw new IllegalStateException("Task context was not set!")
   }
 
   override def next(): Boolean = {

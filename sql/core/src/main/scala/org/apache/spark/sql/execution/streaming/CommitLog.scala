@@ -25,7 +25,6 @@ import scala.io.{Source => IOSource}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -55,7 +54,7 @@ class CommitLog(sparkSession: SparkSession, path: String)
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
-      throw SparkException.internalError("Incomplete log file in the offset commit log")
+      throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
     validateVersion(lines.next().trim, VERSION)
     val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON

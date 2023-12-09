@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -103,7 +102,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     val prevBatchId = offsetLog.getPrevBatchFromStorage(latestBatchId)
     if (latestBatchId != 0 && prevBatchId.isDefined) {
       Some(offsetLog.get(prevBatchId.get).getOrElse({
-        throw SparkException.internalError(s"Offset metadata for batch ${prevBatchId}" +
+        throw new IllegalStateException(s"Offset metadata for batch ${prevBatchId}" +
           s" cannot be found.  This should not happen.")
       }))
     } else {
@@ -147,7 +146,7 @@ class AsyncProgressTrackingMicroBatchExecution(
               // Offset is ready to be committed by the source. Add to queue
               sourceCommitQueue.add(prevBatchOff.get)
             } else {
-              throw SparkException.internalError(
+              throw new IllegalStateException(
                 s"Failed to commit processed data in the source because batch " +
                   s"${lastBatchPersistedToDurableStorage.get()} doesn't exist in the offset log." +
                   s"  This should not happen.")
@@ -273,7 +272,7 @@ class AsyncProgressTrackingMicroBatchExecution(
         throw new IllegalArgumentException(
           "Async progress tracking cannot be used with AvailableNow trigger"
         )
-      case _ => throw SparkException.internalError(s"Unknown type of trigger: $trigger")
+      case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
     }
   }
 

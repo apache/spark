@@ -28,7 +28,7 @@ import scala.collection.mutable.ListBuffer
 import org.json4s.{DefaultFormats, Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.InternalRow
@@ -140,7 +140,7 @@ class TextSocketContinuousStream(
       case (offset, partition) =>
         val max = startOffset.offsets(partition) + buckets(partition).size
         if (offset > max) {
-          throw SparkException.internalError("Invalid offset " + offset + " to commit" +
+          throw new IllegalStateException("Invalid offset " + offset + " to commit" +
           " for partition " + partition + ". Max valid offset: " + max)
         }
         val n = offset - startOffset.offsets(partition)

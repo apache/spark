@@ -21,7 +21,7 @@ import java.io._
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -264,7 +264,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var encoder: RocksDBStateEncoder = _
 
   private def verify(condition: => Boolean, msg: String): Unit = {
-    if (!condition) { throw SparkException.internalError(msg) }
+    if (!condition) { throw new IllegalStateException(msg) }
   }
 }
 

@@ -25,7 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
@@ -77,7 +76,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     if (fileLog.add(batchId, fileStatuses)) {
       logInfo(s"Committed batch $batchId")
     } else {
-      throw SparkException.internalError(s"Race while writing batch $batchId")
+      throw new IllegalStateException(s"Race while writing batch $batchId")
     }
   }
 

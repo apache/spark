@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.types.StructType
@@ -48,14 +47,14 @@ trait Sink extends Table {
   def addBatch(batchId: Long, data: DataFrame): Unit
 
   override def name: String = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 
   override def schema: StructType = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 
   override def capabilities: util.Set[TableCapability] = {
-    throw SparkException.internalError("should not be called.")
+    throw new IllegalStateException("should not be called.")
   }
 }

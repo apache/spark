@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
@@ -93,7 +92,7 @@ class MergingSortWithSessionWindowStateIterator(
     }
 
     if (currentRowFromInput == null && currentRowFromState == null) {
-      throw SparkException.internalError("No Row to provide in next() which should not happen!")
+      throw new IllegalStateException("No Row to provide in next() which should not happen!")
     }
 
     // return current row vs current state row, should return smaller key, earlier session start

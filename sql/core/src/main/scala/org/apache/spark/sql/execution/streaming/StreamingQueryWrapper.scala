@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamingQueryProgress, StreamingQueryStatus}
 
@@ -33,7 +32,7 @@ class StreamingQueryWrapper(@transient private val _streamingQuery: StreamExecut
   def streamingQuery: StreamExecution = {
     /** Assert the codes run in the driver. */
     if (_streamingQuery == null) {
-      throw SparkException.internalError("StreamingQuery cannot be used in executors")
+      throw new IllegalStateException("StreamingQuery cannot be used in executors")
     }
     _streamingQuery
   }

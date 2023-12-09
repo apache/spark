@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.io._
 import java.nio.charset.StandardCharsets._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -165,7 +164,7 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
       val writer = newFakeCompactibleFileStreamLog(version = 2)
       val reader = newFakeCompactibleFileStreamLog(version = 1)
       writer.add(0, Array("entry"))
-      val e = intercept[SparkException] {
+      val e = intercept[IllegalStateException] {
         reader.get(0)
       }
       Seq(

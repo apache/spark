@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -50,7 +49,7 @@ class RatePerMicroBatchStream(
   private def extractOffsetAndTimestamp(offset: Offset): (Long, Long) = {
     offset match {
       case o: RatePerMicroBatchStreamOffset => (o.offset, o.timestamp)
-      case _ => throw SparkException.internalError("The type of Offset should be " +
+      case _ => throw new IllegalStateException("The type of Offset should be " +
         "RatePerMicroBatchStreamOffset")
     }
   }
