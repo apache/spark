@@ -149,7 +149,8 @@ class LogicalPlanSuite extends SparkFunSuite {
 
   test("SPARK-46285: foreachWithSubqueries") {
     val input = UnresolvedRelation(Seq("subquery_table"))
-    val plan = Project(Seq($"x.key", $"y.key"), SubqueryAlias("x", input))
+    val input2 = UnresolvedRelation(Seq("t"))
+    val plan = Project(Seq(Alias(ScalarSubquery(input), "s")()), input2)
     val cache = scala.collection.mutable.Set[String]()
     plan.foreachWithSubqueries {
       case UnresolvedRelation(iden, _, _) => cache.add(iden.mkString("."))
