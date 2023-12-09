@@ -81,8 +81,6 @@ class AnalysisException protected(
       messageParameters = messageParameters,
       cause = None)
 
-  def this(errorClass: String) = this(errorClass = errorClass, messageParameters = Map.empty)
-
   def this(
       errorClass: String,
       messageParameters: Map[String, String],

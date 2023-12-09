@@ -109,7 +109,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           errorClass = "_LEGACY_ERROR_TEMP_3065",
           messageParameters = Map(
             "clazz" -> e.getClass.getCanonicalName,
-            "msg" -> e.getMessage),
+            "msg" -> Option(e.getMessage).getOrElse("")),
           cause = Some(e))
     }
   }

@@ -6788,6 +6788,66 @@
       "<clazz>: <msg>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3066" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3067" : {
+    "message" : [
+      "Streaming aggregation doesn't support group aggregate pandas UDF"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3068" : {
+    "message" : [
+      "Global aggregation with session window in streaming query is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3069" : {
+    "message" : [
+      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3070" : {
+    "message" : [
+      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3071" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3072" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3073" : {
+    "message" : [
+      "Unexpected instruction: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3074" : {
+    "message" : [
+      "field <fieldName> not found from given schema <schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3075" : {
+    "message" : [
+      "Couldn't find scan attribute for <tableAttr> in <scanAttrs>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3076" : {
+    "message" : [
+      "Redefining watermark is disallowed. You can set the config '<config>' to 'false' to restore the previous behavior. Note that multiple stateful operators will be disallowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3077" : {
+    "message" : [
+      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
