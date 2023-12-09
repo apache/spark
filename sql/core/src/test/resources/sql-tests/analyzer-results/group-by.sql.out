@@ -1227,13 +1227,14 @@ SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualNum" : "2",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`mode`"
+    "functionName" : "`mode`",
+    "inputSql" : "\"true\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1250,13 +1251,14 @@ SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualNum" : "2",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`mode`"
+    "functionName" : "`mode`",
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1273,13 +1275,13 @@ SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualNum" : "2",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`mode`"
+    "inputExpr" : "\"b\"",
+    "inputName" : "`deterministic`",
+    "inputType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"b\""
   },
   "queryContext" : [ {
     "objectType" : "",

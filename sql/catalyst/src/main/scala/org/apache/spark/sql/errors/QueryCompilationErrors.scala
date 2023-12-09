@@ -1954,6 +1954,29 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "inputType" -> toSQLType(expression.dataType)))
   }
 
+  def unfoldableInputError(
+      inputName: String,
+      dataType: DataType,
+      expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      messageParameters = Map(
+        "sqlExpr" -> toSQLExpr(expression),
+        "inputName" -> toSQLId(inputName),
+        "inputType" -> toSQLType(dataType),
+        "inputExpr" -> toSQLExpr(expression)
+      ))
+  }
+
+  def unexpectedNullError(exprName: String, expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      messageParameters = Map(
+        "exprName" -> toSQLId(exprName),
+        "sqlExpr" -> toSQLExpr(expression)
+      ))
+  }
+
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     val errorClass = "_LEGACY_ERROR_TEMP_1181"
     new ExtendedAnalysisException(

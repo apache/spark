@@ -30,9 +30,11 @@ import org.apache.spark.util.collection.OpenHashMap
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(col[, reverse]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
-      When multiple values have the same greatest frequency only one value will be returned. The value will be chosen based on optional reverse value. Return the smallest value
-      if reverse is false or the largest value if reverse is true from multiple values with the same frequency. If reverse is not specified the chosen value is not determined.""",
+    _FUNC_(col[, deterministic]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
+      When multiple values have the same greatest frequency then either any of values is returned if `deterministic` is false or is not defined, or the lowest value is returned if `deterministic` is true.
+    _FUNC_() WITHIN GROUP (ORDER BY col) - Returns the most frequent value for the values within `col` (specified in ORDER BY clause). NULL values are ignored.
+      If all the values are NULL, or there are 0 rows, returns NULL. When multiple values have the same greatest frequency only one value will be returned.
+      The value will be chosen based on sort direction. Return the smallest value if sort direction is asc or the largest value if sort direction is desc from multiple values with the same frequency.""",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
@@ -158,10 +160,12 @@ case class Mode(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_() WITHIN GROUP (ORDER BY col) - Returns the most frequent value for the values within `col` (specified in ORDER BY clause)." +
-    "NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL. When multiple values have the same greatest frequency " +
-    "only one value will be returned. The value will be chosen based on sort direction. Return the smallest value if sort direction is asc or " +
-    "the largest value if sort direction is desc from multiple values with the same frequency.",
+  usage = """
+    _FUNC_(col[, deterministic]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
+      When multiple values have the same greatest frequency then either any of values is returned if `deterministic` is false or is not defined, or the lowest value is returned if `deterministic` is true.
+    _FUNC_() WITHIN GROUP (ORDER BY col) - Returns the most frequent value for the values within `col` (specified in ORDER BY clause). NULL values are ignored.
+      If all the values are NULL, or there are 0 rows, returns NULL. When multiple values have the same greatest frequency only one value will be returned.
+      The value will be chosen based on sort direction. Return the smallest value if sort direction is asc or the largest value if sort direction is desc from multiple values with the same frequency.""",
   examples = """
     Examples:
       > SELECT _FUNC_() WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10), (10) AS tab(col);
@@ -182,10 +186,21 @@ object ModeBuilder extends ExpressionBuilder {
     } else if (numArgs == 1) {
       // For compatibility with function calls without WITHIN GROUP.
       Mode(expressions(0))
-    } else if (numArgs == 2 && expressions(1).foldable && expressions(1).dataType == BooleanType) {
+    } else if (numArgs == 2) {
       // For compatibility with function calls without WITHIN GROUP.
-      val deterministicResult = expressions(1).eval().asInstanceOf[Boolean]
-      if (deterministicResult) {
+      if (expressions(1).dataType != BooleanType) {
+        throw QueryCompilationErrors.unexpectedInputDataTypeError(
+          funcName, 2, BooleanType, expressions(1))
+      }
+      if (!expressions(1).foldable) {
+        throw QueryCompilationErrors.unfoldableInputError(
+          "deterministic", BooleanType, expressions(1))
+      }
+      val deterministicResult = expressions(1).eval()
+      if (deterministicResult == null) {
+        throw QueryCompilationErrors.unexpectedNullError("deterministic", expressions(1))
+      }
+      if (deterministicResult.asInstanceOf[Boolean]) {
         new Mode(expressions(0), true)
       } else {
         Mode(expressions(0))

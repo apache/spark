@@ -1154,13 +1154,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualNum" : "2",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`mode`"
+    "functionName" : "`mode`",
+    "inputSql" : "\"true\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1179,13 +1180,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualNum" : "2",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`mode`"
+    "functionName" : "`mode`",
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1204,13 +1206,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualNum" : "2",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`mode`"
+    "inputExpr" : "\"b\"",
+    "inputName" : "`deterministic`",
+    "inputType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"b\""
   },
   "queryContext" : [ {
     "objectType" : "",
