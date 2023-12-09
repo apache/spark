@@ -122,8 +122,9 @@ public class ExternalShuffleBlockResolverSuite {
     // its not legacy yet, but keeping this here in case anybody changes it
     String legacyAppIdJson = "{\"appId\":\"foo\", \"execId\":\"bar\"}";
     assertEquals(appId, mapper.readValue(legacyAppIdJson, AppExecId.class));
-    String legacyShuffleJson = "{\"localDirs\": [\"/bippy\", \"/flippy\"], " +
-      "\"subDirsPerLocalDir\": 7, \"shuffleManager\": " + "\"" + SORT_MANAGER + "\"}";
+    String legacyShuffleJson = """
+       {"localDirs": ["/bippy", "/flippy"], "subDirsPerLocalDir": 7, "shuffleManager": "%s"}
+       """.formatted(SORT_MANAGER);
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
   }
 

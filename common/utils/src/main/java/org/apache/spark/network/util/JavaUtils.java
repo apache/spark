@@ -109,8 +109,9 @@ public class JavaUtils {
         deleteRecursivelyUsingUnixNative(file);
         return;
       } catch (IOException e) {
-        logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
-                        "Falling back to Java IO way", file.getAbsolutePath(), e);
+        logger.warn("""
+          Attempt to delete using native Unix OS command failed for path = {}. \
+          Falling back to Java IO way""", file.getAbsolutePath(), e);
       }
     }
 
@@ -249,11 +250,10 @@ public class JavaUtils {
       // If suffix is valid use that, otherwise none was provided and use the default passed
       return unit.convert(val, suffix != null ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
-      String timeError = "Time must be specified as seconds (s), " +
-              "milliseconds (ms), microseconds (us), minutes (m or min), hour (h), or day (d). " +
-              "E.g. 50s, 100ms, or 250us.";
-
-      throw new NumberFormatException(timeError + "\n" + e.getMessage());
+      throw new NumberFormatException("""
+        Time must be specified as seconds (s), milliseconds (ms), microseconds (us), \
+        minutes (m or min), hour (h), or day (d). E.g. 50s, 100ms, or 250us.
+        %s""".formatted(e.getMessage()));
     }
   }
 
@@ -303,11 +303,10 @@ public class JavaUtils {
       }
 
     } catch (NumberFormatException e) {
-      String byteError = "Size must be specified as bytes (b), " +
-        "kibibytes (k), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +
-        "E.g. 50b, 100k, or 250m.";
-
-      throw new NumberFormatException(byteError + "\n" + e.getMessage());
+      throw new NumberFormatException("""
+        Size must be specified as bytes (b), kibibytes (k), mebibytes (m), gibibytes (g), \
+        tebibytes (t), or pebibytes(p). E.g. 50b, 100k, or 250m.
+        %s""".formatted(e.getMessage()));
     }
   }
 
@@ -386,8 +385,9 @@ public class JavaUtils {
     while (dir == null) {
       attempts += 1;
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-          maxAttempts + " attempts!");
+        throw new IOException("""
+          Failed to create a temp directory (under %s) after %d attempts!
+          """.formatted(root, maxAttempts));
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID());
@@ -407,8 +407,8 @@ public class JavaUtils {
     int expected = dst.remaining();
     while (dst.hasRemaining()) {
       if (channel.read(dst) < 0) {
-        throw new EOFException(String.format("Not enough bytes in channel (expected %d).",
-          expected));
+        throw new EOFException("""
+          Not enough bytes in channel (expected %d).""".formatted(expected));
       }
     }
   }

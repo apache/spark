@@ -50,9 +50,9 @@ public class UTF8StringBuilder {
   // Grows the buffer by at least `neededSize`
   private void grow(int neededSize) {
     if (neededSize > ARRAY_MAX - totalSize()) {
-      throw new UnsupportedOperationException(
-        "Cannot grow internal buffer by size " + neededSize + " because the size after growing " +
-          "exceeds size limitation " + ARRAY_MAX);
+      throw new UnsupportedOperationException("""
+        Cannot grow internal buffer by size %d because the size after growing exceeds size \
+        limitation %d""".formatted(neededSize, ARRAY_MAX));
     }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {

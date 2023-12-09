@@ -48,9 +48,9 @@ final class BufferHolder {
   BufferHolder(UnsafeRow row, int initialSize) {
     int bitsetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields());
     if (row.numFields() > (ARRAY_MAX - initialSize - bitsetWidthInBytes) / 8) {
-      throw new UnsupportedOperationException(
-        "Cannot create BufferHolder for input UnsafeRow because there are " +
-          "too many fields (number of fields: " + row.numFields() + ")");
+      throw new UnsupportedOperationException("""
+        Cannot create BufferHolder for input UnsafeRow because \
+        there are too many fields (number of fields: %d)""".formatted(row.numFields()));
     }
     this.fixedSize = bitsetWidthInBytes + 8 * row.numFields();
     int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(fixedSize + initialSize);
@@ -64,13 +64,13 @@ final class BufferHolder {
    */
   void grow(int neededSize) {
     if (neededSize < 0) {
-      throw new IllegalArgumentException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size is negative");
+      throw new IllegalArgumentException("""
+        Cannot grow BufferHolder by size %d because the size is negative""".formatted(neededSize));
     }
     if (neededSize > ARRAY_MAX - totalSize()) {
-      throw new IllegalArgumentException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
-          "exceeds size limitation " + ARRAY_MAX);
+      throw new IllegalArgumentException("""
+        Cannot grow BufferHolder by size %d because the size after growing exceeds \
+        size limitation %d""".formatted(neededSize, ARRAY_MAX));
     }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {

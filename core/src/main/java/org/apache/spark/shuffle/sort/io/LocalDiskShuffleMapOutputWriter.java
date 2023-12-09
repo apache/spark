@@ -103,12 +103,12 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     // after calling transferTo in kernel version 2.6.32. This issue is described at
     // https://bugs.openjdk.java.net/browse/JDK-7052359 and SPARK-3948.
     if (outputFileChannel != null && outputFileChannel.position() != bytesWrittenToMergedFile) {
-      throw new IOException(
-          "Current position " + outputFileChannel.position() + " does not equal expected " +
-              "position " + bytesWrittenToMergedFile + " after transferTo. Please check your " +
-              " kernel version to see if it is 2.6.32, as there is a kernel bug which will lead " +
-              "to unexpected behavior when using transferTo. You can set " +
-              "spark.file.transferTo=false to disable this NIO feature.");
+      throw new IOException("""
+        Current position %d does not equal expected position %d after transferTo. \
+        Please check your kernel version to see if it is 2.6.32, as there is a kernel bug \
+        which will lead to unexpected behavior when using transferTo. \
+        You can set spark.file.transferTo=false to disable this NIO feature.\
+        """.formatted(outputFileChannel.position(), bytesWrittenToMergedFile));
     }
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
@@ -170,9 +170,9 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     public OutputStream openStream() throws IOException {
       if (partStream == null) {
         if (outputFileChannel != null) {
-          throw new IllegalStateException("Requested an output channel for a previous write but" +
-              " now an output stream has been requested. Should not be using both channels" +
-              " and streams to write.");
+          throw new IllegalStateException("""
+            Requested an output channel for a previous write but now an output stream has been \
+            requested. Should not be using both channels and streams to write.""");
         }
         initStream();
         partStream = new PartitionWriterStream(partitionId);
@@ -184,9 +184,9 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     public Optional<WritableByteChannelWrapper> openChannelWrapper() throws IOException {
       if (partChannel == null) {
         if (partStream != null) {
-          throw new IllegalStateException("Requested an output stream for a previous write but" +
-              " now an output channel has been requested. Should not be using both channels" +
-              " and streams to write.");
+          throw new IllegalStateException("""
+            Requested an output stream for a previous write but now an output channel has been \
+            requested. Should not be using both channels and streams to write.""");
         }
         initChannel();
         partChannel = new PartitionWriterChannel(partitionId);

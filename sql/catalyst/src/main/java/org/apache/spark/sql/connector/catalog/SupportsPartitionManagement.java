@@ -103,9 +103,10 @@ public interface SupportsPartitionManagement extends Table {
       if (ident.numFields() == partitionNames.length) {
         return listPartitionIdentifiers(partitionNames, ident).length > 0;
       } else {
-        throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
-          ") in the partition identifier is not equal to the partition schema length (" +
-          partitionNames.length + "). The identifier might not refer to one partition.");
+        throw new IllegalArgumentException("""
+          The number of fields (%d) in the partition identifier is not equal to \
+          the partition schema length (%d). The identifier might not refer to one partition.\
+          """.formatted(ident.numFields(), partitionNames.length));
       }
     }
 

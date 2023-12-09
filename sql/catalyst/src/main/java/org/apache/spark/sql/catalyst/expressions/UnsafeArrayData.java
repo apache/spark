@@ -429,8 +429,8 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+      throw new UnsupportedOperationException(
+        "Cannot convert this array to unsafe format as it's too big.");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];
@@ -451,8 +451,8 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+      throw new UnsupportedOperationException(
+        "Cannot convert this array to unsafe format as it's too big.");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];

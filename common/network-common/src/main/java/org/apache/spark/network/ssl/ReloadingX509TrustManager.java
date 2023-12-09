@@ -127,8 +127,9 @@ public final class ReloadingX509TrustManager
     if (tm != null) {
       tm.checkClientTrusted(chain, authType);
     } else {
-      throw new CertificateException("Unknown client chain certificate: " +
-        chain[0].toString() + ". Please ensure the correct trust store is specified in the config");
+      throw new CertificateException("""
+        Unknown client chain certificate: %s. Please ensure the correct trust store is specified \
+        in the config""".formatted(chain[0].toString()));
     }
   }
 
@@ -139,8 +140,9 @@ public final class ReloadingX509TrustManager
     if (tm != null) {
       tm.checkServerTrusted(chain, authType);
     } else {
-      throw new CertificateException("Unknown server chain certificate: " +
-        chain[0].toString() + ". Please ensure the correct trust store is specified in the config");
+      throw new CertificateException("""
+        Unknown server chain certificate: %s. Please ensure the correct trust store is specified \
+        in the config""".formatted(chain[0].toString()));
     }
   }
 

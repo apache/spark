@@ -119,10 +119,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       ShuffleExecutorComponents shuffleExecutorComponents) throws SparkException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
     if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE()) {
-      throw new IllegalArgumentException(
-        "UnsafeShuffleWriter can only be used for shuffles with at most " +
-        SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE() +
-        " reduce partitions");
+      throw new IllegalArgumentException("""
+        UnsafeShuffleWriter can only be used for shuffles with at most %d reduce partitions\
+        """.formatted(SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE()));
     }
     this.blockManager = blockManager;
     this.memoryManager = memoryManager;
@@ -191,8 +190,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           if (success) {
             throw e;
           } else {
-            logger.error("In addition to a failure during writing, we failed during " +
-                         "cleanup.", e);
+            logger.error("In addition to a failure during writing, we failed during cleanup.", e);
           }
         }
       }

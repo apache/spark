@@ -58,9 +58,9 @@ class OrcColumnVectorUtils {
       OrcColumnVector valuesVector = toOrcColumnVector(mapType.valueType(), mapVector.values);
       return new OrcMapColumnVector(type, vector, keysVector, valuesVector);
     } else {
-      throw new IllegalArgumentException(
-        String.format("OrcColumnVectorUtils.toOrcColumnVector should not take %s as type " +
-          "and %s as vector", type, vector));
+      throw new IllegalArgumentException("""
+        OrcColumnVectorUtils.toOrcColumnVector should not take %s as type and %s as vector
+        """.formatted(type, vector));
     }
   }
 }

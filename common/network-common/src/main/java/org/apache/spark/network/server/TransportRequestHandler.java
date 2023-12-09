@@ -223,8 +223,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
              callback.onSuccess(ex.getResponse());
              streamHandler.onFailure(streamId, ex);
            } catch (Exception ex) {
-             IOException ioExc = new IOException("Failure post-processing complete stream;" +
-               " failing this rpc and leaving channel active", ex);
+             IOException ioExc = new IOException("""
+               Failure post-processing complete stream; \
+               failing this rpc and leaving channel active""", ex);
              callback.onFailure(ioExc);
              streamHandler.onFailure(streamId, ioExc);
            }

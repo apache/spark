@@ -272,8 +272,9 @@ public class TransportContext implements Closeable {
             conf.sslRpctrustStoreReloadIntervalMs())
           .build();
       } else {
-        logger.error("RPC SSL encryption enabled but keys not found!" +
-          "Please ensure the configured keys are present.");
+        logger.error("""
+          RPC SSL encryption enabled but keys not found!\
+          Please ensure the configured keys are present.""");
         throw new IllegalArgumentException("RPC SSL encryption enabled but keys not found!");
       }
     } else {

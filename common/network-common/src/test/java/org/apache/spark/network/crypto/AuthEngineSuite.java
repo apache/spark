@@ -40,14 +40,14 @@ public class AuthEngineSuite {
 
   private static final String clientPrivate =
       "efe6b68b3fce92158e3637f6ef9d937e75558928dd4b401de04b43d300a73186";
-  private static final String clientChallengeHex =
-      "fb00000005617070496400000010890b6e960f48e998777267a7e4e623220000003c48ad7dc7ec9466da9" +
-      "3bda9f11488dc9404050e02c661d87d67c782444944c6e369b27e0a416c30845a2d9e64271511ca98b41d" +
-      "65f8c426e18ff380f6";
-  private static final String serverResponseHex =
-      "fb00000005617070496400000010708451c9dd2792c97c1ca66e6df449ef0000003c64fe899ecdaf458d4" +
-      "e25e9d5c5a380b8e6d1a184692fac065ed84f8592c18e9629f9c636809dca2ffc041f20346eb53db78738" +
-      "08ecad08b46b5ee3ff";
+  private static final String clientChallengeHex = """
+    fb00000005617070496400000010890b6e960f48e998777267a7e4e623220000003c48ad7dc7ec9466da9\
+    3bda9f11488dc9404050e02c661d87d67c782444944c6e369b27e0a416c30845a2d9e64271511ca98b41d\
+    65f8c426e18ff380f6""";
+  private static final String serverResponseHex = """
+    fb00000005617070496400000010708451c9dd2792c97c1ca66e6df449ef0000003c64fe899ecdaf458d4\
+    e25e9d5c5a380b8e6d1a184692fac065ed84f8592c18e9629f9c636809dca2ffc041f20346eb53db78738\
+    08ecad08b46b5ee3ff""";
   private static final String sharedKey =
       "31963f15a320d5c90333f7ecf5cf3a31c7eaf151de07fef8494663a9f47cfd31";
   private static final String inputIv = "fc6a5dc8b90a9dad8f54f08b51a59ed2";

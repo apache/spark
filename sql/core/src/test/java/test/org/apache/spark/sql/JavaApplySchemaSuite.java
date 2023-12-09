@@ -147,13 +147,13 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Test
   public void applySchemaToJSON() {
-    Dataset<String> jsonDS = spark.createDataset(Arrays.asList(
-      "{\"string\":\"this is a simple string.\", \"integer\":10, \"long\":21474836470, " +
-        "\"bigInteger\":92233720368547758070, \"double\":1.7976931348623157E308, " +
-        "\"boolean\":true, \"null\":null}",
-      "{\"string\":\"this is another simple string.\", \"integer\":11, \"long\":21474836469, " +
-        "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
-        "\"boolean\":false, \"null\":null}"), Encoders.STRING());
+    Dataset<String> jsonDS = spark.createDataset(Arrays.asList("""
+       {"string":"this is a simple string.", "integer":10, "long":21474836470, \
+       "bigInteger":92233720368547758070, "double":1.7976931348623157E308, "boolean":true, \
+       "null":null}""", """
+       {"string":"this is another simple string.", "integer":11, "long":21474836469, \
+       "bigInteger":92233720368547758069, "double":1.7976931348623157E305, "boolean":false, \
+       "null":null}"""), Encoders.STRING());
     List<StructField> fields = new ArrayList<>(7);
     fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(20, 0),
       true));

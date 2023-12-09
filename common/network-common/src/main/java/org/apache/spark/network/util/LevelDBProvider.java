@@ -58,8 +58,9 @@ public class LevelDBProvider {
         } else {
           // the leveldb file seems to be corrupt somehow.  Lets just blow it away and create a new
           // one, so we can keep processing new apps
-          logger.error("error opening leveldb file {}.  Creating new file, will not be able to " +
-              "recover state for existing applications", dbFile, e);
+          logger.error("""
+            error opening leveldb file {}.  Creating new file, will not be able to recover state \
+            for existing applications""", dbFile, e);
           if (dbFile.isDirectory()) {
             for (File f : dbFile.listFiles()) {
               if (!f.delete()) {
@@ -115,8 +116,9 @@ public class LevelDBProvider {
     } else {
       StoreVersion version = mapper.readValue(bytes, StoreVersion.class);
       if (version.major != newversion.major) {
-        throw new IOException("cannot read state DB with version " + version + ", incompatible " +
-            "with current version " + newversion);
+        throw new IOException("""
+          cannot read state DB with version %s, incompatible with current version %s
+          """.formatted(version, newversion));
       }
       storeVersion(db, newversion, mapper);
     }

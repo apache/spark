@@ -56,8 +56,9 @@ public class JavaRandomAdd implements UnboundFunction {
 
   @Override
   public String description() {
-    return "rand_add: add a random integer to the input\n" +
-      "rand_add(int) -> int";
+    return """
+      rand_add: add a random integer to the input
+      rand_add(int) -> int""";
   }
 
   public abstract static class JavaRandomAddBase implements ScalarFunction<Integer> {

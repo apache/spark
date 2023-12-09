@@ -90,9 +90,9 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     for (String key : javaOptsKeys) {
       String envValue = System.getenv(key);
       if (!isEmpty(envValue) && envValue.contains("Xmx")) {
-        String msg = String.format("%s is not allowed to specify max heap(Xmx) memory settings " +
-                "(was %s). Use the corresponding configuration instead.", key, envValue);
-        throw new IllegalArgumentException(msg);
+        throw new IllegalArgumentException("""
+          %s is not allowed to specify max heap(Xmx) memory settings \
+          (was %s). Use the corresponding configuration instead.""".formatted(key, envValue));
       }
       addOptionString(cmd, envValue);
     }

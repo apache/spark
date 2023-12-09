@@ -60,7 +60,8 @@ public class JavaSaveLoadSuite {
 
     List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
-      jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
+      jsonObjects.add("""
+         {"a":%d, "b":"str%d"}""".formatted(i, i));
     }
     Dataset<String> ds = spark.createDataset(jsonObjects, Encoders.STRING());
     df = spark.read().json(ds);

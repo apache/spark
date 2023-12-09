@@ -46,9 +46,9 @@ public class JavaJdbcRDDSuite implements Serializable {
         "jdbc:derby:target/" + dbName + ";create=true")) {
 
       try (Statement create = connection.createStatement()) {
-        create.execute(
-          "CREATE TABLE FOO(ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY" +
-                  " (START WITH 1, INCREMENT BY 1), DATA INTEGER)");
+        create.execute("""
+          CREATE TABLE FOO(ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY \
+          (START WITH 1, INCREMENT BY 1), DATA INTEGER)""");
       }
 
       try (PreparedStatement insert = connection.prepareStatement(

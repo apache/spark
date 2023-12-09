@@ -314,10 +314,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     if (!isEmpty(javaOptions)) {
       for (String javaOption: CommandBuilderUtils.parseOptionString(javaOptions)) {
         if (javaOption.startsWith("-Xmx")) {
-            String msg = String.format("Not allowed to specify max heap(Xmx) memory settings " +
-              "through java options (was %s). Use the corresponding --driver-memory or " +
-              "spark.driver.memory configuration instead.", javaOptions);
-            throw new IllegalArgumentException(msg);
+            throw new IllegalArgumentException("""
+              Not allowed to specify max heap(Xmx) memory settings through java options (was %s). \
+              Use the corresponding --driver-memory or spark.driver.memory configuration instead.
+              """.formatted(javaOptions));
         }
       }
     }
@@ -327,9 +327,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // For backwards compatibility, if a script is specified in
     // the pyspark command line, then run it using spark-submit.
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".py")) {
-      System.err.println(
-        "Running python applications through 'pyspark' is not supported as of Spark 2.0.\n" +
-        "Use ./bin/spark-submit <python file>");
+      System.err.println("""
+        Running python applications through 'pyspark' is not supported as of Spark 2.0.
+        Use ./bin/spark-submit <python file>""");
       System.exit(-1);
     }
 
@@ -379,9 +379,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
     if (!appArgs.isEmpty() && (appArgs.get(0).endsWith(".R") || appArgs.get(0).endsWith(".r"))) {
-      System.err.println(
-        "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
-        "Use ./bin/spark-submit <R file>");
+      System.err.println("""
+        Running R applications through 'sparkR' is not supported as of Spark 2.0.
+        "Use ./bin/spark-submit <R file>""");
       System.exit(-1);
     }
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS

@@ -102,8 +102,9 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       this.comparableAppAttemptId = Integer.parseInt(appAttemptId);
     } catch (NumberFormatException e) {
-      logger.warn("Push based shuffle requires comparable application attemptId, " +
-        "but the appAttemptId {} cannot be parsed to Integer", appAttemptId, e);
+      logger.warn("""
+        Push based shuffle requires comparable application attemptId, \
+        but the appAttemptId {} cannot be parsed to Integer""", appAttemptId, e);
     }
   }
 

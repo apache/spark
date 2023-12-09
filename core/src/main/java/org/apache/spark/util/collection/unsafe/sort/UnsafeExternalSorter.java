@@ -785,8 +785,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         if (iter.hasNext()) {
           iter.loadNext();
         } else {
-          throw new ArrayIndexOutOfBoundsException("Failed to move the iterator " + steps +
-            " steps forward");
+          throw new ArrayIndexOutOfBoundsException("""
+            Failed to move the iterator %d steps forward""".formatted(steps));
         }
       }
     }

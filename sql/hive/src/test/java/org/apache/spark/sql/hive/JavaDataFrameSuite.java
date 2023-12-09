@@ -46,7 +46,8 @@ public class JavaDataFrameSuite {
     hc = TestHive$.MODULE$;
     List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
-      jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
+      jsonObjects.add("""
+        {"key":%d, "value":"str%d"}""".formatted(i, i));
     }
     df = hc.read().json(hc.createDataset(jsonObjects, Encoders.STRING()));
     df.createOrReplaceTempView("window_table");
@@ -65,11 +66,12 @@ public class JavaDataFrameSuite {
     checkAnswer(
       df.select(avg("key").over(
         Window.partitionBy("value").orderBy("key").rowsBetween(-1, 1))),
-      hc.sql("SELECT avg(key) " +
-        "OVER (PARTITION BY value " +
-        "      ORDER BY key " +
-        "      ROWS BETWEEN 1 preceding and 1 following) " +
-        "FROM window_table").collectAsList());
+      hc.sql("""
+              SELECT
+                avg(key) OVER (
+                  PARTITION BY value ORDER BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+              FROM window_table""").collectAsList());
   }
 
   @Test

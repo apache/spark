@@ -269,10 +269,10 @@ class LauncherServer implements Closeable {
 
     value = SparkLauncher.launcherConfig.get(SparkLauncher.DEPRECATED_CHILD_CONNECTION_TIMEOUT);
     if (value != null) {
-        LOG.log(Level.WARNING,
-                "Property '" + SparkLauncher.DEPRECATED_CHILD_CONNECTION_TIMEOUT +
-                "' is deprecated, please switch to '" + SparkLauncher.CHILD_CONNECTION_TIMEOUT +
-                "'.");
+        LOG.log(Level.WARNING, """
+            Property '%s' is deprecated, please switch to '%s'.""".formatted(
+                SparkLauncher.DEPRECATED_CHILD_CONNECTION_TIMEOUT,
+                SparkLauncher.CHILD_CONNECTION_TIMEOUT));
         return Long.parseLong(value);
     }
     return DEFAULT_CONNECT_TIMEOUT;

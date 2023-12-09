@@ -81,8 +81,9 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       parser.DRIVER_CLASS_PATH,
       "/driverCp",
       parser.DRIVER_JAVA_OPTIONS,
-      "-Xmx64g -Dprop=Other -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
-        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      """
+        -Xmx64g -Dprop=Other -Dprop1="-Xmx -Xmx" -Dprop2="-Xmx '-Xmx" \
+        -Dprop3='-Xmx -Xmx' -Dprop4='-Xmx "-Xmx'""",
       SparkLauncher.NO_RESOURCE);
     assertThrows(IllegalArgumentException.class, () -> buildCommand(sparkSubmitArgs, env));
   }
@@ -96,8 +97,9 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       parser.DRIVER_CLASS_PATH,
       "/driverCp",
       parser.DRIVER_JAVA_OPTIONS,
-      "-Dprop=-Xmx -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
-        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      """
+         -Dprop=-Xmx -Dprop1="-Xmx -Xmx" -Dprop2="-Xmx '-Xmx" \
+         -Dprop3='-Xmx -Xmx' -Dprop4='-Xmx "-Xmx'""",
       SparkLauncher.NO_RESOURCE);
     buildCommand(sparkSubmitArgs, env);
   }

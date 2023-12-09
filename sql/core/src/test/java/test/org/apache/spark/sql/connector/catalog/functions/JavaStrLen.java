@@ -54,8 +54,9 @@ public class JavaStrLen implements UnboundFunction {
 
   @Override
   public String description() {
-    return "strlen: returns the length of the input string\n" +
-        " strlen(string) -> int";
+    return """
+      strlen: returns the length of the input string
+       strlen(string) -> int""";
   }
 
   private abstract static class JavaStrLenBase implements ScalarFunction<Integer> {

@@ -145,36 +145,41 @@ public class ExpressionInfo {
         }
         if (!note.isEmpty()) {
             if (!note.contains("    ") || !note.endsWith("  ")) {
-                throw new IllegalArgumentException("'note' is malformed in the expression [" +
-                    this.name + "]. It should start with a newline and 4 leading spaces; end " +
-                    "with a newline and two spaces; however, got [" + note + "].");
+                throw new IllegalArgumentException("""
+                  'note' is malformed in the expression [%s]. It should start with a newline and \
+                  4 leading spaces; end with a newline and two spaces; however, got [%s].\
+                  """.formatted(this.name, note));
             }
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
         }
         if (!group.isEmpty() && !validGroups.contains(group)) {
-            throw new IllegalArgumentException("'group' is malformed in the expression [" +
-                this.name + "]. It should be a value in " + validGroups + "; however, " +
-                "got [" + group + "].");
+            throw new IllegalArgumentException("""
+              'group' is malformed in the expression [%s]. \
+              It should be a value in %s; however, got [%s]. \
+              """.formatted(this.name, validGroups, group));
         }
         if (!source.isEmpty() && !validSources.contains(source)) {
-            throw new IllegalArgumentException("'source' is malformed in the expression [" +
-                    this.name + "]. It should be a value in " + validSources + "; however, " +
-                    "got [" + source + "].");
+            throw new IllegalArgumentException("""
+              'source' is malformed in the expression [%s]. \
+              It should be a value in %s; however, got [%s].\
+              """.formatted(this.name, validGroups, source));
         }
         if (!since.isEmpty()) {
             if (Integer.parseInt(since.split("\\.")[0]) < 0) {
-                throw new IllegalArgumentException("'since' is malformed in the expression [" +
-                    this.name + "]. It should not start with a negative number; however, " +
-                    "got [" + since + "].");
+                throw new IllegalArgumentException("""
+                  'since' is malformed in the expression [%s]. \
+                  It should not start with a negative number; however, got [%s].\
+                  """.formatted(this.name, since));
             }
             this.extended += "\n    Since: " + since + "\n";
         }
         if (!deprecated.isEmpty()) {
             if (!deprecated.contains("    ") || !deprecated.endsWith("  ")) {
-                throw new IllegalArgumentException("'deprecated' is malformed in the " +
-                    "expression [" + this.name + "]. It should start with a newline and 4 " +
-                    "leading spaces; end with a newline and two spaces; however, got [" +
-                    deprecated + "].");
+                throw new IllegalArgumentException("""
+                  'deprecated' is malformed in the expression [%s]. \
+                  It should start with a newline and 4 leading spaces; \
+                  end with a newline and two spaces; however, got [%s].
+                  """.formatted(this.name, deprecated));
             }
             this.extended += "\n    Deprecated:\n      " + deprecated.trim() + "\n";
         }

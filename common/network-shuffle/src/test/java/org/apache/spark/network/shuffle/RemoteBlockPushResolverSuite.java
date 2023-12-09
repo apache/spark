@@ -479,9 +479,10 @@ public class RemoteBlockPushResolverSuite {
     IllegalArgumentException re = assertThrows(IllegalArgumentException.class,
       () -> registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
         INVALID_MERGE_DIRECTORY_META));
-    assertEquals("Failed to get the merge directory information from the shuffleManagerMeta " +
-      "shuffleManager:{\"mergeDirInvalid\": \"merge_manager_2\", \"attemptId\": \"2\"} in " +
-      "executor registration message", re.getMessage());
+    assertEquals("""
+      Failed to get the merge directory information from the shuffleManagerMeta \
+      shuffleManager:{"mergeDirInvalid": "merge_manager_2", "attemptId": "2"} in \
+      executor registration message""", re.getMessage());
   }
 
   @Test
@@ -1007,10 +1008,10 @@ public class RemoteBlockPushResolverSuite {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
       () -> pushResolver.finalizeShuffleMerge(
               new FinalizeShuffleMerge(testApp, ATTEMPT_ID_1, 0, 0)));
-    assertEquals(e.getMessage(),
-      String.format("The attempt id %s in this FinalizeShuffleMerge message does not " +
-        "match with the current attempt id %s stored in shuffle service for application %s",
-        ATTEMPT_ID_1, ATTEMPT_ID_2, testApp));
+    assertEquals(e.getMessage(), """
+      The attempt id %s in this FinalizeShuffleMerge message does not match with the current \
+      attempt id %s stored in shuffle service for application %s\
+      """.formatted(ATTEMPT_ID_1, ATTEMPT_ID_2, testApp));
   }
 
   @Test
@@ -1164,20 +1165,23 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 2));
     RuntimeException re0 = assertThrows(RuntimeException.class,
       () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));
-    assertEquals("MergedBlockMeta fetch for shuffle 0 with shuffleMergeId 0 reduceId 0"
-      + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
-      + " the shuffle is available", re0.getMessage());
+    assertEquals("""
+      MergedBlockMeta fetch for shuffle 0 with shuffleMergeId 0 reduceId 0 is stale shuffle block \
+      fetch request as shuffle blocks of a higher shuffleMergeId for the shuffle is available\
+      """, re0.getMessage());
     RuntimeException re1 = assertThrows(RuntimeException.class,
       () -> pushResolver.finalizeShuffleMerge(
               new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1)));
-    assertEquals("Shuffle merge finalize request for shuffle 0 with shuffleMergeId 1 is stale"
-      + " shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle"
-      + " is already being pushed", re1.getMessage());
+    assertEquals("""
+      Shuffle merge finalize request for shuffle 0 with shuffleMergeId 1 is stale shuffle \
+      finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle is already \
+      being pushed""", re1.getMessage());
     RuntimeException re2 = assertThrows(RuntimeException.class,
       () -> pushResolver.getMergedBlockData(TEST_APP, 0, 1, 0, 0));
-    assertEquals("MergedBlockData fetch for shuffle 0 with shuffleMergeId 1 reduceId 0"
-      + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
-      + " the shuffle is available", re2.getMessage());
+    assertEquals("""
+      MergedBlockData fetch for shuffle 0 with shuffleMergeId 1 reduceId 0 is stale shuffle block \
+      fetch request as shuffle blocks of a higher shuffleMergeId for the shuffle is available\
+      """, re2.getMessage());
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
   }
@@ -1359,15 +1363,16 @@ public class RemoteBlockPushResolverSuite {
 
     // Intentionally keep these hard-coded strings in here, to check backwards-compatibility.
     // It is not legacy yet, but keeping this here in case anybody changes it
-    String legacyAppAttemptIdJson = "{\"appId\": \"foo\", \"attemptId\":\"1\"}";
+    String legacyAppAttemptIdJson = """
+      {"appId": "foo", "attemptId":"1"}""";
     assertEquals(appAttemptId,
       mapper.readValue(legacyAppAttemptIdJson, RemoteBlockPushResolver.AppAttemptId.class));
-    String legacyAppPathInfoJson =
-      "{\"activeLocalDirs\": [\"/foo\", \"/bar\"], \"subDirsPerLocalDir\":\"64\"}";
+    String legacyAppPathInfoJson = """
+      {"activeLocalDirs": ["/foo", "/bar"], "subDirsPerLocalDir":"64"}""";
     assertEquals(pathInfo,
       mapper.readValue(legacyAppPathInfoJson, RemoteBlockPushResolver.AppPathsInfo.class));
-    String legacyPartitionIdJson = "{\"appId\":\"foo\", \"attemptId\":\"1\", "
-      + "\"shuffleId\":\"1\", \"shuffleMergeId\":\"1\"}";
+    String legacyPartitionIdJson = """
+      {"appId":"foo", "attemptId":"1", "shuffleId":"1", "shuffleMergeId":"1"}""";
     assertEquals(partitionId, mapper.readValue(legacyPartitionIdJson,
       RemoteBlockPushResolver.AppAttemptShuffleMergeId.class));
   }
