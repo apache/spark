@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -1006,10 +1006,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         date(1, 1, 1, 0, 0, 0, 1, zid))
     }
 
-    val e = intercept[IllegalStateException] {
-      timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
-    }
-    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
+    checkError(
+      exception = intercept[SparkException] {
+        timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
   }
 
   test("SPARK-38284: difference between two timestamps in units") {
@@ -1056,13 +1058,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         zid) === -9998)
     }
 
-    val e = intercept[IllegalStateException] {
-      timestampDiff(
-        "SECS",
-        date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
-        date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
-        getZoneId("UTC"))
-    }
-    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
+    checkError(
+      exception = intercept[SparkException] {
+        timestampDiff(
+          "SECS",
+          date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+          date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+          getZoneId("UTC"))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
   }
 }
