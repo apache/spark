@@ -583,6 +583,10 @@ jobs:
       uses: bufbuild/buf-setup-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Protocol Buffers Linter
+      uses: bufbuild/buf-lint-action@v1
+      with:
+        input: core/src/main/protobuf
     # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
     - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1

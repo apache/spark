@@ -286,17 +286,17 @@ class SparkSession(SparkConversionMixin):
             with self._lock:
                 if conf is not None:
                     for k, v in conf.getAll():
-                        self._validate_startup_urls()
                         self._options[k] = v
+                        self._validate_startup_urls()
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
                         v = to_str(v)  # type: ignore[assignment]
-                        self._validate_startup_urls()
                         self._options[k] = v
+                        self._validate_startup_urls()
                 else:
                     value = to_str(value)
-                    self._validate_startup_urls()
                     self._options[cast(str, key)] = value
+                    self._validate_startup_urls()
                 return self
 
         def _validate_startup_urls(
@@ -306,22 +306,16 @@ class SparkSession(SparkConversionMixin):
             Helper function that validates the combination of startup URLs and raises an exception
             if incompatible options are selected.
             """
-            if "spark.master" in self._options and (
+            if ("spark.master" in self._options or "MASTER" in os.environ) and (
                 "spark.remote" in self._options or "SPARK_REMOTE" in os.environ
             ):
                 raise PySparkRuntimeError(
-                    error_class="CANNOT_CONFIGURE_SPARK_MASTER",
+                    error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
                     message_parameters={
-                        "url": self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
-                    },
-                )
-            if "spark.remote" in self._options and (
-                "spark.master" in self._options or "MASTER" in os.environ
-            ):
-                raise PySparkRuntimeError(
-                    error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
-                    message_parameters={
-                        "url": self._options.get("spark.master", os.environ.get("MASTER"))
+                        "master_url": self._options.get("spark.master", os.environ.get("MASTER")),
+                        "connect_url": self._options.get(
+                            "spark.remote", os.environ.get("SPARK_REMOTE")
+                        ),
                     },
                 )
 
@@ -333,8 +327,8 @@ class SparkSession(SparkConversionMixin):
                     raise PySparkRuntimeError(
                         error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
                         message_parameters={
-                            "new_url": os.environ["SPARK_REMOTE"],
-                            "existing_url": remote,
+                            "existing_url": os.environ["SPARK_REMOTE"],
+                            "new_url": remote,
                         },
                     )
 
@@ -1423,8 +1417,8 @@ class SparkSession(SparkConversionMixin):
         self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
-                error_class="SHOULD_NOT_DATAFRAME",
-                message_parameters={"arg_name": "data"},
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
             )
 
         if isinstance(schema, str):

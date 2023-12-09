@@ -29,6 +29,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -745,7 +746,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"""
              |Failed to copy node.
              |Is otherCopyArgs specified correctly for $nodeName.

@@ -31,6 +31,7 @@ import org.apache.commons.lang3.StringUtils
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
@@ -923,7 +924,7 @@ case class HiveTableRelation(
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw new IllegalStateException("Table stats must be specified.")
+      throw SparkException.internalError("Table stats must be specified.")
     }
   }
 

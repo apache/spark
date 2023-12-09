@@ -6838,15 +6838,16 @@ def now() -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.range(1)
-    >>> df.select(now()).show(truncate=False) # doctest: +SKIP
-    +-----------------------+
-    |now()    |
-    +-----------------------+
-    |2022-08-26 21:23:22.716|
-    +-----------------------+
+    >>> df.select(sf.now()).show(truncate=False) # doctest: +SKIP
+    +--------------------------+
+    |now()                     |
+    +--------------------------+
+    |2023-12-08 15:18:18.482269|
+    +--------------------------+
     """
-    return _invoke_function("current_timestamp")
+    return _invoke_function("now")
 
 
 @_try_remote_functions
@@ -8278,9 +8279,40 @@ def unix_timestamp(
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+
+    Example 1: Returns the current timestamp in UNIX.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.unix_timestamp().alias('unix_time')).show()
+    ... # doctest: +SKIP
+    +----------+
+    | unix_time|
+    +----------+
+    |1702018137|
+    +----------+
+
+    Example 2: Using default format 'yyyy-MM-dd HH:mm:ss' parses the timestamp string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> time_df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['dt'])
+    >>> time_df.select(sf.unix_timestamp('dt').alias('unix_time')).show()
+    +----------+
+    | unix_time|
+    +----------+
+    |1428520332|
+    +----------+
+
+    Example 3: Using user-specified format 'yyyy-MM-dd' parses the timestamp string.
+
+    >>> import pyspark.sql.functions as sf
     >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> time_df.select(unix_timestamp('dt', 'yyyy-MM-dd').alias('unix_time')).collect()
-    [Row(unix_time=1428476400)]
+    >>> time_df.select(sf.unix_timestamp('dt', 'yyyy-MM-dd').alias('unix_time')).show()
+    +----------+
+    | unix_time|
+    +----------+
+    |1428476400|
+    +----------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timestamp is None:
@@ -8568,13 +8600,21 @@ def window(
     Examples
     --------
     >>> import datetime
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(
     ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
     ... ).toDF("date", "val")
-    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
-    >>> w.select(w.window.start.cast("string").alias("start"),
-    ...          w.window.end.cast("string").alias("end"), "sum").collect()
-    [Row(start='2016-03-11 09:00:05', end='2016-03-11 09:00:10', sum=1)]
+    >>> w = df.groupBy(sf.window("date", "5 seconds")).agg(sf.sum("val").alias("sum"))
+    >>> w.select(
+    ...     w.window.start.cast("string").alias("start"),
+    ...     w.window.end.cast("string").alias("end"),
+    ...     "sum"
+    ... ).show()
+    +-------------------+-------------------+---+
+    |              start|                end|sum|
+    +-------------------+-------------------+---+
+    |2016-03-11 09:00:05|2016-03-11 09:00:10|  1|
+    +-------------------+-------------------+---+
     """
 
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
@@ -8736,9 +8776,30 @@ def to_unix_timestamp(
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> df.select(to_unix_timestamp(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
-    [Row(r=1460098800)]
+
+    Example 1: Using default format 'yyyy-MM-dd HH:mm:ss' parses the timestamp string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> time_df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['dt'])
+    >>> time_df.select(sf.to_unix_timestamp('dt').alias('unix_time')).show()
+    +----------+
+    | unix_time|
+    +----------+
+    |1428520332|
+    +----------+
+
+    Example 2: Using user-specified format 'yyyy-MM-dd' parses the timestamp string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> time_df.select(
+    ...     sf.to_unix_timestamp('dt', sf.lit('yyyy-MM-dd')).alias('unix_time')).show()
+    +----------+
+    | unix_time|
+    +----------+
+    |1428476400|
+    +----------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
@@ -8906,7 +8967,7 @@ def user() -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.user()).show() # doctest: +SKIP
     +--------------+
-    |current_user()|
+    |        user()|
     +--------------+
     | ruifeng.zheng|
     +--------------+
@@ -8925,7 +8986,7 @@ def session_user() -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.session_user()).show() # doctest: +SKIP
     +--------------+
-    |current_user()|
+    |session_user()|
     +--------------+
     | ruifeng.zheng|
     +--------------+

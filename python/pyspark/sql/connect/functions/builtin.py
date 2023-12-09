@@ -2864,7 +2864,7 @@ current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
 
 
 def now() -> Column:
-    return _invoke_function("current_timestamp")
+    return _invoke_function("now")
 
 
 now.__doc__ = pysparkfuncs.now.__doc__

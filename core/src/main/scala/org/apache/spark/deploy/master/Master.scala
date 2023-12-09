@@ -160,7 +160,8 @@ private[deploy] class Master(
 
     if (restServerEnabled) {
       val port = conf.get(MASTER_REST_SERVER_PORT)
-      restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
+      val host = conf.get(MASTER_REST_SERVER_HOST).getOrElse(address.host)
+      restServer = Some(new StandaloneRestServer(host, port, conf, self, masterUrl))
     }
     restServerBoundPort = restServer.map(_.start())
 
@@ -604,8 +605,11 @@ private[deploy] class Master(
     workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
+  private var recoveryStartTimeNs = 0L
+
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
       storedWorkers: Seq[WorkerInfo]): Unit = {
+    recoveryStartTimeNs = System.nanoTime()
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -662,7 +666,8 @@ private[deploy] class Master(
 
     state = RecoveryState.ALIVE
     schedule()
-    logInfo("Recovery complete - resuming operations!")
+    val timeTakenNs = System.nanoTime() - recoveryStartTimeNs
+    logInfo(f"Recovery complete in ${timeTakenNs / 1000000000d}%.3fs - resuming operations!")
   }
 
   /**
@@ -1251,7 +1256,7 @@ private[deploy] class Master(
       exception: Option[Exception]): Unit = {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
-        logInfo(s"Removing driver: $driverId")
+        logInfo(s"Removing driver: $driverId ($finalState)")
         drivers -= driver
         if (completedDrivers.size >= retainedDrivers) {
           val toRemove = math.max(retainedDrivers / 10, 1)

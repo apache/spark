@@ -2926,7 +2926,7 @@ class Dataset[T] private[sql](
     withColumnsRenamed(colNames, newColNames)
   }
 
-  private def withColumnsRenamed(
+  private[spark] def withColumnsRenamed(
     colNames: Seq[String],
     newColNames: Seq[String]): DataFrame = withOrigin {
     require(colNames.size == newColNames.size,

@@ -227,6 +227,14 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.master.rest.host</code></td>
+  <td>(None)</td>
+  <td>
+    Specifies the host of the Master REST API endpoint.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.master.rest.port</code></td>
   <td><code>6066</code></td>
   <td>
