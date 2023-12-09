@@ -3844,12 +3844,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> name))
   }
 
-  def dataSourceDoesNotExist(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "DATA_SOURCE_NOT_EXIST",
-      messageParameters = Map("provider" -> name))
-  }
-
   def foundMultipleDataSources(provider: String): Throwable = {
     new AnalysisException(
       errorClass = "FOUND_MULTIPLE_DATA_SOURCES",

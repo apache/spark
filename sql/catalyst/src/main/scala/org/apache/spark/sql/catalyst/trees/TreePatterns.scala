@@ -42,6 +42,7 @@ object TreePattern extends Enumeration  {
   val CREATE_NAMED_STRUCT: Value = Value
   val CURRENT_LIKE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value
+  val DATA_SOURCE_V2_RELATION: Value = Value
   val DYNAMIC_PRUNING_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value

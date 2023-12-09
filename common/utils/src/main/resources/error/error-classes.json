@@ -875,15 +875,9 @@
     ],
     "sqlState" : "42710"
   },
-  "DATA_SOURCE_NOT_EXIST" : {
-    "message" : [
-      "Data source '<provider>' not found. Please make sure the data source is registered."
-    ],
-    "sqlState" : "42704"
-  },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
-      "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
+      "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`, or register it first."
     ],
     "sqlState" : "42K02"
   },

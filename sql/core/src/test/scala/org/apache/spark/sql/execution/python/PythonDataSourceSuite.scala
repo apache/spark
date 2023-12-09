@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{BatchEvalPythonUDTF, PythonDataSourcePartitions}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   import IntegratedUDFTestUtils._
@@ -146,9 +147,10 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
-    val ds1 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
+    val ds1 = spark.sessionState.dataSourceManager.getDataSource(dataSourceName).get
+    val planBuilder1 = ds1.build(dataSourceName, None, CaseInsensitiveStringMap.empty())
     checkAnswer(
-      ds1(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
+      planBuilder1.build(toAttributes(planBuilder1.schema)),
       Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
 
     // Should be able to override an already registered data source.
@@ -170,9 +172,10 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     spark.dataSource.registerPython(dataSourceName, newDataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
 
-    val ds2 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
+    val ds2 = spark.sessionState.dataSourceManager.getDataSource(dataSourceName).get
+    val planBuilder2 = ds2.build(dataSourceName, None, CaseInsensitiveStringMap.empty())
     checkAnswer(
-      ds2(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
+      planBuilder2.build(toAttributes(planBuilder2.schema)),
       Seq(Row(0)))
   }
 
@@ -219,6 +222,13 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     checkAnswer(spark.read.format("test").load(), Seq(Row(null, 1)))
     checkAnswer(spark.read.format("test").load("1"), Seq(Row("1", 1)))
     checkAnswer(spark.read.format("test").load("1", "2"), Seq(Row("1", 1), Row("2", 1)))
+
+    // Test SQL
+    withTable("tblA") {
+      sql("CREATE TABLE tblA USING test")
+      // The path will be the actual temp path.
+      checkAnswer(spark.table("tblA").selectExpr("value"), Seq(Row(1)))
+    }
   }
 
   test("reader not implemented") {

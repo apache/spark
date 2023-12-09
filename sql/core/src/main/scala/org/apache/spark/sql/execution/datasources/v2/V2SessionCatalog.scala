@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceManager}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
@@ -43,7 +43,9 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(catalog: SessionCatalog)
+class V2SessionCatalog(
+    catalog: SessionCatalog,
+    dataSourceManager: DataSourceManager = new DataSourceManager)
   extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
@@ -85,7 +87,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     try {
       val table = catalog.getTableMetadata(ident.asTableIdentifier)
       if (table.provider.isDefined) {
-        DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
+        DataSourceV2Utils.getTableProvider(table.provider.get, conf, dataSourceManager) match {
           case Some(provider) =>
             // Get the table properties during creation and append the path option
             // to the properties.
@@ -173,7 +175,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       CatalogTableType.MANAGED
     }
 
-    val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
+    val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(
+      provider, conf, dataSourceManager) match {
       // If the provider does not support external metadata, users should not be allowed to
       // specify custom schema when creating the data source table, since the schema will not
       // be used when loading the table.

@@ -21,26 +21,16 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * A manager for user-defined data sources. It is used to register and lookup data sources by
- * their short names or fully qualified names.
+ * A manager for user-defined data sources. It is used to register and lookup data sources by names.
  */
 class DataSourceManager extends Logging {
-
-  private type DataSourceBuilder = (
-    SparkSession,  // Spark session
-    String,  // provider name
-    Option[StructType],  // user specified schema
-    CaseInsensitiveMap[String]  // options
-  ) => LogicalPlan
-
-  private val dataSourceBuilders = new ConcurrentHashMap[String, DataSourceBuilder]()
+  private val dataSourceBuilders = new ConcurrentHashMap[String, UserDefinedDataSourceBuilder]()
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
@@ -48,7 +38,7 @@ class DataSourceManager extends Logging {
    * Register a data source builder for the given provider.
    * Note that the provider name is case-insensitive.
    */
-  def registerDataSource(name: String, builder: DataSourceBuilder): Unit = {
+  def registerDataSource(name: String, builder: UserDefinedDataSourceBuilder): Unit = {
     val normalizedName = normalize(name)
     val previousValue = dataSourceBuilders.put(normalizedName, builder)
     if (previousValue != null) {
@@ -60,12 +50,8 @@ class DataSourceManager extends Logging {
    * Returns a data source builder for the given provider and throw an exception if
    * it does not exist.
    */
-  def lookupDataSource(name: String): DataSourceBuilder = {
-    if (dataSourceExists(name)) {
-      dataSourceBuilders.get(normalize(name))
-    } else {
-      throw QueryCompilationErrors.dataSourceDoesNotExist(name)
-    }
+  def getDataSource(name: String): Option[UserDefinedDataSourceBuilder] = {
+    Option(dataSourceBuilders.get(normalize(name)))
   }
 
   /**
@@ -80,4 +66,17 @@ class DataSourceManager extends Logging {
     dataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
     manager
   }
+}
+
+trait UserDefinedDataSourceBuilder {
+  def build(
+      provider: String,
+      userSpecifiedSchema: Option[StructType],
+      options: CaseInsensitiveStringMap): UserDefinedDataSourcePlanBuilder
+}
+
+trait UserDefinedDataSourcePlanBuilder {
+  def schema: StructType
+
+  def build(output: Seq[Attribute]): LogicalPlan
 }

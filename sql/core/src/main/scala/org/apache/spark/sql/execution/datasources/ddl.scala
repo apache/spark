@@ -99,7 +99,8 @@ case class CreateTempViewUsing(
     }
 
     val catalog = sparkSession.sessionState.catalog
-    val analyzedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
+    val analyzedPlan = DataSource.lookupDataSourceV2(
+        provider, sparkSession.sessionState.conf, sparkSession.sessionState.dataSourceManager)
       .flatMap { tblProvider =>
         DataSourceV2Utils.loadV2Source(sparkSession, tblProvider, userSpecifiedSchema,
           CaseInsensitiveMap(options), provider)

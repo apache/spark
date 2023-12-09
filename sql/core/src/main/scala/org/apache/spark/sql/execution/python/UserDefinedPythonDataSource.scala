@@ -20,16 +20,19 @@ package org.apache.spark.sql.execution.python
 import java.io.{DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonDataSource}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.{UserDefinedDataSourceBuilder, UserDefinedDataSourcePlanBuilder}
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -39,12 +42,23 @@ import org.apache.spark.util.ArrayImplicits._
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
-  def builder(
+  def getBuilder: PythonDataSourceBuilder = new PythonDataSourceBuilder(dataSourceCls)
+
+  def apply(
       sparkSession: SparkSession,
       provider: String,
-      userSpecifiedSchema: Option[StructType],
-      options: CaseInsensitiveMap[String]): LogicalPlan = {
+      userSpecifiedSchema: Option[StructType] = None,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): DataFrame = {
+    val planBuilder = getBuilder.build(provider, userSpecifiedSchema, options)
+    Dataset.ofRows(sparkSession, planBuilder.build(toAttributes(planBuilder.schema)))
+  }
+}
 
+class PythonDataSourceBuilder(dataSourceCls: PythonFunction) extends UserDefinedDataSourceBuilder {
+  override def build(
+      provider: String,
+      userSpecifiedSchema: Option[StructType],
+      options: CaseInsensitiveStringMap): UserDefinedDataSourcePlanBuilder = {
     val runner = new UserDefinedPythonDataSourceRunner(
       dataSourceCls, provider, userSpecifiedSchema, options)
 
@@ -59,19 +73,14 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       pythonVer = dataSourceCls.pythonVer,
       broadcastVars = dataSourceCls.broadcastVars,
       accumulator = dataSourceCls.accumulator)
-    val schema = result.schema
-
-    PythonDataSource(dataSource, schema, output = toAttributes(schema))
+    new PythonDataSourcePlanBuilder(result.schema, dataSource)
   }
+}
 
-  def apply(
-      sparkSession: SparkSession,
-      provider: String,
-      userSpecifiedSchema: Option[StructType] = None,
-      options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty)): DataFrame = {
-    val plan = builder(sparkSession, provider, userSpecifiedSchema, options)
-    Dataset.ofRows(sparkSession, plan)
-  }
+class PythonDataSourcePlanBuilder(
+    override val schema: StructType,
+    dataSource: SimplePythonFunction) extends UserDefinedDataSourcePlanBuilder {
+  override def build(output: Seq[Attribute]): LogicalPlan = PythonDataSource(dataSource, output)
 }
 
 /**
@@ -88,7 +97,7 @@ class UserDefinedPythonDataSourceRunner(
     dataSourceCls: PythonFunction,
     provider: String,
     userSpecifiedSchema: Option[StructType],
-    options: CaseInsensitiveMap[String])
+    options: CaseInsensitiveStringMap)
   extends PythonPlannerRunner[PythonDataSourceCreationResult](dataSourceCls) {
 
   override val workerModule = "pyspark.sql.worker.create_data_source"
@@ -106,7 +115,7 @@ class UserDefinedPythonDataSourceRunner(
 
     // Send the options
     dataOut.writeInt(options.size)
-    options.iterator.foreach { case (key, value) =>
+    options.asCaseSensitiveMap().asScala.iterator.foreach { case (key, value) =>
       PythonWorkerUtils.writeUTF(key, dataOut)
       PythonWorkerUtils.writeUTF(value, dataOut)
     }

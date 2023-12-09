@@ -87,10 +87,11 @@ class HiveSessionStateBuilder(
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
+        RewriteUserDefinedDataSource +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(catalogManager) +:
+        new ResolveSessionCatalog(catalogManager, dataSourceManager) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         new DetermineTableStats(session) +:

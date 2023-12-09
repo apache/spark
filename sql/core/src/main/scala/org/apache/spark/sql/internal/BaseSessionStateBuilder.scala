@@ -171,7 +171,7 @@ abstract class BaseSessionStateBuilder(
     catalog
   }
 
-  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
+  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, dataSourceManager)
 
   protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
 
@@ -199,10 +199,11 @@ abstract class BaseSessionStateBuilder(
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
+        RewriteUserDefinedDataSource +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(this.catalogManager) +:
+        new ResolveSessionCatalog(this.catalogManager, dataSourceManager) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         customResolutionRules

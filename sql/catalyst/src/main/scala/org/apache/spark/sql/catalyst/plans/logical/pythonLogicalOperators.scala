@@ -108,8 +108,7 @@ case class PythonMapInArrow(
  */
 case class PythonDataSource(
     dataSource: PythonFunction,
-    outputSchema: StructType,
-    override val output: Seq[Attribute]) extends LeafNode {
+    output: Seq[Attribute]) extends LeafNode {
   require(output.forall(_.resolved),
     "Unresolved attributes found when constructing PythonDataSource.")
   override protected def stringArgs: Iterator[Any] = {

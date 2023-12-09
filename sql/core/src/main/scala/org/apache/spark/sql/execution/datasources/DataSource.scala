@@ -25,7 +25,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkClassNotFoundException, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command.DataWritingCommand
+import org.apache.spark.sql.execution.datasources.UserDefinedDataSourceTableProvider
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -705,10 +706,26 @@ object DataSource extends Logging {
    * there is no corresponding Data Source V2 implementation, or the provider is configured to
    * fallback to Data Source V1 code path.
    */
-  def lookupDataSourceV2(provider: String, conf: SQLConf): Option[TableProvider] = {
+  def lookupDataSourceV2(
+      provider: String,
+      conf: SQLConf,
+      dataSourceManager: DataSourceManager): Option[TableProvider] = {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
-    val cls = lookupDataSource(provider, conf)
+    val cls = try {
+      lookupDataSource(provider, conf)
+    } catch {
+      case e: SparkClassNotFoundException if e.getErrorClass == "DATA_SOURCE_NOT_FOUND" =>
+        val registeredDataSourceOpt = dataSourceManager.getDataSource(provider)
+        if (registeredDataSourceOpt.isDefined) {
+          return Some(new UserDefinedDataSourceTableProvider(provider, registeredDataSourceOpt.get))
+        } else {
+          throw e
+        }
+    }
+    if (dataSourceManager.dataSourceExists(provider)) {
+      throw QueryCompilationErrors.foundMultipleDataSources(provider)
+    }
     val instance = try {
       cls.getDeclaredConstructor().newInstance()
     } catch {

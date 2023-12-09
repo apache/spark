@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
@@ -49,6 +50,8 @@ case class DataSourceV2Relation(
   extends LeafNode with MultiInstanceRelation with NamedRelation with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
 
   lazy val funCatalog: Option[FunctionCatalog] = catalog.collect {
     case c: FunctionCatalog => c

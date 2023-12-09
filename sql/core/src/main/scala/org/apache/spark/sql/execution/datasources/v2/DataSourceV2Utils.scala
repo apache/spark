@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSuppo
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceManager}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -156,11 +156,14 @@ private[sql] object DataSourceV2Utils extends Logging {
   /**
    * Returns the table provider for the given format, or None if it cannot be found.
    */
-  def getTableProvider(provider: String, conf: SQLConf): Option[TableProvider] = {
+  def getTableProvider(
+      provider: String,
+      conf: SQLConf,
+      dataSourceManager: DataSourceManager): Option[TableProvider] = {
     // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
     // `HiveFileFormat`, when running tests in sql/core.
     if (DDLUtils.isHiveTable(Some(provider))) return None
-    DataSource.lookupDataSourceV2(provider, conf) match {
+    DataSource.lookupDataSourceV2(provider, conf, dataSourceManager) match {
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(p) if !p.isInstanceOf[FileDataSourceV2] => Some(p)
       case _ => None

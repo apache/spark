@@ -50,8 +50,8 @@ import org.apache.spark.util.ArrayImplicits._
 object PlanPythonDataSourceScan extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsPattern(PYTHON_DATA_SOURCE)) {
-    case ds @ PythonDataSource(dataSource: PythonFunction, schema, _) =>
-      val info = new UserDefinedPythonDataSourceReadRunner(dataSource, schema).runInPython()
+    case ds @ PythonDataSource(dataSource: PythonFunction, _) =>
+      val info = new UserDefinedPythonDataSourceReadRunner(dataSource, ds.schema).runInPython()
 
       val readerFunc = SimplePythonFunction(
         command = info.func.toImmutableArraySeq,
@@ -69,7 +69,7 @@ object PlanPythonDataSourceScan extends Rule[LogicalPlan] {
       val pythonUDTF = PythonUDTF(
         name = "python_data_source_read",
         func = readerFunc,
-        elementSchema = schema,
+        elementSchema = ds.schema,
         children = partitionPlan.output,
         evalType = PythonEvalType.SQL_TABLE_UDF,
         udfDeterministic = false,

@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Lo
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
+import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, DataSourceManager}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
@@ -44,7 +44,9 @@ import org.apache.spark.util.ArrayImplicits._
  * identifiers to construct the v1 commands, so that v1 commands do not need to qualify identifiers
  * again, which may lead to inconsistent behavior if the current database is changed in the middle.
  */
-class ResolveSessionCatalog(val catalogManager: CatalogManager)
+class ResolveSessionCatalog(
+    val catalogManager: CatalogManager,
+    dataSourceManager: DataSourceManager = new DataSourceManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
@@ -612,7 +614,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   private def isV2Provider(provider: String): Boolean = {
-    DataSourceV2Utils.getTableProvider(provider, conf).isDefined
+    DataSourceV2Utils.getTableProvider(provider, conf, dataSourceManager).isDefined
   }
 
   private object DatabaseInSessionCatalog {
