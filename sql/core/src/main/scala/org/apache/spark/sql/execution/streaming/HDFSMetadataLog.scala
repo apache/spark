@@ -325,6 +325,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
     val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+      // Batches must be files
+      .filter(f => f.isFile)
       .map(f => pathToBatchId(f.getPath)) ++
       // Iterate over keySet is not thread safe. We call `toArray` to make a copy in the lock to
       // elimiate the race condition.
