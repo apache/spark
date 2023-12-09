@@ -235,7 +235,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
   protected val fs = path.getFileSystem(hadoopConf)
 
   override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
-    fs.listStatus(path, filter)
+    fs.listStatus(path, filter).filter(f => f.isFile)
   }
 
   override def mkdirs(path: Path): Unit = {
@@ -312,7 +312,7 @@ abstract class AbstractFileContextBasedCheckpointFileManager(path: Path, hadoopC
   }
 
   override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
-    fc.util.listStatus(path, filter)
+    fc.util.listStatus(path, filter).filter(f => f.isFile)
   }
 
   override def mkdirs(path: Path): Unit = {
