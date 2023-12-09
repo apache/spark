@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
@@ -242,7 +243,7 @@ private[sql] object GroupStateImpl {
     case "ProcessingTimeTimeout" => GroupStateTimeout.ProcessingTimeTimeout
     case "EventTimeTimeout" => GroupStateTimeout.EventTimeTimeout
     case "NoTimeout" => GroupStateTimeout.NoTimeout
-    case _ => throw new IllegalStateException("Invalid string for GroupStateTimeout: " + clazz)
+    case _ => throw SparkException.internalError("Invalid string for GroupStateTimeout: " + clazz)
   }
 
   def fromJson[S](value: Option[S], json: JValue): GroupStateImpl[S] = {

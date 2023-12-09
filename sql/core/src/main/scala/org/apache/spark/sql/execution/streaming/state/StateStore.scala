@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -689,7 +689,8 @@ object StateStore extends Logging {
   private def doMaintenance(): Unit = {
     logDebug("Doing maintenance")
     if (SparkEnv.get == null) {
-      throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
+      throw SparkException.internalError(
+        "SparkEnv not active, cannot do maintenance on StateStores")
     }
     loadedProviders.synchronized {
       loadedProviders.toSeq

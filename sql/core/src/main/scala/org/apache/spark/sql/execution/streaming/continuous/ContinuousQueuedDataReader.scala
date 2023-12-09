@@ -22,7 +22,7 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -146,7 +146,7 @@ class ContinuousQueuedDataReader(
           if (!reader.next()) {
             // Check again, since reader.next() might have blocked through an incoming interrupt.
             if (!shouldStop()) {
-              throw new IllegalStateException(
+              throw SparkException.internalError(
                 "Continuous reader reported no elements! Reader should have blocked waiting.")
             } else {
               return

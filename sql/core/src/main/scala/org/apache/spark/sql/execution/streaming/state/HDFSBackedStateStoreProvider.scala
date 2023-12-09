@@ -31,7 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -758,7 +758,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) {
-      throw new IllegalStateException(msg)
+      throw SparkException.internalError(msg)
     }
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.read.streaming
@@ -60,7 +61,7 @@ class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
         s.latestOffset(getInitialOffset, ReadLimit.allAvailable())
       case s: Source => s.getOffset.orNull
       case m: MicroBatchStream => m.latestOffset()
-      case s => throw new IllegalStateException(s"Unexpected source: $s")
+      case s => throw SparkException.internalError(s"Unexpected source: $s")
     }
   }
 

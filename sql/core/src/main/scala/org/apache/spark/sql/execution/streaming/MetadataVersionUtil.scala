@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.SparkException
+
 object MetadataVersionUtil {
   /**
    * Parse the log version from the given `text` -- will throw exception when the parsed version
@@ -30,12 +32,14 @@ object MetadataVersionUtil {
           text.substring(1, text.length).toInt
         } catch {
           case _: NumberFormatException =>
-            throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
+            throw SparkException.internalError(
+              s"Log file was malformed: failed to read correct log " +
               s"version from $text.")
         }
       if (version > 0) {
         if (version > maxSupportedVersion) {
-          throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
+          throw SparkException.internalError(
+            s"UnsupportedLogVersion: maximum supported log version " +
             s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
             s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
         } else {
@@ -45,7 +49,7 @@ object MetadataVersionUtil {
     }
 
     // reaching here means we failed to read the correct log version
-    throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
+    throw SparkException.internalError(s"Log file was malformed: failed to read correct log " +
       s"version from $text.")
   }
 }

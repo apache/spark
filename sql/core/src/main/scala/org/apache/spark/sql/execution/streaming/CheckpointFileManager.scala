@@ -26,6 +26,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.local.{LocalFs, RawLocalFs}
 import org.apache.hadoop.fs.permission.FsPermission
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.RenameHelperMethods
@@ -161,7 +162,7 @@ object CheckpointFileManager extends Logging {
 
         // Optionally, check if the renamed file exists
         if (SQLConf.get.checkpointRenamedFileCheck && !fm.exists(finalPath)) {
-          throw new IllegalStateException(s"Renamed temp file $tempPath to $finalPath. " +
+          throw SparkException.internalError(s"Renamed temp file $tempPath to $finalPath. " +
             s"But $finalPath does not exist.")
         }
 

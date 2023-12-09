@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets._
 
 import scala.io.{Source => IOSource}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 
@@ -54,7 +55,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
     }
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
-      throw new IllegalStateException("Incomplete log file")
+      throw SparkException.internalError("Incomplete log file")
     }
 
     validateVersion(lines.next(), OffsetSeqLog.VERSION)

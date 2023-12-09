@@ -499,7 +499,7 @@ abstract class StreamExecution(
    */
   private def assertAwaitThread(): Unit = {
     if (queryExecutionThread eq Thread.currentThread) {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "Cannot wait for a query state from the same thread that is running the query")
     }
   }

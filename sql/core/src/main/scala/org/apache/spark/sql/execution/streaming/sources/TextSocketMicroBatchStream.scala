@@ -25,6 +25,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -155,7 +156,7 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
     val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
     if (offsetDiff < 0) {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 

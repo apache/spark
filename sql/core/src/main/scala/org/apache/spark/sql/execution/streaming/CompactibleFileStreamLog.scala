@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
@@ -155,7 +156,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   override def deserialize(in: InputStream): Array[T] = {
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
-      throw new IllegalStateException("Incomplete log file")
+      throw SparkException.internalError("Incomplete log file")
     }
     validateVersion(lines.next(), metadataLogVersion)
     lines.map(deserializeEntry).toArray
@@ -208,7 +209,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     applyFnToBatchByStream(batchId) { input =>
       val lines = IOSource.fromInputStream(input, UTF_8.name()).getLines()
       if (!lines.hasNext) {
-        throw new IllegalStateException("Incomplete log file")
+        throw SparkException.internalError("Incomplete log file")
       }
       validateVersion(lines.next(), metadataLogVersion)
       fn(lines.map(deserializeEntry))
@@ -263,7 +264,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
           val logs =
             getAllValidBatches(latestId, compactInterval).flatMap { id =>
               filterInBatch(id)(shouldRetain(_, curTime)).getOrElse {
-                throw new IllegalStateException(
+                throw SparkException.internalError(
                   s"${batchIdToPath(id)} doesn't exist " +
                     s"(latestId: $latestId, compactInterval: $compactInterval)")
               }

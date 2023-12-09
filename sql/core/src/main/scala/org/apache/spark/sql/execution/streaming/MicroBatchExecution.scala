@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
@@ -90,7 +91,7 @@ class MicroBatchExecution(
             SingleBatchExecutor()
           }
         }
-      case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
+      case _ => throw SparkException.internalError(s"Unknown type of trigger: $trigger")
     }
   }
 
@@ -367,7 +368,7 @@ class MicroBatchExecution(
           "available for the latest batch via manually deleting the offset file(s). " +
           "Please also ensure the latest batch for commit log is equal or one batch " +
           "earlier than the latest batch for offset log.")
-        throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
+        throw SparkException.internalError(s"batch ${latestBatchId - 1} doesn't exist")
       })
     } else {
       None
@@ -546,7 +547,7 @@ class MicroBatchExecution(
         }
       case (s, _) =>
         // for some reason, the compiler is unhappy and thinks the match is not exhaustive
-        throw new IllegalStateException(s"Unexpected source: $s")
+        throw SparkException.internalError(s"Unexpected source: $s")
     }.unzip
 
     availableOffsets ++= nextOffsets.filter { case (_, o) => o.nonEmpty }
@@ -840,7 +841,7 @@ class MicroBatchExecution(
         // we can't purge the previous version of watermark.
         watermarkPropagator.purge(currentBatchId - 2)
       } else {
-        throw new IllegalStateException(s"batch ${currentBatchId - 1} doesn't exist")
+        throw SparkException.internalError(s"batch ${currentBatchId - 1} doesn't exist")
       }
     }
   }

@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.paths.SparkPath
@@ -202,7 +203,8 @@ class FileStreamSource(
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
         logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
       } else {
-        throw new IllegalStateException("Concurrent update to the log. Multiple streaming jobs " +
+        throw SparkException.internalError(
+          "Concurrent update to the log. Multiple streaming jobs " +
           s"detected for $metadataLogCurrentOffset")
       }
     }

@@ -24,7 +24,7 @@ import java.util.function.UnaryOperator
 
 import scala.collection.mutable.{Map => MutableMap}
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -121,7 +121,7 @@ class ContinuousExecution(
 
   private val triggerExecutor = trigger match {
     case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTimeTrigger(t), triggerClock)
-    case _ => throw new IllegalStateException(s"Unsupported type of trigger: $trigger")
+    case _ => throw SparkException.internalError(s"Unsupported type of trigger: $trigger")
   }
 
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
@@ -168,7 +168,7 @@ class ContinuousExecution(
         updateStatusMessage("Starting new streaming query " +
           s"and getting offsets from latest epoch $latestEpochId")
         val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             s"Batch $latestEpochId was committed without end epoch offsets!")
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
@@ -206,7 +206,7 @@ class ContinuousExecution(
 
     withNewSources.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) =>
-        throw new IllegalStateException("CurrentTimestamp, Now, CurrentDate and LocalTimestamp" +
+        throw SparkException.internalError("CurrentTimestamp, Now, CurrentDate and LocalTimestamp" +
           " not yet supported for continuous processing")
     }
 

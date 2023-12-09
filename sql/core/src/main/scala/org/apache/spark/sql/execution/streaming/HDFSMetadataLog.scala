@@ -29,6 +29,7 @@ import org.apache.hadoop.fs._
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -187,7 +188,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       } catch {
         case ise: IllegalStateException =>
           // re-throw the exception with the log file path added
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             s"Failed to read log file $batchMetadataFile. ${ise.getMessage}", ise)
       } finally {
         IOUtils.closeQuietly(input)
@@ -370,14 +371,14 @@ object HDFSMetadataLog {
     // Verify that we can get all batches between `startId` and `endId`.
     if (startId.isDefined || endId.isDefined) {
       if (batchIds.isEmpty) {
-        throw new IllegalStateException(s"batch ${startId.orElse(endId).get} doesn't exist")
+        throw SparkException.internalError(s"batch ${startId.orElse(endId).get} doesn't exist")
       }
       if (startId.isDefined) {
         val minBatchId = batchIds.head
         assert(minBatchId >= startId.get)
         if (minBatchId != startId.get) {
           val missingBatchIds = startId.get to minBatchId
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             s"batches (${missingBatchIds.mkString(", ")}) don't exist " +
               s"(startId: $startId, endId: $endId)")
         }
@@ -388,7 +389,7 @@ object HDFSMetadataLog {
         assert(maxBatchId <= endId.get)
         if (maxBatchId != endId.get) {
           val missingBatchIds = maxBatchId to endId.get
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             s"batches (${missingBatchIds.mkString(", ")}) don't  exist " +
               s"(startId: $startId, endId: $endId)")
         }
@@ -400,7 +401,7 @@ object HDFSMetadataLog {
       val maxBatchId = batchIds.last
       val missingBatchIds = (minBatchId to maxBatchId).toSet -- batchIds
       if (missingBatchIds.nonEmpty) {
-        throw new IllegalStateException(s"batches (${missingBatchIds.mkString(", ")}) " +
+        throw SparkException.internalError(s"batches (${missingBatchIds.mkString(", ")}) " +
           s"don't exist (startId: $startId, endId: $endId)")
       }
     }

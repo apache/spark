@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -243,10 +244,10 @@ class NoPrefixKeyStateEncoder(keySchema: StructType, valueSchema: StructType)
   override def supportPrefixKeyScan: Boolean = false
 
   override def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-    throw new IllegalStateException("This encoder doesn't support prefix key!")
+    throw SparkException.internalError("This encoder doesn't support prefix key!")
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    throw new IllegalStateException("This encoder doesn't support prefix key!")
+    throw SparkException.internalError("This encoder doesn't support prefix key!")
   }
 }

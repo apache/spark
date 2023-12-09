@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
@@ -170,7 +171,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   private def throwBadStateFormatVersionException(): Nothing = {
-    throw new IllegalStateException("Unexpected state format version! " +
+    throw SparkException.internalError("Unexpected state format version! " +
       s"version $stateFormatVersion")
   }
 
@@ -256,7 +257,8 @@ case class StreamingSymmetricHashJoinExec(
       leftInputIter: Iterator[InternalRow],
       rightInputIter: Iterator[InternalRow]): Iterator[InternalRow] = {
     if (stateInfo.isEmpty) {
-      throw new IllegalStateException(s"Cannot execute join as state info was not specified\n$this")
+      throw SparkException.internalError(
+        s"Cannot execute join as state info was not specified\n$this")
     }
 
     val numOutputRows = longMetric("numOutputRows")

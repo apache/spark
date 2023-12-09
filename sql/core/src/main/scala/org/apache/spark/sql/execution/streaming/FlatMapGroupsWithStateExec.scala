@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -323,7 +324,7 @@ trait FlatMapGroupsWithStateExecBase
           case ProcessingTimeTimeout => batchTimestampMs.get
           case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Cannot filter timed out keys for $timeoutConf")
         }
         val timingOutPairs = stateManager.getAllState(store).filter { state =>
