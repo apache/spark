@@ -16,17 +16,22 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_ewm import EWMTestsMixin
+from pyspark.pandas.tests.window.test_groupby_ewm_mean import GroupByEWMMeanMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class EWMParityTests(EWMTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase, TestUtils):
+class EWMParityGroupByMeanTests(
+    GroupByEWMMeanMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+    TestUtils,
+):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_ewm import *  # noqa: F401
+    from pyspark.pandas.tests.connect.window.test_parity_groupby_ewm_mean import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
