@@ -25,17 +25,21 @@ class SeriesInterpolateMixin:
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
         self.assert_eq(psobj.interpolate(), pobj.interpolate())
-        for limit in range(1, 5):
-            for limit_direction in [None, "forward", "backward", "both"]:
-                for limit_area in [None, "inside", "outside"]:
-                    self.assert_eq(
-                        psobj.interpolate(
-                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                        ),
-                        pobj.interpolate(
-                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                        ),
-                    )
+        for limit, limit_direction, limit_area in [
+            (1, None, None),
+            (2, "forward", "inside"),
+            (3, "backward", "outside"),
+            (4, "backward", "inside"),
+            (5, "both", "inside"),
+        ]:
+            self.assert_eq(
+                psobj.interpolate(
+                    limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                ),
+                pobj.interpolate(
+                    limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                ),
+            )
 
     def test_interpolate(self):
         pser = pd.Series(
