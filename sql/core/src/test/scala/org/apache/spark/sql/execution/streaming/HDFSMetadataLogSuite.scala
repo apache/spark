@@ -25,6 +25,7 @@ import scala.language.implicitConversions
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.UninterruptibleThread
@@ -107,7 +108,7 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
     withTempDir { dir =>
       val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
       def assertLogFileMalformed(func: => Int): Unit = {
-        val e = intercept[IllegalStateException] { func }
+        val e = intercept[SparkException] { func }
         assert(e.getMessage.contains(s"Log file was malformed: failed to read correct log version"))
       }
       assertLogFileMalformed { metadataLog.validateVersion("", 100) }
@@ -120,7 +121,7 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
       assert(metadataLog.validateVersion("v10", 10) === 10)
       assert(metadataLog.validateVersion("v10", 100) === 10)
 
-      val e = intercept[IllegalStateException] { metadataLog.validateVersion("v200", 100) }
+      val e = intercept[SparkException] { metadataLog.validateVersion("v200", 100) }
       Seq(
         "maximum supported log version is v100, but encountered v200",
         "produced by a newer version of Spark and cannot be read by this version"
@@ -191,16 +192,16 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
     verifyBatchIds(Seq(1L, 2L, 3L), Some(1L), None)
     verifyBatchIds(Seq(1L, 2L, 3L), None, None)
 
-    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(1L), None))
-    intercept[IllegalStateException](verifyBatchIds(Seq(), None, Some(1L)))
-    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(1L), Some(1L)))
-    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), None))
-    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), None, Some(5L)))
-    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), Some(5L)))
-    intercept[IllegalStateException](verifyBatchIds(Seq(1, 2, 4, 5), Some(1L), Some(5L)))
+    intercept[SparkException](verifyBatchIds(Seq(), Some(1L), None))
+    intercept[SparkException](verifyBatchIds(Seq(), None, Some(1L)))
+    intercept[SparkException](verifyBatchIds(Seq(), Some(1L), Some(1L)))
+    intercept[SparkException](verifyBatchIds(Seq(2, 3, 4), Some(1L), None))
+    intercept[SparkException](verifyBatchIds(Seq(2, 3, 4), None, Some(5L)))
+    intercept[SparkException](verifyBatchIds(Seq(2, 3, 4), Some(1L), Some(5L)))
+    intercept[SparkException](verifyBatchIds(Seq(1, 2, 4, 5), Some(1L), Some(5L)))
 
     // Related to SPARK-26629, this captures the behavior for verifyBatchIds when startId > endId
-    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(2L), Some(1L)))
+    intercept[SparkException](verifyBatchIds(Seq(), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(2), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(0), Some(2L), Some(1L)))
