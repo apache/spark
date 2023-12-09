@@ -335,6 +335,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 
+### CATALOG_NOT_FOUND
+
+[SQLSTATE: 42P08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The catalog `<catalogName>` not found. Consider to set the SQL config `<config>` to a catalog plugin.
+
 ### CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND
 
 SQLSTATE: 56000
