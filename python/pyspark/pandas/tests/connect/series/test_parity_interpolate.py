@@ -18,11 +18,13 @@ import unittest
 
 from pyspark.pandas.tests.series.test_interpolate import SeriesInterpolateMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityInterpolateTests(
-    SeriesInterpolateMixin, TestUtils, PandasOnSparkTestUtils, ReusedConnectTestCase
+    SeriesInterpolateMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
