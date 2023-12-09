@@ -180,10 +180,10 @@ abstract class OffsetWindowFunctionFrameBase(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    resetStates(rows)
     if (absOffset > rows.length) {
-      prepareForDefaultValue(rows)
+      fillDefaultValue(EmptyRow)
     } else {
-      resetStates(rows)
       if (ignoreNulls) {
         prepareForIgnoreNulls()
       } else {
@@ -191,9 +191,6 @@ abstract class OffsetWindowFunctionFrameBase(
       }
     }
   }
-
-  protected def prepareForDefaultValue(rows: ExternalAppendOnlyUnsafeRowArray): Unit =
-    fillDefaultValue(EmptyRow)
 
   protected def prepareForIgnoreNulls(): Unit = findNextRowWithNonNullInput()
 
@@ -203,6 +200,8 @@ abstract class OffsetWindowFunctionFrameBase(
       nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
       inputIndex += 1
     }
+    // In order to match the correct index during the write phase even if the offset is negative.
+    inputIndex = offset
   }
 
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
@@ -227,19 +226,6 @@ class FrameLessOffsetWindowFunctionFrame(
     ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
-
-  override def prepareForDefaultValue(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // During the write phase, always access the current window group. So need reset the states.
-    resetStates(rows)
-    super.prepareForDefaultValue(rows)
-  }
-
-  override def prepareForRespectNulls(): Unit = {
-    super.prepareForRespectNulls()
-    // In order to match the correct index during the write phase even if the offset is lager than
-    // the window group size or is negative.
-    inputIndex = offset
-  }
 
   private val doWrite = if (ignoreNulls && offset > 0) {
     // For illustration, here is one example: the input data contains nine rows,
