@@ -21,6 +21,7 @@ import java.util.Objects
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LAMBDA_VARIABLE, PLAN_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -73,7 +74,7 @@ class EquivalentExpressions(
             false
           } else {
             // Should not happen
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Cannot update expression: $expr in map: $map with use count: $useCount")
           }
         case _ =>
@@ -81,7 +82,7 @@ class EquivalentExpressions(
             map.put(wrapper, ExpressionStats(expr)(useCount))
           } else {
             // Should not happen
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Cannot update expression: $expr in map: $map with use count: $useCount")
           }
           false
