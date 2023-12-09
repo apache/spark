@@ -198,9 +198,8 @@ private[client] object GrpcExceptionConverter {
         queryContext = params.queryContext)),
     errorConstructor(params =>
       new AnalysisException(
-        params.message,
         cause = params.cause,
-        errorClass = params.errorClass,
+        errorClass = params.errorClass.orNull,
         messageParameters = params.messageParameters,
         context = params.queryContext)),
     errorConstructor(params =>

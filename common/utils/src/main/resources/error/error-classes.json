@@ -6710,5 +6710,88 @@
       "<errorMessage>"
     ],
     "sqlState" : "P0001"
+  },
+  "_LEGACY_ERROR_TEMP_3050" : {
+    "message" : [
+      "Cannot modify the value of a static config: <k>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3051" : {
+    "message" : [
+      "When resolving <u>, fail to find subplan with plan_id=<planId> in <q>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3052" : {
+    "message" : [
+      "Unexpected resolved action: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3053" : {
+    "message" : [
+      "Unexpected WHEN NOT MATCHED action: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3054" : {
+    "message" : [
+      "<expr> is not currently supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3055" : {
+    "message" : [
+      "ScalarFunction '<scalarFunc.name>' neither implement magic method nor override 'produceResult'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3056" : {
+    "message" : [
+      "Unexpected row-level read relations (allow multiple = <allowMultipleReads>): <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3057" : {
+    "message" : [
+      "Cannot retrieve row-level operation from <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3058" : {
+    "message" : [
+      "Found duplicate column(s) <checkType>: <duplicateColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3059" : {
+    "message" : [
+      "The positions provided (<pos>) cannot be resolved in",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3060" : {
+    "message" : [
+      "Couldn't find column <i> in:",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3061" : {
+    "message" : [
+      "<e>",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3062" : {
+    "message" : [
+      "Expected <columnPath> to be a nested data type, but found <o>. Was looking for the index of <attr> in a nested field"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3063" : {
+    "message" : [
+      "pivot is not supported on a streaming DataFrames/Datasets"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3064" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3065" : {
+    "message" : [
+      "<clazz>: <msg>"
+    ]
   }
 }

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
  * @since 1.3.0
  */
 @Stable
-class AnalysisException protected[sql] (
+class AnalysisException protected(
     val message: String,
     val line: Option[Int] = None,
     val startPosition: Option[Int] = None,
@@ -53,6 +53,18 @@ class AnalysisException protected[sql] (
       errorClass: String,
       messageParameters: Map[String, String],
       context: Array[QueryContext],
+      cause: Option[Throwable]) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      context = context,
+      cause = cause)
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
       summary: String) =
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
@@ -68,6 +80,8 @@ class AnalysisException protected[sql] (
       errorClass = errorClass,
       messageParameters = messageParameters,
       cause = None)
+
+  def this(errorClass: String) = this(errorClass = errorClass, messageParameters = Map.empty)
 
   def this(
       errorClass: String,

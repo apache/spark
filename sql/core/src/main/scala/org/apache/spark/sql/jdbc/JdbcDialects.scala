@@ -635,7 +635,10 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return `AnalysisException` or its sub-class.
    */
   def classifyException(message: String, e: Throwable): AnalysisException = {
-    new AnalysisException(message, cause = Some(e))
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_3064",
+      messageParameters = Map("msg" -> message),
+      cause = Some(e))
   }
 
   /**
