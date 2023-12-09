@@ -21,7 +21,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class SeriesInterpolateTestsMixin:
+class SeriesInterpolateMixin:
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
         self.assert_eq(psobj.interpolate(), pobj.interpolate())
@@ -79,13 +79,13 @@ class SeriesInterpolateTestsMixin:
         self._test_interpolate(pser)
 
 
-class SeriesInterpolateTests(SeriesInterpolateTestsMixin, PandasOnSparkTestCase, TestUtils):
+class SeriesInterpolateTests(SeriesInterpolateMixin, PandasOnSparkTestCase, TestUtils):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_series_interpolate import *  # noqa: F401
+    from pyspark.pandas.tests.series.test_interpolate import *  # noqa: F401
 
     try:
         import xmlrunner
