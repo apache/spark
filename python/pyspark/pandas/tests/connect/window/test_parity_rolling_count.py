@@ -16,13 +16,13 @@
 #
 import unittest
 
-from pyspark.pandas.tests.window.test_groupby_rolling import GroupByRollingMixin
+from pyspark.pandas.tests.window.test_rolling_count import RollingCountMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class RollingParityGroupTests(
-    GroupByRollingMixin,
+class RollingParityCountTests(
+    RollingCountMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
@@ -30,7 +30,7 @@ class RollingParityGroupTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.window.test_parity_groupby_rolling import *  # noqa: F401
+    from pyspark.pandas.tests.connect.window.test_parity_rolling_count import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

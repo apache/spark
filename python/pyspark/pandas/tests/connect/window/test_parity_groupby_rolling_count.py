@@ -18,13 +18,12 @@ import unittest
 
 from pyspark.pandas.tests.window.test_groupby_rolling_count import GroupByRollingCountMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class RollingParityGroupCountTests(
     GroupByRollingCountMixin,
     PandasOnSparkTestUtils,
-    TestUtils,
     ReusedConnectTestCase,
 ):
     pass

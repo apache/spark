@@ -21,19 +21,14 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class RollingTestingFuncMixin:
-    def _test_rolling_func(self, ps_func, pd_func=None):
-        if not pd_func:
-            pd_func = ps_func
-        if isinstance(pd_func, str):
-            pd_func = self.convert_str_to_lambda(pd_func)
-        if isinstance(ps_func, str):
-            ps_func = self.convert_str_to_lambda(ps_func)
+class RollingCountMixin:
+    def test_rolling_count(self):
         pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
-        self.assert_eq(ps_func(psser.rolling(2)), pd_func(pser.rolling(2)))
-        self.assert_eq(ps_func(psser.rolling(2)).sum(), pd_func(pser.rolling(2)).sum())
+        self.assert_eq(psser.rolling(2).count(), pser.rolling(2, min_periods=1).count())
+        self.assert_eq(psser.rolling(2).count().sum(), pser.rolling(2, min_periods=1).count().sum())
 
+        # TODO(SPARK-43432): Fix `min_periods` for Rolling.count() to work same as pandas
         # Multiindex
         pser = pd.Series(
             [1, 2, 3],
@@ -41,38 +36,24 @@ class RollingTestingFuncMixin:
             name="a",
         )
         psser = ps.from_pandas(pser)
-        self.assert_eq(ps_func(psser.rolling(2)), pd_func(pser.rolling(2)))
+        self.assert_eq(psser.rolling(2).count(), pser.rolling(2, min_periods=1).count())
 
         pdf = pd.DataFrame(
             {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(ps_func(psdf.rolling(2)), pd_func(pdf.rolling(2)))
-        self.assert_eq(ps_func(psdf.rolling(2)).sum(), pd_func(pdf.rolling(2)).sum())
+        self.assert_eq(psdf.rolling(2).count(), pdf.rolling(2, min_periods=1).count())
+        self.assert_eq(psdf.rolling(2).count().sum(), pdf.rolling(2, min_periods=1).count().sum())
 
         # Multiindex column
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
         psdf.columns = columns
-        self.assert_eq(ps_func(psdf.rolling(2)), pd_func(pdf.rolling(2)))
+        self.assert_eq(psdf.rolling(2).count(), pdf.rolling(2, min_periods=1).count())
 
 
-class RollingMixin(RollingTestingFuncMixin):
-    def test_rolling_min(self):
-        self._test_rolling_func("min")
-
-    def test_rolling_max(self):
-        self._test_rolling_func("max")
-
-    def test_rolling_mean(self):
-        self._test_rolling_func("mean")
-
-    def test_rolling_sum(self):
-        self._test_rolling_func("sum")
-
-
-class RollingTests(
-    RollingMixin,
+class RollingCountTests(
+    RollingCountMixin,
     PandasOnSparkTestCase,
 ):
     pass
@@ -80,7 +61,7 @@ class RollingTests(
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.window.test_rolling import *  # noqa: F401
+    from pyspark.pandas.tests.window.test_rolling_count import *  # noqa: F401
 
     try:
         import xmlrunner

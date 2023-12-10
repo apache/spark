@@ -18,13 +18,12 @@ import unittest
 
 from pyspark.pandas.tests.window.test_rolling_error import RollingErrorMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class RollingParityErrorTests(
     RollingErrorMixin,
     PandasOnSparkTestUtils,
-    TestUtils,
     ReusedConnectTestCase,
 ):
     pass
