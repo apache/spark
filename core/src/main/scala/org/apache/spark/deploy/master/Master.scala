@@ -284,6 +284,10 @@ private[deploy] class Master(
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else if (idToWorker.contains(id)) {
+        if (idToWorker(id).state == WorkerState.UNKNOWN) {
+          logInfo("Worker has been re-registered: " + id)
+          idToWorker(id).state = WorkerState.ALIVE
+        }
         workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
         val workerResources =
