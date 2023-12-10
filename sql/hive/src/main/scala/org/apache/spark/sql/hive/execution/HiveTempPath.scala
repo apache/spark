@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -54,7 +55,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
     if (allSupportedHiveVersions.contains(hiveVersion)) {
       externalTempPath(path, stagingDir)
     } else {
-      throw new IllegalStateException("Unsupported hive version: " + hiveVersion.fullVersion)
+      throw SparkException.internalError("Unsupported hive version: " + hiveVersion.fullVersion)
     }
   }
 
@@ -143,7 +144,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
       stagingDirForCreating.foreach { stagingDir =>
         val fs: FileSystem = stagingDir.getFileSystem(hadoopConf)
         if (!FileUtils.mkdir(fs, stagingDir, true, hadoopConf)) {
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             "Cannot create staging directory  '" + stagingDir.toString + "'")
         }
         fs.deleteOnExit(stagingDir)
