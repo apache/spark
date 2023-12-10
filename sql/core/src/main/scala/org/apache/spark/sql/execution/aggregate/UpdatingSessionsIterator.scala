@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.aggregate
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -174,7 +173,7 @@ class UpdatingSessionsIterator(
 
   private def handleBrokenPreconditionForSort(): Unit = {
     errorOnIterator = true
-    throw SparkException.internalError("The iterator must be sorted by key and session start!")
+    throw new IllegalStateException("The iterator must be sorted by key and session start!")
   }
 
   private val join = new JoinedRow
@@ -216,7 +215,7 @@ class UpdatingSessionsIterator(
 
   private def assertIteratorNotCorrupted(): Unit = {
     if (errorOnIterator) {
-      throw SparkException.internalError("The iterator is already corrupted.")
+      throw new IllegalStateException("The iterator is already corrupted.")
     }
   }
 }
