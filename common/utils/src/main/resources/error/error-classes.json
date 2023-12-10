@@ -6940,16 +6940,16 @@
   },
   "_LEGACY_ERROR_TEMP_3096" : {
     "message" : [
-      "Converted table has <resLen> columns, ",
-      "but source Hive table has <relLen> columns. ",
-      "Set <key> to false, ",
+      "Converted table has <resLen> columns,",
+      "but source Hive table has <relLen> columns.",
+      "Set <key> to false,",
       "or recreate table <ident> to workaround."
     ]
   },
   "_LEGACY_ERROR_TEMP_3097" : {
     "message" : [
-      "Column in converted table has different data type with source Hive table's. ",
-      "Set <key> to false, ",
+      "Column in converted table has different data type with source Hive table's.",
+      "Set <key> to false,",
       "or recreate table <ident> to workaround."
     ]
   },
