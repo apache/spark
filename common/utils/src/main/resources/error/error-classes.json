@@ -6883,6 +6883,76 @@
       "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3085" : {
+    "message" : [
+      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3086" : {
+    "message" : [
+      "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3087" : {
+    "message" : [
+      "Cannot set or change the preserved property key: 'EXTERNAL'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3088" : {
+    "message" : [
+      "The metadata is corrupted. Unable to find the partition column names from the schema. schema: <schema>. Partition columns: <partColumnNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3089" : {
+    "message" : [
+      "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3090" : {
+    "message" : [
+      "Raw list type in java is unsupported because Spark cannot infer the element type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3091" : {
+    "message" : [
+      "Raw map type in java is unsupported because Spark cannot infer key and value types."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3092" : {
+    "message" : [
+      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because Spark cannot infer the data type for these type parameters."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3093" : {
+    "message" : [
+      "Unsupported java type <c>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3094" : {
+    "message" : [
+      "<dt> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3095" : {
+    "message" : [
+      "<dt> cannot be converted to Hive TypeInfo"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3096" : {
+    "message" : [
+      "Converted table has <resLen> columns, ",
+      "but source Hive table has <relLen> columns. ",
+      "Set <key> to false, ",
+      "or recreate table <ident> to workaround."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3097" : {
+    "message" : [
+      "Column in converted table has different data type with source Hive table's. ",
+      "Set <key> to false, ",
+      "or recreate table <ident> to workaround."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
