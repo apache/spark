@@ -153,7 +153,7 @@ class LogicalPlanSuite extends SparkFunSuite {
     val plan = Filter(Exists(input), input2)
     val tableNames = scala.collection.mutable.Set[String]()
     plan.foreachWithSubqueries {
-      case UnresolvedRelation(name, _, _) => tableNames.add(name.mkString("."))
+      case e: UnresolvedRelation => tableNames.add(e.name)
       case _ =>
     }
     assert(tableNames.contains("subquery_table"))
