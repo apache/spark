@@ -14,21 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import unittest
 
-from pyspark.pandas.tests.diff_frames_ops.test_cov_corrwith import DiffFramesCovCorrWithMixin
+from pyspark.pandas.tests.diff_frames_ops.test_cov import DiffFramesCovMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class DiffFramesParityCovCorrWithTests(
-    DiffFramesCovCorrWithMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class DiffFramesParityCovTests(
+    DiffFramesCovMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_cov_corrwith import *  # noqa
+    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_cov import *  # noqa
 
     try:
         import xmlrunner  # type: ignore[import]
