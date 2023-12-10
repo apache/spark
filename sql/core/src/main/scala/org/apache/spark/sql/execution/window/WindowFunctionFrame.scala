@@ -200,7 +200,9 @@ abstract class OffsetWindowFunctionFrameBase(
       nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
       inputIndex += 1
     }
-    // In order to match the correct index during the write phase even if the offset is negative.
+    // `inputIndex` starts as 0, but the `offset` can be negative and we may not enter the
+    // while loop at all. We need to make sure `inputIndex` ends up as `offset` to meet the
+    // assumption of the write path.
     inputIndex = offset
   }
 
@@ -240,7 +242,9 @@ class FrameLessOffsetWindowFunctionFrame(
     // 7. current row -> z, next selected row -> empty, output: null;
     // ... next selected row is empty, all following return null.
     (current: InternalRow) =>
-      if (nextSelectedRow == EmptyRow) {
+      if (absOffset > input.length) {
+        // Already use default values in prepare.
+      } else if (nextSelectedRow == EmptyRow) {
         // Use default values since the offset row whose input value is not null does not exist.
         fillDefaultValue(current)
       } else {
@@ -272,25 +276,29 @@ class FrameLessOffsetWindowFunctionFrame(
     // 8. current row -> v, next selected row -> z, output: z;
     // 9. current row -> null, next selected row -> v, output: v;
     (current: InternalRow) =>
-      if (skippedNonNullCount == absOffset) {
-        nextSelectedRow = EmptyRow
-        skippedNonNullCount -= 1
-        while (nextSelectedRow == EmptyRow && inputIndex < input.length) {
-          val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-          if (!nullCheck(r)) {
-            nextSelectedRow = r
-          }
-          inputIndex += 1
-        }
-      }
-      if (nextSelectedRow == EmptyRow) {
-        // Use default values since the offset row whose input value is not null does not exist.
-        fillDefaultValue(current)
+      if (absOffset > input.length) {
+        // Already use default values in prepare.
       } else {
-        projection(nextSelectedRow)
-      }
-      if (!nullCheck(current)) {
-        skippedNonNullCount += 1
+        if (skippedNonNullCount == absOffset) {
+          nextSelectedRow = EmptyRow
+          skippedNonNullCount -= 1
+          while (nextSelectedRow == EmptyRow && inputIndex < input.length) {
+            val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+            if (!nullCheck(r)) {
+              nextSelectedRow = r
+            }
+            inputIndex += 1
+          }
+        }
+        if (nextSelectedRow == EmptyRow) {
+          // Use default values since the offset row whose input value is not null does not exist.
+          fillDefaultValue(current)
+        } else {
+          projection(nextSelectedRow)
+        }
+        if (!nullCheck(current)) {
+          skippedNonNullCount += 1
+        }
       }
   } else {
     (current: InternalRow) =>
@@ -376,7 +384,9 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   assert(offset > 0)
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (index >= inputIndex - 1 && nextSelectedRow != null) {
+    if (absOffset > input.length) {
+      // Already use default values in prepare.
+    } else if (index >= inputIndex - 1 && nextSelectedRow != null) {
       projection(nextSelectedRow)
     } else {
       fillDefaultValue(EmptyRow)
