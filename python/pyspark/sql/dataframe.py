@@ -48,6 +48,7 @@ from pyspark.errors import (
     PySparkValueError,
     PySparkIndexError,
     PySparkAttributeError,
+    IllegalArgumentException
 )
 from pyspark.rdd import (
     RDD,
@@ -3270,15 +3271,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jcols.append(_to_java_column(cast("ColumnOrName", _c)))
 
         ascending = kwargs.get("ascending", True)
-        if isinstance(ascending, (bool, int)):
-            if not ascending:
-                jcols = [jc.desc() for jc in jcols]
-        elif isinstance(ascending, list):
-            jcols = [jc if asc else jc.desc() for asc, jc in zip(ascending, jcols)]
-        else:
-            raise PySparkTypeError(
-                error_class="NOT_BOOL_OR_LIST",
-                message_parameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
+        try:
+            if isinstance(ascending, (bool, int)):
+                if not ascending:
+                    jcols = [jc.desc() for jc in jcols]
+            elif isinstance(ascending, list):
+                jcols = [jc if asc else jc.desc() for asc, jc in zip(ascending, jcols)]
+            else:
+                raise PySparkTypeError(
+                    error_class="NOT_BOOL_OR_LIST",
+                    message_parameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
+                )
+        except IllegalArgumentException:
+            raise PySparkValueError(
+                message="Multiple sort orders found. "
+                        "Consider not using \"ascending\" kwarg "
+                        "when you have sorted expressions."
             )
         return self._jseq(jcols)
 

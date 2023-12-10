@@ -67,6 +67,11 @@ case class SortOrder(
     sameOrderExpressions: Seq[Expression])
   extends Expression with Unevaluable {
 
+  require(
+    !child.isInstanceOf[SortOrder],
+    "When instantiating SortOrder, the child expression can't be an already sorted expression"
+  )
+
   override def children: Seq[Expression] = child +: sameOrderExpressions
 
   override def checkInputDataTypes(): TypeCheckResult =

@@ -95,4 +95,11 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
           "functionName" -> "`sortorder`",
           "dataType" -> "\"MAP<STRING, STRING>\"")))
   }
+
+  test("SortOrder cannot accept sorted expression as a child") {
+    val e1 = SortOrder(Literal(1), Ascending)
+    intercept[IllegalArgumentException] {
+      SortOrder(e1, Ascending)
+    }
+  }
 }
