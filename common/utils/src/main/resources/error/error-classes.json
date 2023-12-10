@@ -6848,6 +6848,41 @@
       "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3078" : {
+    "message" : [
+      "Can not match ParquetTable in the query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3079" : {
+    "message" : [
+      "Dynamic partition cannot be the parent of a static partition."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3080" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3081" : {
+    "message" : [
+      "Save mode <mode> not allowed for Kafka. Allowed save modes are <append> and <errorIfExists> (default)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3082" : {
+    "message" : [
+      "Creating bucketed Hive serde table is not supported yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3083" : {
+    "message" : [
+      "Unable to infer the schema. The schema specification is required to create the table <tableName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3084" : {
+    "message" : [
+      "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

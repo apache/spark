@@ -18,7 +18,7 @@ package org.apache.spark.sql.connector
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
@@ -51,7 +51,7 @@ class DummyReadOnlyFileTable extends Table with SupportsRead {
   override def schema(): StructType = StructType(Nil)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    throw new AnalysisException("Dummy file reader")
+    throw SparkException.internalError("Dummy file reader")
   }
 
   override def capabilities(): java.util.Set[TableCapability] =
@@ -75,7 +75,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
   override def schema(): StructType = StructType(Nil)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
-    throw new AnalysisException("Dummy file writer")
+    throw SparkException.internalError("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA)
