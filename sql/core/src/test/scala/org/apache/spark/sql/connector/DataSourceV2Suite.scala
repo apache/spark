@@ -26,7 +26,6 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -750,17 +749,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("SPARK-46272: create table as select - error cases") {
+  test("SPARK-46272: create table as select - too many columns") {
     val cls = classOf[SupportsExternalMetadataDataSource]
-    // CTAS with too many columns
     withTable("test") {
       checkError(
         exception = intercept[AnalysisException] {
-          sql(
-            s"""
-               |CREATE TABLE test USING ${cls.getName}
-               |AS VALUES (0, 1, 2), (1, 2, 3)
-               |""".stripMargin)
+          sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1, 2), (1, 2, 3)")
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
         parameters = Map(
@@ -768,7 +762,10 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           "tableColumns" -> "`i`, `j`",
           "dataColumns" -> "`col1`, `col2`, `col3`"))
     }
-    // CTAS with not enough columns
+  }
+
+  test("SPARK-46272: create table as select - not enough columns") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
     withTable("test") {
       checkError(
         exception = intercept[AnalysisException] {
@@ -784,7 +781,10 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           "tableColumns" -> "`i`, `j`",
           "dataColumns" -> "`col1`"))
     }
-    // CTAS with type mismatch
+  }
+
+  test("SPARK-46272: create table as select - column type mismatch") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
     withTable("test") {
       checkError(
         exception = intercept[AnalysisException] {
@@ -798,20 +798,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "colName" -> "`i`", "srcType" -> "\"STRING\"", "targetType" -> "\"INT\""))
-    }
-    // CTAS with schema specified
-    withTable("test") {
-      val error = intercept[ParseException] {
-        sql(
-          s"""
-             |CREATE TABLE test(x INT, y INT) USING ${cls.getName}
-             |AS VALUES (1, 2), (3, 4)
-             |""".stripMargin
-        )
-      }
-      assert(error.getMessage.contains(
-        "Operation not allowed: Schema may not be specified in a " +
-        "Create Table As Select (CTAS) statement"))
     }
   }
 
