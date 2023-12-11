@@ -22,13 +22,11 @@ import javax.xml.stream.XMLEventReader
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
-
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.Exception._
 import scala.util.control.NonFatal
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -157,7 +155,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     parser.peek match {
       case _: EndElement => NullType
       case _: StartElement => inferObject(parser)
-      case c: Characters if c.isWhiteSpace =>
+      case c: Characters if isEmptyString(c) =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
         val data = c.getData
@@ -169,16 +167,18 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _: EndElement => StringType
           case _ => inferField(parser)
         }
-      case c: Characters if !c.isWhiteSpace =>
+      // what about new line character
+      case c: Characters if !isEmptyString(c) =>
         // This could be the characters of a character-only element, or could have mixed
         // characters and other complex structure
         val characterType = inferFrom(c.getData)
         parser.nextEvent()
         parser.peek match {
           case _: StartElement =>
-            // Some more elements follow; so ignore the characters.
-            // Use the schema of the rest
-            inferObject(parser).asInstanceOf[StructType]
+            // Some more elements follow;
+            // This is a mix of values and other elements
+            val innerType = inferObject(parser).asInstanceOf[StructType]
+            addOrUpdateValueTagType(innerType, characterType)
           case _ =>
             // That's all, just the character-only body; use that as the type
             characterType
@@ -231,6 +231,22 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       }
     }
 
+    @tailrec
+    def inferAndCheckEndElement(parser: XMLEventReader): Boolean = {
+      parser.peek match {
+        case _: EndElement | _: EndDocument => true
+        case _: StartElement => false
+        case c: Characters if !isEmptyString(c) =>
+          val characterType = inferFrom(c.getData)
+          parser.nextEvent()
+          addOrUpdateType(options.valueTag, characterType)
+          inferAndCheckEndElement(parser)
+        case _ =>
+          parser.nextEvent()
+          inferAndCheckEndElement(parser)
+      }
+    }
+
     // If there are attributes, then we should process them first.
     val rootValuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
@@ -271,26 +287,16 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
           addOrUpdateType(field, inferredType)
 
-        case c: Characters if !c.isWhiteSpace =>
+        case c: Characters if !isEmptyString(c) =>
           // This can be an attribute-only object
           val valueTagType = inferFrom(c.getData)
           addOrUpdateType(options.valueTag, valueTagType)
 
         case _: EndElement =>
-          shouldStop = StaxXmlParserUtils.checkEndElement(parser)
+          shouldStop = inferAndCheckEndElement(parser)
 
         case _ => // do nothing
       }
-    }
-    // A structure object is an attribute-only element
-    // if it only consists of attributes and valueTags.
-    // If not, we will remove the valueTag field from the schema
-    val attributesOnly = nameToDataType.forall {
-      case (fieldName, _) =>
-        fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix)
-    }
-    if (!attributesOnly) {
-      nameToDataType -= options.valueTag
     }
 
     // Note: other code relies on this sorting for correctness, so don't remove it!
@@ -503,4 +509,57 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       }
     }
   }
+
+  /**
+   * This helper function merges the data type of value tags and inner elements.
+   * It could only be structure data. Consider the following case,
+   * <a>
+   *   value1
+   *   <b>1</b>
+   *   value2
+   * </a>
+   * Input: ''a struct<b int, _VALUE string>'' and ''_VALUE string''
+   * Return: ''a struct<b int, _VALUE array<string>>''
+   * @param objectType inner elements' type
+   * @param valueTagType value tag's type
+   */
+  private[xml] def addOrUpdateValueTagType(
+      objectType: DataType,
+      valueTagType: DataType): DataType = {
+    (objectType, valueTagType) match {
+      case (st: StructType, _) =>
+        // TODO(shujing): case sensitive?
+        val valueTagIndexOpt = st.getFieldIndex(options.valueTag)
+
+        valueTagIndexOpt match {
+          // If the field name exists in the inner elements,
+          // merge the type and infer the combined field as an array type if necessary
+          case Some(index) if !st(index).dataType.isInstanceOf[ArrayType] =>
+            updateStructField(
+              st,
+              index,
+              ArrayType(compatibleType(st(index).dataType, valueTagType)))
+          case Some(index) =>
+            updateStructField(st, index, compatibleType(st(index).dataType, valueTagType))
+          case None =>
+            st.add(options.valueTag, valueTagType)
+        }
+      case _ =>
+        throw new IllegalStateException(
+          "illegal state when merging value tags types in schema inference"
+        )
+    }
+  }
+
+  private[xml] def isEmptyString(c: Characters): Boolean = c.getData.trim.isEmpty
+
+  private def updateStructField(
+      structType: StructType,
+      index: Int,
+      newType: DataType): StructType = {
+    val newFields: Array[StructField] =
+      structType.fields.updated(index, structType.fields(index).copy(dataType = newType))
+    StructType(newFields)
+  }
+
 }

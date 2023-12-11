@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW>
+        value1
+        <array>
+            value2
+            <b>1</b>
+            value3
+        </array>
+        <array>
+            value4
+            <b>2</b>
+            value5
+            <c>3</c>
+            value6
+        </array>
+    </ROW>
+</ROWSET>

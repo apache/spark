@@ -731,7 +731,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .collect()
 
     assert(results(0) === Row("alice", "35"))
-    assert(results(1) === Row("bob", "    "))
+    assert(results(1) === Row("bob", ""))
     assert(results(2) === Row("coc", "24"))
   }
 
@@ -817,7 +817,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(result(0) === Row(Row(null)))
     assert(result(1) === Row(Row(Row(null, null))))
     assert(result(2) === Row(Row(Row("E", null))))
-    assert(result(3) === Row(Row(Row("E", " "))))
+    assert(result(3) === Row(Row(Row("E", ""))))
     assert(result(4) === Row(Row(Row("E", ""))))
   }
 
@@ -1145,8 +1145,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children.xml"))
     val mixedRow = mixedDF.head()
-    assert(mixedRow.getAs[Row](0).toSeq === Seq(" lorem "))
-    assert(mixedRow.getString(1) === " ipsum ")
+    assert(mixedRow.getAs[Row](0).toSeq === Seq(Array(), "lorem"))
+    assert(mixedRow.getString(1) === "ipsum")
   }
 
   test("test mixed text and complex element children") {
@@ -1154,9 +1154,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .option("rowTag", "root")
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children_2.xml"))
-    assert(mixedDF.select("foo.bar").head().getString(0) === " lorem ")
+    assert(mixedDF.select("foo.bar").head().getString(0) === "lorem")
     assert(mixedDF.select("foo.baz.bing").head().getLong(0) === 2)
-    assert(mixedDF.select("missing").head().getString(0) === " ipsum ")
+    assert(mixedDF.select("missing").head().getString(0) === "ipsum")
   }
 
   test("test XSD validation") {
@@ -1720,7 +1720,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       assert(result(1).getAs[String]("_attr") == "attr1"
         && result(1).getAs[String]("_VALUE") == "value2")
       // comments aren't included in valueTag
-      assert(result(2).getAs[String]("_VALUE") == "\n        value3\n        ")
+      assert(result(2).getAs[String]("_VALUE") == "value3")
     }
   }
 
@@ -1732,6 +1732,13 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       field(ATTRIBUTE_NAME),
       field(TAG_NAME, LongType),
       field(VALUETAG_NAME))
+    val expectedAns = Seq(
+      Row(null, null, "value1"),
+      Row("attr1", null, "value2"),
+      Row(null, 5L, "4"),
+      Row(null, 6L, "7"),
+      Row("8", null, null)
+    )
     val dfs = Seq(
       // user specified schema
       spark.read
@@ -1744,25 +1751,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         .xml(getTestResourcePath(resDir + "root-level-value-none.xml"))
     )
     dfs.foreach { df =>
-      val result = df.collect()
-      assert(result.length === 5)
-      assert(result(0).get(0) == null && result(0).get(1) == null)
-      assert(
-        result(1).getAs[String](ATTRIBUTE_NAME) == "attr1"
-          && result(1).getAs[Any](TAG_NAME) == null
-      )
-      assert(
-        result(2).getAs[Long](TAG_NAME) == 5L
-          && result(2).getAs[Any](ATTRIBUTE_NAME) == null
-      )
-      assert(
-        result(3).getAs[Long](TAG_NAME) == 6L
-          && result(3).getAs[Any](ATTRIBUTE_NAME) == null
-      )
-      assert(
-        result(4).getAs[String](ATTRIBUTE_NAME) == "8"
-          && result(4).getAs[Any](TAG_NAME) == null
-      )
+      checkAnswer(df, expectedAns)
     }
   }
 
@@ -2177,5 +2166,49 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         "this is a simple string.")
     )
     testWriteReadRoundTrip(df, Map("nullValue" -> "null", "prefersDecimal" -> "true"))
+  }
+
+  test("capture values interspersed between elements - simple") {
+    val df = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "values-simple.xml"))
+
+    checkAnswer(df, Seq(Row("value1", Row(Array("value2", "value3"), 1))))
+  }
+
+  test("capture values interspersed between elements - array") {
+    val expectedAns = Seq(
+      Row(
+        "value1",
+        Array(
+          Row(List("value2", "value3"), 1, null),
+          Row(List("value4", "value5", "value6"), 2, 3))))
+    val df = spark.read
+      .format("xml")
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "values-array.xml"))
+
+    checkAnswer(df, expectedAns)
+
+  }
+
+  test("capture values interspersed between elements - nested struct") {
+    val df = spark.read
+      .format("xml")
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "values-nested.xml"))
+
+    checkAnswer(
+      df,
+      Seq(
+        Row(
+          "value4",
+          Row(
+            Array("value1", "value2"),
+            Array(1, 2),
+            3))))
   }
 }

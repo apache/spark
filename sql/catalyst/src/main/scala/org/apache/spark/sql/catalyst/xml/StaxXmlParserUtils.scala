@@ -21,7 +21,6 @@ import javax.xml.namespace.QName
 import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
 import javax.xml.stream.events._
 
-import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 
 object StaxXmlParserUtils {
@@ -70,7 +69,6 @@ object StaxXmlParserUtils {
   /**
    * Checks if current event points the EndElement.
    */
-  @tailrec
   def checkEndElement(parser: XMLEventReader): Boolean = {
     parser.peek match {
       case _: EndElement | _: EndDocument => true
