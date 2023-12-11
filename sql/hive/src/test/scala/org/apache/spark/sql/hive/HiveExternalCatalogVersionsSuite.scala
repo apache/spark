@@ -161,11 +161,21 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new String(Files.readAllBytes(contentPath), StandardCharsets.UTF_8)
   }
 
+  private def deleteCorruptedJars(): Unit = {
+    val m2Path = new File(System.getProperty("user.home"), ".m2" + File.separator + "repository")
+    val hive_exec_2_3_9 = new File(m2Path, "org" + File.separator +
+      "apache" + File.separator + "hive" + File.separator +
+      "hive-exec" + File.separator + "2.3.9")
+    val slf4j_api_1_7_30 = new File(m2Path, "org" + File.separator +
+      "slf4j" + File.separator + "slf4j-api" + File.separator + "1.7.30")
+    Utils.deleteRecursively(hive_exec_2_3_9)
+    Utils.deleteRecursively(slf4j_api_1_7_30)
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-    Utils.deleteRecursively(new File("/home/runner/work/spark/spark/sql/hive/target/tmp/hive-ivy-cache"))
-    Utils.deleteRecursively(new File("/home/runner/.m2/repository/org/apache/hive/hive-exec/2.3.9"))
-    Utils.deleteRecursively(new File("/home/runner/.m2/repository/org/slf4j/slf4j-api/1.7.30"))
+    deleteCorruptedJars()
+
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
@@ -218,6 +228,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       if (!sparkHome.exists()) {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
+
       // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
       val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
       val args = Seq(
