@@ -19,8 +19,8 @@ package org.apache.spark.sql.internal
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, NamedExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 
@@ -49,23 +49,22 @@ private[sql] object EasilyFlattenable {
         opType match {
           case OpType.AddNewColumnsOnly =>
             // case of new columns being added only
-            val attribsReassignedInProj = projList.filter(ne => ne match {
-              case _: AttributeReference => false
-              case _ => true
-            }).map(_.name).toSet.intersect(child.output.map(_.name).toSet)
+            val childOutput = child.output.map(_.name).toSet
+            val attribsRemappedInProj = projList.flatMap(ne => ne match {
+              case _: AttributeReference => Seq.empty[(String, Expression)]
 
-            if (tinkeredOrNewNamedExprs.exists(ne => ne.references.exists {
-              case attr: AttributeReference => attribsReassignedInProj.contains(attr.name)
-              case u: UnresolvedAttribute => if (u.nameParts.size > 1) {
-                true
+              case Alias(expr, name) => if (childOutput.contains(name)) {
+                Seq(name -> expr)
               } else {
-                attribsReassignedInProj.contains(u.name)
+                Seq.empty[(String, Expression)]
               }
-            } || ne.collectFirst {
+
+              case _ => Seq.empty[(String, Expression)]
+            }).toMap
+
+            if (tinkeredOrNewNamedExprs.exists(_.collectFirst {
               case ex if !ex.deterministic => ex
-              case ex if ex.isInstanceOf[UserDefinedExpression] => ex
               case u: UnresolvedAttribute if u.nameParts.size != 1 => u
-              case u: UnresolvedAlias => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
             }.nonEmpty)) {
@@ -77,20 +76,21 @@ private[sql] object EasilyFlattenable {
                     _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
                   case anyOtherExpr =>
                     (anyOtherExpr transformUp {
-                      case attr: AttributeReference => projList.find(
+                      case attr: AttributeReference => attribsRemappedInProj.get(attr.name).orElse(
+                        projList.find(
                         _.toAttribute.canonicalized == attr.canonicalized).map {
                         case al: Alias => al.child
                         case x => x
-                      }.getOrElse(attr)
+                      }).getOrElse(attr)
 
-                      case u: UnresolvedAttribute => projList.find(
-                        _.toAttribute.name.equalsIgnoreCase(u.name)).map {
+                      case u: UnresolvedAttribute => attribsRemappedInProj.get(u.name).orElse(
+                        projList.find( _.toAttribute.name.equalsIgnoreCase(u.name)).map {
                         case al: Alias => al.child
                         case u: UnresolvedAttribute =>
                           throw new UnsupportedOperationException("Not able to flatten" +
                             s"  unresolved attribute $u")
                         case x => x
-                      }.getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
+                      }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                         s"  unresolved attribute $u"))
                     }).asInstanceOf[NamedExpression]
                 }
