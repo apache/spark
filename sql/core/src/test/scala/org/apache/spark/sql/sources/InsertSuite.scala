@@ -2627,7 +2627,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-test("UNSUPPORTED_OVERWRITE.TABLE: Can't overwrite a table that is also being read from") {
+  test("UNSUPPORTED_OVERWRITE.TABLE: Can't overwrite a table that is also being read from") {
     val tableName = "t1"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
