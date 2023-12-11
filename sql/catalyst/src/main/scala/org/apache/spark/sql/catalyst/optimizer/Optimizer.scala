@@ -81,6 +81,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
+        PushCalculationThroughExpand,
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
@@ -1998,6 +1999,50 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case other =>
           throw new IllegalStateException(s"Unexpected join type: $other")
       }
+  }
+}
+
+/**
+ * Push down calculations in Aggregate through Expand, so the expressions will only be evaluated once.
+ * For example:
+ * Agg(grouping, sum($a + $b)) <= Expand <= Project, if $a and $b comes from the Project,
+ * a + b will be pushed down to the Project:
+ * Agg(grouping, sum("a + b")) <= Expand <= Project(old projections ++ ($a + $b).as("a + b"))
+ *
+ */
+object PushCalculationThroughExpand extends Rule[LogicalPlan] {
+
+  private def extractAggregateExpressions(
+      aggs: Seq[NamedExpression],
+      outputSet: AttributeSet): (Seq[NamedExpression], mutable.HashMap[Expression, Alias]) = {
+    val pushedMap = mutable.HashMap[Expression, Alias]()
+    val newAggs = aggs.map {
+      case agg if agg.references.subsetOf(outputSet) =>
+        val newAgg = agg transformDown {
+          case e: Expression if !e.isInstanceOf[AttributeReference]
+            && !e.exists(_.isInstanceOf[AggregateFunction]) && e.deterministic =>
+            pushedMap.getOrElseUpdate(e, Alias(e, e.toString)()).toAttribute
+        }
+        newAgg.asInstanceOf[NamedExpression]
+
+      case agg => agg
+    }
+    (newAggs, pushedMap)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
+    _.containsPattern(AGGREGATE), ruleId) {
+    case agg @ Aggregate(_, aggs, Expand(projections, output, child))
+      if aggs.exists (agg =>
+        agg.references.subsetOf(child.outputSet)
+          && !agg.exists { case e: AggregateExpression if e.filter.nonEmpty => true }
+          && agg.exists(e => !e.isInstanceOf[AttributeReference] &&
+                             !e.exists(_.isInstanceOf[AggregateFunction]) && e.deterministic)) =>
+      val (newAggs, pushedMap) = extractAggregateExpressions(aggs, child.outputSet)
+      val pushedAttrs = pushedMap.values.map(_.toAttribute)
+      val newProject = Project(child.output ++ pushedMap.values, child)
+      val newExpand = Expand(projections.map(_ ++ pushedAttrs), output ++ pushedAttrs, newProject)
+      agg.copy(aggregateExpressions = newAggs, child = newExpand)
   }
 }
 
