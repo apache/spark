@@ -470,6 +470,7 @@ object SQLConf {
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
     .version("1.0.1")
+    .withTag("caching-data")
     .booleanConf
     .createWithDefault(true)
 
@@ -477,6 +478,7 @@ object SQLConf {
     .doc("Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
       "memory utilization and compression, but risk OOMs when caching data.")
     .version("1.1.1")
+    .withTag("caching-data")
     .intConf
     .createWithDefault(10000)
 
@@ -596,6 +598,7 @@ object SQLConf {
       "run, and file-based data source tables where the statistics are computed directly on " +
       "the files of data.")
     .version("1.1.0")
+    .withTag("tuning")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
@@ -2695,6 +2698,7 @@ object SQLConf {
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
       .version("2.2.0")
+      .withTag("cbo")
       .booleanConf
       .createWithDefault(false)
 
