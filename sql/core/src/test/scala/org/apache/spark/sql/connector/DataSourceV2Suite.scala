@@ -787,17 +787,41 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("SPARK-46273: insert into partitioned table") {
+  test("SPARK-46273: insert into with partition") {
     val cls = classOf[SupportsExternalMetadataDataSource]
     withTable("test") {
-      sql(
-        s"""
-           |CREATE TABLE test(x INT, y INT) USING ${cls.getName}
-           |PARTITIONED BY (x)
-           |""".stripMargin)
+      sql(s"CREATE TABLE test(x INT, y INT) USING ${cls.getName} PARTITIONED BY (x, y)")
       sql("INSERT INTO test PARTITION(x = 1) VALUES (2)")
-      sql("INSERT INTO test PARTITION(x = 2) VALUES (3), (4)")
-      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(2, 4)))
+      sql("INSERT INTO test PARTITION(x = 2, y) VALUES (3)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3)))
+      sql("INSERT INTO test PARTITION(y, x = 3) VALUES (4)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4)))
+      sql("INSERT INTO test PARTITION(x, y) VALUES (4, 5)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4), Row(4, 5)))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT INTO test PARTITION(z = 1) VALUES (2)")
+        },
+        errorClass = "NON_PARTITION_COLUMN",
+        parameters = Map("columnName" -> "`z`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT INTO test PARTITION(x, y = 1) VALUES (2, 3)")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "tableColumns" -> "`x`, `y`",
+          "dataColumns" -> "`col1`, `y`, `col2`")
+      )
+    }
+  }
+
+  test("SPARK-46273: insert overwrite with partition") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTable("test") {
+      sql(s"CREATE TABLE test (x INT, y INT) USING ${cls.getName} PARTITIONED BY (x, y)")
+      sql("INSERT INTO test PARTITION(x = 1) VALUES (2)")
       checkError(
         exception = intercept[AnalysisException] {
           sql("INSERT OVERWRITE test PARTITION(x = 1) VALUES (5)")
