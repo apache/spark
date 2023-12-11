@@ -28,7 +28,7 @@ from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
 def persist_dataframe_as_chunks(dataframe: DataFrame) -> list[str]:
     """
-    Persist the spark dataframe as chunks, each chunk is an arrow batch.
+    Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
     Return the list of chunk ids.
     This function is only available when it is called from spark driver process.
     """
@@ -41,7 +41,7 @@ def persist_dataframe_as_chunks(dataframe: DataFrame) -> list[str]:
 
 def unpersist_chunks(chunk_ids: list[str]) -> None:
     """
-    Remove chunks by chunk ids.
+    Unpersist chunks by chunk ids.
     This function is only available when it is called from spark driver process.
     """
     sc = SparkSession.getActiveSession().sparkContext
