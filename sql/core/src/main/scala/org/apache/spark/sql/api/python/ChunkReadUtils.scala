@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.api.python
 
-import java.io.{ByteArrayOutputStream, DataOutputStream}
+import java.io.ByteArrayOutputStream
+
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.execution.arrow.ArrowBatchStreamWriter
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 
 

@@ -17,17 +17,15 @@
 
 package org.apache.spark.api.python
 
+import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream}
+import java.net.{InetAddress, ServerSocket, Socket}
+import java.nio.charset.StandardCharsets.UTF_8
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
-
-import java.net.{InetAddress, ServerSocket, Socket}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId}
-
-import java.io.{BufferedOutputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.nio.charset.StandardCharsets.UTF_8
-import scala.collection.mutable.ArrayBuffer
 
 
 class CachedArrowBatchServer extends Logging {
