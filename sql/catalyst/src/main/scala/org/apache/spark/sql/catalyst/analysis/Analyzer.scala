@@ -320,6 +320,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveIdentifierClause ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
+      ResolveBetweenExpression ::
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
@@ -3415,6 +3416,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case WindowExpression(rank: RankLike, spec) if spec.resolved =>
         val order = spec.orderSpec.map(_.child)
         WindowExpression(rank.withOrder(order), spec)
+    }
+  }
+
+  /**
+   * Transform UnresolvedBetweenExpression into a [BetweenExpr].
+   */
+  object ResolveBetweenExpression extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_BETWEEN), ruleId) {
+        case p: LogicalPlan => p.transformExpressionsUpWithPruning(
+          _.containsPattern(UNRESOLVED_BETWEEN), ruleId) {
+          case UnresolvedBetweenExpression(proj, lower, upper) if proj.resolved =>
+            new BetweenExpr(proj, lower, upper)
+        }
+      }
     }
   }
 

@@ -854,3 +854,17 @@ case class TempResolvedColumn(
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(TEMP_RESOLVED_COLUMN)
 }
+
+case class UnresolvedBetweenExpression(first: Expression, second: Expression, third: Expression)
+  extends TernaryExpression with Unevaluable {
+  override lazy val resolved: Boolean = first.resolved
+  override def dataType: DataType = first.dataType
+  override def nullable: Boolean = first.resolved
+
+  override protected def withNewChildrenInternal(
+    newProjection: Expression, newLower: Expression, newUpper: Expression): Expression = {
+    copy(first = newProjection, second = newLower, third = newUpper)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_BETWEEN)
+}

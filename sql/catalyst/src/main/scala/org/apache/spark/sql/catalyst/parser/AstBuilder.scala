@@ -1975,10 +1975,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
-        // BETWEEN is translated to lower <= e && e <= upper
-        invertIfNotDefined(And(
-          GreaterThanOrEqual(e, expression(ctx.lower)),
-          LessThanOrEqual(e, expression(ctx.upper))))
+        invertIfNotDefined(
+          UnresolvedBetweenExpression(e, expression(ctx.lower), expression(ctx.upper)))
       case SqlBaseParser.IN if ctx.query != null =>
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
