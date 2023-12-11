@@ -2017,7 +2017,8 @@ object PushCalculationThroughExpand extends Rule[LogicalPlan] {
       outputSet: AttributeSet): (Seq[NamedExpression], mutable.HashMap[Expression, Alias]) = {
     val pushedMap = mutable.HashMap[Expression, Alias]()
     val newAggs = aggs.map {
-      case agg if agg.references.subsetOf(outputSet) =>
+      case agg if agg.references.subsetOf(outputSet) &&
+        agg.collect { case e: AggregateExpression if e.filter.nonEmpty => e }.isEmpty =>
         val newAgg = agg transformDown {
           case e: Expression if !e.isInstanceOf[AttributeReference]
             && !e.exists(_.isInstanceOf[AggregateFunction]) && e.deterministic =>
@@ -2035,7 +2036,7 @@ object PushCalculationThroughExpand extends Rule[LogicalPlan] {
     case agg @ Aggregate(_, aggs, Expand(projections, output, child))
       if aggs.exists (agg =>
         agg.references.subsetOf(child.outputSet)
-          && !agg.exists { case e: AggregateExpression if e.filter.nonEmpty => true }
+          && agg.collect { case e: AggregateExpression if e.filter.nonEmpty => e }.isEmpty
           && agg.exists(e => !e.isInstanceOf[AttributeReference] &&
                              !e.exists(_.isInstanceOf[AggregateFunction]) && e.deterministic)) =>
       val (newAggs, pushedMap) = extractAggregateExpressions(aggs, child.outputSet)
