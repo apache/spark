@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 package org.apache.spark.sql.catalyst.xml
+
 import java.io.{CharConversionException, FileNotFoundException, IOException, StringReader}
 import java.nio.charset.MalformedInputException
 import java.util.Locale

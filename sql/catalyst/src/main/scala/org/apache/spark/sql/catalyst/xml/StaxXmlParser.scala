@@ -606,12 +606,11 @@ class XmlTokenizer(
         return Some(str)
       }
     } catch {
-      case _: FileNotFoundException if options.ignoreMissingFiles =>
+      case e: FileNotFoundException if options.ignoreMissingFiles =>
         logWarning(
           "Skipping the rest of" +
           " the content in the missing file during schema inference",
-          e
-        )
+          e)
       case NonFatal(e) =>
         ExceptionUtils.getRootCause(e) match {
           case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
