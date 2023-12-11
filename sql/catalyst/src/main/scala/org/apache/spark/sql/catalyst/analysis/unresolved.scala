@@ -899,6 +899,12 @@ case object UnresolvedWithinGroup extends LeafExpression with Unevaluable {
   override lazy val resolved = false
 }
 
+/**
+ * An intermediate expression to hold a between expression. Between expression
+ * needs to be replaced with CTE expression during analysis. In order to use CTE expression
+ * all child types need to be resolved. Hence, UnresolvedBetweenExpression is kept until
+ * children are resolved and then it gets replaced with BetweenExpr.
+ */
 case class UnresolvedBetweenExpression(first: Expression, second: Expression, third: Expression)
   extends TernaryExpression with Unevaluable {
   override lazy val resolved: Boolean = first.resolved
