@@ -1774,7 +1774,7 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
     status
   }
 
-  override def isFile(path: Path): Boolean = super.isFile(local(path))
+  override def getFileStatus(path: Path): FileStatus = super.getFileStatus(local(path))
 
   override def globStatus(pathPattern: Path): Array[FileStatus] = {
     val newPath = new Path(pathPattern.toUri.getPath)

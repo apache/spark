@@ -25,7 +25,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class DiffFramesCovCorrWithMixin:
+class DiffFramesCorrWithMixin:
     @property
     def pdf1(self):
         return pd.DataFrame(
@@ -80,43 +80,6 @@ class DiffFramesCovCorrWithMixin:
         reset_option("compute.ops_on_diff_frames")
         super().tearDownClass()
 
-    def test_cov(self):
-        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035], index=[0, 1, 2])
-        pser2 = pd.Series([0.12528585, 0.26962463, 0.51111198], index=[1, 2, 3])
-        self._test_cov(pser1, pser2)
-
-        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035], index=[0, 1, 2])
-        pser2 = pd.Series([0.12528585, 0.26962463, 0.51111198, 0.32076008], index=[1, 2, 3, 4])
-        self._test_cov(pser1, pser2)
-
-        pser1 = pd.Series([0.90010907, 0.13484424, 0.62036035, 0.32076008], index=[0, 1, 2, 3])
-        pser2 = pd.Series([0.12528585, 0.26962463], index=[1, 2])
-        self._test_cov(pser1, pser2)
-
-        psser1 = ps.from_pandas(pser1)
-        with self.assertRaisesRegex(TypeError, "unsupported type: <class 'list'>"):
-            psser1.cov([0.12528585, 0.26962463, 0.51111198])
-        with self.assertRaisesRegex(
-            TypeError, "unsupported type: <class 'pandas.core.series.Series'>"
-        ):
-            psser1.cov(pser2)
-
-    def _test_cov(self, pser1, pser2):
-        psser1 = ps.from_pandas(pser1)
-        psser2 = ps.from_pandas(pser2)
-
-        pcov = pser1.cov(pser2)
-        pscov = psser1.cov(psser2)
-        self.assert_eq(pcov, pscov, almost=True)
-
-        pcov = pser1.cov(pser2, min_periods=2)
-        pscov = psser1.cov(psser2, min_periods=2)
-        self.assert_eq(pcov, pscov, almost=True)
-
-        pcov = pser1.cov(pser2, min_periods=3)
-        pscov = psser1.cov(psser2, min_periods=3)
-        self.assert_eq(pcov, pscov, almost=True)
-
     def test_corrwith(self):
         df1 = ps.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
         df2 = ps.DataFrame({"A": [5, 3, 6, 4], "B": [11, 2, 4, 3], "C": [4, 3, 8, np.nan]})
@@ -164,13 +127,17 @@ class DiffFramesCovCorrWithMixin:
             self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
 
-class DiffFramesCovCorrWithTests(DiffFramesCovCorrWithMixin, PandasOnSparkTestCase, SQLTestUtils):
+class DiffFramesCorrWithTests(
+    DiffFramesCorrWithMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.diff_frames_ops.test_cov_corrwith import *  # noqa: F401
+    from pyspark.pandas.tests.diff_frames_ops.test_corrwith import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -926,8 +926,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(table.name(), "truncate in batch mode")
   }
 
-  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table.name(), "overwrite by filter in batch mode")
+  def unsupportedOverwriteByFilterInBatchModeError(name: String): Throwable = {
+    unsupportedTableOperationError(name, "overwrite by filter in batch mode")
   }
 
   def catalogOperationNotSupported(catalog: CatalogPlugin, operation: String): Throwable = {

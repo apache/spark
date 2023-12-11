@@ -63,7 +63,7 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
           case _ =>
             if (!supportsBatchWrite(r.table) || !r.table.supports(OVERWRITE_BY_FILTER)) {
               throw QueryCompilationErrors.unsupportedOverwriteByFilterInBatchModeError(
-                r.table)
+               r.name)
             }
         }
 

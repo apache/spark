@@ -108,11 +108,14 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(10)
     val planner = spark.sessionState.planner
     val deduplicate = Deduplicate(df.queryExecution.analyzed.output, df.queryExecution.analyzed)
-    val err = intercept[IllegalStateException] {
-      planner.plan(deduplicate)
-    }
-    assert(err.getMessage.contains("Deduplicate operator for non streaming data source " +
-      "should have been replaced by aggregate in the optimizer"))
+    checkError(
+      exception = intercept[SparkException] {
+        planner.plan(deduplicate)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("Deduplicate operator for non streaming data source should have been " +
+          "replaced by aggregate in the optimizer")))
   }
 
   test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {

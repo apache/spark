@@ -14,24 +14,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.pandas.tests.diff_frames_ops.test_cov_corrwith import DiffFramesCovCorrWithMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.pandas.tests.window.test_rolling import RollingTestingFuncMixin
 
 
-class DiffFramesParityCovCorrWithTests(
-    DiffFramesCovCorrWithMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class RollingAdvMixin(RollingTestingFuncMixin):
+    def test_rolling_quantile(self):
+        self._test_rolling_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
+
+    def test_rolling_std(self):
+        self._test_rolling_func("std")
+
+    def test_rolling_var(self):
+        self._test_rolling_func("var")
+
+    def test_rolling_skew(self):
+        self._test_rolling_func("skew")
+
+    def test_rolling_kurt(self):
+        self._test_rolling_func("kurt")
+
+
+class RollingAdvTests(
+    RollingAdvMixin,
+    PandasOnSparkTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_cov_corrwith import *  # noqa
+    import unittest
+    from pyspark.pandas.tests.window.test_rolling_adv import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
