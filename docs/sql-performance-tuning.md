@@ -297,7 +297,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
    </tr>
  </table>
 
-### Spliting skewed shuffle partitions
+### Splitting skewed shuffle partitions
  <table>
    <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
    <tr>
