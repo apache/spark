@@ -134,7 +134,10 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         .map(scanAttr => tableAttr -> scanAttr)
         .getOrElse {
           throw new AnalysisException(
-            s"Couldn't find scan attribute for $tableAttr in ${scanAttrs.mkString(",")}")
+            errorClass = "_LEGACY_ERROR_TEMP_3075",
+            messageParameters = Map(
+              "tableAttr" -> tableAttr.toString,
+              "scanAttrs" -> scanAttrs.mkString(",")))
         }
     }
     AttributeMap(attrMapping)
