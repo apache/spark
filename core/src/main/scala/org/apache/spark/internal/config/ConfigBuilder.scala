@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.regex.PatternSyntaxException
 
@@ -131,7 +132,7 @@ private[spark] class TypedConfigBuilder[T](
   def createOptional: OptionalConfigEntry[T] = {
     val entry = new OptionalConfigEntry[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, converter, stringConverter, parent._doc,
-      parent._public, parent._version)
+      parent._public, parent._tags, parent._version)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -146,7 +147,7 @@ private[spark] class TypedConfigBuilder[T](
         val transformedDefault = converter(stringConverter(default))
         val entry = new ConfigEntryWithDefault[T](parent.key, parent._prependedKey,
           parent._prependSeparator, parent._alternatives, transformedDefault, converter,
-          stringConverter, parent._doc, parent._public, parent._version)
+          stringConverter, parent._doc, parent._public, parent._tags, parent._version)
         parent._onCreate.foreach(_ (entry))
         entry
     }
@@ -156,7 +157,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefaultFunction(defaultFunc: () => T): ConfigEntry[T] = {
     val entry = new ConfigEntryWithDefaultFunction[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, defaultFunc, converter, stringConverter,
-      parent._doc, parent._public, parent._version)
+      parent._doc, parent._public, parent._tags, parent._version)
     parent._onCreate.foreach(_ (entry))
     entry
   }
@@ -168,7 +169,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefaultString(default: String): ConfigEntry[T] = {
     val entry = new ConfigEntryWithDefaultString[T](parent.key, parent._prependedKey,
       parent._prependSeparator, parent._alternatives, default, converter, stringConverter,
-      parent._doc, parent._public, parent._version)
+      parent._doc, parent._public, parent._tags, parent._version)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -187,6 +188,7 @@ private[spark] case class ConfigBuilder(key: String) {
   private[config] var _prependedKey: Option[String] = None
   private[config] var _prependSeparator: String = ""
   private[config] var _public = true
+  private[config] var _tags = List.empty[String]
   private[config] var _doc = ""
   private[config] var _version = ""
   private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
@@ -194,6 +196,13 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def internal(): ConfigBuilder = {
     _public = false
+    this
+  }
+
+  def withTag(tag: String): ConfigBuilder = {
+    require(!tag.contains(" "))
+    require(tag.toLowerCase(Locale.ROOT) == tag)
+    _tags = _tags :+ tag
     this
   }
 
@@ -263,7 +272,7 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
     val entry = new FallbackConfigEntry(key, _prependedKey, _prependSeparator, _alternatives, _doc,
-      _public, _version, fallback)
+      _public, _tags, _version, fallback)
     _onCreate.foreach(_(entry))
     entry
   }

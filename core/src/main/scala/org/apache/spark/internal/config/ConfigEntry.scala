@@ -80,6 +80,7 @@ private[spark] abstract class ConfigEntry[T] (
     val stringConverter: T => String,
     val doc: String,
     val isPublic: Boolean,
+    val tags: List[String],
     val version: String) {
 
   import ConfigEntry._
@@ -120,6 +121,7 @@ private class ConfigEntryWithDefault[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    tags: List[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -130,6 +132,7 @@ private class ConfigEntryWithDefault[T] (
     stringConverter,
     doc,
     isPublic,
+    tags,
     version
   ) {
 
@@ -152,6 +155,7 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    tags: List[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -162,6 +166,7 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter,
     doc,
     isPublic,
+    tags,
     version
   ) {
 
@@ -184,6 +189,7 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    tags: List[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -194,6 +200,7 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter,
     doc,
     isPublic,
+    tags,
     version
   ) {
 
@@ -220,6 +227,7 @@ private[spark] class OptionalConfigEntry[T](
     val rawStringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    tags: List[String],
     version: String)
   extends ConfigEntry[Option[T]](
     key,
@@ -230,6 +238,7 @@ private[spark] class OptionalConfigEntry[T](
     v => v.map(rawStringConverter).orNull,
     doc,
     isPublic,
+    tags,
     version
   ) {
 
@@ -250,6 +259,7 @@ private[spark] class FallbackConfigEntry[T] (
     alternatives: List[String],
     doc: String,
     isPublic: Boolean,
+    tags: List[String],
     version: String,
     val fallback: ConfigEntry[T])
   extends ConfigEntry[T](
@@ -261,6 +271,7 @@ private[spark] class FallbackConfigEntry[T] (
     fallback.stringConverter,
     doc,
     isPublic,
+    tags,
     version
   ) {
 
