@@ -98,7 +98,7 @@ class StaxXmlParser(
       options.columnNameOfCorruptRecord)
 
     val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer, options) { tokens =>
+    convertStream(xmlTokenizer) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
@@ -577,7 +577,7 @@ class StaxXmlParser(
  */
 class XmlTokenizer(
   inputStream: InputStream,
-  options: XmlOptions) {
+  options: XmlOptions) extends Logging {
   private val reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
   private var currentStartTag: String = _
   private var buffer = new StringBuilder()
@@ -593,18 +593,34 @@ class XmlTokenizer(
    * @return whether it reads successfully
    */
   def next(): Option[String] = {
-    if (readUntilStartElement()) {
-      try {
-        buffer.append(currentStartTag)
-        // Don't check whether the end element was found. Even if not, return everything
-        // that was read, which will invariably cause a parse error later
-        readUntilEndElement(currentStartTag.endsWith(">"))
-        return Some(buffer.toString())
-      } finally {
-        buffer = new StringBuilder()
+    try {
+      if (readUntilStartElement()) {
+        try {
+          buffer.append(currentStartTag)
+          // Don't check whether the end element was found. Even if not, return everything
+          // that was read, which will invariably cause a parse error later
+          readUntilEndElement(currentStartTag.endsWith(">"))
+          return Some(buffer.toString())
+        } finally {
+          buffer = new StringBuilder()
+        }
       }
+      None
+    } catch {
+      case _: FileNotFoundException if options.ignoreMissingFiles =>
+        None
+      case NonFatal(e) =>
+        ExceptionUtils.getRootCause(e) match {
+          case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+            logWarning(
+              "Skipping the rest of" +
+              " the content in the corrupted file during schema inference",
+              e
+            )
+            None
+          case o => throw o
+        }
     }
-    None
   }
 
   private def readUntilStartElement(): Boolean = {
@@ -730,17 +746,17 @@ class XmlTokenizer(
   }
 }
 
-object StaxXmlParser extends Logging {
+object StaxXmlParser {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
   def tokenizeStream(inputStream: InputStream, options: XmlOptions): Iterator[String] = {
     val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer, options)(tokens => tokens)
+    convertStream(xmlTokenizer)(tokens => tokens)
   }
 
   private def convertStream[T](
-    xmlTokenizer: XmlTokenizer, options: XmlOptions)(
+    xmlTokenizer: XmlTokenizer)(
     convert: String => T) = new Iterator[T] {
 
     private var nextRecord = xmlTokenizer.next()
@@ -752,20 +768,7 @@ object StaxXmlParser extends Logging {
         throw QueryExecutionErrors.endOfStreamError()
       }
       val curRecord = convert(nextRecord.get)
-      try {
-        nextRecord = xmlTokenizer.next()
-      } catch {
-        case _: FileNotFoundException if options.ignoreMissingFiles =>
-          nextRecord = None
-        case NonFatal(e) =>
-          ExceptionUtils.getRootCause(e) match {
-            case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
-              logWarning("Skipping the rest of" +
-                " the content in the corrupted file during schema inference", e)
-              nextRecord = None
-            case o => throw o
-          }
-      }
+      nextRecord = xmlTokenizer.next()
       curRecord
     }
   }
