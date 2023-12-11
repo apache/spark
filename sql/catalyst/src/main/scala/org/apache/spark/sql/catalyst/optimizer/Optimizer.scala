@@ -2004,8 +2004,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Push down calculations in Aggregate through Expand, so the expressions will only be evaluated once.
- * For example:
+ * Push down calculations in Aggregate through Expand, so the expressions will only be evaluated
+ * once. For example:
  * Agg(grouping, sum($a + $b)) <= Expand <= Project, if $a and $b comes from the Project,
  * a + b will be pushed down to the Project:
  * Agg(grouping, sum("a + b")) <= Expand <= Project(old projections ++ ($a + $b).as("a + b"))
