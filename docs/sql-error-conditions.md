@@ -55,6 +55,15 @@ See '`<docroot>`/sql-migration-guide.html#query-engine'.
 
 Column or field `<name>` is ambiguous and has `<n>` matches.
 
+### AMBIGUOUS_COLUMN_REFERENCE
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
+This column points to one of the DataFrame but Spark is unable to figure out which one.
+Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
+and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
+
 ### AMBIGUOUS_LATERAL_COLUMN_ALIAS
 
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -153,6 +162,14 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because schema i
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` is not in defined values for enum: `<enumString>`.
+
+### [CANNOT_CREATE_DATA_SOURCE_TABLE](sql-error-conditions-cannot-create-data-source-table-error-class.html)
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create data source table `<tableName>`:
+
+For more details see [CANNOT_CREATE_DATA_SOURCE_TABLE](sql-error-conditions-cannot-create-data-source-table-error-class.html)
 
 ### CANNOT_DECODE_URL
 
@@ -271,6 +288,12 @@ SQLSTATE: 58030
 
 Failed to set permissions on created path `<path>` back to `<permission>`.
 
+### CANNOT_SAVE_VARIANT
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot save variant data type into external storage.
+
 ### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -311,6 +334,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+
+### CATALOG_NOT_FOUND
+
+[SQLSTATE: 42P08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The catalog `<catalogName>` not found. Consider to set the SQL config `<config>` to a catalog plugin.
 
 ### CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND
 
@@ -445,6 +474,12 @@ DataType `<type>` requires a length parameter, for example `<type>`(10). Please 
 
 Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
 
+### DATA_SOURCE_NOT_EXIST
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' not found. Please make sure the data source is registered.
+
 ### DATA_SOURCE_NOT_FOUND
 
 [SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -566,6 +601,18 @@ The event time `<eventName>` has the invalid type `<eventType>`, but expected "T
 
 Exceeds char/varchar type length limitation: `<limit>`.
 
+### EXCEPT_NESTED_COLUMN_INVALID_TYPE
+
+[SQLSTATE: 428H2](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+EXCEPT column `<columnName>` was resolved and expected to be StructType, but found type `<dataType>`.
+
+### EXCEPT_OVERLAPPING_COLUMNS
+
+[SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
+
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -610,7 +657,7 @@ Column expression `<expr>` cannot be sorted because its type `<exprType>` is not
 
 [SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
 
-Failed to execute user defined function (`<functionName>`: (`<signature>`) => `<result>`).
+User defined function (`<functionName>`: (`<signature>`) => `<result>`) failed due to: `<reason>`.
 
 ### FAILED_FUNCTION_CALL
 
@@ -659,6 +706,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOUND_MULTIPLE_DATA_SOURCES
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Detected multiple data sources with the name '`<provider>`'. Please check the data source isn't simultaneously registered and located in the classpath.
 
 ### GENERATED_COLUMN_WITH_DEFAULT_VALUE
 
@@ -1085,6 +1138,14 @@ The index 0 is invalid. An index shall be either `< 0 or >` 0 (the first element
 Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
+
+### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+SQLSTATE: ID001
+
+Invalid inverse distribution function `<funcName>`.
+
+For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1823,6 +1884,12 @@ The seed expression `<seedExpr>` of the expression `<exprWithSeed>` must be fold
 
 sortBy must be used together with bucketBy.
 
+### SPARK_JOB_CANCELLED
+
+[SQLSTATE: XXKDA](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Job `<jobId>` cancelled `<reason>`
+
 ### SPECIFY_BUCKETING_IS_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1830,6 +1897,18 @@ sortBy must be used together with bucketBy.
 A CREATE TABLE without explicit column list cannot specify bucketing information.
 Please use the form with explicit column list and specify bucketing information.
 Alternatively, allow bucketing information to be inferred by omitting the clause.
+
+### SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS.
+
+### SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and PARTITIONED BY.
 
 ### SPECIFY_PARTITION_IS_NOT_ALLOWED
 
@@ -1856,6 +1935,66 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 [SQLSTATE: 42713](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Static partition column `<staticName>` is also specified in the column list.
+
+### STDS_COMMITTED_BATCH_UNAVAILABLE
+
+SQLSTATE: KD006
+
+No committed batch found, checkpoint location: `<checkpointLocation>`. Ensure that the query has run and committed any microbatch before stopping.
+
+### STDS_CONFLICT_OPTIONS
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The options `<options>` cannot be specified together. Please specify the one.
+
+### STDS_FAILED_TO_READ_STATE_SCHEMA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: `<sourceOptions>`.
+Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists.
+
+### STDS_INTERNAL_ERROR
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Internal error: `<message>`
+Please, report this bug to the corresponding communities or vendors, and provide the full stack trace.
+
+### [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+[SQLSTATE: 42616](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for source option '`<optionName>`':
+
+For more details see [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+### STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE
+
+SQLSTATE: KD006
+
+The state does not have any partition. Please double check that the query points to the valid state. options: `<sourceOptions>`
+
+### STDS_OFFSET_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+The offset log for `<batchId>` does not exist, checkpoint location: `<checkpointLocation>`.
+Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source.
+
+### STDS_OFFSET_METADATA_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`.
+The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata.
+
+### STDS_REQUIRED_OPTION_UNSPECIFIED
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+'`<optionName>`' must be specified.
 
 ### STREAM_FAILED
 
@@ -1936,6 +2075,12 @@ CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part 
 The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.
 Expected `<aliasesSize>` aliases, but got `<aliasesNames>`.
 Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
+
+### UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 
@@ -2336,3 +2481,9 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+### XML_ROW_TAG_MISSING
+
+[SQLSTATE: 42KDF](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<rowTag>` option is required for reading files in XML format.

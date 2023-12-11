@@ -26,9 +26,11 @@ import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.tags.AmmoniteTest
 import org.apache.spark.util.IvyTestUtils
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
+@AmmoniteTest
 class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   private val executorService = Executors.newSingleThreadExecutor()

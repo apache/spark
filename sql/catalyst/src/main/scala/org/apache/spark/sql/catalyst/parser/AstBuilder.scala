@@ -33,9 +33,9 @@ import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -51,6 +51,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -1083,8 +1084,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // window w1 as (partition by p_mfgr order by p_name
     //               range between 2 preceding and 2 following),
     //        w2 as w1
-    val windowMapView = baseWindowMap.view.mapValues {
-      case WindowSpecReference(name) =>
+    val windowMapView = baseWindowMap.transform {
+      case (_, WindowSpecReference(name)) =>
         baseWindowMap.get(name) match {
           case Some(spec: WindowSpecDefinition) =>
             spec
@@ -1093,12 +1094,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           case None =>
             throw QueryParsingErrors.cannotResolveWindowReferenceError(name, ctx)
         }
-      case spec: WindowSpecDefinition => spec
+      case (_, spec: WindowSpecDefinition) => spec
     }
 
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
-    WithWindowDefinition(windowMapView.map(identity).toMap, query)
+    WithWindowDefinition(windowMapView.map(identity), query)
   }
 
   /**
@@ -1393,7 +1394,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         case Some(c) if c.booleanExpression != null =>
           (baseJoinType, Option(expression(c.booleanExpression)))
         case Some(c) =>
-          throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
+          throw SparkException.internalError(s"Unimplemented joinCriteria: $c")
         case None if ctx.NATURAL != null =>
           if (ctx.LATERAL != null) {
             throw QueryParsingErrors.incompatibleJoinTypesError(
@@ -1785,7 +1786,27 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Both un-targeted (global) and targeted aliases are supported.
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq))
+    var target = Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq)
+
+    if (ctx.exceptClause != null) {
+      visitStarExcept(ctx, target)
+    }
+    else {
+      UnresolvedStar(target)
+    }
+  }
+
+  /**
+   * Create a star-except (i.e. all - except list) expression; this selects all elements in the
+   * specified object except those in the except list.
+   * Both un-targeted (global) and targeted aliases are supported.
+   */
+  def visitStarExcept(ctx: StarContext, target: Option[Seq[String]]): Expression = withOrigin(ctx) {
+    val exceptCols = ctx.exceptClause
+      .exceptCols.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
+    UnresolvedStarExcept(
+      target,
+      exceptCols.toSeq)
   }
 
   /**
@@ -2186,35 +2207,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Create a Percentile expression.
-   */
-  override def visitPercentile(ctx: PercentileContext): Expression = withOrigin(ctx) {
-    val percentage = expression(ctx.percentage)
-    val sortOrder = visitSortItem(ctx.sortItem)
-    val percentile = ctx.name.getType match {
-      case SqlBaseParser.PERCENTILE_CONT =>
-        sortOrder.direction match {
-          case Ascending => PercentileCont(sortOrder.child, percentage)
-          case Descending => PercentileCont(sortOrder.child, percentage, true)
-        }
-      case SqlBaseParser.PERCENTILE_DISC =>
-        sortOrder.direction match {
-          case Ascending => PercentileDisc(sortOrder.child, percentage)
-          case Descending => PercentileDisc(sortOrder.child, percentage, true)
-        }
-    }
-    val filter = Option(ctx.where).map(expression(_))
-    val aggregateExpression = percentile.toAggregateExpression(false, filter)
-    ctx.windowSpec match {
-      case spec: WindowRefContext =>
-        UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
-      case spec: WindowDefContext =>
-        WindowExpression(aggregateExpression, visitWindowDef(spec))
-      case _ => aggregateExpression
-    }
-  }
-
-  /**
    * Create a Substring/Substr expression.
    */
   override def visitSubstring(ctx: SubstringContext): Expression = withOrigin(ctx) {
@@ -2275,6 +2267,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case expressions =>
         expressions
     }
+    val order = ctx.sortItem.asScala.map(visitSortItem)
     val filter = Option(ctx.where).map(expression(_))
     val ignoreNulls =
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
@@ -2292,7 +2285,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       val funcCtx = ctx.functionName
       val func = withFuncIdentClause(
         funcCtx,
-        ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls)
+        ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls, order.toSeq)
       )
 
       // Check if the function is evaluated in a windowed context.
@@ -2622,7 +2615,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
             .split("\\s")
             .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
             .filter(s => s != "interval" && s.matches("[a-z]+"))
-          constructMultiUnitsIntervalLiteral(ctx, interval, units)
+          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq)
         } else {
           Literal(interval, CalendarIntervalType)
         }
@@ -3242,6 +3235,15 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
+   * Create a [[ClusterBySpec]].
+   */
+  override def visitClusterBySpec(ctx: ClusterBySpecContext): ClusterBySpec = withOrigin(ctx) {
+    val columnNames = ctx.multipartIdentifierList.multipartIdentifier.asScala
+      .map(typedVisit[Seq[String]]).map(FieldReference(_)).toSeq
+    ClusterBySpec(columnNames)
+  }
+
+  /**
    * Convert a property list into a key-value map.
    * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
@@ -3341,6 +3343,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * - location
    * - comment
    * - serde
+   * - clusterBySpec
    *
    * Note: Partition transforms are based on existing table schema definition. It can be simple
    * column names, or functions like `year(date_col)`. Partition columns are column names with data
@@ -3348,7 +3351,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   type TableClauses = (
       Seq[Transform], Seq[StructField], Option[BucketSpec], Map[String, String],
-      OptionList, Option[String], Option[String], Option[SerdeInfo])
+      OptionList, Option[String], Option[String], Option[SerdeInfo], Option[ClusterBySpec])
 
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
@@ -3406,7 +3409,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       if (arguments.size > 1) {
         throw QueryParsingErrors.wrongNumberArgumentsForTransformError(name, arguments.size, ctx)
       } else if (arguments.isEmpty) {
-        throw new IllegalStateException(s"Not enough arguments for transform $name")
+        throw SparkException.internalError(s"Not enough arguments for transform $name")
       } else {
         getFieldReference(ctx, arguments.head)
       }
@@ -3467,7 +3470,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))
       reference.orElse(literal)
-          .getOrElse(throw new IllegalStateException("Invalid transform argument"))
+          .getOrElse(throw SparkException.internalError("Invalid transform argument"))
     }
   }
 
@@ -3809,6 +3812,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.clusterBySpec(), "CLUSTER BY", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
     if (ctx.skewSpec.size > 0) {
@@ -3827,8 +3831,19 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val comment = visitCommentSpecList(ctx.commentSpec())
     val serdeInfo =
       getSerdeInfo(ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
+    val clusterBySpec = ctx.clusterBySpec().asScala.headOption.map(visitClusterBySpec)
+
+    if (clusterBySpec.isDefined) {
+      if (partCols.nonEmpty || partTransforms.nonEmpty) {
+        throw QueryParsingErrors.clusterByWithPartitionedBy(ctx)
+      }
+      if (bucketSpec.isDefined) {
+        throw QueryParsingErrors.clusterByWithBucketing(ctx)
+      }
+    }
+
     (partTransforms, partCols, bucketSpec, cleanedProperties, cleanedOptions, newLocation, comment,
-      serdeInfo)
+      serdeInfo, clusterBySpec)
   }
 
   protected def getSerdeInfo(
@@ -3881,6 +3896,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    *     [OPTIONS table_property_list]
    *     [ROW FORMAT row_format]
    *     [STORED AS file_format]
+   *     [CLUSTER BY (col_name, col_name, ...)]
    *     [CLUSTERED BY (col_name, col_name, ...)
    *       [SORTED BY (col_name [ASC|DESC], ...)]
    *       INTO num_buckets BUCKETS
@@ -3902,7 +3918,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partTransforms, partCols, bucketSpec, properties, options, location,
-      comment, serdeInfo) = visitCreateTableClauses(ctx.createTableClauses())
+      comment, serdeInfo, clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
 
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
@@ -3915,7 +3931,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
     val partitioning =
-      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+      partitionExpressions(partTransforms, partCols, ctx) ++
+        bucketSpec.map(_.asTransform) ++
+        clusterBySpec.map(_.asTransform)
+
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
       serdeInfo, external)
 
@@ -3958,6 +3977,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    *   replace_table_clauses (order insensitive):
    *     [OPTIONS table_property_list]
    *     [PARTITIONED BY (partition_fields)]
+   *     [CLUSTER BY (col_name, col_name, ...)]
    *     [CLUSTERED BY (col_name, col_name, ...)
    *       [SORTED BY (col_name [ASC|DESC], ...)]
    *       INTO num_buckets BUCKETS
@@ -3973,8 +3993,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
     val orCreate = ctx.replaceTableHeader().CREATE() != null
-    val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
-      visitCreateTableClauses(ctx.createTableClauses())
+    val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo,
+      clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
     val columns = Option(ctx.createOrReplaceTableColTypeList())
       .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
@@ -3984,7 +4004,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
     val partitioning =
-      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+      partitionExpressions(partTransforms, partCols, ctx) ++
+        bucketSpec.map(_.asTransform) ++
+        clusterBySpec.map(_.asTransform)
+
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
       serdeInfo, external = false)
 
@@ -4049,25 +4072,37 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
-      UnresolvedNamespace(Seq.empty[String])
+      CurrentNamespace
     }
     ShowTables(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
 
   /**
-   * Create a [[ShowTableExtended]] command.
+   * Create a [[ShowTablesExtended]] or [[ShowTablePartition]] command.
    */
   override def visitShowTableExtended(
       ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
-    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
-      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    Option(ctx.partitionSpec).map { spec =>
+      val table = withOrigin(ctx.pattern) {
+        if (ctx.identifierReference() != null) {
+          withIdentClause(ctx.identifierReference(), ns => {
+            val names = ns :+ string(visitStringLit(ctx.pattern))
+            UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
+          })
+        } else {
+          val names = Seq.empty[String] :+ string(visitStringLit(ctx.pattern))
+          UnresolvedTable(names, "SHOW TABLE EXTENDED ... PARTITION ...")
+        }
+      }
+      ShowTablePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
+    }.getOrElse {
+      val ns = if (ctx.identifierReference() != null) {
+        withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+      } else {
+        CurrentNamespace
+      }
+      ShowTablesExtended(ns, string(visitStringLit(ctx.pattern)))
     }
-    val ns = if (ctx.identifierReference() != null) {
-      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
-    } else {
-      UnresolvedNamespace(Seq.empty[String])
-    }
-    ShowTableExtended(ns, string(visitStringLit(ctx.pattern)), partitionKeys)
   }
 
   /**
@@ -4077,7 +4112,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
-      UnresolvedNamespace(Seq.empty[String])
+      CurrentNamespace
     }
     ShowViews(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
@@ -4542,7 +4577,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
-      UnresolvedNamespace(Seq.empty[String])
+      CurrentNamespace
     }
     AnalyzeTables(ns, noScan = ctx.identifier != null)
   }
@@ -4940,9 +4975,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         withIdentClause(ctx.ns, UnresolvedNamespace(_)),
         userScope, systemScope, pattern)
     } else if (legacy.isDefined) {
-      ShowFunctions(UnresolvedNamespace(legacy.get.dropRight(1)), userScope, systemScope, pattern)
+      val ns = if (legacy.get.length > 1) {
+        UnresolvedNamespace(legacy.get.dropRight(1))
+      } else {
+        CurrentNamespace
+      }
+      ShowFunctions(ns, userScope, systemScope, pattern)
     } else {
-      ShowFunctions(UnresolvedNamespace(Nil), userScope, systemScope, pattern)
+      ShowFunctions(CurrentNamespace, userScope, systemScope, pattern)
     }
   }
 

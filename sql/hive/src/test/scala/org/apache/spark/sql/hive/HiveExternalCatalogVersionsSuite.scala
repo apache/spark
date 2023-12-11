@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test HiveExternalCatalog backward compatibility.
@@ -228,8 +229,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
-          // TODO SPARK-37159 Consider to remove the following
-          // JVM module options once the Spark 3.2 line is EOL.
           JavaModuleOptions.defaultModuleOptions(),
         tempPyFile.getCanonicalPath)
       runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
@@ -270,7 +269,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .filter(_.contains("""<a href="spark-"""))
         .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
-        .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filter(_ < org.apache.spark.SPARK_VERSION).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil

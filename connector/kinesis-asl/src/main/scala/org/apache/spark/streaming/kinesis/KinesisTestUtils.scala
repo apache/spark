@@ -289,6 +289,6 @@ private[kinesis] class SimpleDataGenerator(
       sentSeqNumbers += ((num, seqNumber))
     }
 
-    shardIdToSeqNumbers.view.mapValues(_.toSeq).toMap
+    shardIdToSeqNumbers.toMap.transform((_, v) => v.toSeq)
   }
 }

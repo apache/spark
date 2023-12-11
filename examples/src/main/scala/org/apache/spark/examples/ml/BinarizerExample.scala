@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import scala.collection.immutable
+
 // $example on$
 import org.apache.spark.ml.feature.Binarizer
 // $example off$
@@ -31,7 +33,7 @@ object BinarizerExample {
       .getOrCreate()
 
     // $example on$
-    val data = Array((0, 0.1), (1, 0.8), (2, 0.2))
+    val data = immutable.ArraySeq.unsafeWrapArray(Array((0, 0.1), (1, 0.8), (2, 0.2)))
     val dataFrame = spark.createDataFrame(data).toDF("id", "feature")
 
     val binarizer: Binarizer = new Binarizer()

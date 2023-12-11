@@ -24,14 +24,18 @@ import java.util.Date
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.lang3.StringUtils
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedLeafNode}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, UnresolvedLeafNode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -39,10 +43,12 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -170,6 +176,55 @@ case class CatalogTablePartition(
   }
 }
 
+/**
+ * A container for clustering information.
+ *
+ * @param columnNames the names of the columns used for clustering.
+ */
+case class ClusterBySpec(columnNames: Seq[NamedReference]) {
+  override def toString: String = toJson
+
+  def toJson: String = ClusterBySpec.mapper.writeValueAsString(columnNames.map(_.fieldNames))
+}
+
+object ClusterBySpec {
+  private val mapper = {
+    val ret = new ObjectMapper() with ClassTagExtensions
+    ret.setSerializationInclusion(Include.NON_ABSENT)
+    ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    ret.registerModule(DefaultScalaModule)
+    ret
+  }
+
+  def fromProperty(columns: String): ClusterBySpec = {
+    ClusterBySpec(mapper.readValue[Seq[Seq[String]]](columns).map(FieldReference(_)))
+  }
+
+  def toProperty(
+      schema: StructType,
+      clusterBySpec: ClusterBySpec,
+      resolver: Resolver): (String, String) = {
+    CatalogTable.PROP_CLUSTERING_COLUMNS ->
+      normalizeClusterBySpec(schema, clusterBySpec, resolver).toJson
+  }
+
+  private def normalizeClusterBySpec(
+      schema: StructType,
+      clusterBySpec: ClusterBySpec,
+      resolver: Resolver): ClusterBySpec = {
+    val normalizedColumns = clusterBySpec.columnNames.map { columnName =>
+      val position = SchemaUtils.findColumnPosition(
+        columnName.fieldNames().toImmutableArraySeq, schema, resolver)
+      FieldReference(SchemaUtils.getColumnName(position, schema))
+    }
+
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedColumns.map(_.toString),
+      resolver)
+
+    ClusterBySpec(normalizedColumns)
+  }
+}
 
 /**
  * A container for bucketing information.
@@ -407,7 +462,7 @@ case class CatalogTable(
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties =
-      SQLConf.get.redactOptions(properties.view.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
+      SQLConf.get.redactOptions(properties.filter { case (k, _) => !k.startsWith(VIEW_PREFIX) })
         .toSeq.sortBy(_._1)
         .map(p => p._1 + "=" + p._2)
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
@@ -462,6 +517,10 @@ case class CatalogTable(
       if (value.isEmpty) key else s"$key: $value"
     }.mkString("", "\n", "")
   }
+
+  lazy val clusterBySpec: Option[ClusterBySpec] = {
+    properties.get(PROP_CLUSTERING_COLUMNS).map(ClusterBySpec.fromProperty)
+  }
 }
 
 object CatalogTable {
@@ -498,6 +557,8 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VARIABLE_NAMES = VIEW_PREFIX + "referredTempVariablesNames"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
+
+  val PROP_CLUSTERING_COLUMNS: String = "clusteringColumns"
 
   def splitLargeTableProp(
       key: String,
@@ -561,10 +622,8 @@ object CatalogTable {
       createTime = 0L,
       lastAccessTime = 0L,
       properties = table.properties
-        .view
-        .filterKeys(!nondeterministicProps.contains(_))
-        .map(identity)
-        .toMap,
+        .filter { case (k, _) => !nondeterministicProps.contains(k) }
+        .map(identity),
       stats = None,
       ignoredProperties = Map.empty
     )
@@ -865,7 +924,7 @@ case class HiveTableRelation(
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw new IllegalStateException("Table stats must be specified.")
+      throw SparkException.internalError("Table stats must be specified.")
     }
   }
 

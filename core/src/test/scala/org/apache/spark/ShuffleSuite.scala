@@ -37,6 +37,7 @@ import org.apache.spark.scheduler.{MapStatus, MergeStatus, MyRDD, SparkListener,
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDirsTest {
@@ -50,7 +51,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     sc = new SparkContext("local", "test", myConf)
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 4)
     val groups = pairs.groupByKey(4).collect()
-    assert(groups.size === 2)
+    assert(groups.length === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
@@ -154,7 +155,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
-    val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
+    val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1)).toImmutableArraySeq
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new ShuffledRDD[Int, Int, Int](pairs,
       new HashPartitioner(2)).collect()
@@ -167,7 +168,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
-    val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22))
+    val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22)).toImmutableArraySeq
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new OrderedRDDFunctions[Int, Int, MutablePair[Int, Int]](pairs)
       .sortByKey().collect()

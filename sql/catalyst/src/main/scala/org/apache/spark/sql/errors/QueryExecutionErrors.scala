@@ -190,7 +190,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "signature" -> inputTypes,
-        "result" -> outputType),
+        "result" -> outputType,
+        "reason" -> e.toString),
       cause = e)
   }
 
@@ -1716,7 +1717,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "metadataPath" -> metadataPath.toString(),
         "legacyMetadataPath" -> legacyMetadataPath.toString(),
-        "StreamingCheckpointEscaptedPathCheckEnabled" ->
+        "StreamingCheckpointEscapedPathCheckEnabled" ->
           SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key),
       cause = null)
   }
@@ -1810,9 +1811,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def catalogPluginClassNotFoundError(name: String): Throwable = {
+  def catalogNotFoundError(name: String): Throwable = {
     new CatalogNotFoundException(
-      s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+      errorClass = "CATALOG_NOT_FOUND",
+      messageParameters = Map(
+        "catalogName" -> toSQLId(name),
+        "config" -> toSQLConf(s"spark.sql.catalog.$name")))
   }
 
   def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
@@ -2093,7 +2097,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2250",
       messageParameters = Map(
-        "autoBroadcastjoinThreshold" -> SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
+        "autoBroadcastJoinThreshold" -> SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
         "driverMemory" -> SparkLauncher.DRIVER_MEMORY,
         "analyzeTblMsg" -> analyzeTblMsg),
       cause = oe.getCause)
@@ -2757,5 +2761,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(funcName),
         "upper" -> size.toString,
         "invalidValue" -> pos.toString))
+  }
+
+  def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("charset"),
+        "charset" -> charset))
   }
 }

@@ -214,11 +214,11 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       }
       val execFiles =
         children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
-      assert(execFiles.size === 1)
+      assert(execFiles.length === 1)
       val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
       assert(allLines.size === 1)
       val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
-      assert(addrs.size === 2)
+      assert(addrs.length === 2)
       assert(addrs.sorted === Array("3", "4"))
 
       assert(NonLocalModeSparkPlugin.driverContext != null)
@@ -264,7 +264,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): String = {
     // try to keep this simple and only write the gpus addresses, if we add more resources need to
     // make more complex
-    val resourcesString = resources.view.filterKeys(_.equals(GPU)).map {
+    val resourcesString = resources.filter { case (k, _) => k.equals(GPU) }.map {
       case (_, ri) =>
         s"${ri.addresses.mkString(",")}"
     }.mkString(",")

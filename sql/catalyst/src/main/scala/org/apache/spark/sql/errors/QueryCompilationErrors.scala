@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Object for grouping error messages from exceptions thrown during query compilation.
@@ -228,9 +229,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       case seq => Some(CreateStruct(seq)).map(e => Alias(e, e.sql)()).get
     }
       .groupBy(_.dataType)
-      .view
-      .mapValues(values => values.map(value => toSQLId(value.name)).sorted)
-      .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
+      .transform((_, values) => values.map(value => toSQLId(value.name)).sorted)
+      .transform((_, values) => if (values.length > 3) values.take(3) :+ "..." else values)
       .toList.sortBy(_._1.sql)
       .map { case (dataType, values) => s"${toSQLType(dataType)} (${values.mkString(", ")})" }
 
@@ -639,6 +639,30 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def distinctInverseDistributionFunctionUnsupportedError(funcName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
+  }
+
+  def inverseDistributionFunctionMissingWithinGroupError(funcName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+      messageParameters = Map("funcName" -> toSQLId(funcName)))
+  }
+
+  def wrongNumOrderingsForInverseDistributionFunctionError(
+      funcName: String,
+      validOrderingsNumber: Int,
+      actualOrderingsNumber: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
+      messageParameters = Map(
+        "funcName" -> toSQLId(funcName),
+        "expectedNum" -> validOrderingsNumber.toString,
+        "actualNum" -> actualOrderingsNumber.toString))
+  }
+
   def aliasNumberNotMatchColumnNumberError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(
@@ -656,6 +680,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "aliasesSize" -> aliasesSize.toString,
         "aliasesNames" -> aliasesNames))
+  }
+
+  def invalidSortOrderInUDTFOrderingColumnFromAnalyzeMethodHasAlias(
+      aliasName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD",
+      messageParameters = Map("aliasName" -> aliasName))
   }
 
   def windowAggregateFunctionWithFilterNotSupportedError(): Throwable = {
@@ -845,7 +876,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ident: Identifier,
       operation: String): Throwable = {
     unsupportedTableOperationError(
-      catalog.name +: ident.namespace :+ ident.name, operation)
+      (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq, operation)
   }
 
   def unsupportedTableOperationError(
@@ -1563,6 +1594,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def cannotSaveVariantIntoExternalStorageError(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_SAVE_VARIANT",
+      messageParameters = Map.empty)
+  }
+
   def cannotResolveAttributeError(name: String, outputStr: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1137",
@@ -2138,12 +2175,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "inputTypesLen" -> bound.inputTypes().length.toString))
   }
 
-  def commandUnsupportedInV2TableError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1200",
-      messageParameters = Map("name" -> name))
-  }
-
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
     new AnalysisException(
@@ -2470,7 +2501,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "_LEGACY_ERROR_TEMP_1231",
       messageParameters = Map(
         "key" -> key,
-        "tblName" -> tblName))
+        "tblName" -> toSQLId(tblName)))
   }
 
   def invalidPartitionSpecError(
@@ -2482,7 +2513,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "specKeys" -> specKeys,
         "partitionColumnNames" -> partitionColumnNames.mkString(", "),
-        "tableName" -> tableName))
+        "tableName" -> toSQLId(tableName)))
   }
 
   def columnAlreadyExistsError(columnName: String): Throwable = {
@@ -2538,6 +2569,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       table: String,
       partition: TablePartitionSpec): Throwable = {
     new NoSuchPartitionException(db, table, partition)
+  }
+
+  def notExistPartitionError(
+      table: Identifier,
+      partitionIdent: InternalRow,
+      partitionSchema: StructType): Throwable = {
+    new NoSuchPartitionException(table.toString, partitionIdent, partitionSchema)
   }
 
   def analyzingColumnStatisticsNotSupportedForColumnTypeError(
@@ -3804,5 +3842,30 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "DATA_SOURCE_ALREADY_EXISTS",
       messageParameters = Map("provider" -> name))
+  }
+
+  def dataSourceDoesNotExist(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_NOT_EXIST",
+      messageParameters = Map("provider" -> name))
+  }
+
+  def foundMultipleDataSources(provider: String): Throwable = {
+    new AnalysisException(
+      errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
+      messageParameters = Map("provider" -> provider))
+  }
+
+  def xmlRowTagRequiredError(optionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "XML_ROW_TAG_MISSING",
+      messageParameters = Map("rowTag" -> toSQLId(optionName))
+    )
+  }
+
+  def invalidUDFClassError(invalidClass: String): Throwable = {
+    new InvalidUDFClassException(
+      errorClass = "_LEGACY_ERROR_TEMP_2450",
+      messageParameters = Map("invalidClass" -> invalidClass))
   }
 }

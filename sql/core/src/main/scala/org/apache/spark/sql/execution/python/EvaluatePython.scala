@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -182,9 +183,9 @@ object EvaluatePython {
         case c if c.getClass.isArray =>
           val array = c.asInstanceOf[Array[_]]
           if (array.length != fields.length) {
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Input row doesn't have expected number of values required by the schema. " +
-                s"${fields.length} fields are required while ${array.length} values are provided."
+              s"${fields.length} fields are required while ${array.length} values are provided."
             )
           }
 

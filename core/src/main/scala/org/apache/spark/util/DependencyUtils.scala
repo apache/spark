@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] case class IvyProperties(
     packagesExclusions: String,
@@ -101,7 +102,7 @@ private[spark] object DependencyUtils extends Logging {
       ivySettingsPath: Option[String]): Seq[String] = {
     val exclusions: Seq[String] =
       if (!StringUtils.isBlank(packagesExclusions)) {
-        packagesExclusions.split(",")
+        packagesExclusions.split(",").toImmutableArraySeq
       } else {
         Nil
       }

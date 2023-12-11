@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import inspect
 import os
 import sys
-from typing import IO, List
+from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
+from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
@@ -55,7 +55,6 @@ def main(infile: IO, outfile: IO) -> None:
     The JVM sends the following information to this process:
     - a `DataSource` class representing the data source to be created.
     - a provider name in string.
-    - a list of paths in string.
     - an optional user-specified schema in json string.
     - a dictionary of options in string.
 
@@ -84,8 +83,20 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
+        # Check the name method is a class method.
+        if not inspect.ismethod(data_source_cls.name):
+            raise PySparkTypeError(
+                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                message_parameters={
+                    "expected": "'name()' method to be a classmethod",
+                    "actual": f"'{type(data_source_cls.name).__name__}'",
+                },
+            )
+
         # Receive the provider name.
         provider = utf8_deserializer.loads(infile)
+
+        # Check if the provider name matches the data source's name.
         if provider.lower() != data_source_cls.name().lower():
             raise PySparkAssertionError(
                 error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
@@ -94,12 +105,6 @@ def main(infile: IO, outfile: IO) -> None:
                     "actual": f"'{provider}'",
                 },
             )
-
-        # Receive the paths.
-        num_paths = read_int(infile)
-        paths: List[str] = []
-        for _ in range(num_paths):
-            paths.append(utf8_deserializer.loads(infile))
 
         # Receive the user-specified schema
         user_specified_schema = None
@@ -124,11 +129,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate a data source.
         try:
-            data_source = data_source_cls(
-                paths=paths,
-                userSpecifiedSchema=user_specified_schema,  # type: ignore
-                options=options,
-            )
+            data_source = data_source_cls(options=options)
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",

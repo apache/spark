@@ -236,7 +236,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       // Try reading the output back as an object file
       val ct = reflect.ClassTag[Any](Utils.classForName(className, noSparkClassLoader = true))
       val output = sc.objectFile[Any](outputDir)
-      assert(output.collect().size === 3)
+      assert(output.collect().length === 3)
       assert(output.collect().head.getClass.getName === className)
     }
   }
@@ -596,7 +596,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 
@@ -639,7 +639,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 

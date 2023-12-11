@@ -29,6 +29,7 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -47,6 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -362,8 +364,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
-        // `mapValues` is lazy and we need to force it to materialize by converting to Map
-        m.view.mapValues(mapChild).toMap
+        m.toMap.transform((_, v) => mapChild(v))
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -745,7 +746,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"""
              |Failed to copy node.
              |Is otherCopyArgs specified correctly for $nodeName.
@@ -783,11 +784,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
         Some(arg.asInstanceOf[BaseType].clone())
       // `mapValues` is lazy and we need to force it to materialize by converting to Map
-      case m: Map[_, _] => m.view.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
+      case m: Map[_, _] => m.toMap.transform {
+        case (_, arg: TreeNode[_]) if containsChild(arg) =>
           arg.asInstanceOf[BaseType].clone()
-        case other => other
-      }.toMap
+        case (_, other) => other
+      }
       case d: DataType => d // Avoid unpacking Structs
       case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
       case args: Iterable[_] => args.map(mapChild)
@@ -829,7 +830,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       // Sort elements for deterministic behaviours
       truncatedString(set.toSeq.map(formatArg(_, maxFields)).sorted, "{", ", ", "}", maxFields)
     case array: Array[_] =>
-      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+      truncatedString(
+        array.map(formatArg(_, maxFields)).toImmutableArraySeq, "[", ", ", "]", maxFields)
     case other =>
       other.toString
   }

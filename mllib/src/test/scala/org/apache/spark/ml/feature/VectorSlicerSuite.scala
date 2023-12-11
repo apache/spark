@@ -23,6 +23,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 class VectorSlicerSuite extends MLTest with DefaultReadWriteTest {
 
@@ -78,7 +79,8 @@ class VectorSlicerSuite extends MLTest with DefaultReadWriteTest {
     val resultAttrs = Array("f1", "f4").map(defaultAttr.withName)
     val resultAttrGroup = new AttributeGroup("expected", resultAttrs.asInstanceOf[Array[Attribute]])
 
-    val rdd = sc.parallelize(data.zip(expected)).map { case (a, b) => Row(a, b) }
+    val rdd = sc.parallelize(data.zip(expected).toImmutableArraySeq)
+      .map { case (a, b) => Row(a, b) }
     val df = spark.createDataFrame(rdd,
       StructType(Array(attrGroup.toStructField(), resultAttrGroup.toStructField())))
 

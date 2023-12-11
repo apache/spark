@@ -105,7 +105,9 @@ Missing Values
    Index.fillna
    Index.dropna
    Index.isna
+   Index.isnull
    Index.notna
+   Index.notnull
 
 Conversion
 ~~~~~~~~~~
@@ -127,8 +129,14 @@ in Spark. These can be accessed by ``Index.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    Index.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    Index.spark.transform
 
 Sorting
@@ -190,6 +198,10 @@ Categorical components
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
    CategoricalIndex.map
+   CategoricalIndex.equals
+   CategoricalIndex.max
+   CategoricalIndex.min
+   CategoricalIndex.tolist
 
 .. _api.multiindex:
 
@@ -302,9 +314,15 @@ in Spark. These can be accessed by ``MultiIndex.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    MultiIndex.spark.data_type
    MultiIndex.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    MultiIndex.spark.transform
 
 MultiIndex Sorting

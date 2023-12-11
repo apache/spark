@@ -22,6 +22,7 @@ import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import scala.annotation.varargs
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -64,6 +65,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -240,7 +242,7 @@ class Dataset[T] private[sql](
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
   }
 
-  private implicit def classTag = exprEnc.clsTag
+  private implicit def classTag: ClassTag[T] = exprEnc.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
@@ -254,7 +256,7 @@ class Dataset[T] private[sql](
   private[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
       queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
-    }
+    }.toImmutableArraySeq
   }
 
   /**
@@ -282,7 +284,8 @@ class Dataset[T] private[sql](
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
+    (schema.fieldNames
+      .map(SchemaUtils.escapeMetaCharacters).toImmutableArraySeq +: data.map { row =>
       row.toSeq.map { cell =>
         assert(cell != null, "ToPrettyString is not nullable and should not return null value")
         // Escapes meta-characters not to break the `showString` format
@@ -295,7 +298,7 @@ class Dataset[T] private[sql](
           str
         }
       }: Seq[String]
-    }
+    }).toImmutableArraySeq
   }
 
   /**
@@ -777,8 +780,7 @@ class Dataset[T] private[sql](
       val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
       require(!IntervalUtils.isNegative(parsedDelay),
         s"delay threshold ($delayThreshold) should not be negative.")
-      EliminateEventTimeWatermark(
-        EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
+      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
     }
   }
 
@@ -993,7 +995,7 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   def join(right: Dataset[_], usingColumns: Array[String]): DataFrame = {
-    join(right, usingColumns.toSeq)
+    join(right, usingColumns.toImmutableArraySeq)
   }
 
   /**
@@ -1062,7 +1064,7 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame = {
-    join(right, usingColumns.toSeq, joinType)
+    join(right, usingColumns.toImmutableArraySeq, joinType)
   }
 
   /**
@@ -1244,7 +1246,7 @@ class Dataset[T] private[sql](
 
       withTypedPlan(JoinWith.typedJoinWith(
         joined,
-        sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
+        sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
         sparkSession.sessionState.analyzer.resolver,
         this.exprEnc.isSerializedAsStructForTopLevel,
         other.exprEnc.isSerializedAsStructForTopLevel))
@@ -1450,7 +1452,7 @@ class Dataset[T] private[sql](
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
-      if (sqlContext.conf.supportQuotedRegexColumnName) {
+      if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
         Column(addDataFrameIdToCol(resolve(colName)))
@@ -1627,7 +1629,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = withOrigin {
-    implicit val encoder = c1.encoder
+    implicit val encoder: ExpressionEncoder[U1] = c1.encoder
     val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
 
     if (!encoder.isSerializedAsStructForTopLevel) {
@@ -1822,6 +1824,33 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
     RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.CubeType)
+  }
+
+  /**
+   * Create multi-dimensional aggregation for the current Dataset using the specified grouping sets,
+   * so we can run aggregation on them.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
+   *
+   * {{{
+   *   // Compute the average for all numeric columns group by specific grouping sets.
+   *   ds.groupingSets(Seq(Seq($"department", $"group"), Seq()), $"department", $"group").avg()
+   *
+   *   // Compute the max age and average salary, group by specific grouping sets.
+   *   ds.groupingSets(Seq($"department", $"gender"), Seq()), $"department", $"group").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def groupingSets(groupingSets: Seq[Seq[Column]], cols: Column*): RelationalGroupedDataset = {
+    RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      RelationalGroupedDataset.GroupingSetsType(groupingSets.map(_.map(_.expr))))
   }
 
   /**
@@ -2075,8 +2104,8 @@ class Dataset[T] private[sql](
       valueColumnName: String): DataFrame = withOrigin {
     withPlan {
       Unpivot(
-        Some(ids.map(_.named)),
-        Some(values.map(v => Seq(v.named))),
+        Some(ids.map(_.named).toImmutableArraySeq),
+        Some(values.map(v => Seq(v.named)).toImmutableArraySeq),
         None,
         variableColumnName,
         Seq(valueColumnName),
@@ -2108,7 +2137,7 @@ class Dataset[T] private[sql](
       valueColumnName: String): DataFrame = withOrigin {
     withPlan {
       Unpivot(
-        Some(ids.map(_.named)),
+        Some(ids.map(_.named).toImmutableArraySeq),
         None,
         None,
         variableColumnName,
@@ -2893,18 +2922,29 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = withOrigin {
+    val (colNames, newColNames) = colsMap.toSeq.unzip
+    withColumnsRenamed(colNames, newColNames)
+  }
+
+  private[spark] def withColumnsRenamed(
+    colNames: Seq[String],
+    newColNames: Seq[String]): DataFrame = withOrigin {
+    require(colNames.size == newColNames.size,
+      s"The size of existing column names: ${colNames.size} isn't equal to " +
+        s"the size of new column names: ${newColNames.size}")
+
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output: Seq[NamedExpression] = queryExecution.analyzed.output
 
-    val projectList = colsMap.foldLeft(output) {
+    val projectList = colNames.zip(newColNames).foldLeft(output) {
       case (attrs, (existingName, newName)) =>
-      attrs.map(attr =>
-        if (resolver(attr.name, existingName)) {
-          Alias(attr, newName)()
-        } else {
-          attr
-        }
-      )
+        attrs.map(attr =>
+          if (resolver(attr.name, existingName)) {
+            Alias(attr, newName)()
+          } else {
+            attr
+          }
+        )
     }
     SchemaUtils.checkColumnNameDuplication(
       projectList.map(_.name),
@@ -3063,19 +3103,10 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(col: Column, cols: Column*): DataFrame = {
-    val allColumns = col +: cols
-    val expressions = (for (col <- allColumns) yield col match {
-      case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(
-          u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
-      case Column(expr: Expression) => expr
-    })
-    val attrs = this.logicalPlan.output
-    val colsAfterDrop = attrs.filter { attr =>
-      expressions.forall(expression => !attr.semanticEquals(expression))
-    }.map(attr => Column(attr))
-    select(colsAfterDrop : _*)
+  def drop(col: Column, cols: Column*): DataFrame = withOrigin {
+    withPlan {
+      DataFrameDropColumns((col +: cols).map(_.expr), logicalPlan)
+    }
   }
 
   /**
@@ -3126,7 +3157,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def dropDuplicates(colNames: Array[String]): Dataset[T] = dropDuplicates(colNames.toSeq)
+  def dropDuplicates(colNames: Array[String]): Dataset[T] =
+    dropDuplicates(colNames.toImmutableArraySeq)
 
   /**
    * Returns a new [[Dataset]] with duplicate rows removed, considering only
@@ -3213,7 +3245,7 @@ class Dataset[T] private[sql](
    * @since 3.5.0
    */
   def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
-    dropDuplicatesWithinWatermark(colNames.toSeq)
+    dropDuplicatesWithinWatermark(colNames.toImmutableArraySeq)
   }
 
   /**
@@ -3451,7 +3483,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = withOrigin {
-    implicit val uEnc = encoder
+    implicit val uEnc: Encoder[U] = encoder
     withTypedPlan(MapElements[T, U](func, logicalPlan))
   }
 

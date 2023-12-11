@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FakeV2SessionCatalog
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -46,7 +47,7 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
       val name = invocation.getArgument[String](0)
-      catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+      catalogs.getOrElse(name, throw QueryExecutionErrors.catalogNotFoundError(name))
     })
     when(manager.currentCatalog).thenReturn(sessionCatalog)
     when(manager.v2SessionCatalog).thenReturn(sessionCatalog)
@@ -114,7 +115,7 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
       val name = invocation.getArgument[String](0)
-      catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+      catalogs.getOrElse(name, throw QueryExecutionErrors.catalogNotFoundError(name))
     })
     when(manager.currentCatalog).thenReturn(catalogs("prod"))
     when(manager.currentNamespace).thenReturn(Array.empty[String])

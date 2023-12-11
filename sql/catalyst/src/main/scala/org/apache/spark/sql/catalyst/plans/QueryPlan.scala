@@ -245,7 +245,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def transformAllExpressionsWithSubqueries(
     rule: PartialFunction[Expression, Expression]): this.type = {
     transformWithSubqueries {
-      case q => q.transformExpressions(rule).asInstanceOf[PlanType]
+      case q => q.transformExpressions(rule)
     }.asInstanceOf[this.type]
   }
 
@@ -532,6 +532,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
 
     transformDownWithPruning(cond, ruleId)(g)
+  }
+
+  /**
+   * A variant of [[foreach]] which considers plan nodes inside subqueries as well.
+   */
+  def foreachWithSubqueries(f: PlanType => Unit): Unit = {
+    def actualFunc(plan: PlanType): Unit = {
+      f(plan)
+      plan.subqueries.foreach(_.foreachWithSubqueries(f))
+    }
+    foreach(actualFunc)
   }
 
   /**

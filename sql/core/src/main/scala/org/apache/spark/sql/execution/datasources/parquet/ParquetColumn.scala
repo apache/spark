@@ -23,6 +23,7 @@ import org.apache.parquet.io.PrimitiveColumnIO
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Rich information for a Parquet column together with its SparkSQL type.
@@ -43,12 +44,12 @@ object ParquetColumn {
   def apply(sparkType: DataType, io: PrimitiveColumnIO): ParquetColumn = {
     this(sparkType, Some(io.getColumnDescriptor), io.getRepetitionLevel,
       io.getDefinitionLevel, io.getType.isRepetition(Repetition.REQUIRED),
-      io.getFieldPath, Seq.empty)
+      io.getFieldPath.toImmutableArraySeq, Seq.empty)
   }
 
   def apply(sparkType: DataType, io: GroupColumnIO, children: Seq[ParquetColumn]): ParquetColumn = {
     this(sparkType, None, io.getRepetitionLevel,
       io.getDefinitionLevel, io.getType.isRepetition(Repetition.REQUIRED),
-      io.getFieldPath, children)
+      io.getFieldPath.toImmutableArraySeq, children)
   }
 }

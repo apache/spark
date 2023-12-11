@@ -29,6 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[BucketedRandomProjectionLSH]].
@@ -68,7 +69,7 @@ class BucketedRandomProjectionLSHModel private[ml](
   extends LSHModel[BucketedRandomProjectionLSHModel] with BucketedRandomProjectionLSHParams {
 
   private[ml] def this(uid: String, randUnitVectors: Array[Vector]) = {
-    this(uid, Matrices.fromVectors(randUnitVectors))
+    this(uid, Matrices.fromVectors(randUnitVectors.toImmutableArraySeq))
   }
 
   private[ml] def randUnitVectors: Array[Vector] = randMatrix.rowIter.toArray
