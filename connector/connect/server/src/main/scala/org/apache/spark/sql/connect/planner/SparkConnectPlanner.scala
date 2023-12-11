@@ -985,18 +985,14 @@ class SparkConnectPlanner(
       val (colNames, newColNames) = rel.getRenamesList.asScala.toSeq.map { rename =>
         (rename.getColName, rename.getNewColName)
       }.unzip
-      val ds = Dataset
-        .ofRows(session, transformRelation(rel.getInput))
+      val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
       ds.logicalPlan.setTagValue(LogicalPlan.SKIP_FLATTENING, true)
-      ds.withColumnsRenamed(colNames, newColNames)
-        .logicalPlan
+      ds.withColumnsRenamed(colNames, newColNames).logicalPlan
     } else {
       // for backward compatibility
-      val ds = Dataset
-        .ofRows(session, transformRelation(rel.getInput))
+      val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
       ds.logicalPlan.setTagValue(LogicalPlan.SKIP_FLATTENING, true)
-      ds.withColumnsRenamed(rel.getRenameColumnsMapMap)
-        .logicalPlan
+      ds.withColumnsRenamed(rel.getRenameColumnsMapMap).logicalPlan
     }
   }
 
