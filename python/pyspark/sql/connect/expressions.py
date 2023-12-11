@@ -97,6 +97,11 @@ class Expression:
 
     def alias(self, *alias: str, **kwargs: Any) -> "ColumnAlias":
         metadata = kwargs.pop("metadata", None)
+        if len(alias) > 1 and metadata is not None:
+            raise PySparkValueError(
+                error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+                message_parameters={"arg_name": "metadata"},
+            )
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
 

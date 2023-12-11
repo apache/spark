@@ -122,6 +122,16 @@ class TypesTestsMixin:
     def test_infer_schema(self):
         d = [Row(l=[], d={}, s=None), Row(l=[Row(a=1, b="s")], d={"key": Row(c=1.0, d="2")}, s="")]
         rdd = self.sc.parallelize(d)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame(rdd, schema=123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
         df = self.spark.createDataFrame(rdd)
         self.assertEqual([], df.rdd.map(lambda r: r.l).first())
         self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
@@ -882,6 +892,18 @@ class TypesTestsMixin:
         self.assertEqual("b", df.select(df.r.getField("b")).first()[0])
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
         self.assertEqual("v", df.select(df.d.getItem("k")).first()[0])
+
+        # Deprecated behaviors
+        map_col = F.create_map(F.lit(0), F.lit(100), F.lit(1), F.lit(200))
+        self.assertEqual(
+            self.spark.range(1).withColumn("mapped", map_col.getItem(F.col("id"))).first()[1], 100
+        )
+
+        struct_col = F.struct(F.lit(0), F.lit(100), F.lit(1), F.lit(200))
+        self.assertEqual(
+            self.spark.range(1).withColumn("struct", struct_col.getField(F.lit("col1"))).first()[1],
+            0,
+        )
 
     def test_infer_long_type(self):
         longrow = [Row(f1="a", f2=100000000000000)]

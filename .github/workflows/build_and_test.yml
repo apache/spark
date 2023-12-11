@@ -241,12 +241,12 @@ jobs:
           ./dev/free_disk_space
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.9
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -268,6 +268,10 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
+        // SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
+        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
+          MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
+        fi
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
@@ -428,7 +432,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -538,7 +542,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -579,6 +583,10 @@ jobs:
       uses: bufbuild/buf-setup-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Protocol Buffers Linter
+      uses: bufbuild/buf-lint-action@v1
+      with:
+        input: core/src/main/protobuf
     # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
     - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1
@@ -586,7 +594,7 @@ jobs:
         input: connector/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
     - name: Install Python 3.9
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
     - name: Install dependencies for Python CodeGen check
@@ -661,7 +669,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -827,7 +835,7 @@ jobs:
         restore-keys: |
           java${{ matrix.java }}-maven-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -882,7 +890,7 @@ jobs:
         restore-keys: |
           tpcds-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -989,7 +997,7 @@ jobs:
         restore-keys: |
           docker-integration-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1049,7 +1057,7 @@ jobs:
           restore-keys: |
             k8s-integration-coursier-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}

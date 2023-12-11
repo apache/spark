@@ -16,19 +16,19 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_series_interpolate import SeriesInterpolateTestsMixin
+from pyspark.pandas.tests.series.test_string_ops_adv import SeriesStringOpsAdvMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesInterpolateParityTests(
-    SeriesInterpolateTestsMixin, TestUtils, PandasOnSparkTestUtils, ReusedConnectTestCase
+class SeriesParityStringOpsAdvTests(
+    SeriesStringOpsAdvMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_series_interpolate import *  # noqa: F401
+    from pyspark.pandas.tests.connect.series.test_parity_string_ops_adv import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

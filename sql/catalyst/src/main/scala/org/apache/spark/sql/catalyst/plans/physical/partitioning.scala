@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 import scala.annotation.tailrec
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
@@ -55,7 +56,8 @@ case object UnspecifiedDistribution extends Distribution {
   override def requiredNumPartitions: Option[Int] = None
 
   override def createPartitioning(numPartitions: Int): Partitioning = {
-    throw new IllegalStateException("UnspecifiedDistribution does not have default partitioning.")
+    throw SparkException.internalError(
+      "UnspecifiedDistribution does not have default partitioning.")
   }
 }
 
@@ -220,7 +222,7 @@ trait Partitioning {
    * @param distribution the required clustered distribution for this partitioning
    */
   def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
-    throw new IllegalStateException(s"Unexpected partitioning: ${getClass.getSimpleName}")
+    throw SparkException.internalError(s"Unexpected partitioning: ${getClass.getSimpleName}")
 
   /**
    * The actual method that defines whether this [[Partitioning]] can satisfy the given
