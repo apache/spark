@@ -36,7 +36,7 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 
 {% include_relative generated-sql-config-table-caching-data.html %}
 
-## Tuning Partitions
+## Other Configuration Options
 
 The following options can also be used to tune the performance of query execution. It is possible
 that these options will be deprecated in future release as more optimizations are performed automatically.
