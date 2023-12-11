@@ -2608,7 +2608,26 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("UNSUPPORTED_OVERWRITE.TABLE: Can't overwrite a table that is also being read from") {
+  test("SPARK-46370: Querying a table should not invalidate the column defaults") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(i INT, s STRING DEFAULT 'def') USING CSV")
+      spark.sql("INSERT INTO t SELECT 1, DEFAULT")
+      spark.sql("ALTER TABLE t ALTER COLUMN s DROP DEFAULT")
+      spark.sql("INSERT INTO t SELECT 2, DEFAULT")
+      val results = spark.table("t").collect()
+      assert(results.length == 2)
+      spark.sql("ALTER TABLE t ALTER COLUMN s SET DEFAULT 'mno'")
+      spark.sql("INSERT INTO t SELECT 3, DEFAULT").collect()
+      checkAnswer(
+        spark.table("t"),
+        Seq(
+          Row(1, "def"),
+          Row(2, null),
+          Row(3, "mno")))
+    }
+  }
+
+test("UNSUPPORTED_OVERWRITE.TABLE: Can't overwrite a table that is also being read from") {
     val tableName = "t1"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
