@@ -34,30 +34,9 @@ memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableNam
 Configuration of in-memory caching can be done using the `setConf` method on `SparkSession` or by running
 `SET key=value` commands using SQL.
 
-<table>
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-<tr>
-  <td><code>spark.sql.inMemoryColumnarStorage.compressed</code></td>
-  <td>true</td>
-  <td>
-    When set to true, Spark SQL will automatically select a compression codec for each column based
-    on statistics of the data.
-  </td>
-  <td>1.0.1</td>
-</tr>
-<tr>
-  <td><code>spark.sql.inMemoryColumnarStorage.batchSize</code></td>
-  <td>10000</td>
-  <td>
-    Controls the size of batches for columnar caching. Larger batch sizes can improve memory utilization
-    and compression, but risk OOMs when caching data.
-  </td>
-  <td>1.1.1</td>
-</tr>
+{% include_relative generated-sql-config-table-caching-data.html %}
 
-</table>
-
-## Other Configuration Options
+## Tuning Partitions
 
 The following options can also be used to tune the performance of query execution. It is possible
 that these options will be deprecated in future release as more optimizations are performed automatically.
