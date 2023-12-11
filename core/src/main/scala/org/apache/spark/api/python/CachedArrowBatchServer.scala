@@ -58,28 +58,10 @@ class CachedArrowBatchServer extends Logging {
 
     val blockManager = SparkEnv.get.blockManager
 
-    ByteArrayOutputStream
     val blockData =
       blockManager.get[Array[Byte]](blockId).get.data.next().asInstanceOf[Array[Byte]]
-    val outputStream = new BufferedOutputStream(sock.getOutputStream())
-
-    val out = new DataOutputStream(outputStream)
-    val batchWriter =
-      new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
-
-    // Batches ordered by (index of partition, batch index in that partition) tuple
-    val batchOrder = ArrayBuffer.empty[(Int, Int)]
-
-    // Handler to eagerly write batches to Python as they arrive, un-ordered
-    val handlePartitionBatches = (index: Int, arrowBatches: Array[Array[Byte]]) =>
-      if (arrowBatches.nonEmpty) {
-        // Write all batches (can be more than 1) in the partition, store the batch order tuple
-        batchWriter.writeBatches(arrowBatches.iterator)
-        arrowBatches.indices.foreach {
-          partitionBatchIndex => batchOrder.append((index, partitionBatchIndex))
-        }
-      }
-
+    val out = new BufferedOutputStream(sock.getOutputStream())
+    out.write(blockData)
     out.flush()
   }
 

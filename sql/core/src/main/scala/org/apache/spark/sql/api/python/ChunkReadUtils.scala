@@ -17,19 +17,27 @@
 
 package org.apache.spark.sql.api.python
 
+import java.io.{ByteArrayOutputStream, DataOutputStream}
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.SparkEnv
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.execution.arrow.ArrowBatchStreamWriter
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 
 
 object ChunkReadUtils {
 
   def persistDataFrameAsArrowBatchChunks(dataFrame: DataFrame): Array[String] = {
+    val sparkSession = SparkSession.getActiveSession.get
     val rdd = dataFrame.toArrowBatchRdd
+    val schemaJson = dataFrame.schema.json
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val errorOnDuplicatedFieldNames =
+      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
     rdd.mapPartitions { iter: Iterator[Array[Byte]] =>
       val blockManager = SparkEnv.get.blockManager
+      val schema = DataType.fromJson
 
       val chunkIds = new ArrayBuffer[String]()
 
@@ -37,6 +45,12 @@ object ChunkReadUtils {
         for (blockData <- iter) {
           val uuid = java.util.UUID.randomUUID()
           val blockId = ArrowBatchBlockId(uuid)
+
+          val out = new ByteArrayOutputStream(32 * 1024 * 1024)
+
+          val batchWriter =
+            new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
+
 
           blockManager.putSingle[Array[Byte]](
             blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true
