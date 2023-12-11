@@ -65,6 +65,8 @@ private[deploy] class Master(
   private val retainedDrivers = conf.get(RETAINED_DRIVERS)
   private val maxDrivers = conf.get(MAX_DRIVERS)
   private val reaperIterations = conf.get(REAPER_ITERATIONS)
+  private val recoveryTimeoutMs =
+    conf.get(RECOVERY_TIMEOUT).map(_ * 1000).getOrElse(workerTimeoutMs)
   private val recoveryMode = conf.get(RECOVERY_MODE)
   private val maxExecutorRetries = conf.get(MAX_EXECUTOR_RETRIES)
 
@@ -160,7 +162,8 @@ private[deploy] class Master(
 
     if (restServerEnabled) {
       val port = conf.get(MASTER_REST_SERVER_PORT)
-      restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
+      val host = conf.get(MASTER_REST_SERVER_HOST).getOrElse(address.host)
+      restServer = Some(new StandaloneRestServer(host, port, conf, self, masterUrl))
     }
     restServerBoundPort = restServer.map(_.start())
 
@@ -245,7 +248,7 @@ private[deploy] class Master(
           override def run(): Unit = Utils.tryLogNonFatalError {
             self.send(CompleteRecovery)
           }
-        }, workerTimeoutMs, TimeUnit.MILLISECONDS)
+        }, recoveryTimeoutMs, TimeUnit.MILLISECONDS)
       }
 
     case CompleteRecovery => completeRecovery()
@@ -283,6 +286,10 @@ private[deploy] class Master(
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else if (idToWorker.contains(id)) {
+        if (idToWorker(id).state == WorkerState.UNKNOWN) {
+          logInfo("Worker has been re-registered: " + id)
+          idToWorker(id).state = WorkerState.ALIVE
+        }
         workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
         val workerResources =
@@ -604,8 +611,11 @@ private[deploy] class Master(
     workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
+  private var recoveryStartTimeNs = 0L
+
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
       storedWorkers: Seq[WorkerInfo]): Unit = {
+    recoveryStartTimeNs = System.nanoTime()
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -662,7 +672,8 @@ private[deploy] class Master(
 
     state = RecoveryState.ALIVE
     schedule()
-    logInfo("Recovery complete - resuming operations!")
+    val timeTakenNs = System.nanoTime() - recoveryStartTimeNs
+    logInfo(f"Recovery complete in ${timeTakenNs / 1000000000d}%.3fs - resuming operations!")
   }
 
   /**

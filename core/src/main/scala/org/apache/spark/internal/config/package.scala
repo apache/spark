@@ -931,7 +931,7 @@ package object config {
 
   private[spark] val MAX_EXECUTOR_FAILURES =
     ConfigBuilder("spark.executor.maxNumFailures")
-      .doc("Spark exits if the number of failed executors exceeds this threshold. " +
+      .doc("The maximum number of executor failures before failing the application. " +
         "This configuration only takes effect on YARN, or Kubernetes when " +
         "`spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
       .version("3.5.0")
@@ -940,7 +940,7 @@ package object config {
 
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.executor.failuresValidityInterval")
-      .doc("Interval after which Executor failures will be considered independent and not " +
+      .doc("Interval after which executor failures will be considered independent and not " +
         "accumulate towards the attempt count. This configuration only takes effect on YARN, " +
         "or Kubernetes when `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
       .version("3.5.0")
@@ -1838,6 +1838,12 @@ package object config {
     .version("1.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
+    .doc("Specifies the host of the Master REST API endpoint")
+    .version("4.0.0")
+    .stringConf
+    .createOptional
 
   private[spark] val MASTER_REST_SERVER_PORT = ConfigBuilder("spark.master.rest.port")
     .version("1.3.0")

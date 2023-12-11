@@ -629,7 +629,8 @@ private[sql] object DataSourceV2Strategy extends Logging {
         expressions.Not(rebuildExpressionFromFilter(not.child(), translatedFilterToExpr))
       case _ =>
         translatedFilterToExpr.getOrElse(predicate,
-          throw new IllegalStateException("Failed to rebuild Expression for filter: " + predicate))
+          throw SparkException.internalError(
+            "Failed to rebuild Expression for filter: " + predicate))
     }
   }
 
@@ -642,7 +643,8 @@ private[sql] object DataSourceV2Strategy extends Logging {
   protected[sql] def translateRuntimeFilterV2(expr: Expression): Option[Predicate] = expr match {
     case in @ InSubqueryExec(PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
       val values = in.values().getOrElse {
-        throw new IllegalStateException(s"Can't translate $in to v2 Predicate, no subquery result")
+        throw SparkException.internalError(
+          s"Can't translate $in to v2 Predicate, no subquery result")
       }
       val literals = values.map(LiteralValue(_, in.child.dataType))
       Some(new Predicate("IN", FieldReference(name) +: literals))
