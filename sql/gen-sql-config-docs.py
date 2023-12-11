@@ -18,7 +18,7 @@
 import os
 import re
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from textwrap import dedent
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
@@ -28,23 +28,38 @@ from pyspark.java_gateway import launch_gateway
 
 
 SQLConfEntry = namedtuple(
-    "SQLConfEntry", ["name", "default", "description", "version"])
-
-
-def get_sql_configs(jvm, group):
-    if group == "static":
-        config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listStaticSQLConfigs()
-    else:
-        config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listRuntimeSQLConfigs()
-    sql_configs = [
-        SQLConfEntry(
-            name=_sql_config._1(),
-            default=_sql_config._2(),
-            description=_sql_config._3(),
-            version=_sql_config._4()
-        )
-        for _sql_config in config_set
+    "SQLConfEntry", [
+        "name",
+        "default",
+        "description",
+        "version",
+        "tags",
     ]
+)
+
+
+def get_sql_configs(jvm):
+    sql_configs = defaultdict(
+        list, {
+            "__all": [],
+            "__no_group": [],
+        }
+    )
+    config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listAllSQLConfigsWithTags()
+    for raw_config in config_set:
+        sql_config = SQLConfEntry(
+            name=raw_config._1(),
+            default=raw_config._2(),
+            description=raw_config._3(),
+            version=raw_config._4(),
+            tags=list(raw_config._5()),
+        )
+        sql_configs["__all"].append(sql_config)
+        if not sql_config.tags:
+            sql_configs["__no_group"].append(sql_config)
+        else:
+            for tag in sql_config.tags:
+                sql_configs[tag].append(sql_config)
     return sql_configs
 
 
@@ -105,8 +120,11 @@ def generate_sql_configs_table_html(sql_configs, path):
 
             f.write(dedent(
                 """
-                <tr>
-                    <td><code>{name}</code></td>
+                <tr id="{name}">
+                    <td>
+                        <a href="#{name}"><code>#</code></a>
+                        <code>{name}</code>
+                    </td>
                     <td>{default}</td>
                     <td>{description}</td>
                     <td>{version}</td>
@@ -126,10 +144,7 @@ if __name__ == "__main__":
     jvm = launch_gateway().jvm
     docs_root_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs")
 
-    sql_configs = get_sql_configs(jvm, "runtime")
-    sql_configs_table_path = os.path.join(docs_root_dir, "generated-runtime-sql-config-table.html")
-    generate_sql_configs_table_html(sql_configs, path=sql_configs_table_path)
-
-    sql_configs = get_sql_configs(jvm, "static")
-    sql_configs_table_path = os.path.join(docs_root_dir, "generated-static-sql-config-table.html")
-    generate_sql_configs_table_html(sql_configs, path=sql_configs_table_path)
+    sql_configs = get_sql_configs(jvm)
+    for group in sql_configs:
+        html_table_path = os.path.join(docs_root_dir, f"generated-sql-config-table-{group}.html")
+        generate_sql_configs_table_html(sql_configs[group], path=html_table_path)
