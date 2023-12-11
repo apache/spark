@@ -21,7 +21,7 @@ import java.io.{ByteArrayOutputStream, DataOutputStream}
 import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.execution.arrow.ArrowBatchStreamWriter
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 
@@ -37,12 +37,11 @@ object ChunkReadUtils {
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
     rdd.mapPartitions { iter: Iterator[Array[Byte]] =>
       val blockManager = SparkEnv.get.blockManager
-      val schema = DataType.fromJson
-
+      val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
       val chunkIds = new ArrayBuffer[String]()
 
       try {
-        for (blockData <- iter) {
+        for (arrowBatch <- iter) {
           val uuid = java.util.UUID.randomUUID()
           val blockId = ArrowBatchBlockId(uuid)
 
@@ -51,6 +50,10 @@ object ChunkReadUtils {
           val batchWriter =
             new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
 
+          batchWriter.writeBatches(Iterator.single(arrowBatch))
+          batchWriter.end()
+
+          val blockData = out.toByteArray
 
           blockManager.putSingle[Array[Byte]](
             blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true

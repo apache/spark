@@ -16,8 +16,13 @@
 #
 
 import os
+
+import pyarrow as pa
+
+from pyspark.rdd import _create_local_socket
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
+from pyspark.serializers import write_with_length
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
 
@@ -51,5 +56,34 @@ def read_chunk(chunk_id):
     """
 
     port = int(os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"])
-    secret = os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"]
-    serializer = ArrowStreamSerializer()
+    auth_secret = os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"]
+
+    sockfile = _create_local_socket((port, auth_secret))
+
+    try:
+        write_with_length(chunk_id.encode("utf-8"), sockfile)
+        sockfile.flush()
+
+        arrow_serializer = ArrowStreamSerializer()
+
+        batch_stream = arrow_serializer.load_stream(sockfile)
+
+        arrow_batch = list(batch_stream)[0]
+
+        arrow_batch = pa.RecordBatch.from_arrays(
+            [
+                # This call actually reallocates the array
+                pa.concat_arrays([array])
+                for array in arrow_batch
+            ],
+            schema=arrow_batch.schema,
+        )
+
+        arrow_table = pa.Table.from_batches([arrow_batch])
+
+        return arrow_table
+    finally:
+        sockfile.close()
+
+
+
