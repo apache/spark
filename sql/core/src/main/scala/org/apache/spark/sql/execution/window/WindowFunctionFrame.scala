@@ -242,9 +242,7 @@ class FrameLessOffsetWindowFunctionFrame(
     // 7. current row -> z, next selected row -> empty, output: null;
     // ... next selected row is empty, all following return null.
     (current: InternalRow) =>
-      if (absOffset > input.length) {
-        // Already use default values in prepare.
-      } else if (nextSelectedRow == EmptyRow) {
+      if (nextSelectedRow == EmptyRow) {
         // Use default values since the offset row whose input value is not null does not exist.
         fillDefaultValue(current)
       } else {
@@ -276,35 +274,29 @@ class FrameLessOffsetWindowFunctionFrame(
     // 8. current row -> v, next selected row -> z, output: z;
     // 9. current row -> null, next selected row -> v, output: v;
     (current: InternalRow) =>
-      if (absOffset > input.length) {
-        // Already use default values in prepare.
-      } else {
-        if (skippedNonNullCount == absOffset) {
-          nextSelectedRow = EmptyRow
-          skippedNonNullCount -= 1
-          while (nextSelectedRow == EmptyRow && inputIndex < input.length) {
-            val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-            if (!nullCheck(r)) {
-              nextSelectedRow = r
-            }
-            inputIndex += 1
+      if (skippedNonNullCount == absOffset) {
+        nextSelectedRow = EmptyRow
+        skippedNonNullCount -= 1
+        while (nextSelectedRow == EmptyRow && inputIndex < input.length) {
+          val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+          if (!nullCheck(r)) {
+            nextSelectedRow = r
           }
+          inputIndex += 1
         }
-        if (nextSelectedRow == EmptyRow) {
-          // Use default values since the offset row whose input value is not null does not exist.
-          fillDefaultValue(current)
-        } else {
-          projection(nextSelectedRow)
-        }
-        if (!nullCheck(current)) {
-          skippedNonNullCount += 1
-        }
+      }
+      if (nextSelectedRow == EmptyRow) {
+        // Use default values since the offset row whose input value is not null does not exist.
+        fillDefaultValue(current)
+      } else {
+        projection(nextSelectedRow)
+      }
+      if (!nullCheck(current)) {
+        skippedNonNullCount += 1
       }
   } else {
     (current: InternalRow) =>
-      if (absOffset > input.length) {
-        // Already use default values in prepare.
-      } else if (inputIndex >= 0 && inputIndex < input.length) {
+      if (inputIndex >= 0 && inputIndex < input.length) {
         val r = WindowFunctionFrame.getNextOrNull(inputIterator)
         projection(r)
       } else {
@@ -315,7 +307,11 @@ class FrameLessOffsetWindowFunctionFrame(
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    doWrite(current)
+    if (absOffset > input.length) {
+      // Already use default values in prepare.
+    } else {
+      doWrite(current)
+    }
   }
 }
 
