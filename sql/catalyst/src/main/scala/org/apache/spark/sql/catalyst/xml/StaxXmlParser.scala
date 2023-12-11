@@ -133,7 +133,9 @@ class StaxXmlParser(
       val isRootAttributesOnly = schema.fields.forall { f =>
         f.name == options.valueTag || f.name.startsWith(options.attributePrefix)
       }
-      Some(convertObject(parser, schema, rootAttributes, isRootAttributesOnly))
+      val result = Some(convertObject(parser, schema, rootAttributes, isRootAttributesOnly))
+      parser.close()
+      result
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
@@ -576,7 +578,7 @@ class StaxXmlParser(
 class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) {
-  private val reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+  private var reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
   private var currentStartTag: String = _
   private var buffer = new StringBuilder()
   private val startTag = s"<${options.rowTag}>"
@@ -591,17 +593,24 @@ class XmlTokenizer(
    * @return whether it reads successfully
    */
   def next(): Option[String] = {
-    if (readUntilStartElement()) {
-      try {
+    try {
+      if (readUntilStartElement()) {
         buffer.append(currentStartTag)
         // Don't check whether the end element was found. Even if not, return everything
         // that was read, which will invariably cause a parse error later
         readUntilEndElement(currentStartTag.endsWith(">"))
-        return Some(buffer.toString())
-      } finally {
+        val str = buffer.toString()
         buffer = new StringBuilder()
+        return Some(str)
       }
+    } catch {
+      case e: Throwable =>
+        reader.close()
+        reader = null
+        throw e
     }
+    reader.close()
+    reader = null
     None
   }
 
