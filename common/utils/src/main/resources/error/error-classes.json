@@ -1007,7 +1007,7 @@
   },
   "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES" : {
     "message" : [
-      "Using statement contains multiple arguments with same alias (<aliases>)."
+      "The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (<aliases>), which is invalid; please update the command to specify unique aliases and then try it again."
     ],
     "sqlState" : "42701"
   },
@@ -2275,7 +2275,7 @@
   },
   "INVALID_STATEMENT_FOR_EXECUTE_INTO" : {
     "message" : [
-      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: <sqlString>."
+      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: <sqlString>."
     ],
     "sqlState" : "07501"
   },

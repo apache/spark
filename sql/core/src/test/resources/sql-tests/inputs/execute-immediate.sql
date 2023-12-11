@@ -65,7 +65,18 @@ SELECT b, a;
 -- use AS for using positional params
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as first, a;
 
+-- empty query
+EXECUTE IMMEDIATE 'SELECT 42 WHERE 2 = 1' INTO res_id;
+SELECT res_id;
+
+-- implicit casting
+EXECUTE IMMEDIATE 'SELECT \'1707\'' INTO res_id;
+SELECT res_id;
+
 -- test errors
+-- string to int error
+EXECUTE IMMEDIATE 'SELECT \'invalid_cast_error_expected\'' INTO res_id;
+
 -- require query when using INTO
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1;
 
@@ -92,5 +103,17 @@ EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO a, b USING 1
 -- INTO does not support braces - parser error
 EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10;
 
+-- Error too many rows
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id;
+
+-- Error mismatch cardinality
+EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view' INTO res_id;
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id, b;
+
+-- duplicate aliases
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first;
+
+-- duplicate into entry
+EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id;
 
 DROP TABLE x;

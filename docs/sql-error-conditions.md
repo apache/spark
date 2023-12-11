@@ -603,7 +603,7 @@ Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<colum
 
 [SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Using statement contains multiple arguments with same alias (`<aliases>`).
+The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (`<aliases>`), which is invalid; please update the command to specify unique aliases and then try it again.
 
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
@@ -1275,9 +1275,9 @@ For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-synta
 
 ### INVALID_STATEMENT_FOR_EXECUTE_INTO
 
-[SQLSTATE: 42606](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+SQLSTATE: 07501
 
-The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: `<sqlString>`.
+The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 

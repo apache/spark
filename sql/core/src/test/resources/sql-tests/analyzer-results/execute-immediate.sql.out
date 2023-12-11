@@ -391,12 +391,71 @@ Project [id#x, name#x, data#x]
 
 
 -- !query
-EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
+EXECUTE IMMEDIATE 'SELECT 42 WHERE 2 = 1' INTO res_id
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=42)]
-+- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
-   +- Project [cast(col1#x as int) AS id#x]
-      +- LocalRelation [col1#x]
++- Project [42 AS 42#x]
+   +- Filter (2 = 1)
+      +- OneRowRelation
+
+
+-- !query
+SELECT res_id
+-- !query analysis
+Project [variablereference(system.session.res_id=CAST(NULL AS INT)) AS res_id#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT \'1707\'' INTO res_id
+-- !query analysis
+SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))]
++- Project [cast(1707#x as int) AS res_id#x]
+   +- Project [1707 AS 1707#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT res_id
+-- !query analysis
+Project [variablereference(system.session.res_id=1707) AS res_id#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT \'invalid_cast_error_expected\'' INTO res_id
+-- !query analysis
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'invalid_cast_error_expected'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT \\'invalid_cast_error_expected\\'' INTO res_id"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "sqlState" : "07501",
+  "messageParameters" : {
+    "sqlString" : "INSERT INTO x VALUES (?)"
+  }
+}
 
 
 -- !query
@@ -508,6 +567,98 @@ org.apache.spark.SparkNumberFormatException
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view' INTO res_id
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "2",
+    "numTarget" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id, b
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "1",
+    "numTarget" : "2"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+  "sqlState" : "42701",
+  "messageParameters" : {
+    "aliases" : "`first`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 92,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+  "sqlState" : "42701",
+  "messageParameters" : {
+    "aliases" : "`first`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 92,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view' INTO (res_id, res_id)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {

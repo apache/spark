@@ -22,10 +22,10 @@ import scala.util.{Either, Left, Right}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, SparkSqlParser}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, EXECUTE_IMMEDIATE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.types.StringType
@@ -55,6 +55,8 @@ case class ExecuteImmediateQuery(
 class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     extends Rule[LogicalPlan]
     with ColumnResolutionHelper {
+
+  lazy val parser = new SparkSqlParser()
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -108,7 +110,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case ExecuteImmediateQuery(expressions, query, targetVariablesOpt) =>
         val queryString = extractQueryString(query)
-        val plan = CatalystSqlParser.parsePlan(queryString);
+        val plan = parseStatement(queryString, targetVariablesOpt)
 
         val posNodes = plan.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })
@@ -145,17 +147,36 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
         }
 
         targetVariablesOpt
-          .map(expressions => {
-            if (queryPlan.exists(_.containsPattern(COMMAND))) {
-              throw new AnalysisException(
-                errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-                messageParameters = Map("sqlString" -> queryString))
-            }
-
-            SetVariable(expressions, queryPlan)
+          .map(variables => {
+            SetVariable(variables, queryPlan)
           })
           .getOrElse { queryPlan }
     }
+
+  private def parseStatement(
+    queryString: String,
+    targetVariables: Option[Seq[Expression]]): LogicalPlan = {
+    // If targetVariables is defined, statement needs to be a query.
+    // Otherwise, it can be anything.
+    targetVariables.map { expressions =>
+      try {
+        parser.parseQuery(queryString)
+      } catch {
+        case e: ParseException =>
+          // Since we do not have a way of telling that parseQuery failed because of
+          // actual parsing error or because statement was passed where query was expected,
+          // we need to make sure that parsePlan wouldn't throw
+          parser.parsePlan(queryString)
+
+          // Plan was sucessfully parsed, but query wasn't - throw.
+          throw new AnalysisException(
+            errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+            messageParameters = Map("sqlString" -> queryString),
+            cause = Some(e))
+      }
+
+    }.getOrElse { parser.parsePlan(queryString) }
+  }
 
   private def getVariableReference(nameParts: Seq[String]): VariableReference = {
     lookupVariable(nameParts) match {

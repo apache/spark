@@ -313,11 +313,75 @@ struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 
 
 -- !query
-EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
+EXECUTE IMMEDIATE 'SELECT 42 WHERE 2 = 1' INTO res_id
 -- !query schema
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT res_id
+-- !query schema
+struct<res_id:int>
+-- !query output
+NULL
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT \'1707\'' INTO res_id
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT res_id
+-- !query schema
+struct<res_id:int>
+-- !query output
+1707
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT \'invalid_cast_error_expected\'' INTO res_id
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'invalid_cast_error_expected'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT \\'invalid_cast_error_expected\\'' INTO res_id"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "sqlState" : "07501",
+  "messageParameters" : {
+    "sqlString" : "INSERT INTO x VALUES (?)"
+  }
+}
 
 
 -- !query
@@ -441,6 +505,110 @@ org.apache.spark.SparkNumberFormatException
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING 10
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view' INTO res_id
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "2",
+    "numTarget" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id, b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "1",
+    "numTarget" : "2"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+  "sqlState" : "42701",
+  "messageParameters" : {
+    "aliases" : "`first`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 92,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+  "sqlState" : "42701",
+  "messageParameters" : {
+    "aliases" : "`first`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 92,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view' INTO (res_id, res_id)
 -- !query schema
 struct<>
 -- !query output

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.catalyst.parser
 
 import java.time.ZoneOffset
 import java.util.{Locale, TimeZone}
