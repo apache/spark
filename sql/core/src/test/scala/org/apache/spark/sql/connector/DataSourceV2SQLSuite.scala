@@ -45,10 +45,8 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
-import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -1120,7 +1118,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`spark_catalog`.`default`.`tbl`",
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`col1`"
         )
@@ -1155,7 +1153,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`spark_catalog`.`default`.`tbl`",
           "tableColumns" -> "`id`, `data`",
           "dataColumns" -> "`col1`"
         )
@@ -1191,7 +1189,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "`default`.`tbl`",
+          "tableName" -> "`spark_catalog`.`default`.`tbl`",
           "tableColumns" -> "`id`, `data`, `data2`",
           "dataColumns" -> "`col1`, `col2`"
         )
@@ -2765,8 +2763,10 @@ class DataSourceV2SQLSuiteV1Filter
       exception = intercept[CatalogNotFoundException] {
         sql("SET CATALOG not_exist_catalog")
       },
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`not_exist_catalog`",
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
   }
 
   test("SPARK-35973: ShowCatalogs") {
@@ -3388,13 +3388,6 @@ class DataSourceV2SQLSuiteV1Filter
 
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
-}
-
-/** Used as a V2 DataSource for V2SessionCatalog DDL */
-class FakeV2Provider extends SimpleTableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("Unnecessary for DDL tests")
-  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {

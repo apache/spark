@@ -92,9 +92,9 @@ public class TestManagedBuffer extends ManagedBuffer {
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ManagedBuffer) {
+    if (other instanceof ManagedBuffer managedBuffer) {
       try {
-        ByteBuffer nioBuf = ((ManagedBuffer) other).nioByteBuffer();
+        ByteBuffer nioBuf = managedBuffer.nioByteBuffer();
         if (nioBuf.remaining() != len) {
           return false;
         } else {

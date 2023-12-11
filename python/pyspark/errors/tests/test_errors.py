@@ -19,6 +19,7 @@
 import json
 import unittest
 
+from pyspark.errors import PySparkValueError
 from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
 
@@ -45,6 +46,10 @@ class ErrorsTest(unittest.TestCase):
             return error_classes_json
 
         json.loads(ERROR_CLASSES_JSON, object_pairs_hook=detect_duplication)
+
+    def test_invalid_error_class(self):
+        with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
+            PySparkValueError(error_class="invalid", message_parameters={})
 
 
 if __name__ == "__main__":

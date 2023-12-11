@@ -378,7 +378,8 @@ class KafkaTestUtils(
   }
 
   def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
-    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster()).view.mapValues(_.size).toSeq
+    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster())
+      .map { case (k, v) => (k, v.size) }.toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */

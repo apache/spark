@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -1322,7 +1323,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).view.mapValues(_.get).toMap
+        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
 
@@ -2048,7 +2049,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
+        case f @ UnresolvedFunction(nameParts, _, _, _, _, _) =>
           if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
             f
           } else {
@@ -2208,7 +2209,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _)
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _)
               if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
@@ -2237,7 +2238,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
           }
 
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _) => withPosition(u) {
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _) => withPosition(u) {
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
@@ -2330,6 +2331,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         numArgs: Int,
         u: UnresolvedFunction): Expression = {
       func match {
+        case owg: SupportsOrderingWithinGroup if u.isDistinct =>
+          throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
+            owg.prettyName)
+        case owg: SupportsOrderingWithinGroup if u.orderingWithinGroup.isEmpty =>
+          throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
+            owg.prettyName)
+        case f
+          if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            func.prettyName, "WITHIN GROUP (ORDER BY ...)")
         // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
         // the context of a Window clause. They do not need to be wrapped in an
         // AggregateExpression.
@@ -2372,6 +2383,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case agg: AggregateFunction =>
           // Note: PythonUDAF does not support these advanced clauses.
           if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
+          // After parse, the inverse distribution functions not set the ordering within group yet.
+          val newAgg = agg match {
+            case owg: SupportsOrderingWithinGroup if u.orderingWithinGroup.nonEmpty =>
+              owg.withOrderingWithinGroup(u.orderingWithinGroup)
+            case _ =>
+              agg
+          }
 
           u.filter match {
             case Some(filter) if !filter.deterministic =>
@@ -2385,17 +2403,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case _ =>
           }
           if (u.ignoreNulls) {
-            val aggFunc = agg match {
+            val aggFunc = newAgg match {
               case first: First => first.copy(ignoreNulls = u.ignoreNulls)
               case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
               case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
               case _ =>
                 throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                  agg.prettyName, "IGNORE NULLS")
+                  newAgg.prettyName, "IGNORE NULLS")
             }
             aggFunc.toAggregateExpression(u.isDistinct, u.filter)
           } else {
-            agg.toAggregateExpression(u.isDistinct, u.filter)
+            newAgg.toAggregateExpression(u.isDistinct, u.filter)
           }
         // This function is not an aggregate function, just return the resolved one.
         case other =>
@@ -3652,8 +3670,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // `GetStructField` without the name property.
         .collect { case g: GetStructField if g.name.isEmpty => g }
         .groupBy(_.child)
-        .view
-        .mapValues(_.map(_.ordinal).distinct.sorted)
+        .transform((_, v) => v.map(_.ordinal).distinct.sorted)
 
       structChildToOrdinals.foreach { case (expr, ordinals) =>
         val schema = expr.dataType.asInstanceOf[StructType]
@@ -3706,7 +3723,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             s"UpCast only supports DecimalType as AbstractDataType yet, but got: $target")
 
         case UpCast(child, target, walkedTypePath) if target == DecimalType

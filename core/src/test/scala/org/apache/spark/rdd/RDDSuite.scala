@@ -1255,8 +1255,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       .getPartitions
       .map(coalescedRDD.getPreferredLocations(_).head)
       .groupBy(identity)
-      .view
-      .mapValues(_.length)
+      .transform((_, v) => v.length)
 
     // Make sure the coalesced partitions are distributed fairly evenly between the two locations.
     // This should not become flaky since the DefaultPartitionsCoalescer uses a fixed seed.
