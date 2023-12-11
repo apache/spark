@@ -18,6 +18,7 @@
 package org.apache.spark.internal.config
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 private[spark] object Deploy {
   val RECOVERY_MODE = ConfigBuilder("spark.deploy.recoveryMode")
@@ -55,6 +56,14 @@ private[spark] object Deploy {
     .version("0.8.1")
     .stringConf
     .createWithDefault("")
+
+  val RECOVERY_TIMEOUT = ConfigBuilder("spark.deploy.recoveryTimeout")
+    .doc("Configures the timeout for recovery process. The default value is the same " +
+      "with ${WORKER_TIMEOUT.key}.")
+    .version("4.0.0")
+    .timeConf(TimeUnit.SECONDS)
+    .checkValue(_ > 0, "spark.deploy.recoveryTimeout must be positive.")
+    .createOptional
 
   val ZOOKEEPER_URL = ConfigBuilder("spark.deploy.zookeeper.url")
     .doc(s"When `${RECOVERY_MODE.key}` is set to ZOOKEEPER, this " +

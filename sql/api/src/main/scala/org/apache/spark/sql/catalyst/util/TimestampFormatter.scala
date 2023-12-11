@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.time.FastDateFormat
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
@@ -90,7 +91,7 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeException])
   @throws(classOf[IllegalStateException])
   def parseWithoutTimeZone(s: String, allowTimeZone: Boolean): Long =
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"The method `parseWithoutTimeZone(s: String, allowTimeZone: Boolean)` should be " +
         "implemented in the formatter of timestamp without time zone")
 
@@ -137,7 +138,7 @@ sealed trait TimestampFormatter extends Serializable {
 
   @throws(classOf[IllegalStateException])
   def format(localDateTime: LocalDateTime): String =
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"The method `format(localDateTime: LocalDateTime)` should be implemented in the formatter " +
         "of timestamp without time zone")
 

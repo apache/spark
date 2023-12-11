@@ -30,6 +30,7 @@ import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -927,7 +928,7 @@ class SessionCatalog(
 
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
     val viewText = metadata.viewText.getOrElse {
-      throw new IllegalStateException("Invalid view without text.")
+      throw SparkException.internalError("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
     val origin = Origin(

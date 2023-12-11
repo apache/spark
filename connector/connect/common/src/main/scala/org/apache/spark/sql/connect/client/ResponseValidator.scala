@@ -65,20 +65,9 @@ class ResponseValidator extends Logging {
 
       override def innerIterator: Iterator[T] = inner
 
-      override def hasNext: Boolean = {
-        innerIterator.hasNext
-      }
-
       override def next(): T = {
         verifyResponse {
           innerIterator.next()
-        }
-      }
-
-      override def close(): Unit = {
-        innerIterator match {
-          case it: CloseableIterator[T] => it.close()
-          case _ => // nothing
         }
       }
     }

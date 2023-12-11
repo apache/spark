@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.types._
 
 /**
@@ -57,7 +58,7 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
               projSchema.size,
               a.containsNull)
           case (_, projSchema) =>
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"unmatched child schema for GetArrayStructFields: ${projSchema.toString}"
             )
         }
@@ -72,7 +73,7 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
           case (projection, projSchema: StructType) =>
             GetStructField(projection, projSchema.fieldIndex(field.name))
           case (_, projSchema) =>
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"unmatched child schema for GetStructField: ${projSchema.toString}"
             )
         }

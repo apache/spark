@@ -1394,7 +1394,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         case Some(c) if c.booleanExpression != null =>
           (baseJoinType, Option(expression(c.booleanExpression)))
         case Some(c) =>
-          throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
+          throw SparkException.internalError(s"Unimplemented joinCriteria: $c")
         case None if ctx.NATURAL != null =>
           if (ctx.LATERAL != null) {
             throw QueryParsingErrors.incompatibleJoinTypesError(
@@ -3409,7 +3409,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       if (arguments.size > 1) {
         throw QueryParsingErrors.wrongNumberArgumentsForTransformError(name, arguments.size, ctx)
       } else if (arguments.isEmpty) {
-        throw new IllegalStateException(s"Not enough arguments for transform $name")
+        throw SparkException.internalError(s"Not enough arguments for transform $name")
       } else {
         getFieldReference(ctx, arguments.head)
       }
@@ -3470,7 +3470,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))
       reference.orElse(literal)
-          .getOrElse(throw new IllegalStateException("Invalid transform argument"))
+          .getOrElse(throw SparkException.internalError("Invalid transform argument"))
     }
   }
 

@@ -16,19 +16,22 @@
 #
 import unittest
 
-from pyspark.pandas.tests.diff_frames_ops.test_cov_corrwith import DiffFramesCovCorrWithMixin
+from pyspark.pandas.tests.window.test_ewm_error import EWMErrorMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class DiffFramesParityCovCorrWithTests(
-    DiffFramesCovCorrWithMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class EWMParityErrorTests(
+    EWMErrorMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+    TestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_cov_corrwith import *  # noqa
+    from pyspark.pandas.tests.connect.window.test_parity_ewm_error import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

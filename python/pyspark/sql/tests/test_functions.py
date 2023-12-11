@@ -1355,6 +1355,15 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
         )
 
+    def test_current_user(self):
+        df = self.spark.range(1).select(F.current_user())
+        self.assertIsInstance(df.first()[0], str)
+        self.assertEqual(df.schema.names[0], "current_user()")
+        df = self.spark.range(1).select(F.user())
+        self.assertEqual(df.schema.names[0], "user()")
+        df = self.spark.range(1).select(F.session_user())
+        self.assertEqual(df.schema.names[0], "session_user()")
+
     def test_bucket(self):
         with self.assertRaises(PySparkTypeError) as pe:
             F.bucket("5", "id")
