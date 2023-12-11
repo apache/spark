@@ -76,7 +76,6 @@ case class InsertIntoHadoopFsRelationCommand(
 
   val MAX_DYNAMIC_PARTITIONS = SQLConf.get.getConf(SQLConf.MAX_DYNAMIC_PARTITIONS_PERNODE)
 
-
   override def requiredOrdering: Seq[SortOrder] =
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options,
       staticPartitions.size)
