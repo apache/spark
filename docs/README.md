@@ -46,8 +46,6 @@ $ cd docs
 $ bundle install
 ```
 
-Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
-
 ### SQL and Python API Documentation (Optional)
 
 To generate SQL and Python API docs, you'll need to install these libraries:
