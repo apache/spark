@@ -612,9 +612,8 @@ class SparkSession private[sql] (
   def addArtifact(bytes: Array[Byte], target: String): Unit = client.addArtifact(bytes, target)
 
   /**
-   * Add a single in-memory artifact to the session while preserving the directory structure
-   * specified by `target` under the session's working directory of that particular file
-   * extension.
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
    *
    * Supported target file extensions are .jar and .class.
    *
