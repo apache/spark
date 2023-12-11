@@ -24,7 +24,10 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 class SeriesInterpolateMixin:
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
-        self.assert_eq(psobj.interpolate(), pobj.interpolate())
+        self.assert_eq(
+            psobj.interpolate().sort_index(),
+            pobj.interpolate().sort_index(),
+        )
         for limit, limit_direction, limit_area in [
             (1, None, None),
             (2, "forward", "inside"),
@@ -35,10 +38,10 @@ class SeriesInterpolateMixin:
             self.assert_eq(
                 psobj.interpolate(
                     limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                ),
+                ).sort_index(),
                 pobj.interpolate(
                     limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                ),
+                ).sort_index(),
             )
 
     def test_interpolate(self):
