@@ -72,6 +72,14 @@ private[sql] object PythonSQLUtils extends Logging {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
   }
 
+  def listAllSQLConfigsWithTags():
+    Array[(String, String, String, String, Array[String])] = {
+    val conf = new SQLConf()
+    conf.getAllDefinedConfsWithTags.map(c =>
+      Tuple5(c._1, c._2, c._3, c._4, c._5.toArray)
+    ).toArray
+  }
+
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
     val conf = new SQLConf()
     conf.getAllDefinedConfs
