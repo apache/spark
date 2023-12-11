@@ -6953,6 +6953,11 @@
       "or recreate table <ident> to workaround."
     ]
   },
+  "_LEGACY_ERROR_TEMP_3100" : {
+    "message" : [
+      "<message>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
