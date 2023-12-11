@@ -24,11 +24,13 @@ import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
+
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 import scala.xml.SAXException
+
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -57,22 +59,22 @@ import org.apache.spark.unsafe.types.UTF8String
 
 import scala.annotation.tailrec
 
-class StaxXmlParser(schema: StructType, val options: XmlOptions) extends Logging {
+class StaxXmlParser(
+    schema: StructType,
+    val options: XmlOptions) extends Logging {
 
   private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true
-  )
+    isParsing = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    isParsing = true
-  )
+    isParsing = true)
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -84,8 +86,8 @@ class StaxXmlParser(schema: StructType, val options: XmlOptions) extends Logging
    */
   val parse: String => Option[InternalRow] = {
     // This is intentionally a val to create a function once and reuse.
-    if (schema.isEmpty) { (_: String) =>
-      Some(InternalRow.empty)
+    if (schema.isEmpty) {
+      (_: String) => Some(InternalRow.empty)
     } else {
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
       (input: String) => doParseColumn(input, options.parseMode, xsdSchema)
@@ -166,11 +168,18 @@ class StaxXmlParser(schema: StructType, val options: XmlOptions) extends Logging
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(() => xmlRecord, () => Array.empty, wrappedCharException)
+        throw BadRecordException(() => xmlRecord, () => Array.empty,
+          wrappedCharException)
       case PartialResultException(row, cause) =>
-        throw BadRecordException(record = () => xmlRecord, partialResults = () => Array(row), cause)
+        throw BadRecordException(
+          record = () => xmlRecord,
+          partialResults = () => Array(row),
+          cause)
       case PartialResultArrayException(rows, cause) =>
-        throw BadRecordException(record = () => xmlRecord, partialResults = () => rows, cause)
+        throw BadRecordException(
+          record = () => xmlRecord,
+          partialResults = () => rows,
+          cause)
     }
   }
 
@@ -246,8 +255,7 @@ class StaxXmlParser(schema: StructType, val options: XmlOptions) extends Logging
         convertTo(c.getData, dt)
       case (e: XMLEvent, dt: DataType) =>
         throw new IllegalArgumentException(
-          s"Failed to parse a value for data type $dt with event ${e.toString}"
-        )
+          s"Failed to parse a value for data type $dt with event ${e.toString}")
     }
   }
 
@@ -260,16 +268,16 @@ class StaxXmlParser(schema: StructType, val options: XmlOptions) extends Logging
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
     attributes.foreach { attr =>
-        kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
-      -> convertTo(attr.getValue, valueType))
+      kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
+        -> convertTo(attr.getValue, valueType))
     }
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
           kvPairs +=
-          (UTF8String.fromString(StaxXmlParserUtils.getName(e.asStartElement.getName, options)) ->
-          convertField(parser, valueType))
+            (UTF8String.fromString(StaxXmlParserUtils.getName(e.asStartElement.getName, options)) ->
+            convertField(parser, valueType))
         case c: Characters if !isEmptyString(c) =>
           // Create a value tag field for it
           kvPairs +=

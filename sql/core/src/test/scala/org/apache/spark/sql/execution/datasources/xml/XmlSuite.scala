@@ -1737,8 +1737,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       Row("attr1", null, "value2"),
       Row(null, 5L, "4"),
       Row(null, 6L, "7"),
-      Row("8", null, null)
-    )
+      Row("8", null, null))
     val dfs = Seq(
       // user specified schema
       spark.read
