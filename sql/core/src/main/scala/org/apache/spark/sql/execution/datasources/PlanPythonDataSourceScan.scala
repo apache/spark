@@ -51,7 +51,10 @@ object PlanPythonDataSourceScan extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsPattern(PYTHON_DATA_SOURCE)) {
     case ds @ PythonDataSource(dataSource: PythonFunction, schema, _) =>
-      val info = new UserDefinedPythonDataSourceReadRunner(dataSource, schema).runInPython()
+      val inputSchema = PythonDataSourcePartitions.schema
+
+      val info = new UserDefinedPythonDataSourceReadRunner(
+        dataSource, inputSchema, schema).runInPython()
 
       val readerFunc = SimplePythonFunction(
         command = info.func.toImmutableArraySeq,

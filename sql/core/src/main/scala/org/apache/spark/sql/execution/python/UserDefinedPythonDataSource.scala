@@ -147,9 +147,17 @@ case class PythonDataSourceReadInfo(
     func: Array[Byte],
     partitions: Seq[Array[Byte]])
 
+/**
+ * Send information to a Python process to plan a Python data source read.
+ *
+ * @param func an Python data source instance
+ * @param inputSchema input schema to the data source read from its child plan
+ * @param outputSchema output schema of the Python data source
+ */
 class UserDefinedPythonDataSourceReadRunner(
     func: PythonFunction,
-    schema: StructType) extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
+    inputSchema: StructType,
+    outputSchema: StructType) extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
 
   // See the logic in `pyspark.sql.worker.plan_data_source_read.py`.
   override val workerModule = "pyspark.sql.worker.plan_data_source_read"
@@ -158,8 +166,11 @@ class UserDefinedPythonDataSourceReadRunner(
     // Send Python data source
     PythonWorkerUtils.writePythonFunction(func, dataOut)
 
+    // Send input schema
+    PythonWorkerUtils.writeUTF(inputSchema.json, dataOut)
+
     // Send schema
-    PythonWorkerUtils.writeUTF(schema.json, dataOut)
+    PythonWorkerUtils.writeUTF(outputSchema.json, dataOut)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReadInfo = {
