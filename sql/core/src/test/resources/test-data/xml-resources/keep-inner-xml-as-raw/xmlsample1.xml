@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tag1 Create="03.12.2020 16:09:21" Count="300">
+    <tag2 Name="a" Surname="b" SecId="1">
+        <tag3 Name="x" Duration="100">
+            <tag2 field="test" field2="test2" field3="500"></tag2>
+        </tag3>
+        <tag3 Name="x1" Duration="1001">
+            <tag3 innerf="a" innerf1="b" innerf2="2000">
+                <tag2 col4="a" col5="b"></tag2>
+            </tag3>
+        </tag3>
+        <tag3 col1="x" col2="y" col3="5"></tag3>
+        <tag3 Name="x2" Duration="1002">
+            <tag2 field="test1" field2="test21" field3="5001"></tag2>
+        </tag3>
+    </tag2>
+</tag1>

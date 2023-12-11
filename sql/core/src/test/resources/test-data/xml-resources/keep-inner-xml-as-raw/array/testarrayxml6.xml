@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEAMS Create="03.12.2020 16:09:21" Count="300">
+    <PERSON Name="a" Surname="b" SecId="1">
+        <TASK Name="x" Duration="100">
+            <COMMENT Desc="TEST">
+                <DESC Assignee="x"></DESC>
+            </COMMENT>
+        </TASK>
+    </PERSON>
+    <PERSON Name="a1" Surname="b1" SecId="11">
+        <TASK Name="y" Duration="200">
+            <COMMENT Desc="TEST">
+                <DESC Assignee="y"></DESC>
+            </COMMENT>
+        </TASK>
+    </PERSON>
+</TEAMS>
