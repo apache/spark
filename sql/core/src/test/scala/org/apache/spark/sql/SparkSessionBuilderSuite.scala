@@ -104,7 +104,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     SparkSession.clearActiveSession()
     assert(SparkSession.active == session)
     SparkSession.clearDefaultSession()
-    intercept[IllegalStateException](SparkSession.active)
+    intercept[SparkException](SparkSession.active)
     session.stop()
   }
 

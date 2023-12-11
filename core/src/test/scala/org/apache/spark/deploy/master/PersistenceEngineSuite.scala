@@ -19,6 +19,7 @@
 package org.apache.spark.deploy.master
 
 import java.net.ServerSocket
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.ThreadLocalRandom
 
 import org.apache.curator.test.TestingServer
@@ -68,6 +69,21 @@ class PersistenceEngineSuite extends SparkFunSuite {
       val conf = new SparkConf()
       testPersistenceEngine(conf, serializer =>
         new FileSystemPersistenceEngine(dir.getAbsolutePath + "/a/b/c/dir", serializer)
+      )
+    }
+  }
+
+  test("SPARK-46215: FileSystemPersistenceEngine with a symbolic link") {
+    withTempDir { dir =>
+      val target = Paths.get(dir.getAbsolutePath(), "target")
+      val link = Paths.get(dir.getAbsolutePath(), "symbolic_link");
+
+      Files.createDirectories(target)
+      Files.createSymbolicLink(link, target);
+
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new FileSystemPersistenceEngine(link.toAbsolutePath.toString, serializer)
       )
     }
   }

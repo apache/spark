@@ -37,6 +37,23 @@ private[spark] object Worker {
     .longConf
     .createWithDefault(60)
 
+  val WORKER_INITIAL_REGISTRATION_RETRIES = ConfigBuilder("spark.worker.initialRegistrationRetries")
+    .version("4.0.0")
+    .internal()
+    .doc("The number of retries to reconnect in short intervals (between 5 and 15 seconds).")
+    .intConf
+    .checkValue(_ > 0, "The number of initial registration retries should be positive")
+    .createWithDefault(6)
+
+  val WORKER_MAX_REGISTRATION_RETRIES = ConfigBuilder("spark.worker.maxRegistrationRetries")
+    .version("4.0.0")
+    .internal()
+    .doc("The max number of retries to reconnect. After spark.worker.initialRegistrationRetries " +
+      "attempts, the interval is between 30 and 90 seconds.")
+    .intConf
+    .checkValue(_ > 0, "The max number of registration retries should be positive")
+    .createWithDefault(16)
+
   val WORKER_DRIVER_TERMINATE_TIMEOUT = ConfigBuilder("spark.worker.driverTerminateTimeout")
     .version("2.1.2")
     .timeConf(TimeUnit.MILLISECONDS)

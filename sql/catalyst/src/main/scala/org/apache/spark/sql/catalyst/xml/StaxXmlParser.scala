@@ -135,7 +135,9 @@ class StaxXmlParser(
       val isRootAttributesOnly = schema.fields.forall { f =>
         f.name == options.valueTag || f.name.startsWith(options.attributePrefix)
       }
-      Some(convertObject(parser, schema, rootAttributes, isRootAttributesOnly))
+      val result = Some(convertObject(parser, schema, rootAttributes, isRootAttributesOnly))
+      parser.close()
+      result
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
@@ -578,7 +580,7 @@ class StaxXmlParser(
 class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) extends Logging {
-  private val reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+  private var reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
   private var currentStartTag: String = _
   private var buffer = new StringBuilder()
   private val startTag = s"<${options.rowTag}>"
@@ -595,20 +597,21 @@ class XmlTokenizer(
   def next(): Option[String] = {
     try {
       if (readUntilStartElement()) {
-        try {
-          buffer.append(currentStartTag)
-          // Don't check whether the end element was found. Even if not, return everything
-          // that was read, which will invariably cause a parse error later
-          readUntilEndElement(currentStartTag.endsWith(">"))
-          return Some(buffer.toString())
-        } finally {
-          buffer = new StringBuilder()
-        }
+        buffer.append(currentStartTag)
+        // Don't check whether the end element was found. Even if not, return everything
+        // that was read, which will invariably cause a parse error later
+        readUntilEndElement(currentStartTag.endsWith(">"))
+        val str = buffer.toString()
+        buffer = new StringBuilder()
+        return Some(str)
       }
-      None
     } catch {
       case _: FileNotFoundException if options.ignoreMissingFiles =>
-        None
+        logWarning(
+          "Skipping the rest of" +
+          " the content in the missing file during schema inference",
+          e
+        )
       case NonFatal(e) =>
         ExceptionUtils.getRootCause(e) match {
           case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
@@ -617,10 +620,19 @@ class XmlTokenizer(
               " the content in the corrupted file during schema inference",
               e
             )
-            None
-          case o => throw o
+          case o =>
+            reader.close()
+            reader = null
+            throw o
         }
+      case e: Throwable =>
+        reader.close()
+        reader = null
+        throw e
     }
+    reader.close()
+    reader = null
+    None
   }
 
   private def readUntilStartElement(): Boolean = {

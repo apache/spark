@@ -74,9 +74,12 @@ class ArrowCollectSerializer(Serializer):
         num = read_int(stream)
         if num == -1:
             error_msg = UTF8Deserializer().loads(stream)
-            raise RuntimeError(
-                "An error occurred while calling "
-                "ArrowCollectSerializer.load_stream: {}".format(error_msg)
+            raise PySparkRuntimeError(
+                error_class="ERROR_OCCURRED_WHILE_CALLING",
+                message_parameters={
+                    "func_name": "ArrowCollectSerializer.load_stream",
+                    "error_msg": error_msg,
+                },
             )
         batch_order = []
         for i in range(num):
@@ -735,8 +738,9 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 )
 
             elif dataframes_in_group != 0:
-                raise ValueError(
-                    "Invalid number of pandas.DataFrames in group {0}".format(dataframes_in_group)
+                raise PySparkValueError(
+                    error_class="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    message_parameters={"dataframes_in_group": str(dataframes_in_group)},
                 )
 
 

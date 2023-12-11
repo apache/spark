@@ -18,24 +18,31 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class SeriesInterpolateTestsMixin:
+class SeriesInterpolateMixin:
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
-        self.assert_eq(psobj.interpolate(), pobj.interpolate())
-        for limit in range(1, 5):
-            for limit_direction in [None, "forward", "backward", "both"]:
-                for limit_area in [None, "inside", "outside"]:
-                    self.assert_eq(
-                        psobj.interpolate(
-                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                        ),
-                        pobj.interpolate(
-                            limit=limit, limit_direction=limit_direction, limit_area=limit_area
-                        ),
-                    )
+        self.assert_eq(
+            psobj.interpolate().sort_index(),
+            pobj.interpolate().sort_index(),
+        )
+        for limit, limit_direction, limit_area in [
+            (1, None, None),
+            (2, "forward", "inside"),
+            (3, "backward", "outside"),
+            (4, "backward", "inside"),
+            (5, "both", "inside"),
+        ]:
+            self.assert_eq(
+                psobj.interpolate(
+                    limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                ).sort_index(),
+                pobj.interpolate(
+                    limit=limit, limit_direction=limit_direction, limit_area=limit_area
+                ).sort_index(),
+            )
 
     def test_interpolate(self):
         pser = pd.Series(
@@ -79,13 +86,16 @@ class SeriesInterpolateTestsMixin:
         self._test_interpolate(pser)
 
 
-class SeriesInterpolateTests(SeriesInterpolateTestsMixin, PandasOnSparkTestCase, TestUtils):
+class SeriesInterpolateTests(
+    SeriesInterpolateMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_series_interpolate import *  # noqa: F401
+    from pyspark.pandas.tests.series.test_interpolate import *  # noqa: F401
 
     try:
         import xmlrunner

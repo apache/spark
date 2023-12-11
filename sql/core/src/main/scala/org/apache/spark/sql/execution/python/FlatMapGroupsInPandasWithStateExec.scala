@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.{JobArtifactSet, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -145,7 +145,7 @@ case class FlatMapGroupsInPandasWithStateExec(
           case ProcessingTimeTimeout => batchTimestampMs.get
           case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Cannot filter timed out keys for $timeoutConf")
         }
         val timingOutPairs = stateManager.getAllState(store).filter { state =>

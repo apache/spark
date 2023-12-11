@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructF
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -916,7 +917,7 @@ private[hive] trait HiveInspectors {
       toInspector(dt.sqlType)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) =>
-      throw new IllegalStateException(s"Hive doesn't support the constant type [$dt].")
+      throw SparkException.internalError(s"Hive doesn't support the constant type [$dt].")
     // ideally, we don't test the foldable here(but in optimizer), however, some of the
     // Hive UDF / UDAF requires its argument to be constant objectinspector, we do it eagerly.
     case _ if expr.foldable => toInspector(Literal.create(expr.eval(), expr.dataType))

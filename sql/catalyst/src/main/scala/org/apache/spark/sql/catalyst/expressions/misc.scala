@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -336,7 +336,8 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 case class CurrentUser() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
-  override def prettyName: String = "current_user"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_user")
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 

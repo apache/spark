@@ -134,7 +134,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      Some(inferObject(parser, rootAttributes))
+      val schema = Some(inferObject(parser, rootAttributes))
+      parser.close()
+      schema
     } catch {
       case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
         handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
