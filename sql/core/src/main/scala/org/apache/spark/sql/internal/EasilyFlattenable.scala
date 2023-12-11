@@ -20,7 +20,7 @@ package org.apache.spark.sql.internal
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 
@@ -64,6 +64,7 @@ private[sql] object EasilyFlattenable {
 
             if (tinkeredOrNewNamedExprs.exists(_.collectFirst {
               case ex if !ex.deterministic => ex
+              case ex if ex.isInstanceOf[UserDefinedExpression] => ex
               case u: UnresolvedAttribute if u.nameParts.size != 1 => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
