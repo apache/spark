@@ -50,7 +50,7 @@ def unpersist_chunks(chunk_ids: list[str]) -> None:
 
 def read_chunk(chunk_id):
     """
-    Read chunk by id, return arrow batch data of this chunk.
+    Read chunk by id, return this chunk as an arrow table.
     You can call this function from spark driver, spark python UDF python,
     descendant process of spark driver, or descendant process of spark python UDF worker.
     """
