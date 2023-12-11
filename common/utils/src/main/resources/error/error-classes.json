@@ -2277,7 +2277,7 @@
     "message" : [
       "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement isn't: <sqlString>."
     ],
-    "sqlState" : "42606"
+    "sqlState" : "07501"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [

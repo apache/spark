@@ -27,8 +27,8 @@ Executes a sql statement provided as a `STRING`, optionally passing `arg_exprN` 
 
 ```sql
 EXECUTE IMMEDIATE sql_string
-        [ INTO (var_name [, …] ) ]
-        [ USING ( arg_expr [ AS ] [alias] [, …] ) ]
+        [ INTO var_name [, …]  ]
+        [ USING { (arg_expr [ AS ] [alias] [, …] ) | arg_expr [ AS ] [alias] [, …] } ]
 ```
 
 ### Parameters
@@ -37,14 +37,14 @@ EXECUTE IMMEDIATE sql_string
 
   A STRING expression producing a well-formed SQL statement.
 
-* **INTO ( var_name [, …] )**
+* **INTO var_name [, …]**
 
     Optionally returns the results of a single row query into SQL variables.
     If the query returns no rows the result is NULL.
     - `var_name`
     A SQL variable. A variable may not be referenced more than once.
 
-* **USING (arg_expr [, …] )**
+* **USING arg_expr [, …]**
 
   Optionally, if sql_string contains parameter markers, binds in values to the parameters.
   - `arg_expr`
@@ -61,26 +61,26 @@ EXECUTE IMMEDIATE sql_string
 
 ```sql
 -- A self-contained execution using a literal string
-EXECUTE IMMEDIATE ‘SELECT SUM(c1) FROM VALUES(?), (?)’ USING (5, 6);
+EXECUTE IMMEDIATE 'SELECT SUM(c1) FROM VALUES(?), (?)' USING 5, 6;
  11
 
 -- A SQL string composed in a SQL variable
-DECLARE sqlStr = ‘SELECT SUM(c1) FROM VALUES(?), (?)’;
+DECLARE sqlStr = 'SELECT SUM(c1) FROM VALUES(?), (?)';
 DECLARE arg1 = 5;
 DECLARE arg2 = 6;
-EXECUTE IMMEDIATE sqlStr USING (arg1, arg2);
+EXECUTE IMMEDIATE sqlStr USING arg1, arg2;
  11
 
 -- Using the INTO clause
 DECLARE sum INT;
-EXECUTE IMMEDIATE sqlStr INTO (sum) USING (arg1, arg2);
+EXECUTE IMMEDIATE sqlStr INTO sum USING arg1, arg2;
 SELECT sum;
  11
 
 -- Using named parameter markers
-SET VAR sqlStr = ‘SELECT SUM(c1) FROM VALUES(:first), (:second)’;
+SET VAR sqlStr = 'SELECT SUM(c1) FROM VALUES(:first), (:second)';
 EXECUTE IMMEDIATE sqlStr INTO (sum)
-    USING (5 AS first, arg2 AS second);
+    USING 5 AS first, arg2 AS second;
 SELECT sum;
  11
 ```
