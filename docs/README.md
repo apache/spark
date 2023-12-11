@@ -32,7 +32,7 @@ The Spark documentation build uses a number of tools to build HTML docs and API 
 Python, R and SQL.
 
 You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
-[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
+[Python](https://www.python.org/downloads/)
 installed. Make sure the `bundle` command is available, if not install the Gem containing it:
 
 ```sh
