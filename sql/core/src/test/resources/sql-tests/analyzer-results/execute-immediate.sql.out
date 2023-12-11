@@ -638,35 +638,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first
+EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+  "errorClass" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
-    "aliases" : "`first`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 92,
-    "fragment" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first"
-  } ]
-}
-
-
--- !query
-EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view' INTO (res_id, res_id)
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
+    "nameList" : "`res_id`"
   }
 }
 

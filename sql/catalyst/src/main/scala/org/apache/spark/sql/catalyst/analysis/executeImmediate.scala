@@ -22,7 +22,7 @@ import scala.util.{Either, Left, Right}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, SparkSqlParser}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -55,8 +55,6 @@ case class ExecuteImmediateQuery(
 class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     extends Rule[LogicalPlan]
     with ColumnResolutionHelper {
-
-  lazy val parser = new SparkSqlParser()
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -160,13 +158,13 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     // Otherwise, it can be anything.
     targetVariables.map { expressions =>
       try {
-        parser.parseQuery(queryString)
+        CatalystSqlParser.parseQuery(queryString)
       } catch {
         case e: ParseException =>
           // Since we do not have a way of telling that parseQuery failed because of
           // actual parsing error or because statement was passed where query was expected,
           // we need to make sure that parsePlan wouldn't throw
-          parser.parsePlan(queryString)
+          CatalystSqlParser.parsePlan(queryString)
 
           // Plan was sucessfully parsed, but query wasn't - throw.
           throw new AnalysisException(
@@ -175,7 +173,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
             cause = Some(e))
       }
 
-    }.getOrElse { parser.parsePlan(queryString) }
+    }.getOrElse { CatalystSqlParser.parsePlan(queryString) }
   }
 
   private def getVariableReference(nameParts: Seq[String]): VariableReference = {
