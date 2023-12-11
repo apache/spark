@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import warnings
 
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import warnings
 from typing import (
     Any,
     Dict,
@@ -49,6 +49,8 @@ if TYPE_CHECKING:
         PandasGroupedMapFunction,
         GroupedMapPandasUserDefinedFunction,
         PandasCogroupedMapFunction,
+        ArrowCogroupedMapFunction,
+        ArrowGroupedMapFunction,
         PandasGroupedMapFunctionWithState,
     )
     from pyspark.sql.connect.dataframe import DataFrame
@@ -109,6 +111,8 @@ class GroupedData:
             type_str = "RollUp"
         elif self._group_type == "cube":
             type_str = "Cube"
+        elif self._group_type == "grouping_sets":
+            type_str = "GroupingSets"
         else:
             type_str = "Pivot"
 
@@ -351,6 +355,30 @@ class GroupedData:
 
     applyInPandasWithState.__doc__ = PySparkGroupedData.applyInPandasWithState.__doc__
 
+    def applyInArrow(
+        self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        )
+
+        return DataFrame(
+            plan.GroupMap(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInArrow.__doc__ = PySparkGroupedData.applyInArrow.__doc__
+
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
         return PandasCogroupedOps(self, other)
 
@@ -390,6 +418,31 @@ class PandasCogroupedOps:
         )
 
     applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
+
+    def applyInArrow(
+        self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+        )
+
+        return DataFrame(
+            plan.CoGroupMap(
+                input=self._gd1._df._plan,
+                input_grouping_cols=self._gd1._grouping_cols,
+                other=self._gd2._df._plan,
+                other_grouping_cols=self._gd2._grouping_cols,
+                function=udf_obj,
+            ),
+            session=self._gd1._df._session,
+        )
+
+    applyInArrow.__doc__ = PySparkPandasCogroupedOps.applyInArrow.__doc__
 
     @staticmethod
     def _extract_cols(gd: "GroupedData") -> List[Column]:

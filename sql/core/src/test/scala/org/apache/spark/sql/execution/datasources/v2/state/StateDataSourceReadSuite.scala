@@ -49,7 +49,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
         CheckLastBatch((6, 0), (7, 1), (8, 0))
       )
 
-      intercept[IllegalArgumentException] {
+      intercept[StateDataSourceReadStateSchemaFailure] {
         spark.read.format("statestore").load(tempDir.getAbsolutePath)
       }
     }
@@ -67,7 +67,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
       offsetLog.purgeAfter(0)
       commitLog.purgeAfter(-1)
 
-      intercept[IllegalStateException] {
+      intercept[StataDataSourceCommittedBatchUnavailable] {
         spark.read.format("statestore").load(tempDir.getAbsolutePath)
       }
     }
@@ -98,67 +98,79 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
 
       rewriteStateSchemaFileToDummy()
 
-      intercept[IllegalArgumentException] {
+      intercept[StateDataSourceReadStateSchemaFailure] {
         spark.read.format("statestore").load(tempDir.getAbsolutePath)
       }
     }
   }
 
   test("ERROR: path is not specified") {
-    intercept[IllegalArgumentException] {
+    val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
       spark.read.format("statestore").load()
     }
+    checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
+      Map("optionName" -> StateSourceOptions.PATH))
   }
 
   test("ERROR: operator ID specified to negative") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
           .option(StateSourceOptions.OPERATOR_ID, -1)
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE", "42616",
+        Map("optionName" -> StateSourceOptions.OPERATOR_ID))
     }
   }
 
   test("ERROR: batch ID specified to negative") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
           .option(StateSourceOptions.BATCH_ID, -1)
           .load(tempDir.getAbsolutePath)
       }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE", "42616",
+        Map("optionName" -> StateSourceOptions.BATCH_ID))
     }
   }
 
   test("ERROR: store name is empty") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValueIsEmpty] {
         spark.read.format("statestore")
           .option(StateSourceOptions.STORE_NAME, "")
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_EMPTY", "42616",
+        Map("optionName" -> StateSourceOptions.STORE_NAME))
     }
   }
 
   test("ERROR: invalid value for joinSide option") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
           .option(StateSourceOptions.JOIN_SIDE, "both")
           // trick to bypass getting the last committed batch before validating operator ID
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
+        Map(
+          "optionName" -> StateSourceOptions.JOIN_SIDE,
+          "message" -> "Valid values are left,right,none"))
     }
   }
 
   test("ERROR: both options `joinSide` and `storeName` are specified") {
     withTempDir { tempDir =>
-      intercept[IllegalArgumentException] {
+      val exc = intercept[StateDataSourceConflictOptions] {
         spark.read.format("statestore")
           .option(StateSourceOptions.JOIN_SIDE, "right")
           .option(StateSourceOptions.STORE_NAME, "right-keyToNumValues")
@@ -166,6 +178,9 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
           .option(StateSourceOptions.BATCH_ID, 0)
           .load(tempDir.getAbsolutePath)
       }
+      checkError(exc, "STDS_CONFLICT_OPTIONS", "42613",
+        Map("options" ->
+          s"['${StateSourceOptions.JOIN_SIDE}', '${StateSourceOptions.STORE_NAME}']"))
     }
   }
 

@@ -129,7 +129,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
   def setJars(jars: Array[String]): SparkConf = {
-    setJars(jars.toSeq)
+    setJars(jars.toImmutableArraySeq)
   }
 
   /**
@@ -158,7 +158,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * (Java-friendly version.)
    */
   def setExecutorEnv(variables: Array[(String, String)]): SparkConf = {
-    setExecutorEnv(variables.toSeq)
+    setExecutorEnv(variables.toImmutableArraySeq)
   }
 
   /**

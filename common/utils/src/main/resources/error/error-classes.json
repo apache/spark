@@ -149,6 +149,19 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_CREATE_DATA_SOURCE_TABLE" : {
+    "message" : [
+      "Failed to create data source table <tableName>:"
+    ],
+    "subClass" : {
+      "EXTERNAL_METADATA_UNSUPPORTED" : {
+        "message" : [
+          "provider '<provider>' does not support external metadata but a schema is provided. Please remove the schema when creating the table."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
+  },
   "CANNOT_DECODE_URL" : {
     "message" : [
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
@@ -393,6 +406,12 @@
       "Fail to assign a value of <sourceType> type to the <targetType> type column or variable <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
+  },
+  "CATALOG_NOT_FOUND" : {
+    "message" : [
+      "The catalog <catalogName> not found. Consider to set the SQL config <config> to a catalog plugin."
+    ],
+    "sqlState" : "42P08"
   },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
@@ -1858,6 +1877,29 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
+    "message" : [
+      "Invalid inverse distribution function <funcName>."
+    ],
+    "subClass" : {
+      "DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "Cannot use DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "WITHIN_GROUP_MISSING" : {
+        "message" : [
+          "WITHIN GROUP is required for inverse distribution function."
+        ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "Requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
+        ]
+      }
+    },
+    "sqlState" : "ID001"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -3030,6 +3072,81 @@
     ],
     "sqlState" : "42713"
   },
+  "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
+    "message" : [
+      "No committed batch found, checkpoint location: <checkpointLocation>. Ensure that the query has run and committed any microbatch before stopping."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_CONFLICT_OPTIONS" : {
+    "message" : [
+      "The options <options> cannot be specified together. Please specify the one."
+    ],
+    "sqlState" : "42613"
+  },
+  "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
+    "message" : [
+      "Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: <sourceOptions>.",
+      "Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
+  },
+  "STDS_INTERNAL_ERROR" : {
+    "message" : [
+      "Internal error: <message>",
+      "Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STDS_INVALID_OPTION_VALUE" : {
+    "message" : [
+      "Invalid value for source option '<optionName>':"
+    ],
+    "subClass" : {
+      "IS_EMPTY" : {
+        "message" : [
+          "cannot be empty."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "cannot be negative."
+        ]
+      },
+      "WITH_MESSAGE" : {
+        "message" : [
+          "<message>"
+        ]
+      }
+    },
+    "sqlState" : "42616"
+  },
+  "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
+    "message" : [
+      "The state does not have any partition. Please double check that the query points to the valid state. options: <sourceOptions>"
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_OFFSET_LOG_UNAVAILABLE" : {
+    "message" : [
+      "The offset log for <batchId> does not exist, checkpoint location: <checkpointLocation>.",
+      "Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_OFFSET_METADATA_LOG_UNAVAILABLE" : {
+    "message" : [
+      "Metadata is not available for offset log for <batchId>, checkpoint location: <checkpointLocation>.",
+      "The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_REQUIRED_OPTION_UNSPECIFIED" : {
+    "message" : [
+      "'<optionName>' must be specified."
+    ],
+    "sqlState" : "42601"
+  },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
@@ -3107,6 +3224,12 @@
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
       "Expected <aliasesSize> aliases, but got <aliasesNames>.",
       "Please ensure that the number of aliases provided matches the number of columns output by the UDTF."
+    ],
+    "sqlState" : "42802"
+  },
+  "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias <aliasName>; please remove this alias and then try the query again."
     ],
     "sqlState" : "42802"
   },
@@ -3527,6 +3650,11 @@
       "ORC_TYPE_CAST" : {
         "message" : [
           "Unable to convert <orcType> of Orc to data type <toType>."
+        ]
+      },
+      "OVERWRITE_BY_SUBQUERY" : {
+        "message" : [
+          "INSERT OVERWRITE with a subquery condition."
         ]
       },
       "PANDAS_UDAF_IN_PIVOT" : {

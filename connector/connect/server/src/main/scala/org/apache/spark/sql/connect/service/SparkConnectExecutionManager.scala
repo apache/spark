@@ -164,7 +164,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     scheduledExecutor = None
     executions.clear()
     abandonedTombstones.invalidateAll()
-    if (!lastExecutionTime.isDefined) {
+    if (lastExecutionTime.isEmpty) {
       lastExecutionTime = Some(System.currentTimeMillis())
     }
   }

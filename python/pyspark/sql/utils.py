@@ -39,6 +39,7 @@ from pyspark.errors import (  # noqa: F401
     UnknownException,
     SparkUpgradeException,
     PySparkNotImplementedError,
+    PySparkRuntimeError,
 )
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
@@ -90,8 +91,9 @@ def require_test_compiled() -> None:
     paths = glob.glob(test_class_path)
 
     if len(paths) == 0:
-        raise RuntimeError(
-            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path
+        raise PySparkRuntimeError(
+            error_class="TEST_CLASS_NOT_COMPILED",
+            message_parameters={"test_class_path": test_class_path},
         )
 
 
@@ -274,7 +276,10 @@ def get_active_spark_context() -> SparkContext:
     otherwise, returns the active SparkContext."""
     sc = SparkContext._active_spark_context
     if sc is None or sc._jvm is None:
-        raise RuntimeError("SparkContext or SparkSession should be created first.")
+        raise PySparkRuntimeError(
+            error_class="SESSION_OR_CONTEXT_NOT_EXISTS",
+            message_parameters={},
+        )
     return sc
 
 
