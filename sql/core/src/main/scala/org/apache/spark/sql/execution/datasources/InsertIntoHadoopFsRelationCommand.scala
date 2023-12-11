@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
@@ -30,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -73,6 +73,9 @@ case class InsertIntoHadoopFsRelationCommand(
     enableDynamicOverwrite && mode == SaveMode.Overwrite &&
       staticPartitions.size < partitionColumns.length
   }
+
+  val MAX_DYNAMIC_PARTITIONS = SQLConf.get.getConf(SQLConf.MAX_DYNAMIC_PARTITIONS_PERNODE)
+
 
   override def requiredOrdering: Seq[SortOrder] =
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options,
@@ -188,6 +191,14 @@ case class InsertIntoHadoopFsRelationCommand(
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options,
           numStaticPartitionCols = staticPartitions.size)
+
+      val updatePartitionNum = updatedPartitionPaths.size
+      logInfo("current update partition number is: " + updatePartitionNum)
+
+      if (updatePartitionNum > MAX_DYNAMIC_PARTITIONS) {
+        throw QueryExecutionErrors.writePartitionExceedConfigSizeWhenDynamicPartitionError(
+          updatePartitionNum, MAX_DYNAMIC_PARTITIONS)
+      }
 
 
       // update metastore partition metadata
