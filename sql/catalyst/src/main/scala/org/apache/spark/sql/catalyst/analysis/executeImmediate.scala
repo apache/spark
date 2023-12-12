@@ -174,7 +174,6 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
             messageParameters = Map("sqlString" -> queryString),
             cause = Some(e))
       }
-
     }.getOrElse { parser.parsePlan(queryString) }
   }
 
