@@ -63,7 +63,7 @@ def get_sql_configs(jvm):
     return sql_configs
 
 
-def generate_sql_configs_table_html(sql_configs, path):
+def generate_sql_configs_table_html(sql_configs, path, group):
     """
     Generates an HTML table at `path` that lists all public SQL
     configuration options.
@@ -120,9 +120,9 @@ def generate_sql_configs_table_html(sql_configs, path):
 
             f.write(dedent(
                 """
-                <tr id="{name}">
+                <tr id="{anchor}">
                     <td>
-                        <a href="#{name}"><code>#</code></a>
+                        <a href="#{anchor}"><code>#</code></a>
                         <code>{name}</code>
                     </td>
                     <td>{default}</td>
@@ -131,10 +131,13 @@ def generate_sql_configs_table_html(sql_configs, path):
                 </tr>
                 """
                 .format(
+                    # Making the group part of the anchor id ensures unique anchors
+                    # even if a config happens to show up multiple times on a given page.
+                    anchor=f"{config.name}-{group}",
                     name=config.name,
                     default=default,
                     description=markdown.markdown(config.description),
-                    version=config.version
+                    version=config.version,
                 )
             ))
         f.write("</table>\n")
@@ -147,4 +150,4 @@ if __name__ == "__main__":
     sql_configs = get_sql_configs(jvm)
     for group in sql_configs:
         html_table_path = os.path.join(docs_root_dir, f"generated-sql-config-table-{group}.html")
-        generate_sql_configs_table_html(sql_configs[group], path=html_table_path)
+        generate_sql_configs_table_html(sql_configs[group], path=html_table_path, group=group)
