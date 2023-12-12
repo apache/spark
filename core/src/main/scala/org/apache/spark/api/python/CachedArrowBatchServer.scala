@@ -94,7 +94,7 @@ class CachedArrowBatchServer extends Logging {
           JavaUtils.closeQuietly(serverSocket)
         }
       }
-    }
+    }.start()
     (serverSocket.getLocalPort, authHelper.secret)
   }
 

@@ -491,14 +491,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
+    SparkEnv.set(_env)
 
     val cachedArrowBatchServer = new CachedArrowBatchServer()
     val cachedArrowBatchServerInfo = cachedArrowBatchServer.start()
 
     _cachedArrowBatchServerPort = Some(cachedArrowBatchServerInfo._1)
     _cachedArrowBatchServerSecret = Some(cachedArrowBatchServerInfo._2)
-
-    SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
     _conf.getOption("spark.repl.class.outputDir").foreach { path =>
