@@ -236,15 +236,15 @@ public final class VectorizedRleValuesReader extends ValuesReader
         n = (int) (end - start + 1);
 
         switch (mode) {
-          case RLE:
+          case RLE -> {
             if (currentValue == state.maxDefinitionLevel) {
               updater.readValues(n, state.valueOffset, values, valueReader);
             } else {
               nulls.putNulls(state.valueOffset, n);
             }
             state.valueOffset += n;
-            break;
-          case PACKED:
+          }
+          case PACKED -> {
             for (int i = 0; i < n; ++i) {
               int currentValue = currentBuffer[currentBufferIdx++];
               if (currentValue == state.maxDefinitionLevel) {
@@ -253,7 +253,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
                 nulls.putNull(state.valueOffset++);
               }
             }
-            break;
+          }
         }
         state.levelOffset += n;
         leftInBatch -= n;
@@ -404,7 +404,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       long rangeEnd = state.currentRangeEnd();
 
       switch (mode) {
-        case RLE:
+        case RLE -> {
           // This RLE block is consist of top-level rows, so we'll need to check
           // if the rows should be skipped according to row indexes.
           if (currentValue == 0) {
@@ -462,8 +462,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
             leftInPage -= valuesLeftInBlock;
             currentCount -= valuesLeftInBlock;
           }
-          break;
-        case PACKED:
+        }
+        case PACKED -> {
           int i = 0;
 
           for (; i < valuesLeftInBlock; i++) {
@@ -498,7 +498,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           leftInPage -= i;
           currentCount -= i;
           currentBufferIdx += i;
-          break;
+        }
       }
     }
 
@@ -626,7 +626,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) {
     switch (mode) {
-      case RLE:
+      case RLE -> {
         if (currentValue == state.maxDefinitionLevel) {
           updater.readValues(n, state.valueOffset, values, valueReader);
         } else {
@@ -634,8 +634,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         }
         state.valueOffset += n;
         defLevels.putInts(state.levelOffset, n, currentValue);
-        break;
-      case PACKED:
+      }
+      case PACKED -> {
         for (int i = 0; i < n; ++i) {
           int currentValue = currentBuffer[currentBufferIdx++];
           if (currentValue == state.maxDefinitionLevel) {
@@ -645,7 +645,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           }
           defLevels.putInt(state.levelOffset + i, currentValue);
         }
-        break;
+      }
     }
   }
 
@@ -662,14 +662,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(n, this.currentCount);
       switch (mode) {
-        case RLE:
+        case RLE -> {
           // We only need to skip non-null values from `valuesReader` since nulls are represented
           // via definition levels which are skipped here via decrementing `currentCount`.
           if (currentValue == state.maxDefinitionLevel) {
             updater.skipValues(num, valuesReader);
           }
-          break;
-        case PACKED:
+        }
+        case PACKED -> {
           int totalSkipNum = 0;
           for (int i = 0; i < num; ++i) {
             // Same as above, only skip non-null values from `valuesReader`
@@ -678,7 +678,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
             }
           }
           updater.skipValues(totalSkipNum, valuesReader);
-          break;
+        }
       }
       currentCount -= num;
       n -= num;
@@ -695,13 +695,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (currentCount == 0 && !readNextGroup()) break;
       int n = Math.min(left, this.currentCount);
       switch (mode) {
-        case RLE:
-          c.putInts(rowId, n, currentValue);
-          break;
-        case PACKED:
+        case RLE -> c.putInts(rowId, n, currentValue);
+        case PACKED -> {
           c.putInts(rowId, n, currentBuffer, currentBufferIdx);
           currentBufferIdx += n;
-          break;
+        }
       }
       rowId += n;
       left -= n;
@@ -772,15 +770,13 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (this.currentCount == 0) this.readNextGroup();
       int n = Math.min(left, this.currentCount);
       switch (mode) {
-        case RLE:
-          c.putBooleans(rowId, n, currentValue != 0);
-          break;
-        case PACKED:
+        case RLE -> c.putBooleans(rowId, n, currentValue != 0);
+        case PACKED -> {
           for (int i = 0; i < n; ++i) {
             // For Boolean types, `currentBuffer[currentBufferIdx++]` can only be 0 or 1
             c.putByte(rowId + i, (byte) currentBuffer[currentBufferIdx++]);
           }
-          break;
+        }
       }
       rowId += n;
       left -= n;
@@ -878,27 +874,23 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * Reads the next byteWidth little endian int.
    */
   private int readIntLittleEndianPaddedOnBitWidth() throws IOException {
-    switch (bytesWidth) {
-      case 0:
-        return 0;
-      case 1:
-        return in.read();
-      case 2: {
+    return switch (bytesWidth) {
+      case 0 -> 0;
+      case 1 -> in.read();
+      case 2 -> {
         int ch2 = in.read();
         int ch1 = in.read();
-        return (ch1 << 8) + ch2;
+        yield (ch1 << 8) + ch2;
       }
-      case 3: {
+      case 3 -> {
         int ch3 = in.read();
         int ch2 = in.read();
         int ch1 = in.read();
-        return (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
+        yield (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
       }
-      case 4: {
-        return readIntLittleEndian();
-      }
-    }
-    throw new RuntimeException("Unreachable");
+      case 4 -> readIntLittleEndian();
+      default -> throw new RuntimeException("Unreachable");
+    };
   }
 
   /**
@@ -914,11 +906,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       int header = readUnsignedVarInt();
       this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
       switch (mode) {
-        case RLE:
+        case RLE -> {
           this.currentCount = header >>> 1;
           this.currentValue = readIntLittleEndianPaddedOnBitWidth();
-          break;
-        case PACKED:
+        }
+        case PACKED -> {
           int numGroups = header >>> 1;
           this.currentCount = numGroups * 8;
 
@@ -933,9 +925,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
             this.packer.unpack8Values(buffer, buffer.position(), this.currentBuffer, valueIndex);
             valueIndex += 8;
           }
-          break;
-        default:
-          throw new ParquetDecodingException("not a valid mode " + this.mode);
+        }
       }
     } catch (IOException e) {
       throw new ParquetDecodingException("Failed to read from input stream", e);
@@ -953,11 +943,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (this.currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(left, this.currentCount);
       switch (mode) {
-        case RLE:
-          break;
-        case PACKED:
-          currentBufferIdx += num;
-          break;
+        case RLE -> {}
+        case PACKED -> currentBufferIdx += num;
       }
       currentCount -= num;
       left -= num;

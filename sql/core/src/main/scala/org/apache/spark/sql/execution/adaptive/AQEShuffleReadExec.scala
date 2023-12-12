@@ -69,7 +69,7 @@ case class AQEShuffleReadExec private(
             case other => other
           }
         case _ =>
-          throw new IllegalStateException("operating on canonicalization plan")
+          throw SparkException.internalError("operating on canonicalization plan")
       }
     } else if (isCoalescedRead) {
       // For coalesced shuffle read, the data distribution is not changed, only the number of
@@ -90,7 +90,7 @@ case class AQEShuffleReadExec private(
         case r: RoundRobinPartitioning =>
           r.copy(numPartitions = partitionSpecs.length)
         case other @ SinglePartition =>
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             "Unexpected partitioning for coalesced shuffle read: " + other)
         case _ =>
           // Spark plugins may have custom partitioning and may replace this operator
@@ -163,7 +163,7 @@ case class AQEShuffleReadExec private(
           assert(p.dataSize.isDefined)
           p.dataSize.get
         case p: PartialReducerPartitionSpec => p.dataSize
-        case p => throw new IllegalStateException(s"unexpected $p")
+        case p => throw SparkException.internalError(s"unexpected $p")
       })
     } else {
       None
@@ -253,7 +253,7 @@ case class AQEShuffleReadExec private(
         sendDriverMetrics()
         stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
       case _ =>
-        throw new IllegalStateException("operating on canonicalized plan")
+        throw SparkException.internalError("operating on canonicalized plan")
     }
   }
 

@@ -444,10 +444,10 @@ public class RetryingBlockTransferorSuite {
             String blockId = block.getKey();
             Object blockValue = block.getValue();
 
-            if (blockValue instanceof ManagedBuffer) {
-              retryListener.onBlockFetchSuccess(blockId, (ManagedBuffer) blockValue);
-            } else if (blockValue instanceof Exception) {
-              retryListener.onBlockFetchFailure(blockId, (Exception) blockValue);
+            if (blockValue instanceof ManagedBuffer managedBuffer) {
+              retryListener.onBlockFetchSuccess(blockId, managedBuffer);
+            } else if (blockValue instanceof Exception exception) {
+              retryListener.onBlockFetchFailure(blockId, exception);
             } else {
               fail("Can only handle ManagedBuffers and Exceptions, got " + blockValue);
             }

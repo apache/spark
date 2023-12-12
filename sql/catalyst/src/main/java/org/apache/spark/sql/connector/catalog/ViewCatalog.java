@@ -141,6 +141,92 @@ public interface ViewCatalog extends CatalogPlugin {
       Map<String, String> properties) throws ViewAlreadyExistsException, NoSuchNamespaceException;
 
   /**
+   * Replace a view in the catalog.
+   * <p>
+   * The default implementation has a race condition.
+   * Catalogs are encouraged to implement this operation atomically.
+   *
+   * @param ident a view identifier
+   * @param sql the SQL text that defines the view
+   * @param currentCatalog the current catalog
+   * @param currentNamespace the current namespace
+   * @param schema the view query output schema
+   * @param queryColumnNames the query column names
+   * @param columnAliases the column aliases
+   * @param columnComments the column comments
+   * @param properties the view properties
+   * @throws NoSuchViewException If the view doesn't exist or is a table
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   */
+  default void replaceView(
+          Identifier ident,
+          String sql,
+          String currentCatalog,
+          String[] currentNamespace,
+          StructType schema,
+          String[] queryColumnNames,
+          String[] columnAliases,
+          String[] columnComments,
+          Map<String, String> properties) throws NoSuchViewException, NoSuchNamespaceException {
+    if (viewExists(ident)) {
+      dropView(ident);
+      try {
+        createView(ident, sql, currentCatalog, currentNamespace, schema,
+                queryColumnNames, columnAliases, columnComments, properties);
+      }
+      catch (ViewAlreadyExistsException e) {
+        throw new RuntimeException("Race condition when dropping and creating view", e);
+      }
+    } else {
+      throw new NoSuchViewException(ident);
+    }
+  }
+
+  /**
+   * Create or replace a view in the catalog.
+   * <p>
+   * The default implementation has race conditions.
+   * Catalogs are encouraged to implement this operation atomically.
+   *
+   * @param ident a view identifier
+   * @param sql the SQL text that defines the view
+   * @param currentCatalog the current catalog
+   * @param currentNamespace the current namespace
+   * @param schema the view query output schema
+   * @param queryColumnNames the query column names
+   * @param columnAliases the column aliases
+   * @param columnComments the column comments
+   * @param properties the view properties
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   */
+  default void createOrReplaceView(
+          Identifier ident,
+          String sql,
+          String currentCatalog,
+          String[] currentNamespace,
+          StructType schema,
+          String[] queryColumnNames,
+          String[] columnAliases,
+          String[] columnComments,
+          Map<String, String> properties) throws NoSuchNamespaceException {
+    if (viewExists(ident)) {
+      try {
+        replaceView(ident, sql, currentCatalog, currentNamespace, schema,
+                queryColumnNames, columnAliases, columnComments, properties);
+      } catch (NoSuchViewException e) {
+        throw new RuntimeException("Race condition when checking and replacing view", e);
+      }
+    } else {
+      try {
+        createView(ident, sql, currentCatalog, currentNamespace, schema,
+                queryColumnNames, columnAliases, columnComments, properties);
+      } catch (ViewAlreadyExistsException e) {
+        throw new RuntimeException("Race condition when checking and creating view", e);
+      }
+    }
+  }
+
+  /**
    * Apply {@link ViewChange changes} to a view in the catalog.
    * <p>
    * Implementations may reject the requested changes. If any change is rejected, none of the

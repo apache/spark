@@ -138,6 +138,14 @@ select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattl
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
 select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
 select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.');
+select decode(X'68656c6c6f', 'Windows-xxx');
+select decode(scol, ecol) from values(X'68656c6c6f', 'Windows-xxx') as t(scol, ecol);
+set spark.sql.legacy.javaCharsets=true;
+select decode(X'68656c6c6f', 'WINDOWS-1252');
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol);
+set spark.sql.legacy.javaCharsets=false;
+select decode(X'68656c6c6f', 'WINDOWS-1252');
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol);
 
 -- contains
 SELECT CONTAINS(null, 'Spark');

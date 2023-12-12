@@ -1520,20 +1520,6 @@ class SparkConnectClient(object):
         except grpc.RpcError:
             return None
 
-    def _display_server_stack_trace(self) -> bool:
-        from pyspark.sql.connect.conf import RuntimeConf
-
-        conf = RuntimeConf(self)
-        try:
-            if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
-                return True
-            return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
-        except Exception as e:  # noqa: F841
-            # Falls back to true if an exception occurs during reading the config.
-            # Otherwise, it will recursively try to get the conf when it consistently
-            # fails, ending up with `RecursionError`.
-            return True
-
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
@@ -1567,7 +1553,7 @@ class SparkConnectClient(object):
                         info,
                         status.message,
                         self._fetch_enriched_error(info),
-                        self._display_server_stack_trace(),
+                        True,
                     ) from None
 
             raise SparkConnectGrpcException(status.message) from None
@@ -1575,12 +1561,15 @@ class SparkConnectClient(object):
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
     def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
-        for path in paths:
-            for attempt in self._retrying():
-                with attempt:
-                    self._artifact_manager.add_artifacts(
-                        path, pyfile=pyfile, archive=archive, file=file
-                    )
+        try:
+            for path in paths:
+                for attempt in self._retrying():
+                    with attempt:
+                        self._artifact_manager.add_artifacts(
+                            path, pyfile=pyfile, archive=archive, file=file
+                        )
+        except Exception as error:
+            self._handle_error(error)
 
     def copy_from_local_to_fs(self, local_path: str, dest_path: str) -> None:
         for attempt in self._retrying():

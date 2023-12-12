@@ -210,7 +210,7 @@ class StringIndexer @Since("1.4.0") (
     val (inputCols, _) = getInOutCols()
 
     val sortFunc = StringIndexer.getSortFunc(ascending = ascending)
-    val orgStrings = countByValue(dataset, inputCols).toSeq
+    val orgStrings = countByValue(dataset, inputCols).toImmutableArraySeq
     ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
       counts.toSeq.sortWith(sortFunc).map(_._1).toArray
     }.toArray
@@ -221,7 +221,7 @@ class StringIndexer @Since("1.4.0") (
 
     val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq).map(collect_set)
     val allLabels = dataset.select(selectedCols: _*)
-      .collect().toSeq.flatMap(_.toSeq)
+      .collect().toImmutableArraySeq.flatMap(_.toSeq)
       .asInstanceOf[scala.collection.Seq[scala.collection.Seq[String]]].toSeq
     ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
       val sorted = labels.filter(_ != null).sorted

@@ -1111,5 +1111,18 @@ img {
 table {
   width: 100%;
   overflow-wrap: normal;
+  border-collapse: collapse; /* Ensures that the borders collapse into a single border */
 }
 
+table th, table td {
+  border: 1px solid #cccccc; /* Adds a border to each table header and data cell */
+  padding: 6px 13px; /* Optional: Adds padding inside each cell for better readability */
+}
+
+table tr {
+  background-color: white; /* Sets a default background color for all rows */
+}
+
+table tr:nth-child(2n) {
+  background-color: #F1F4F5; /* Sets a different background color for even rows */
+}

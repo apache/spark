@@ -27,6 +27,7 @@ import scala.util.{Left, Right}
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ExecuteImmediateQuery, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
@@ -271,7 +272,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     } else if (ctx.stringLit() != null) {
       SetCatalogCommand(string(visitStringLit(ctx.stringLit())))
     } else {
-      throw new IllegalStateException("Invalid catalog name")
+      throw SparkException.internalError("Invalid catalog name")
     }
   }
 

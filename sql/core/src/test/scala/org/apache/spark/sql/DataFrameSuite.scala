@@ -24,6 +24,7 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.immutable.ListMap
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
@@ -985,6 +986,12 @@ class DataFrameSuite extends QueryTest
       },
       errorClass = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`age`"))
+  }
+
+  test("SPARK-46260: withColumnsRenamed should respect the Map ordering") {
+    val df = spark.range(10).toDF()
+    assert(df.withColumnsRenamed(ListMap("id" -> "a", "a" -> "b")).columns === Array("b"))
+    assert(df.withColumnsRenamed(ListMap("a" -> "b", "id" -> "a")).columns === Array("a"))
   }
 
   test("SPARK-20384: Value class filter") {

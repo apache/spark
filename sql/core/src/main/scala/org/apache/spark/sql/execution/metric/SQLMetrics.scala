@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -230,7 +230,7 @@ object SQLMetrics {
       } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
-        throw new IllegalStateException(s"unexpected metrics type: $metricsType")
+        throw SparkException.internalError(s"unexpected metrics type: $metricsType")
       }
 
       val validValues = values.filter(_ >= 0)

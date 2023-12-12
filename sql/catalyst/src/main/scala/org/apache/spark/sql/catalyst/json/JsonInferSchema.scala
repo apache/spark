@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
@@ -367,9 +368,9 @@ object JsonInferSchema {
           // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
           // building a hash map or performing additional sorting.
           assert(isSorted(fields1),
-            s"${StructType.simpleString}'s fields were not sorted: ${fields1.toSeq}")
+            s"${StructType.simpleString}'s fields were not sorted: ${fields1.toImmutableArraySeq}")
           assert(isSorted(fields2),
-            s"${StructType.simpleString}'s fields were not sorted: ${fields2.toSeq}")
+            s"${StructType.simpleString}'s fields were not sorted: ${fields2.toImmutableArraySeq}")
 
           val newFields = new java.util.ArrayList[StructField]()
 

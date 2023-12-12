@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.logging.log4j.Level
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
@@ -63,14 +64,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val schema3 = new StructType().add("c", ArrayType(CharType(5)))
     Seq(schema1, schema2, schema3).foreach { schema =>
       val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
-      intercept[IllegalStateException] {
-        DataSourceV2Relation(
-          table,
-          DataTypeUtils.toAttributes(schema),
-          None,
-          None,
-          CaseInsensitiveStringMap.empty()).analyze
-      }
+      checkError(
+        exception = intercept[SparkException] {
+          DataSourceV2Relation(
+            table,
+            DataTypeUtils.toAttributes(schema),
+            None,
+            None,
+            CaseInsensitiveStringMap.empty()).analyze
+        },
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" ->
+          "Logical plan should not have output of char/varchar type.*\n"),
+        matchPVals = true)
     }
   }
 

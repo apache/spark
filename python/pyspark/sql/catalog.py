@@ -1237,14 +1237,6 @@ class Catalog:
         """
         self._jcatalog.refreshByPath(path)
 
-    def _reset(self) -> None:
-        """(Internal use only) Drop all existing databases (except "default"), tables,
-        partitions and functions, and set the current database to "default".
-
-        This is mainly used for tests.
-        """
-        self._jsparkSession.sessionState().catalog().reset()
-
 
 def _test() -> None:
     import os

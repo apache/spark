@@ -1387,7 +1387,7 @@ class DataFrame(Frame, Generic[T]):
         #  anyway and we don't have to worry about operations on different DataFrames.
         return self._apply_series_op(lambda psser: psser.apply(func))
 
-    # TODO: not all arguments are implemented comparing to pandas' for now.
+    # TODO(SPARK-46156): add `axis` parameter.
     def aggregate(self, func: Union[List[str], Dict[Name, List[str]]]) -> "DataFrame":
         """Aggregate using one or more operations over the specified axis.
 
@@ -2103,9 +2103,7 @@ class DataFrame(Frame, Generic[T]):
             v = [row[c] for c in data_spark_column_names]
             return k, v
 
-        can_return_named_tuples = sys.version_info >= (3, 7) or len(self.columns) + index < 255
-
-        if name is not None and can_return_named_tuples:
+        if name is not None:
             itertuple = namedtuple(name, fields, rename=True)  # type: ignore[misc]
             for k, v in map(
                 extract_kv_from_spark_row,
@@ -3422,7 +3420,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self._update_internal_frame(self.drop(columns=item)._internal)
         return result
 
-    # TODO: add axis parameter can work when '1' or 'columns'
+    # TODO(SPARK-46158): add axis parameter can work when '1' or 'columns'
     def xs(self, key: Name, axis: Axis = 0, level: Optional[int] = None) -> DataFrameOrSeries:
         """
         Return cross-section from the DataFrame.
@@ -3663,7 +3661,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO: implement axis=1
+    # TODO(SPARK-46159): implement axis=1
     def at_time(
         self, time: Union[datetime.time, str], asof: bool = False, axis: Axis = 0
     ) -> "DataFrame":
@@ -4629,7 +4627,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf = psdf[columns]
         self._update_internal_frame(psdf._internal)
 
-    # TODO: add frep and axis parameter
+    # TODO(SPARK-46156): add frep and axis parameter
     def shift(self, periods: int = 1, fill_value: Optional[Any] = None) -> "DataFrame":
         """
         Shift DataFrame by desired number of periods.
@@ -4679,7 +4677,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             lambda psser: psser._shift(periods, fill_value), should_resolve=True
         )
 
-    # TODO: axis should support 1 or 'columns' either at this moment
+    # TODO(SPARK-46161): axis should support 1 or 'columns' either at this moment
     def diff(self, periods: int = 1, axis: Axis = 0) -> "DataFrame":
         """
         First discrete difference of element.
@@ -4754,7 +4752,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
 
-    # TODO: axis should support 1 or 'columns' either at this moment
+    # TODO(SPARK-46162): axis should support 1 or 'columns' either at this moment
     def nunique(
         self,
         axis: Axis = 0,
@@ -8918,7 +8916,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return DataFrame(internal)
 
-    # TODO: add 'filter_func' and 'errors' parameter
+    # TODO(SPARK-46163): add 'filter_func' and 'errors' parameter
     def update(self, other: "DataFrame", join: str = "left", overwrite: bool = True) -> None:
         """
         Modify in place using non-NA values from another DataFrame.
@@ -9502,7 +9500,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             lambda psser: psser.rename(tuple([i + suffix for i in psser._column_label]))
         )
 
-    # TODO: include and exclude should be implemented.
+    # TODO(SPARK-46164): include and exclude should be implemented.
     def describe(self, percentiles: Optional[List[float]] = None) -> "DataFrame":
         """
         Generate descriptive statistics that summarize the central tendency,
@@ -10861,7 +10859,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO: axis, level and **kwargs should be implemented.
+    # TODO(SPARK-46165): axis and **kwargs should be implemented.
     def all(
         self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
     ) -> "Series":
@@ -10956,7 +10954,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO: axis, skipna, level and **kwargs should be implemented.
+    # TODO(SPARK-46166): axis, skipna and **kwargs should be implemented.
     def any(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
         """
         Return whether any element is True.
@@ -11114,7 +11112,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # dtype: bool
         return first_series(DataFrame(internal))
 
-    # TODO: add axis, pct, na_option parameter
+    # TODO(SPARK-46167): add axis, pct, na_option parameter
     def rank(
         self, method: str = "average", ascending: bool = True, numeric_only: bool = False
     ) -> "DataFrame":
@@ -11892,7 +11890,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._apply_series_op(op, should_resolve=True)
 
-    # TODO: axis = 1
+    # TODO(SPARK-46168): axis = 1
     def idxmax(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of maximum over requested axis.
@@ -11970,7 +11968,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
 
-    # TODO: axis = 1
+    # TODO(SPARK-46168): axis = 1
     def idxmin(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of minimum over requested axis.
