@@ -94,7 +94,7 @@ private[sql] object ArrowConverters extends Logging {
     protected val arrowWriter = ArrowWriter.create(root)
     private var _lastBatchRowCount: Long = -1L
 
-    val lastBatchRowCount = _lastBatchRowCount
+    def lastBatchRowCount: Long = _lastBatchRowCount
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
       close()

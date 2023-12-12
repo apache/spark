@@ -26,7 +26,7 @@ from pyspark.serializers import write_with_length
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
 
-def persist_dataframe_as_chunks(dataframe: DataFrame) -> list[tuple[str, int, int]]:
+def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int) -> list[tuple[str, int, int]]:
     """
     Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
     Return the list of tuple (chunk_id, chunk_row_count, chunk_byte_count).
@@ -35,7 +35,7 @@ def persist_dataframe_as_chunks(dataframe: DataFrame) -> list[tuple[str, int, in
     sc = SparkSession.getActiveSession().sparkContext
     chunk_info_list = list(
         sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils
-        .persistDataFrameAsArrowBatchChunks(dataframe._jdf)
+        .persistDataFrameAsArrowBatchChunks(dataframe._jdf, max_records_per_batch)
     )
     return [
         (chunk_info_java._1(), chunk_info_java._2(), chunk_info_java._3())

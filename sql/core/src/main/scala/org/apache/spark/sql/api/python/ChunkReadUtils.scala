@@ -40,7 +40,7 @@ object ChunkReadUtils {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
-    val chunkInfoList = rdd.mapPartitions { iter: Iterator[(Array[Byte], Long)] =>
+    rdd.mapPartitions { iter: Iterator[(Array[Byte], Long)] =>
       val blockManager = SparkEnv.get.blockManager
       val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
       val chunkInfoList = new ArrayBuffer[(String, Long, Long)]()
