@@ -1145,7 +1145,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children.xml"))
     val mixedRow = mixedDF.head()
-    assert(mixedRow.getAs[Row](0).toSeq === Seq(Array(), "lorem"))
+    assert(mixedRow.getAs[Row](0) === Row(List("issue", "text ignored"), "lorem"))
     assert(mixedRow.getString(1) === "ipsum")
   }
 
@@ -1729,15 +1729,15 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val TAG_NAME = "tag"
     val VALUETAG_NAME = "_VALUE"
     val schema = buildSchema(
+      field(VALUETAG_NAME),
       field(ATTRIBUTE_NAME),
-      field(TAG_NAME, LongType),
-      field(VALUETAG_NAME))
+      field(TAG_NAME, LongType))
     val expectedAns = Seq(
-      Row(null, null, "value1"),
-      Row("attr1", null, "value2"),
-      Row(null, 5L, "4"),
-      Row(null, 6L, "7"),
-      Row("8", null, null))
+      Row("value1", null, null),
+      Row("value2", "attr1", null),
+      Row("4", null, 5L),
+      Row("7", null, 6L),
+      Row(null, "8", null))
     val dfs = Seq(
       // user specified schema
       spark.read
@@ -2204,10 +2204,11 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       df,
       Seq(
         Row(
-          "value4",
           Row(
-            Array("value1", "value2"),
-            Array(1, 2),
-            3))))
+            "value4",
+            Row(
+              Array("value1", "value2"),
+              Array(1, 2),
+              3)))))
   }
 }

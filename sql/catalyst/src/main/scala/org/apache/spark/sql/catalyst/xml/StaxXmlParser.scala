@@ -591,7 +591,13 @@ class StaxXmlParser(
       castTo(data, FloatType).asInstanceOf[Float]
     }
   }
-  private[xml] def isEmptyString(c: Characters): Boolean = c.getData.trim.isEmpty
+  private[xml] def isEmptyString(c: Characters): Boolean = {
+    if (options.ignoreSurroundingSpaces) {
+      c.getData.trim.isEmpty
+    } else {
+      c.isWhiteSpace
+    }
+  }
 
   @tailrec
   private def parseAndCheckEndElement(
