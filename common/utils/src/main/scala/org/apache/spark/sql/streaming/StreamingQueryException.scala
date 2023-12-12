@@ -48,11 +48,11 @@ class StreamingQueryException private[sql](
       errorClass: String,
       messageParameters: Map[String, String]) = {
     this(
-      messageParameters.get("queryDebugString").getOrElse(null),
+      messageParameters.get("queryDebugString").getOrElse(""),
       message,
       cause,
-      messageParameters.get("startOffset").getOrElse(null),
-      messageParameters.get("endOffset").getOrElse(null),
+      messageParameters.get("startOffset").getOrElse(""),
+      messageParameters.get("endOffset").getOrElse(""),
       errorClass,
       messageParameters)
   }
