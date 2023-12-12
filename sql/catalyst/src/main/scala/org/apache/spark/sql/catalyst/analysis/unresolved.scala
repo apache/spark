@@ -39,7 +39,7 @@ import org.apache.spark.util.ArrayImplicits._
 class UnresolvedException(function: String)
   extends SparkException(
     errorClass = "INTERNAL_ERROR",
-    messageParameters = Map("message" -> s"Invalid call to `$function` on unresolved object"),
+    messageParameters = Map("message" -> s"Invalid call to $function on unresolved object"),
     cause = null)
 
 /** Parent trait for unresolved node types */
