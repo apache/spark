@@ -22,8 +22,10 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, NamedExpression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, LeafExpression, NamedExpression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, Project, ResolvedHint, SubqueryAlias, UnaryNode, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -33,6 +35,7 @@ import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 import org.apache.spark.util.ArrayImplicits._
@@ -325,7 +328,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 val canonicalizedCdProj = cdPlanProject.canonicalized.asInstanceOf[Project]
                 // matchIndexInCdPlanProj remains  -1 in the end, itindicates it is
                 // new cols created out of existing output attribs
-                val (equivMapping, inComingProjNeedingMod) = canonicalizedInProj.projectList.
+                val (equivMapping, inComingProjNoDirectMapping) = canonicalizedInProj.projectList.
                   zipWithIndex.map {
                   case (inComingNE, index) =>
                     // first check for equivalent named expressions..if index is != -1, that means
@@ -340,7 +343,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                             canonicalizedCdProj.projectList.indexWhere(_ == attrx)
                         case Alias(childExpr, _) => matchIndexInCdPlanProj =
                           canonicalizedCdProj.projectList.indexWhere(
-                            _.children.headOption.map(_ == childExpr).getOrElse(false))
+                            _.children.headOption.exists(_ == childExpr))
                       }
                     }
 
@@ -348,31 +351,38 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
                 }.partition(_._2 != -1)
 
+                // If expressions of inComingProjNoDirectMapping can be expressed in terms of the
+                // incoming attribute refs or incoming alias exprs,  which can be mapped directly
+                // to the CachedPlan's output, we are good. so lets transform such indirectly
+                // mappable named expressions in terms of mappable attributes of the incoming plan
+                val directlyMappedIncomingProjs = equivMapping.map {
+                  case(incmngIndex, _) => incomingProject.projectList(incmngIndex)
+                }
+                val transformedIndirectlyMappableExpr = inComingProjNoDirectMapping.map {
+                  case (incomngIndex, _) =>
+                    val ne = incomingProject.projectList(incomngIndex)
+                    val modifiedNe = ne.transformDown {
+                      case expr => directlyMappedIncomingProjs.find(ne => ne.toAttribute == expr
+                      || ne.children.headOption.contains(expr)).
+                        map(ne => Replaceable(ne.toAttribute)).getOrElse(expr)
+                    }.asInstanceOf[NamedExpression]
+                    incomngIndex -> modifiedNe
+                }.toMap
+
                 val cdAttribToInAttrib = equivMapping.map {
                   case (inAttribIndex, cdAttribIndex) =>
                     cdPlanProject.projectList(cdAttribIndex).toAttribute ->
                       incomingProject.projectList(inAttribIndex).toAttribute
                 }.toMap
                 if (cdAttribToInAttrib.size == cachedPlan.output.size &&
-                  canonicalizedInProj.projectList.map(_.references).reduce(_ ++ _).
-                    subsetOf(canonicalizedCdProj.outputSet)) {
-                val projectionToForceOnCdPlan = cachedPlan.output.map(cdAttribToInAttrib)
-                val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
-                  case (ne, indx) => if (equivMapping.exists(_._1 == indx)) {
-                    ne.toAttribute
-                  } else {
-                    ne.transformUp {
-                      case attr: Attribute => val indexInChildOutput =
-                        incomingPlan.child.output.indexWhere(_.canonicalized == attr.canonicalized)
-                        val attribInChildCdPlan = cachedPlan.child.output(indexInChildOutput)
-                        val attribInCdPlan = cdPlanProject.projectList.find {
-                          case attr: Attribute =>
-                            attr.canonicalized == attribInChildCdPlan.canonicalized
-                          case al: Alias =>
-                            al.child.canonicalized == attribInChildCdPlan.canonicalized
-                        }.get.toAttribute
-                        cdAttribToInAttrib.find(
-                          _._1.canonicalized == attribInCdPlan.canonicalized).map(_._2).get
+                    transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
+                  val projectionToForceOnCdPlan = cachedPlan.output.map(cdAttribToInAttrib)
+                  val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
+                    case (ne, indx) => if (equivMapping.exists(_._1 == indx)) {
+                      ne.toAttribute
+                    } else {
+                      transformedIndirectlyMappableExpr(indx).transformUp {
+                        case Replaceable(attribToUse) => attribToUse
                       }.asInstanceOf[NamedExpression]
                     }
                   }
@@ -505,4 +515,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
     }
   }
+}
+
+private case class Replaceable(attribToUse: Attribute) extends LeafExpression {
+  override def nullable: Boolean = false
+  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException()
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new UnsupportedOperationException()
+  override def dataType: DataType = attribToUse.dataType
 }

@@ -165,7 +165,7 @@ class AddColumnsFlattenSuite extends QueryTest
     checkAnswer(newDfOpt, newDfUnopt)
   }
 
-  test("use of cached InMemoryRelation when new columns added do not result in new project") {
+  test("use of cached InMemoryRelation when new columns added do not result in new project -1") {
     val testDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     testDf.cache()
@@ -175,6 +175,23 @@ class AddColumnsFlattenSuite extends QueryTest
         Seq("newCol1", "newCol2", "newCol3", "newCol4"),
         Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))
       ))
+    val optDfNodes = collectNodes(newDfOpt)
+    val nonOptDfNodes = collectNodes(newDfUnopt)
+    assert(initNodes.size === optDfNodes.size)
+    assert(nonOptDfNodes.size === optDfNodes.size + 1)
+    checkAnswer(newDfOpt, newDfUnopt)
+    assert(newDfOpt.queryExecution.optimizedPlan.collectLeaves().head.
+      isInstanceOf[InMemoryRelation])
+  }
+
+  test("use of cached InMemoryRelation when new columns added do not result in new project -2") {
+    val testDf = spark.range(20).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").
+      select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e")
+    testDf.cache()
+    val initNodes = collectNodes(testDf)
+    val (newDfOpt, newDfUnopt) = getComparableDataFrames(testDf,
+      df => df.withColumns(Seq("newCol1"), Seq(col("c") + 2 + col("a") * col("e"))))
     val optDfNodes = collectNodes(newDfOpt)
     val nonOptDfNodes = collectNodes(newDfUnopt)
     assert(initNodes.size === optDfNodes.size)
