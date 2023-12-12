@@ -706,6 +706,7 @@ object SQLConf {
         s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} is true). It takes effect when Spark " +
         "coalesces small shuffle partitions or splits skewed shuffle partition.")
       .version("3.0.0")
+      .withTag("aqe-coalesce-partitions")
       .fallbackConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   val COALESCE_PARTITIONS_ENABLED =
@@ -714,6 +715,7 @@ object SQLConf {
         "contiguous shuffle partitions according to the target size (specified by " +
         s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), to avoid too many small tasks.")
       .version("3.0.0")
+      .withTag("aqe-coalesce-partitions")
       .booleanConf
       .createWithDefault(true)
 
@@ -727,6 +729,7 @@ object SQLConf {
         "regression when enabling adaptive query execution. It's recommended to set this config " +
         "to false and respect the configured target size.")
       .version("3.2.0")
+      .withTag("aqe-coalesce-partitions")
       .booleanConf
       .createWithDefault(true)
 
@@ -735,6 +738,7 @@ object SQLConf {
       .doc("The minimum size of shuffle partitions after coalescing. This is useful when the " +
         "adaptively calculated target size is too small during partition coalescing.")
       .version("3.2.0")
+      .withTag("aqe-coalesce-partitions")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "minPartitionSize must be positive")
       .createWithDefaultString("1MB")
@@ -759,6 +763,7 @@ object SQLConf {
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and '${COALESCE_PARTITIONS_ENABLED.key}' " +
         "are both true.")
       .version("3.0.0")
+      .withTag("aqe-coalesce-partitions")
       .intConf
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional

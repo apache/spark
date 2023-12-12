@@ -232,49 +232,8 @@ Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that ma
 
 ### Coalescing Post Shuffle Partitions
 This feature coalesces the post shuffle partitions based on the map output statistics when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.coalescePartitions.enabled` configurations are true. This feature simplifies the tuning of shuffle partition number when running queries. You do not need to set a proper shuffle partition number to fit your dataset. Spark can pick the proper shuffle partition number at runtime once you set a large enough initial number of shuffle partitions via `spark.sql.adaptive.coalescePartitions.initialPartitionNum` configuration.
- <table>
-   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-   <tr>
-     <td><code>spark.sql.adaptive.coalescePartitions.enabled</code></td>
-     <td>true</td>
-     <td>
-       When true and <code>spark.sql.adaptive.enabled</code> is true, Spark will coalesce contiguous shuffle partitions according to the target size (specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>), to avoid too many small tasks.
-     </td>
-     <td>3.0.0</td>
-   </tr>
-   <tr>
-     <td><code>spark.sql.adaptive.coalescePartitions.parallelismFirst</code></td>
-     <td>true</td>
-     <td>
-       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regression when enabling adaptive query execution. It's recommended to set this config to false and respect the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
-     </td>
-     <td>3.2.0</td>
-   </tr>
-   <tr>
-     <td><code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code></td>
-     <td>1MB</td>
-     <td>
-       The minimum size of shuffle partitions after coalescing. Its value can be at most 20% of <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>. This is useful when the target size is ignored during partition coalescing, which is the default case.
-     </td>
-     <td>3.2.0</td>
-   </tr>
-   <tr>
-     <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
-     <td>(none)</td>
-     <td>
-       The initial number of shuffle partitions before coalescing. If not set, it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
-     </td>
-     <td>3.0.0</td>
-   </tr>
-   <tr>
-     <td><code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code></td>
-     <td>64 MB</td>
-     <td>
-       The advisory size in bytes of the shuffle partition during adaptive optimization (when <code>spark.sql.adaptive.enabled</code> is true). It takes effect when Spark coalesces small shuffle partitions or splits skewed shuffle partition.
-     </td>
-     <td>3.0.0</td>
-   </tr>
- </table>
+
+{% include_relative generated-sql-config-table-aqe-coalesce-partitions.html %}
 
 ### Spliting skewed shuffle partitions
  <table>
