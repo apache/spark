@@ -118,6 +118,24 @@ class CapturedException(PySparkException):
         else:
             return None
 
+    def getMessage(self) -> str:
+        assert SparkContext._gateway is not None
+        gw = SparkContext._gateway
+
+        if self._origin is not None and is_instance_of(
+            gw, self._origin, "org.apache.spark.SparkThrowable"
+        ):
+            error_class = self._origin.getErrorClass()
+            message_parameters = self._origin.getMessageParameters()
+
+            error_message = gw.jvm.org.apache.spark.SparkThrowableHelper.getMessage(
+                error_class, message_parameters
+            )
+
+            return error_message
+        else:
+            return ""
+
 
 def convert_exception(e: Py4JJavaError) -> CapturedException:
     assert e is not None
