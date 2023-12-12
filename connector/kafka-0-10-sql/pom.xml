@@ -122,11 +122,9 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-minikdc</artifactId>
     </dependency>
-    <!-- Kafka embedded server uses Zookeeper 3.5.7 API -->
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
-      <version>3.5.7</version>
       <scope>test</scope>
     </dependency>
     <dependency>

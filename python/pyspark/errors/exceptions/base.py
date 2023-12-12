@@ -60,6 +60,7 @@ class PySparkException(Exception):
 
         See Also
         --------
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getSqlState`
         """
@@ -74,6 +75,7 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getSqlState`
         """
         return self._message_parameters
@@ -89,13 +91,28 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
         """
         return None
 
+    def getMessage(self) -> str:
+        """
+        Returns full error message.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getSqlState`
+        """
+        return f"[{self.getErrorClass()}] {self._message}"
+
     def __str__(self) -> str:
         if self.getErrorClass() is not None:
-            return f"[{self.getErrorClass()}] {self._message}"
+            return self.getMessage()
         else:
             return self._message
 
@@ -260,7 +277,20 @@ class PySparkPicklingError(PySparkException, PicklingError):
     """
 
 
+class RetriesExceeded(PySparkException):
+    """
+    Represents an exception which is considered retriable, but retry limits
+    were exceeded
+    """
+
+
 class PySparkKeyError(PySparkException, KeyError):
     """
     Wrapper class for KeyError to support error classes.
+    """
+
+
+class PySparkImportError(PySparkException, ImportError):
+    """
+    Wrapper class for ImportError to support error classes.
     """

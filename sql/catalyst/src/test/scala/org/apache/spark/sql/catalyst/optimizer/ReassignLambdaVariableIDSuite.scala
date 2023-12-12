@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
@@ -55,7 +56,10 @@ class ReassignLambdaVariableIDSuite extends PlanTest {
     val var1 = LambdaVariable("a", BooleanType, true, id = -2)
     val var2 = LambdaVariable("b", BooleanType, true, id = 4)
     val query = testRelation.where(var1 && var2)
-    val e = intercept[IllegalStateException](Optimize.execute(query))
-    assert(e.getMessage.contains("should be all positive or negative"))
+    checkError(
+      exception = intercept[SparkException](Optimize.execute(query)),
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "LambdaVariable IDs in a query should be all positive or negative."))
   }
 }

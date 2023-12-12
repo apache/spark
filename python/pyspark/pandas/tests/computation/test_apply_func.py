@@ -40,12 +40,6 @@ class FrameApplyFunctionMixin:
             index=np.random.rand(9),
         )
 
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_apply(self):
         pdf = pd.DataFrame(
             {

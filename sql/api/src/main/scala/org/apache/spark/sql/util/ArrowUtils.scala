@@ -26,6 +26,7 @@ import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -53,7 +54,7 @@ private[sql] object ArrowUtils {
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType if timeZoneId == null =>
-      throw new IllegalStateException("Missing timezoneId where it is mandatory.")
+      throw SparkException.internalError("Missing timezoneId where it is mandatory.")
     case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
     case TimestampNTZType =>
       new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)

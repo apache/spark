@@ -178,7 +178,7 @@ class DataFrame:
     write.__doc__ = PySparkDataFrame.write.__doc__
 
     def isEmpty(self) -> bool:
-        return len(self.take(1)) == 0
+        return len(self.select().take(1)) == 0
 
     isEmpty.__doc__ = PySparkDataFrame.isEmpty.__doc__
 

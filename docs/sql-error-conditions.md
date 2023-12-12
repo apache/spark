@@ -335,6 +335,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 
+### CATALOG_NOT_FOUND
+
+[SQLSTATE: 42P08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The catalog `<catalogName>` not found. Consider to set the SQL config `<config>` to a catalog plugin.
+
 ### CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND
 
 SQLSTATE: 56000
@@ -1929,6 +1935,66 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 [SQLSTATE: 42713](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Static partition column `<staticName>` is also specified in the column list.
+
+### STDS_COMMITTED_BATCH_UNAVAILABLE
+
+SQLSTATE: KD006
+
+No committed batch found, checkpoint location: `<checkpointLocation>`. Ensure that the query has run and committed any microbatch before stopping.
+
+### STDS_CONFLICT_OPTIONS
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The options `<options>` cannot be specified together. Please specify the one.
+
+### STDS_FAILED_TO_READ_STATE_SCHEMA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: `<sourceOptions>`.
+Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists.
+
+### STDS_INTERNAL_ERROR
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Internal error: `<message>`
+Please, report this bug to the corresponding communities or vendors, and provide the full stack trace.
+
+### [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+[SQLSTATE: 42616](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for source option '`<optionName>`':
+
+For more details see [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+### STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE
+
+SQLSTATE: KD006
+
+The state does not have any partition. Please double check that the query points to the valid state. options: `<sourceOptions>`
+
+### STDS_OFFSET_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+The offset log for `<batchId>` does not exist, checkpoint location: `<checkpointLocation>`.
+Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source.
+
+### STDS_OFFSET_METADATA_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`.
+The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata.
+
+### STDS_REQUIRED_OPTION_UNSPECIFIED
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+'`<optionName>`' must be specified.
 
 ### STREAM_FAILED
 

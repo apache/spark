@@ -292,14 +292,6 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.max.executor.failures</code></td>
-  <td>numExecutors * 2, with minimum of 3</td>
-  <td>
-    The maximum number of executor failures before failing the application.
-  </td>
-  <td>1.0.0</td>
-</tr>
-<tr>
   <td><code>spark.yarn.historyServer.address</code></td>
   <td>(none)</td>
   <td>
@@ -498,15 +490,6 @@ To use a custom metrics.properties for the application master and executors, upd
     these HDFS configs from the job's local configuration files. This config is very similar to <code>mapreduce.job.send-token-conf</code>. Please check YARN-5910 for more details.
   </td>
   <td>3.3.0</td>
-</tr>
-<tr>
-  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
-  <td>(none)</td>
-  <td>
-  Defines the validity interval for executor failure tracking.
-  Executor failures which are older than the validity interval will be ignored.
-  </td>
-  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>

@@ -148,6 +148,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(spaces);
   }
 
+  /**
+   * Determines if the specified character (Unicode code point) is white space or an ISO control
+   * character according to Java.
+   */
+  public static boolean isWhitespaceOrISOControl(int codePoint) {
+    return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
+  }
+
   private UTF8String(Object base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
@@ -250,9 +258,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public byte[] getBytes() {
     // avoid copy if `base` is `byte[]`
-    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[]
-      && ((byte[]) base).length == numBytes) {
-      return (byte[]) base;
+    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[] bytes
+      && bytes.length == numBytes) {
+      return bytes;
     } else {
       byte[] bytes = new byte[numBytes];
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
@@ -496,14 +504,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
-  }
-
-  /**
-   * Determines if the specified character (Unicode code point) is white space or an ISO control
-   * character according to Java.
-   */
-  private boolean isWhitespaceOrISOControl(int codePoint) {
-    return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
   }
 
   /**
