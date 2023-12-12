@@ -19,8 +19,8 @@ package org.apache.spark.sql.api.python
 
 import java.io.ByteArrayOutputStream
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{DataFrame, SparkSession}
