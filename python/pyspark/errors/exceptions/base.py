@@ -60,6 +60,7 @@ class PySparkException(Exception):
 
         See Also
         --------
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getSqlState`
         """
@@ -74,6 +75,7 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getSqlState`
         """
         return self._message_parameters
@@ -89,13 +91,28 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
         """
         return None
 
+    def getMessage(self) -> str:
+        """
+        Returns full error message.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getSqlState`
+        """
+        return f"[{self.getErrorClass()}] {self._message}"
+
     def __str__(self) -> str:
         if self.getErrorClass() is not None:
-            return f"[{self.getErrorClass()}] {self._message}"
+            return self.getMessage()
         else:
             return self._message
 
