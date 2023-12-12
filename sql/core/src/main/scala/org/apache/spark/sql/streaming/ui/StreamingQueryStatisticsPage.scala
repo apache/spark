@@ -209,6 +209,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         p.stateOperators.map(_.numRowsUpdated).sum.toDouble))
       val maxNumRowsUpdated = numRowsUpdatedData.maxBy(_._2)._2
 
+      val numRowsRemovedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsRemoved).sum.toDouble))
+      val maxNumRowsRemoved = numRowsRemovedData.maxBy(_._2)._2
+
       val memoryUsedBytesData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         p.stateOperators.map(_.memoryUsedBytes).sum.toDouble))
       val maxMemoryUsedBytes = memoryUsedBytesData.maxBy(_._2)._2
@@ -241,6 +245,18 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           maxNumRowsUpdated,
           "records")
       graphUIDataForNumberUpdatedRows.generateDataJs(jsCollector)
+
+      val graphUIDataForNumberRemovedRows =
+        new GraphUIData(
+          "aggregated-num-removed-state-rows-timeline",
+          "aggregated-num-removed-state-rows-histogram",
+          numRowsRemovedData,
+          minBatchTime,
+          maxBatchTime,
+          0,
+          maxNumRowsRemoved,
+          "records")
+      graphUIDataForNumberRemovedRows.generateDataJs(jsCollector)
 
       val graphUIDataForMemoryUsedBytes =
         new GraphUIData(
@@ -285,6 +301,15 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           </td>
           <td class={"aggregated-num-updated-state-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
           <td class={"aggregated-num-updated-state-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
+      </tr>
+      <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Aggregated Number Of Removed State Rows{SparkUIUtils.tooltip("Aggregated number of state rows removed from the state. Normally it means the number of rows evicted from the state because watermark has passed, except in flatMapGroupWithState, where users can manually remove the state.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class={"aggregated-num-removed-state-rows-timeline"}>{graphUIDataForNumberRemovedRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-removed-state-rows-histogram"}>{graphUIDataForNumberRemovedRows.generateHistogramHtml(jsCollector)}</td>
         </tr>
         <tr>
           <td style="vertical-align: middle;">
