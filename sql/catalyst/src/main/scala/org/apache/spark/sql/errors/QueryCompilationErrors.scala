@@ -3924,4 +3924,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
+
+  def dataSourceTableSchemaMismatchError(
+      tableSchema: StructType, actualSchema: StructType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+      messageParameters = Map(
+        "tableSchema" -> toSQLType(tableSchema),
+        "actualSchema" -> toSQLType(actualSchema)))
+  }
 }

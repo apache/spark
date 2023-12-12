@@ -698,7 +698,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-46043: create table in SQL with path option") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[WritableDataSourceSupportsExternalMetadata]
     withTempDir { dir =>
       val path = s"${dir.getCanonicalPath}/test"
       Seq((0, 1), (1, 2)).toDF("x", "y").write.format("csv").save(path)
@@ -726,83 +726,63 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-46272: create table as select") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[WritableDataSourceSupportsExternalMetadata]
     withTable("test") {
       sql(
         s"""
            |CREATE TABLE test USING ${cls.getName}
-           |AS VALUES (0, 1), (1, 2)
+           |AS VALUES (0, 1), (1, 2) t(i, j)
            |""".stripMargin)
-      checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(1, 2)))
+      checkAnswer(sql("SELECT * FROM test"), Seq((0, 1), (1, 2)).toDF("i", "j"))
       sql(
         s"""
            |CREATE OR REPLACE TABLE test USING ${cls.getName}
-           |AS VALUES (2, 3), (4, 5)
+           |AS VALUES (2, 3), (4, 5) t(i, j)
            |""".stripMargin)
-      checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3), Row(4, 5)))
+      checkAnswer(sql("SELECT * FROM test"), Seq((2, 3), (4, 5)).toDF("i", "j"))
       sql(
         s"""
            |CREATE TABLE IF NOT EXISTS test USING ${cls.getName}
            |AS VALUES (3, 4), (4, 5)
            |""".stripMargin)
-      checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3), Row(4, 5)))
+      checkAnswer(sql("SELECT * FROM test"), Seq((2, 3), (4, 5)).toDF("i", "j"))
     }
   }
 
-  test("SPARK-46272: create table as select - too many columns") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+  test("SPARK-46272: create table as select - schema name mismatch") {
+    val cls = classOf[WritableDataSourceSupportsExternalMetadata]
     withTable("test") {
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1, 2), (1, 2, 3)")
+          sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1), (1, 2)")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`test`",
-          "tableColumns" -> "`i`, `j`",
-          "dataColumns" -> "`col1`, `col2`, `col3`"))
-    }
-  }
-
-  test("SPARK-46272: create table as select - not enough columns") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
-    withTable("test") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(
-            s"""
-               |CREATE TABLE test USING ${cls.getName}
-               |AS VALUES (0), (1)
-               |""".stripMargin)
-        },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`test`",
-          "tableColumns" -> "`i`, `j`",
-          "dataColumns" -> "`col1`"))
+          "tableSchema" -> "\"STRUCT<i: INT, j: INT>\"",
+          "actualSchema" -> "\"STRUCT<col1: INT, col2: INT>\""))
     }
   }
 
   test("SPARK-46272: create table as select - column type mismatch") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[WritableDataSourceSupportsExternalMetadata]
     withTable("test") {
       checkError(
         exception = intercept[AnalysisException] {
           sql(
             s"""
                |CREATE TABLE test USING ${cls.getName}
-               |AS VALUES ('a', 'b'), ('c', 'd')
+               |AS VALUES ('a', 'b'), ('c', 'd') t(i, j)
                |""".stripMargin)
         },
-        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`test`",
-          "colName" -> "`i`", "srcType" -> "\"STRING\"", "targetType" -> "\"INT\""))
+          "tableSchema" -> "\"STRUCT<i: INT, j: INT>\"",
+          "actualSchema" -> "\"STRUCT<i: STRING, j: STRING>\""))
     }
   }
 
   test("SPARK-46272: create or replace table as select with path options") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[CustomSchemaAndPartitioningDataSource]
     withTempDir { dir =>
       val path = s"${dir.getCanonicalPath}/test"
       Seq((0, 1), (1, 2)).toDF("x", "y").write.format("csv").save(path)
@@ -865,7 +845,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-46273: insert into") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[CustomSchemaAndPartitioningDataSource]
     withTable("test") {
       sql(
         s"""
@@ -905,7 +885,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-46273: insert overwrite") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[CustomSchemaAndPartitioningDataSource]
     withTable("test") {
       sql(
         s"""
@@ -927,7 +907,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-46273: insert into with partition") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[CustomSchemaAndPartitioningDataSource]
     withTable("test") {
       sql(s"CREATE TABLE test(x INT, y INT) USING ${cls.getName} PARTITIONED BY (x, y)")
       sql("INSERT INTO test PARTITION(x = 1) VALUES (2)")
@@ -957,7 +937,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-46273: insert overwrite with partition") {
-    val cls = classOf[SupportsExternalMetadataDataSource]
+    val cls = classOf[CustomSchemaAndPartitioningDataSource]
     withTable("test") {
       sql(s"CREATE TABLE test (x INT, y INT) USING ${cls.getName} PARTITIONED BY (x, y)")
       sql("INSERT INTO test PARTITION(x = 1) VALUES (2)")
@@ -1473,9 +1453,18 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
   }
 }
 
-class SupportsExternalMetadataDataSource extends SimpleWritableDataSource {
+/**
+ * A writable data source that supports external metadata with a fixed schema (i int, j int).
+ */
+class WritableDataSourceSupportsExternalMetadata extends SimpleWritableDataSource {
   override def supportsExternalMetadata(): Boolean = true
+}
 
+/**
+ * A writable data source that supports external metadata with
+ * user-specified schema and partitioning.
+ */
+class CustomSchemaAndPartitioningDataSource extends WritableDataSourceSupportsExternalMetadata {
   class TestTable(
       schema: StructType,
       partitioning: Array[Transform],

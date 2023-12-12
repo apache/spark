@@ -492,6 +492,12 @@ Data source '`<provider>`' not found. Please make sure the data source is regist
 
 Failed to find the data source: `<provider>`. Please find packages at `https://spark.apache.org/third-party-projects.html`.
 
+### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
+
+SQLSTATE: none assigned
+
+The schema of the data source table `<tableSchema>` does not match the actual schema `<actualSchema>`. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+
 ### DATETIME_OVERFLOW
 
 [SQLSTATE: 22008](sql-error-conditions-sqlstates.html#class-22-data-exception)
