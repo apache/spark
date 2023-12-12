@@ -787,6 +787,8 @@ private[spark] class TaskSetManager(
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause successful and tasksSuccessful wrong result.
     if(info.finished) {
+      // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable lifetime.
+      info.resetAccumulables()
       return
     }
     val index = info.index
@@ -804,6 +806,8 @@ private[spark] class TaskSetManager(
       // Handle this task as a killed task
       handleFailedTask(tid, TaskState.KILLED,
         TaskKilled("Finish but did not commit due to another attempt succeeded"))
+      // SPARK-46383: Not clearing the accumulables here because they are already cleared in
+      // handleFailedTask.
       return
     }
 
@@ -846,9 +850,47 @@ private[spark] class TaskSetManager(
     // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
-    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates,
-      result.metricPeaks, info)
+
+    emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), Success, result.value(),
+      result.accumUpdates, result.metricPeaks, info)
     maybeFinishTaskSet()
+  }
+
+  /**
+   * A wrapper around [[DAGScheduler.taskEnded()]] that empties out the accumulables for the
+   * TaskInfo object, corresponding to the completed task, referenced by this class.
+   *
+   * SPARK-46383: For the completed task, we ship the original TaskInfo to the DAGScheduler and only
+   * retain a cloned TaskInfo in this class. We then set the accumulables to Nil for the TaskInfo
+   * object that corresponds to the completed task.
+   * We do this to release references to `TaskInfo.accumulables()` as the TaskInfo
+   * objects held by this class are long-lived and have a heavy memory footprint on the driver.
+   *
+   * This is safe as the TaskInfo accumulables are not needed once they are shipped to the
+   * DAGScheduler where they are aggregated. Additionally, the original TaskInfo, and not a
+   * clone, must be sent to the DAGScheduler as this TaskInfo object is sent to the
+   * DAGScheduler on multiple events during the task's lifetime. Users can install
+   * SparkListeners that compare the TaskInfo objects across these SparkListener events and
+   * thus the TaskInfo object sent to the DAGScheduler must always reference the same TaskInfo
+   * object.
+   */
+  private def emptyTaskInfoAccumulablesAndNotifyDagScheduler(
+      taskId: Long,
+      task: Task[_],
+      reason: TaskEndReason,
+      result: Any,
+      accumUpdates: Seq[AccumulatorV2[_, _]],
+      metricPeaks: Array[Long],
+      taskInfo: TaskInfo): Unit = {
+    val index = taskInfo.index
+    if (conf.get(DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION)) {
+      val clonedTaskInfo = taskInfo.cloneWithEmptyAccumulables()
+      // Update this task's taskInfo while preserving its position in the list
+      taskAttempts(index) =
+        taskAttempts(index).map { i => if (i eq taskInfo) clonedTaskInfo else i }
+      taskInfos(taskId) = clonedTaskInfo
+    }
+    sched.dagScheduler.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
   }
 
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
@@ -874,6 +916,8 @@ private[spark] class TaskSetManager(
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause copiesRunning wrong result.
     if (info.finished) {
+      // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable lifetime.
+      info.resetAccumulables()
       return
     }
     removeRunningTask(tid)
@@ -908,7 +952,8 @@ private[spark] class TaskSetManager(
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
           logError(s"$task had a not serializable result: ${ef.description}; not retrying")
-          sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
+          emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
+            accumUpdates, metricPeaks, info)
           abort(s"$task had a not serializable result: ${ef.description}")
           return
         }
@@ -917,7 +962,8 @@ private[spark] class TaskSetManager(
           // re-execute it.
           logError("Task %s in stage %s (TID %d) can not write to output file: %s; not retrying"
             .format(info.id, taskSet.id, tid, ef.description))
-          sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
+          emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
+            accumUpdates, metricPeaks, info)
           abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
             info.id, taskSet.id, tid, ef.description))
           return
@@ -970,7 +1016,8 @@ private[spark] class TaskSetManager(
       isZombie = true
     }
 
-    sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
+    emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
+      accumUpdates, metricPeaks, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
@@ -1086,7 +1133,7 @@ private[spark] class TaskSetManager(
           addPendingTask(index)
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
-          sched.dagScheduler.taskEnded(
+          emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid,
             tasks(index), Resubmitted, null, Seq.empty, Array.empty, info)
         }
       }

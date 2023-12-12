@@ -61,6 +61,11 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       accumUpdates: Seq[AccumulatorV2[_, _]],
       metricPeaks: Array[Long],
       taskInfo: TaskInfo): Unit = {
+    accumUpdates.foreach(acc =>
+      taskInfo.setAccumulables(
+        acc.toInfo(Some(acc.value), Some(acc.value)) +: taskInfo.accumulables)
+    )
+    taskScheduler.endedTasks(taskInfo.index) = reason
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
@@ -227,6 +232,74 @@ class TaskSetManagerSuite
       sched = null
     }
     super.afterEach()
+  }
+
+  test("SPARK-46383: Accumulables of TaskInfo objects held by TaskSetManager must not be " +
+    "accessed once the task has completed") { conf =>
+    sc = new SparkContext("local", "test", conf)
+    sched = FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdates = taskSet.tasks.head.metrics.internalAccums
+
+    // Offer a host. This will launch the first task.
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+    assert(taskOption.isDefined)
+
+    clock.advance(1)
+    // Tell it the first task has finished successfully
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
+    assert(sched.endedTasks(0) === Success)
+
+    val e = intercept[IllegalStateException]{
+      manager.taskInfos.head._2.accumulables
+    }
+    assert(e.getMessage.contains("Accumulables for the TaskInfo have been cleared"))
+  }
+
+  test("SPARK-46383: TaskInfo accumulables are cleared upon task completion") { conf =>
+    sc = new SparkContext("local", "test", conf)
+    sched = FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(2)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdates = taskSet.tasks.head.metrics.internalAccums
+
+    // Offer a host. This will launch the first task.
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+    assert(taskOption.isDefined)
+
+    clock.advance(1)
+    // Tell it the first task has finished successfully
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
+    assert(sched.endedTasks(0) === Success)
+
+    // Only one task was launched and it completed successfully, thus the TaskInfo accumulables
+    // should be empty.
+    assert(!manager.taskInfos.exists(l => !l._2.isAccumulablesEmpty))
+    assert(manager.taskAttempts.flatMap(l => l.filter(!_.isAccumulablesEmpty)).isEmpty)
+
+    // Fail the second task (MAX_TASK_FAILURES - 1) times.
+    (1 to manager.maxTaskFailures - 1).foreach { index =>
+      val offerResult = manager.resourceOffer("exec1", "host1", ANY)._1
+      assert(offerResult.isDefined,
+        "Expect resource offer on iteration %s to return a task".format(index))
+      assert(offerResult.get.index === 1)
+      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+      assert(!sched.taskSetsFailed.contains(FakeTaskFailure(taskSet.id)))
+    }
+
+    clock.advance(1)
+    // Successfully finish the second task.
+    val taskOption1 = manager.resourceOffer("exec1", "host1", ANY)._1
+    manager.handleSuccessfulTask(taskOption1.get.taskId, createTaskResult(1, accumUpdates))
+    assert(sched.endedTasks(1) === Success)
+    // The TaskInfo accumulables should be empty as the second task has now completed successfully.
+    assert(!manager.taskInfos.exists(l => !l._2.isAccumulablesEmpty))
+    assert(manager.taskAttempts.flatMap(l => l.filter(!_.isAccumulablesEmpty)).isEmpty)
+
+    assert(sched.finishedManagers.contains(manager))
   }
 
   test("TaskSet with no preferences") {

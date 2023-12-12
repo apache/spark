@@ -2620,4 +2620,14 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
+
+  private[spark] val DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION =
+    ConfigBuilder("spark.scheduler.dropTaskInfoAccumulablesOnTaskCompletion.enabled")
+    .internal()
+    .doc("If true, the task info accumulables will be cleared upon task completion in " +
+      "TaskSetManager. This reduces the heap usage of the driver by only referencing the " +
+      "task info accumulables for the active tasks and not for completed tasks.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 }

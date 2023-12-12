@@ -45,7 +45,7 @@ class TaskInfo(
     val executorId: String,
     val host: String,
     val taskLocality: TaskLocality.TaskLocality,
-    val speculative: Boolean) {
+    val speculative: Boolean) extends Cloneable {
 
   /**
    * This api doesn't contains partitionId, please use the new api.
@@ -75,12 +75,45 @@ class TaskInfo(
    * accumulable to be updated multiple times in a single task or for two accumulables with the
    * same name but different IDs to exist in a task.
    */
-  def accumulables: Seq[AccumulableInfo] = _accumulables
+  def accumulables: Seq[AccumulableInfo] = {
+    if (throwOnAccumulablesCall) {
+      throw new IllegalStateException("Accumulables for the TaskInfo have been cleared")
+    } else {
+      _accumulables
+    }
+  }
 
   private[this] var _accumulables: Seq[AccumulableInfo] = Nil
 
   private[spark] def setAccumulables(newAccumulables: Seq[AccumulableInfo]): Unit = {
     _accumulables = newAccumulables
+  }
+
+  /**
+   * If true, a call to TaskInfo.accumulables() will throw an exception.
+   */
+  private var throwOnAccumulablesCall: Boolean = false
+
+  override def clone(): TaskInfo = super.clone().asInstanceOf[TaskInfo]
+
+  /**
+   * For testing only. Allows probing accumulables without triggering the exception when
+   * `throwOnAccumulablesCall` is set.
+   */
+  private[scheduler] def isAccumulablesEmpty(): Boolean = {
+    _accumulables.isEmpty
+  }
+
+  private[scheduler] def resetAccumulables(): Unit = {
+    setAccumulables(Nil)
+    throwOnAccumulablesCall = true
+  }
+
+  private[scheduler] def cloneWithEmptyAccumulables(): TaskInfo = {
+    val cloned = clone()
+    cloned.setAccumulables(Nil)
+    cloned.throwOnAccumulablesCall = true
+    cloned
   }
 
   /**
