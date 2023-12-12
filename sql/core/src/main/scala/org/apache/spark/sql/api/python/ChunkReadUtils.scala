@@ -31,20 +31,22 @@ import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 
 object ChunkReadUtils {
 
-  def persistDataFrameAsArrowBatchChunks(dataFrame: DataFrame): Array[String] = {
+  def persistDataFrameAsArrowBatchChunks(
+      dataFrame: DataFrame, maxRecordsPerBatch: Int
+  ): Array[(String, Long, Long)] = {
     val sparkSession = SparkSession.getActiveSession.get
-    val rdd = dataFrame.toArrowBatchRdd
+    val rdd = dataFrame.toArrowBatchRddWithBatchRowCount(maxRecordsPerBatch)
     val schemaJson = dataFrame.schema.json
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
-    rdd.mapPartitions { iter: Iterator[Array[Byte]] =>
+    val chunkInfoList = rdd.mapPartitions { iter: Iterator[(Array[Byte], Long)] =>
       val blockManager = SparkEnv.get.blockManager
       val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
-      val chunkIds = new ArrayBuffer[String]()
+      val chunkInfoList = new ArrayBuffer[(String, Long, Long)]()
 
       try {
-        for (arrowBatch <- iter) {
+        for ((arrowBatch, rowCount) <- iter) {
           val uuid = java.util.UUID.randomUUID()
           val blockId = ArrowBatchBlockId(uuid)
 
@@ -61,16 +63,24 @@ object ChunkReadUtils {
           blockManager.putSingle[Array[Byte]](
             blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true
           )
-          chunkIds.append(blockId.toString)
+          chunkInfoList.append(
+            (blockId.toString, rowCount, blockData.length)
+          )
         }
       } catch {
         case e: Exception =>
           // Clean cached chunks
-          unpersistChunks(chunkIds.asJava)
+          for ((chunkId, _, _) <- chunkInfoList) {
+            try {
+              blockManager.master.removeBlock(BlockId(chunkId))
+            } catch {
+              case _: Exception => ()
+            }
+          }
           throw e
       }
 
-      chunkIds.iterator
+      chunkInfoList.iterator
     }.collect()
   }
 
