@@ -77,8 +77,6 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
-    envVars.put("ARROW_MAX_RECORDS_PER_BATCH", SQLConf.get.arrowMaxRecordsPerBatch.toString)
-
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,
       /* valueCompare = */ false)

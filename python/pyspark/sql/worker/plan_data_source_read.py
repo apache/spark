@@ -33,7 +33,6 @@ from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalData
 from pyspark.sql.datasource import DataSource, InputPartition
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
-    _create_row,
     _parse_datatype_json_string,
     BinaryType,
     StructType,
@@ -103,15 +102,10 @@ def main(infile: IO, outfile: IO) -> None:
                     "actual": f"'{type(input_schema).__name__}'",
                 },
             )
-        # Check the child schema must contain only one column with binary type.
-        if len(input_schema) != 1 or not isinstance(input_schema[0].dataType, BinaryType):
-            raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
-                    "expected": "an input schema with only one column of type 'BinaryType'",
-                    "actual": f"'{input_schema}'",
-                },
-            )
+        assert len(input_schema) == 1 and isinstance(input_schema[0].dataType, BinaryType), (
+            "The input schema of Python data source read should contain only one column of type "
+            f"'BinaryType', but got '{input_schema}'"
+        )
 
         # Receive the data source output schema.
         schema_json = utf8_deserializer.loads(infile)
@@ -124,6 +118,13 @@ def main(infile: IO, outfile: IO) -> None:
                     "actual": f"'{type(schema).__name__}'",
                 },
             )
+
+        # Receive the configuration values.
+        max_arrow_batch_size = read_int(infile)
+        assert max_arrow_batch_size > 0, (
+            "The maximum arrow batch size should be greater than 0, but got "
+            f"'{max_arrow_batch_size}'"
+        )
 
         # Instantiate data source reader.
         try:
@@ -179,7 +180,6 @@ def main(infile: IO, outfile: IO) -> None:
         import pyarrow as pa
 
         # Create input converter.
-        input_fields = [input_schema.fields[0].name]
         converter = ArrowTableToRowsConversion._create_converter(BinaryType())
 
         # Create output converter.
@@ -192,34 +192,29 @@ def main(infile: IO, outfile: IO) -> None:
         ]
 
         def data_source_read_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
-            rows = []
+            partition_bytes = None
 
             # Get the partition value from the input iterator.
             for batch in iterator:
                 # There should be only one row/column in the batch.
-                if batch.num_columns != 1 or batch.num_rows != 1:
-                    raise PySparkAssertionError(
-                        "Expected each batch to have exactly 1 column and 1 row, "
-                        f"but found {batch.num_columns} columns and {batch.num_rows} rows."
-                    )
+                assert batch.num_columns == 1 and batch.num_rows == 1, (
+                    "Expected each batch to have exactly 1 column and 1 row, "
+                    f"but found {batch.num_columns} columns and {batch.num_rows} rows."
+                )
                 columns = [column.to_pylist() for column in batch.columns]
-                values = [converter(columns[0][0])]
-                rows.append(_create_row(fields=input_fields, values=values))
+                partition_bytes = converter(columns[0][0])
 
-            assert len(rows) == 1 and len(rows[0]) == 1
+            assert (
+                partition_bytes is not None
+            ), "The input iterator for Python data source read function is empty."
 
             # Deserialize the partition value.
-            partition_bytes = rows[0][0]
             partition = pickleSer.loads(partition_bytes)
 
-            if partition is not None and not isinstance(partition, InputPartition):
-                raise PySparkAssertionError(
-                    error_class="PYTHON_DATA_SOURCE_READ_ERROR",
-                    message_parameters={
-                        "expected": "a partition of type 'InputPartition'",
-                        "actual": f"'{type(partition).__name__}'",
-                    },
-                )
+            assert partition is None or isinstance(partition, InputPartition), (
+                "Expected the partition value to be of type 'InputPartition', "
+                f"but found '{type(partition).__name__}'."
+            )
 
             output_iter = reader.read(partition)  # type: ignore[arg-type]
 
@@ -237,11 +232,9 @@ def main(infile: IO, outfile: IO) -> None:
             def batched(iterator: Iterator, n: int) -> Iterator:
                 return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
 
-            max_batch_size = int(os.environ.get("ARROW_MAX_RECORDS_PER_BATCH", "10000"))
-
             # Convert the results from the `reader.read` method to an iterator of arrow batches.
             num_cols = len(column_names)
-            for batch in batched(output_iter, max_batch_size):
+            for batch in batched(output_iter, max_arrow_batch_size):
                 pylist: List[List] = [[] for _ in range(num_cols)]
                 for result in batch:
                     # Validate the output row schema.
