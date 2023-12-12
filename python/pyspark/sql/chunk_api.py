@@ -29,6 +29,8 @@ from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int) -> list[tuple[str, int, int]]:
     """
     Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
+    It tries to persist data to spark worker memory firstly, if memory is not sufficient,
+    then it fallbacks to persist spilled data to spark worker local disk.
     Return the list of tuple (chunk_id, chunk_row_count, chunk_byte_count).
     This function is only available when it is called from spark driver process.
     """
