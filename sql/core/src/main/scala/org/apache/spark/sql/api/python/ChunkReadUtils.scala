@@ -19,6 +19,7 @@ package org.apache.spark.sql.api.python
 
 import java.io.ByteArrayOutputStream
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
@@ -65,7 +66,7 @@ object ChunkReadUtils {
       } catch {
         case e: Exception =>
           // Clean cached chunks
-          unpersistChunks(chunkIds.toArray)
+          unpersistChunks(chunkIds.asJava)
           throw e
       }
 
@@ -73,9 +74,9 @@ object ChunkReadUtils {
     }.collect()
   }
 
-  def unpersistChunks(chunkIds: Array[String]): Unit = {
+  def unpersistChunks(chunkIds: java.util.List[String]): Unit = {
     val blockManager = SparkEnv.get.blockManager
-    for (chunkId <- chunkIds) {
+    for (chunkId <- chunkIds.asScala) {
       try {
         blockManager.removeBlock(BlockId(chunkId))
       } catch {
