@@ -207,8 +207,8 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
         assert(exception.getErrorClass != null)
         assert(exception.getMessageParameters().get("id") == query.id.toString)
         assert(exception.getMessageParameters().get("runId") == query.runId.toString)
-        assert(exception.getMessageParameters().get("startOffset") != null)
-        assert(exception.getMessageParameters().get("endOffset") != null)
+        assert(!exception.getMessageParameters().get("startOffset").isEmpty)
+        assert(!exception.getMessageParameters().get("endOffset").isEmpty)
         assert(exception.getCause.isInstanceOf[SparkException])
         assert(exception.getCause.getCause.isInstanceOf[SparkException])
         assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
@@ -222,7 +222,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
     }
   }
 
-  test("throw exception in streaming, manager") {
+  test("throw exception in streaming, check with StreamingQueryManager") {
     // Disable spark.sql.pyspark.jvmStacktrace.enabled to avoid hitting the
     // netty header limit.
     withSQLConf("spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
@@ -253,8 +253,8 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       assert(exception.getErrorClass != null)
       assert(exception.getMessageParameters().get("id") == query.id.toString)
       assert(exception.getMessageParameters().get("runId") == query.runId.toString)
-      assert(exception.getMessageParameters().get("startOffset") != null)
-      assert(exception.getMessageParameters().get("endOffset") != null)
+      assert(!exception.getMessageParameters().get("startOffset").isEmpty)
+      assert(!exception.getMessageParameters().get("endOffset").isEmpty)
       assert(exception.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
