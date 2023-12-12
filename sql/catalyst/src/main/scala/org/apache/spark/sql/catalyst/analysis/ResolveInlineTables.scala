@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper}
+import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
@@ -33,12 +34,14 @@ import org.apache.spark.sql.types.{StructField, StructType}
  */
 object ResolveInlineTables extends Rule[LogicalPlan]
   with CastSupport with AliasHelper with EvalHelper {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    AlwaysProcess.fn, ruleId) {
-    case table: UnresolvedInlineTable if table.expressionsResolved =>
-      validateInputDimension(table)
-      validateInputEvaluable(table)
-      convert(table)
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsDown(p => ComputeCurrentTime(p)).resolveOperatorsWithPruning(
+      AlwaysProcess.fn, ruleId) {
+      case table: UnresolvedInlineTable if table.expressionsResolved =>
+        validateInputDimension(table)
+        validateInputEvaluable(table)
+        convert(table)
+    }
   }
 
   /**
