@@ -328,8 +328,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 val canonicalizedCdProj = cdPlanProject.canonicalized.asInstanceOf[Project]
                 // matchIndexInCdPlanProj remains  -1 in the end, itindicates it is
                 // new cols created out of existing output attribs
-                val (equivMapping, inComingProjNoDirectMapping) = canonicalizedInProj.projectList.
-                  zipWithIndex.map {
+                val (incomingToCachedPlanIndxMapping, inComingProjNoDirectMapping) =
+                    canonicalizedInProj.projectList.zipWithIndex.map {
                   case (inComingNE, index) =>
                     // first check for equivalent named expressions..if index is != -1, that means
                     // it is pass thru Alias or pass thru - Attribute
@@ -346,16 +346,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                             _.children.headOption.exists(_ == childExpr))
                       }
                     }
-
                     index -> matchIndexInCdPlanProj
-
                 }.partition(_._2 != -1)
 
                 // If expressions of inComingProjNoDirectMapping can be expressed in terms of the
                 // incoming attribute refs or incoming alias exprs,  which can be mapped directly
                 // to the CachedPlan's output, we are good. so lets transform such indirectly
                 // mappable named expressions in terms of mappable attributes of the incoming plan
-                val directlyMappedIncomingProjs = equivMapping.map {
+                val directlyMappedIncomingProjs = incomingToCachedPlanIndxMapping.map {
                   case(incmngIndex, _) => incomingProject.projectList(incmngIndex)
                 }
                 val transformedIndirectlyMappableExpr = inComingProjNoDirectMapping.map {
@@ -369,7 +367,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     incomngIndex -> modifiedNe
                 }.toMap
 
-                val cdAttribToInAttrib = equivMapping.map {
+                val cdAttribToInAttrib = incomingToCachedPlanIndxMapping.map {
                   case (inAttribIndex, cdAttribIndex) =>
                     cdPlanProject.projectList(cdAttribIndex).toAttribute ->
                       incomingProject.projectList(inAttribIndex).toAttribute
@@ -378,7 +376,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
                   val projectionToForceOnCdPlan = cachedPlan.output.map(cdAttribToInAttrib)
                   val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
-                    case (ne, indx) => if (equivMapping.exists(_._1 == indx)) {
+                    case (ne, indx) => if (incomingToCachedPlanIndxMapping.exists(_._1 == indx)) {
                       ne.toAttribute
                     } else {
                       transformedIndirectlyMappableExpr(indx).transformUp {

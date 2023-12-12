@@ -20,7 +20,7 @@ package org.apache.spark.sql.internal
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 
@@ -37,12 +37,13 @@ private[sql] object EasilyFlattenable {
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition {
-          case _: AttributeReference => true
+          case _: Attribute => true
           case _ => false
         }
         val currentOutputAttribs = AttributeSet(p.output)
-        val passThruAttribsContainedInCurrentOutput = passThruAttribs.forall(
-          currentOutputAttribs.contains)
+        val passThruAttribsContainedInCurrentOutput = passThruAttribs.forall( attribute =>
+          currentOutputAttribs.contains(attribute) ||
+            currentOutputAttribs.exists(_.name == attribute.name))
         val opType = identifyOp(passThruAttribs, currentOutputAttribs, tinkeredOrNewNamedExprs,
           passThruAttribsContainedInCurrentOutput)
 
@@ -75,6 +76,12 @@ private[sql] object EasilyFlattenable {
                 newProjList.map {
                   case attr: AttributeReference => projList.find(
                     _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+
+                  case ua: UnresolvedAttribute =>
+                    projList.find(_.toAttribute.name.equalsIgnoreCase(ua.name)).
+                      getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
+                    s"  unresolved attribute $ua"))
+
                   case anyOtherExpr =>
                     (anyOtherExpr transformUp {
                       case attr: AttributeReference => attribsRemappedInProj.get(attr.name).orElse(
