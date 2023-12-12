@@ -1483,26 +1483,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     comparePlans(actual2, expected2)
   }
 
-  test("Execute Immediate plan transformation") {
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-        "res", "1", Literal(1), overrideIfExists = true)
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      "res2", "1", Literal(1), overrideIfExists = true)
-    val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
-    val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual1, expected1)
-    val actual2 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 42 WHERE :first = 1' USING 2 as first").analyze
-    val expected2 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual2, expected2)
-    // Test that plan is transformed to SET operation
-    val actual3 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
-    val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
-    comparePlans(actual3, expected3)
-
-  }
-
   test("SPARK-44066: bind positional parameters to literals") {
     CTERelationDef.curId.set(0)
     val actual1 = PosParameterizedQuery(
