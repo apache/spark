@@ -25,6 +25,7 @@ import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -56,8 +57,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
-import scala.annotation.tailrec
 
 class StaxXmlParser(
     schema: StructType,
@@ -217,16 +216,16 @@ class StaxXmlParser(
         parser.next
         parser.peek match {
           case _: EndElement =>
-            // TODO: optimize it
-            // TODO: array of value tag
-            if (!isEmptyString(c)) {
-              val indexOpt = getFieldNameToIndex(st).get(options.valueTag)
-              indexOpt.map { index =>
-                // TODO: optimize it
+            // It couldn't be an array of value tags
+            // as the opening tag is immediately followed by a closing tag.
+            if (isEmptyString(c)) {
+              return null
+            }
+            val indexOpt = getFieldNameToIndex(st).get(options.valueTag)
+            indexOpt match {
+              case Some(index) =>
                 convertTo(c.getData, st.fields(index).dataType)
-              }.orNull
-            } else {
-              null
+              case None => null
             }
           case _ =>
             val row = convertObject(parser, st)
@@ -238,7 +237,6 @@ class StaxXmlParser(
         }
       case (_: Characters, _: StringType) =>
         convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
-      // TODO: can we remove it?
       case (c: Characters, _: DataType) if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
@@ -281,7 +279,7 @@ class StaxXmlParser(
         case c: Characters if !isEmptyString(c) =>
           // Create a value tag field for it
           kvPairs +=
-          // TODO: potential mismatch?
+          // TODO: We don't support an array value tags in map yet.
           (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)
@@ -626,16 +624,16 @@ class StaxXmlParser(
     schema.getFieldIndex(name) match {
       case Some(index) =>
         schema(index).dataType match {
-          case arr @ ArrayType(elementType, _) =>
+          case ArrayType(elementType, _) =>
             val value = convertTo(string, elementType)
             val result = if (row(index) == null) {
               ArrayBuffer(value)
             } else {
-              // TODO(shujing): optimization?
+              val genericArrayData = row(index).asInstanceOf[GenericArrayData]
               if (addToTail) {
-                row(index).asInstanceOf[GenericArrayData].toArray(elementType) :+ value
+                genericArrayData.toArray(elementType) :+ value
               } else {
-                value +: row(index).asInstanceOf[GenericArrayData].toArray(elementType)
+                value +: genericArrayData.toArray(elementType)
               }
             }
             row(index) = new GenericArrayData(result)
@@ -644,7 +642,6 @@ class StaxXmlParser(
         }
       case None => // do nothing
     }
-    // TODO(shujing): optimization?
     InternalRow.fromSeq(row.toIndexedSeq)
   }
 }
