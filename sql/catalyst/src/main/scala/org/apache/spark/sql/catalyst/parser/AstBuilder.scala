@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.jdk.CollectionConverters._
-import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -165,56 +164,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     // Apply CTEs
     query.optionalMap(ctx.ctes)(withCTE)
-  }
-
-  override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
-    // Because of how parsing rules are written, we know that either
-    // queryParam or targetVariable is non null - hence use Either to represent this.
-    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(string(visitStringLit(sl))))
-    val queryVariable = Option(ctx.queryParam.multipartIdentifier)
-      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
-
-    val targetVars = Option(ctx.targetVariable)
-      .map(v => visitMultipartIdentifierList(v))
-    val exprs = Option(ctx.executeImmediateUsing)
-      .map(ctx => visitExecuteImmediateUsing(ctx)).getOrElse(Seq.empty)
-
-    ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
-  }
-
-  override def visitExecuteImmediateUsing(ctx: ExecuteImmediateUsingContext): Seq[Expression] = {
-    val exprs = visitExecuteImmediateArgumentSeq(ctx.params)
-    validateExecImmediateArguments(exprs, ctx.params)
-    exprs
-  }
-
-  private def validateExecImmediateArguments(
-    expressions: Seq[Expression],
-    ctx : ExecuteImmediateArgumentSeqContext) : Unit = {
-    val duplicateAliases = expressions
-      .filter(_.isInstanceOf[Alias])
-      .groupBy {
-        case Alias(arg, name) => name
-      }.filter(group => group._2.size > 1)
-
-    if (duplicateAliases.nonEmpty) {
-      throw QueryParsingErrors.duplicateArgumentNamesError(duplicateAliases.keys.toSeq, ctx)
-    }
-  }
-
-  override def visitExecuteImmediateArgumentSeq
-    (ctx: ExecuteImmediateArgumentSeqContext) : Seq[Expression] = {
-    Option(ctx).toSeq
-      .flatMap(c => c.executeImmediateArgument.asScala).map { c =>
-        val reference : Option[Expression] = Option(c.multipartIdentifier)
-          .map(r => UnresolvedAttribute(visitMultipartIdentifier(r)))
-        val literal : Option[Expression] = Option(c.constant)
-          .map(typedVisit[Literal])
-        val arg = reference.getOrElse(literal.get)
-        Option(c.name)
-          .map(n => Alias(arg, n.getText)())
-          .getOrElse(arg);
-      }
   }
 
   override def visitDmlStatement(ctx: DmlStatementContext): AnyRef = withOrigin(ctx) {

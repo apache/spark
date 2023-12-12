@@ -40,6 +40,53 @@ struct<>
 
 
 -- !query
+EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true'
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp'
+-- !query schema
+struct<id:int,name:string>
+-- !query output
+10	name1
+20	name2
+30	name3
+40	name4
+50	name5
+60	name6
+70	name7
+
+
+-- !query
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'tbl_view_tmp' as tblName
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int                 	                    
+name                	string
+
+
+-- !query
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'x' as tblName
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+id                  	int
+
+
+-- !query
 EXECUTE IMMEDIATE sql_string
 -- !query schema
 struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>

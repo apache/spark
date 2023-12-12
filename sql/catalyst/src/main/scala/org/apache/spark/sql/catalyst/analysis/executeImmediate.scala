@@ -22,7 +22,7 @@ import scala.util.{Either, Left, Right}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.{ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -41,9 +41,10 @@ import org.apache.spark.sql.types.StringType
  *   variables to store the result of the query
  */
 case class ExecuteImmediateQuery(
-    args: Seq[Expression],
-    query: Either[String, UnresolvedAttribute],
-    targetVariables: Option[Seq[UnresolvedAttribute]])
+  args: Seq[Expression],
+  query: Either[String, UnresolvedAttribute],
+  targetVariables: Option[Seq[UnresolvedAttribute]],
+  parser: ParserInterface)
     extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
@@ -106,9 +107,9 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case ExecuteImmediateQuery(expressions, query, targetVariablesOpt) =>
+      case ExecuteImmediateQuery(expressions, query, targetVariablesOpt, parser) =>
         val queryString = extractQueryString(query)
-        val plan = parseStatement(queryString, targetVariablesOpt)
+        val plan = parseStatement(parser, queryString, targetVariablesOpt)
 
         val posNodes = plan.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })
@@ -152,19 +153,20 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     }
 
   private def parseStatement(
+    parser: ParserInterface,
     queryString: String,
     targetVariables: Option[Seq[Expression]]): LogicalPlan = {
     // If targetVariables is defined, statement needs to be a query.
     // Otherwise, it can be anything.
     targetVariables.map { expressions =>
       try {
-        CatalystSqlParser.parseQuery(queryString)
+        parser.parseQuery(queryString)
       } catch {
         case e: ParseException =>
           // Since we do not have a way of telling that parseQuery failed because of
           // actual parsing error or because statement was passed where query was expected,
           // we need to make sure that parsePlan wouldn't throw
-          CatalystSqlParser.parsePlan(queryString)
+          parser.parsePlan(queryString)
 
           // Plan was sucessfully parsed, but query wasn't - throw.
           throw new AnalysisException(
@@ -173,7 +175,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
             cause = Some(e))
       }
 
-    }.getOrElse { CatalystSqlParser.parsePlan(queryString) }
+    }.getOrElse { parser.parsePlan(queryString) }
   }
 
   private def getVariableReference(nameParts: Seq[String]): VariableReference = {

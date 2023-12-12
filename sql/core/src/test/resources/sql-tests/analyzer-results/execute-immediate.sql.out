@@ -46,6 +46,53 @@ SetVariable [variablereference(system.session.sql_string=CAST(NULL AS STRING))]
 
 
 -- !query
+EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true'
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
+-- !query analysis
+CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, true
+   +- Project [id#x, name#x]
+      +- SubqueryAlias tbl_view
+         +- View (`tbl_view`, [id#x,name#x,data#x])
+            +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+               +- Project [id#x, name#x, data#x]
+                  +- SubqueryAlias tbl_view
+                     +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp'
+-- !query analysis
+Project [id#x, name#x]
++- SubqueryAlias tbl_view_tmp
+   +- View (`tbl_view_tmp`, [id#x,name#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
+         +- Project [id#x, name#x]
+            +- SubqueryAlias tbl_view
+               +- View (`tbl_view`, [id#x,name#x,data#x])
+                  +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                     +- Project [id#x, name#x, data#x]
+                        +- SubqueryAlias tbl_view
+                           +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'tbl_view_tmp' as tblName
+-- !query analysis
+DescribeTableCommand `tbl_view_tmp`, false, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'x' as tblName
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`x`, false, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
 EXECUTE IMMEDIATE sql_string
 -- !query analysis
 Project [id#x, name#x, data#x]

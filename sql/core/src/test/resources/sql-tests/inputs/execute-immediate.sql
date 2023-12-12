@@ -14,6 +14,13 @@ CREATE TABLE x (id INT) USING csv;
 DECLARE sql_string STRING;
 SET VAR sql_string = 'SELECT * from tbl_view where name = \'name1\'';
 
+-- test commands
+EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true';
+EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName;
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp';
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'tbl_view_tmp' as tblName;
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'x' as tblName;
+
 -- test execute immediate without parameters
 EXECUTE IMMEDIATE sql_string;
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = \'name1\'';
