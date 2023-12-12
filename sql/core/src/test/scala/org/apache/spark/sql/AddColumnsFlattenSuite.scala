@@ -54,7 +54,7 @@ class AddColumnsFlattenSuite extends QueryTest
     checkAnswer(newDfOpt, newDfUnopt)
   }
 
-  test("withColumns: new project addition if redefined alias is used in new columns") {
+  test("withColumns: no new project addition if redefined alias is used in new columns - 1") {
     val testDf = spark.range(10).select($"id" as "a", $"id" as "b").select($"a" + 1 as "a",
       $"b")
     val initNodes = collectNodes(testDf)
@@ -62,8 +62,22 @@ class AddColumnsFlattenSuite extends QueryTest
       df => df.withColumns(Seq("newCol1"), Seq(col("a") + 2)))
     val optDfNodes = collectNodes(newDfOpt)
     val nonOptDfNodes = collectNodes(newDfUnopt)
-    assert(initNodes.size + 1 === optDfNodes.size)
-    assert(nonOptDfNodes.size === optDfNodes.size)
+    assert(initNodes.size  === optDfNodes.size)
+    assert(nonOptDfNodes.size === optDfNodes.size + 1)
+    checkAnswer(newDfOpt, newDfUnopt)
+  }
+
+  test("withColumns: no new project addition if redefined alias is used in new columns - 2") {
+    val testDf = spark.range(20).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").
+      select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e")
+    val initNodes = collectNodes(testDf)
+    val (newDfOpt, newDfUnopt) = getComparableDataFrames(testDf,
+      df => df.withColumns(Seq("newCol1"), Seq(col("c") + 2 + col("a") * col("e"))))
+    val optDfNodes = collectNodes(newDfOpt)
+    val nonOptDfNodes = collectNodes(newDfUnopt)
+    assert(initNodes.size === optDfNodes.size)
+    assert(nonOptDfNodes.size === optDfNodes.size + 1)
     checkAnswer(newDfOpt, newDfUnopt)
   }
 
