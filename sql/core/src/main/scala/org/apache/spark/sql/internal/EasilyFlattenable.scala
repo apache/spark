@@ -22,6 +22,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.util.Utils
 
 
 private[sql] object EasilyFlattenable {
@@ -105,30 +106,44 @@ private[sql] object EasilyFlattenable {
               }
               remappedNewProjListResult match {
                 case Success(remappedNewProjList) =>
-                  val newProj = p.copy(projectList = remappedNewProjList)
-                  Option(newProj)
+                  Option(p.copy(projectList = remappedNewProjList))
+
                 case Failure(_) => None
               }
             }
 
           case OpType.RemapOnly =>
             // case of renaming of columns
-            val remappedNewProjListResult = newProjList.map {
-              case attr: AttributeReference => projList.find(
-                _.toAttribute.canonicalized == attr.canonicalized).get
+            val remappedNewProjListResult = Try {
+              newProjList.map {
+                case attr: AttributeReference => projList.find(
+                  _.toAttribute.canonicalized == attr.canonicalized).get
 
-              case al@Alias(ar: AttributeReference, name) =>
-                projList.find(
-                  _.toAttribute.canonicalized == ar.canonicalized).map {
-                  case alx: Alias => alx.copy(name = name)(exprId = al.exprId,
-                    qualifier = al.qualifier, explicitMetadata = al.explicitMetadata,
-                    nonInheritableMetadataKeys = al.nonInheritableMetadataKeys)
+                case ua: UnresolvedAttribute => projList.find(
+                  _.toAttribute.name.equalsIgnoreCase(ua.name)).
+                  getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
+                    s"  unresolved attribute $ua"))
 
-                  case _: AttributeReference => al
-                }.get
+                case al@Alias(ar: AttributeReference, name) =>
+                  projList.find(_.toAttribute.canonicalized == ar.canonicalized).map {
+                    case alx: Alias => alx.copy(name = name)(exprId = al.exprId,
+                      qualifier = al.qualifier, explicitMetadata = al.explicitMetadata,
+                      nonInheritableMetadataKeys = al.nonInheritableMetadataKeys)
+
+                    case _: AttributeReference => al
+                  }.get
+              }
             }
+            remappedNewProjListResult match {
+              case Success(remappedNewProjList) =>
+                Option(p.copy(projectList = remappedNewProjList))
 
-            Option(p.copy(projectList = remappedNewProjListResult))
+              case Failure(ex) => if (Utils.isTesting) {
+                throw ex
+              } else {
+                None
+              }
+            }
 
           case _ => None
         }
