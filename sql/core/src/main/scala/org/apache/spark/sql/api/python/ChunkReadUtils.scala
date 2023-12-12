@@ -75,10 +75,11 @@ object ChunkReadUtils {
   }
 
   def unpersistChunks(chunkIds: java.util.List[String]): Unit = {
-    val blockManager = SparkEnv.get.blockManager
+    val blockManagerMaster = SparkEnv.get.blockManager.master
+
     for (chunkId <- chunkIds.asScala) {
       try {
-        blockManager.removeBlock(BlockId(chunkId))
+        blockManagerMaster.removeBlock(BlockId(chunkId))
       } catch {
         case _: Exception => ()
       }
