@@ -2691,8 +2691,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
         context = ExpectedContext(
           fragment = "b",
-          start = 38,
-          stop = 38))
+          start = 51,
+          stop = 51))
     }
   }
 }
