@@ -32,7 +32,7 @@ import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 case class ChunkMeta(
   id: String,
   rowCount: Long,
-  byteCount: Long,
+  byteCount: Long
 )
 
 object ChunkReadUtils {
