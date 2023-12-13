@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.SparkException.sparkRequire
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -1300,14 +1301,16 @@ trait ComplexTypeMergingExpression extends Expression {
   lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
 
   def dataTypeCheck: Unit = {
-    require(
-      inputTypesForMerging.nonEmpty,
-      "The collection of input data types must not be empty.")
-    require(
-      TypeCoercion.haveSameType(inputTypesForMerging),
-      "All input types must be the same except nullable, containsNull, valueContainsNull flags. " +
-        s"The expression is: $this. " +
-        s"The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}.")
+    sparkRequire(
+      requirement = inputTypesForMerging.nonEmpty,
+      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
+      messageParameters = Map("expression" -> this.toString))
+    sparkRequire(
+      requirement = TypeCoercion.haveSameType(inputTypesForMerging),
+      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
+      messageParameters = Map(
+        "expression" -> this.toString,
+        "inputTypes" -> inputTypesForMerging.mkString("\n\t")))
   }
 
   private lazy val internalDataType: DataType = {

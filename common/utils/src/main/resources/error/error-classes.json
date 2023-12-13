@@ -494,6 +494,25 @@
     ],
     "sqlState" : "22004"
   },
+  "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT" : {
+    "message" : [
+      "Cannot process input data types for expression: <expression>."
+    ],
+    "subClass" : {
+      "NO_INPUTS" : {
+        "message" : [
+          "The collection of input data types must not be empty."
+        ]
+      },
+      "MISMATCHED_TYPES" : {
+        "message": [
+          "All input types must be the same except nullable, containsNull, valueContainsNull flags.",
+          "The input types found are <inputTypes>."
+        ]
+      }
+    },
+    "sqlState" : "42K09"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
