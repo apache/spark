@@ -780,6 +780,8 @@ abstract class PushableColumnBase {
     case a: Attribute => Some(Seq(a.name))
     case s: GetStructField =>
       extractNestedCol(s.child).map(_ :+ s.childSchema(s.ordinal).name)
+    case c: Cast =>
+      extractNestedCol(c.child)
     case _ => None
   }
 }

@@ -286,6 +286,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-46392 DataSourceV2Strategy should push cast filters") {
+    val attrStr = $"cstr".string
+    testTranslateFilter(EqualTo(Cast(attrStr, IntegerType), 1), Some(sources.EqualTo("cstr", 1)))
+  }
+
   test("SPARK-31027 test `PushableColumn.unapply` that finds the column name of " +
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>
