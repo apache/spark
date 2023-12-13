@@ -19,13 +19,12 @@ license: |
   limitations under the License.
 ---
 
+Spark offers many techniques for tuning the performance of DataFrame or SQL workloads. Those techniques, broadly speaking, include caching data, altering how datasets are partitioned, selecting the optimal join strategy, and providing the optimizer with additional information it can use to build more efficient execution plans.
+
 * Table of contents
 {:toc}
 
-For some workloads, it is possible to improve performance by either caching data in memory, or by
-turning on some experimental options.
-
-## Caching Data In Memory
+## Caching Data
 
 Spark SQL can cache tables using an in-memory columnar format by calling `spark.catalog.cacheTable("tableName")` or `dataFrame.cache()`.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
@@ -36,108 +35,42 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 
 {% include_relative generated-sql-config-table-caching-data.html %}
 
-## Other Configuration Options
+## Tuning Partitions
 
-The following options can also be used to tune the performance of query execution. It is possible
-that these options will be deprecated in future release as more optimizations are performed automatically.
+{% include_relative generated-sql-config-table-tuning-partitions.html %}
 
-<table>
-  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-  <tr>
-    <td><code>spark.sql.files.maxPartitionBytes</code></td>
-    <td>134217728 (128 MB)</td>
-    <td>
-      The maximum number of bytes to pack into a single partition when reading files.
-      This configuration is effective only when using file-based sources such as Parquet, JSON and ORC.
-    </td>
-    <td>2.0.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.files.openCostInBytes</code></td>
-    <td>4194304 (4 MB)</td>
-    <td>
-      The estimated cost to open a file, measured by the number of bytes that could be scanned in the same
-      time. This is used when putting multiple files into a partition. It is better to over-estimate,
-      then the partitions with small files will be faster than partitions with bigger files (which is
-      scheduled first). This configuration is effective only when using file-based sources such as Parquet,
-      JSON and ORC.
-    </td>
-    <td>2.0.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.files.minPartitionNum</code></td>
-    <td>Default Parallelism</td>
-    <td>
-      The suggested (not guaranteed) minimum number of split file partitions. If not set, the default
-      value is `spark.sql.leafNodeDefaultParallelism`. This configuration is effective only when using file-based
-      sources such as Parquet, JSON and ORC.
-    </td>
-    <td>3.1.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.files.maxPartitionNum</code></td>
-    <td>None</td>
-    <td>
-      The suggested (not guaranteed) maximum number of split file partitions. If it is set,
-      Spark will rescale each partition to make the number of partitions is close to this
-      value if the initial number of partitions exceeds this value. This configuration is
-      effective only when using file-based sources such as Parquet, JSON and ORC.
-    </td>
-    <td>3.5.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.broadcastTimeout</code></td>
-    <td>300</td>
-    <td>
-      <p>
-        Timeout in seconds for the broadcast wait time in broadcast joins
-      </p>
-    </td>
-    <td>1.3.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
-    <td>10485760 (10 MB)</td>
-    <td>
-      Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
-      performing a join. By setting this value to -1, broadcasting can be disabled. Note that currently
-      statistics are only supported for Hive Metastore tables where the command
-      <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.
-    </td>
-    <td>1.1.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.shuffle.partitions</code></td>
-    <td>200</td>
-    <td>
-      Configures the number of partitions to use when shuffling data for joins or aggregations.
-    </td>
-    <td>1.1.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.sources.parallelPartitionDiscovery.threshold</code></td>
-    <td>32</td>
-    <td>
-      Configures the threshold to enable parallel listing for job input paths. If the number of
-      input paths is larger than this threshold, Spark will list the files by using Spark distributed job.
-      Otherwise, it will fallback to sequential listing. This configuration is only effective when
-      using file-based data sources such as Parquet, ORC and JSON.
-    </td>
-    <td>1.5.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.sources.parallelPartitionDiscovery.parallelism</code></td>
-    <td>10000</td>
-    <td>
-      Configures the maximum listing parallelism for job input paths. In case the number of input
-      paths is larger than this value, it will be throttled down to use this value. This configuration is only effective when using file-based data sources such as Parquet, ORC
-      and JSON.
-    </td>
-    <td>2.1.1</td>
-  </tr>
-</table>
+### Coalesce Hints
 
-## Join Strategy Hints for SQL Queries
+Coalesce hints allow Spark SQL users to control the number of output files just like
+`coalesce`, `repartition` and `repartitionByRange` in the Dataset API. They can be used for performance
+tuning and reducing the number of output files. The `COALESCE` hint only has a partition number as a
+parameter. The `REPARTITION` hint has a partition number, columns, or both/neither of them as parameters.
+The `REPARTITION_BY_RANGE` hint must have column names and a partition number is optional. The `REBALANCE`
+hint has an initial partition number, columns, or both/neither of them as parameters.
+
+```sql
+SELECT /*+ COALESCE(3) */ * FROM t;
+SELECT /*+ REPARTITION(3) */ * FROM t;
+SELECT /*+ REPARTITION(c) */ * FROM t;
+SELECT /*+ REPARTITION(3, c) */ * FROM t;
+SELECT /*+ REPARTITION */ * FROM t;
+SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
+SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
+SELECT /*+ REBALANCE */ * FROM t;
+SELECT /*+ REBALANCE(3) */ * FROM t;
+SELECT /*+ REBALANCE(c) */ * FROM t;
+SELECT /*+ REBALANCE(3, c) */ * FROM t;
+```
+
+For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
+
+## Optimizing the Join Strategy
+
+### Automatically Broadcasting Joins
+
+{% include_relative generated-sql-config-table-tuning-broadcast.html %}
+
+### Join Strategy Hints
 
 The join strategy hints, namely `BROADCAST`, `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL`,
 instruct Spark to use the hinted strategy on each specified relation when joining them with another
@@ -202,33 +135,15 @@ SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 
 For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html#join-hints).
 
-## Coalesce Hints for SQL Queries
+## Cost-Based Optimization
+Apache Spark 2.2 introduced a [cost-based optimization framework][cbo] that leverages statistics to select an optimal execution plan. This framework can be enabled via the `spark.sql.cbo.enabled` umbrella configuration.
 
-Coalesce hints allow Spark SQL users to control the number of output files just like
-`coalesce`, `repartition` and `repartitionByRange` in the Dataset API, they can be used for performance
-tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
-parameter. The "REPARTITION" hint has a partition number, columns, or both/neither of them as parameters.
-The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional. The "REBALANCE"
-hint has an initial partition number, columns, or both/neither of them as parameters.
+[cbo]: https://www.databricks.com/blog/2017/08/31/cost-based-optimizer-in-apache-spark-2-2.html
 
-```sql
-SELECT /*+ COALESCE(3) */ * FROM t;
-SELECT /*+ REPARTITION(3) */ * FROM t;
-SELECT /*+ REPARTITION(c) */ * FROM t;
-SELECT /*+ REPARTITION(3, c) */ * FROM t;
-SELECT /*+ REPARTITION */ * FROM t;
-SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
-SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
-SELECT /*+ REBALANCE */ * FROM t;
-SELECT /*+ REBALANCE(3) */ * FROM t;
-SELECT /*+ REBALANCE(c) */ * FROM t;
-SELECT /*+ REBALANCE(3, c) */ * FROM t;
-```
-
-For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
+{% include_relative generated-sql-config-table-cbo.html %}
 
 ## Adaptive Query Execution
-Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration. As of Spark 3.0, there are three major features in AQE: including coalescing post-shuffle partitions, converting sort-merge join to broadcast join, and skew join optimization.
+Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
 
 ### Coalescing Post Shuffle Partitions
 This feature coalesces the post shuffle partitions based on the map output statistics when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.coalescePartitions.enabled` configurations are true. This feature simplifies the tuning of shuffle partition number when running queries. You do not need to set a proper shuffle partition number to fit your dataset. Spark can pick the proper shuffle partition number at runtime once you set a large enough initial number of shuffle partitions via `spark.sql.adaptive.coalescePartitions.initialPartitionNum` configuration.
@@ -236,117 +151,26 @@ This feature coalesces the post shuffle partitions based on the map output stati
 {% include_relative generated-sql-config-table-aqe-coalesce-partitions.html %}
 
 ### Spliting skewed shuffle partitions
- <table>
-   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-   <tr>
-     <td><code>spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled</code></td>
-     <td>true</td>
-     <td>
-       When true and <code>spark.sql.adaptive.enabled</code> is true, Spark will optimize the skewed shuffle partitions in RebalancePartitions and split them to smaller ones according to the target size (specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>), to avoid data skew.
-     </td>
-     <td>3.2.0</td>
-   </tr>
-   <tr>
-     <td><code>spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor</code></td>
-     <td>0.2</td>
-     <td>
-       A partition will be merged during splitting if its size is small than this factor multiply <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
-     </td>
-     <td>3.3.0</td>
-   </tr>
- </table>
+
+{% include_relative generated-sql-config-table-aqe-skewed-shuffle-partitions.html %}
 
 ### Converting sort-merge join to broadcast join
 AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the adaptive broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
-  <table>
-     <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-     <tr>
-       <td><code>spark.sql.adaptive.autoBroadcastJoinThreshold</code></td>
-       <td>(none)</td>
-       <td>
-         Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when performing a join. By setting this value to -1, broadcasting can be disabled. The default value is the same as <code>spark.sql.autoBroadcastJoinThreshold</code>. Note that, this config is used only in adaptive framework.
-       </td>
-       <td>3.2.0</td>
-     </tr>
-     <tr>
-       <td><code>spark.sql.adaptive.localShuffleReader.enabled</code></td>
-       <td>true</td>
-       <td>
-         When true and <code>spark.sql.adaptive.enabled</code> is true, Spark tries to use local shuffle reader to read the shuffle data when the shuffle partitioning is not needed, for example, after converting sort-merge join to broadcast-hash join.
-       </td>
-       <td>3.0.0</td>
-     </tr>
-  </table>
+
+{% include_relative generated-sql-config-table-aqe-broadcast-join.html %}
 
 ### Converting sort-merge join to shuffled hash join
-AQE converts sort-merge join to shuffled hash join when all post shuffle partitions are smaller than a threshold, the max threshold can see the config `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
-  <table>
-     <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-     <tr>
-       <td><code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code></td>
-       <td>0</td>
-       <td>
-         Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition sizes are not larger than this config, join selection prefers to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
-       </td>
-       <td>3.2.0</td>
-     </tr>
-  </table>
+AQE converts sort-merge join to shuffled hash join when all post shuffle partitions are smaller than the threshold configured in `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
+
+{% include_relative generated-sql-config-table-aqe-shuffled-hash-join.html %}
 
 ### Optimizing Skew Join
 Data skew can severely downgrade the performance of join queries. This feature dynamically handles skew in sort-merge join by splitting (and replicating if needed) skewed tasks into roughly evenly sized tasks. It takes effect when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewJoin.enabled` configurations are enabled.
-  <table>
-     <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-     <tr>
-       <td><code>spark.sql.adaptive.skewJoin.enabled</code></td>
-       <td>true</td>
-       <td>
-         When true and <code>spark.sql.adaptive.enabled</code> is true, Spark dynamically handles skew in sort-merge join by splitting (and replicating if needed) skewed partitions.
-       </td>
-       <td>3.0.0</td>
-     </tr>
-     <tr>
-       <td><code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code></td>
-       <td>5.0</td>
-       <td>
-         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code>.
-       </td>
-       <td>3.0.0</td>
-     </tr>
-     <tr>
-       <td><code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code></td>
-       <td>256MB</td>
-       <td>
-         A partition is considered as skewed if its size in bytes is larger than this threshold and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code> multiplying the median partition size. Ideally, this config should be set larger than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
-       </td>
-       <td>3.0.0</td>
-     </tr>
-     <tr>
-       <td><code>spark.sql.adaptive.forceOptimizeSkewedJoin</code></td>
-       <td>false</td>
-       <td>
-         When true, force enable OptimizeSkewedJoin, which is an adaptive rule to optimize skewed joins to avoid straggler tasks, even if it introduces extra shuffle.
-       </td>
-       <td>3.3.0</td>
-     </tr>
-   </table>
 
-### Misc
-  <table>
-    <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-    <tr>
-      <td><code>spark.sql.adaptive.optimizer.excludedRules</code></td>
-      <td>(none)</td>
-      <td>
-        Configures a list of rules to be disabled in the adaptive optimizer, in which the rules are specified by their rule names and separated by comma. The optimizer will log the rules that have indeed been excluded.
-      </td>
-      <td>3.1.0</td>
-    </tr>
-    <tr>
-      <td><code>spark.sql.adaptive.customCostEvaluatorClass</code></td>
-      <td>(none)</td>
-      <td>
-        The custom cost evaluator class to be used for adaptive execution. If not being set, Spark will use its own <code>SimpleCostEvaluator</code> by default.
-      </td>
-      <td>3.2.0</td>
-    </tr>
-  </table>
+{% include_relative generated-sql-config-table-aqe-skew-join.html %}
+
+### Advanced Customization
+
+You can control the details of how AQE works by providing your own cost evaluator class or by excluding AQE optimizer rules.
+
+{% include_relative generated-sql-config-table-aqe-advanced.html %}
