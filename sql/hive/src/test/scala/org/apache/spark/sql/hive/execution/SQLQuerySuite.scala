@@ -2683,6 +2683,16 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           fragment = "b",
           start = 38,
           stop = 38) )
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("INSERT INTO t SELECT cast(a as short) FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 38,
+          stop = 38))
     }
   }
 }
