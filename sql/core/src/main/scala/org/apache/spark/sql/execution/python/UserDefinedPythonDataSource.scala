@@ -29,7 +29,6 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, Pyth
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
-import org.apache.spark.sql.catalyst.plans.logical.PythonDataSourcePartitions
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
@@ -38,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -138,6 +137,8 @@ class PythonPartitionReaderFactory(
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
+  private val inputSchema: StructType = new StructType().add("partition", BinaryType)
+
   /**
    * (Driver-side) Run Python process, and get the pickled Python Data Source
    * instance and its schema.
@@ -162,7 +163,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       outputSchema: StructType): PythonDataSourceReadInfo = {
     new UserDefinedPythonDataSourceReadRunner(
       createPythonFunction(
-        pythonResult.dataSource), PythonDataSourcePartitions.schema, outputSchema).runInPython()
+        pythonResult.dataSource), inputSchema, outputSchema).runInPython()
   }
 
   /**
@@ -181,7 +182,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       name = "read_from_data_source",
       func = readerFunc,
       dataType = outputSchema,
-      children = PythonDataSourcePartitions.getOutputAttrs,
+      children = toAttributes(inputSchema),
       evalType = pythonEvalType,
       udfDeterministic = false)
 
@@ -191,7 +192,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     val evaluatorFactory = new MapInBatchEvaluatorFactory(
       toAttributes(outputSchema),
       Seq(ChainedPythonFunctions(Seq(pythonUDF.func))),
-      PythonDataSourcePartitions.schema,
+      inputSchema,
       conf.arrowMaxRecordsPerBatch,
       pythonEvalType,
       conf.sessionLocalTimeZone,
