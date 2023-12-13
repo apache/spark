@@ -72,7 +72,7 @@ private[sql] object EasilyFlattenable {
               case ex: WindowExpression => ex
               case ex: UserDefinedExpression => ex
               case u: UnresolvedAttribute if u.nameParts.size != 1 |
-                ambiguousAttribs.contains(u.name) => u
+                ambiguousAttribs.exists(_.equalsIgnoreCase(u.name)) => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
             }.nonEmpty)) {
@@ -124,7 +124,12 @@ private[sql] object EasilyFlattenable {
                 case attr: AttributeReference => projList.find(
                   _.toAttribute.canonicalized == attr.canonicalized).get
 
-                case ua: UnresolvedAttribute if ua.nameParts.size == 1 => projList.find(
+                case ua: UnresolvedAttribute if ua.nameParts.size != 1 |
+                  ambiguousAttribs.exists(_.equalsIgnoreCase(ua.name)) =>
+                  throw new UnsupportedOperationException("Not able to flatten" +
+                    s"  unresolved attribute $ua")
+
+                case ua: UnresolvedAttribute => projList.find(
                   _.toAttribute.name.equalsIgnoreCase(ua.name)).
                   getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                     s"  unresolved attribute $ua"))
