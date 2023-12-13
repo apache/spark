@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -55,6 +56,10 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val df = spark.read.format(dataSourceName).schema(schema).load()
     assert(df.rdd.getNumPartitions == 2)
     val plan = df.queryExecution.optimizedPlan
+    plan match {
+      case s: DataSourceV2ScanRelation if s.relation.table.isInstanceOf[PythonTable] =>
+      case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
+    }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
@@ -164,12 +169,12 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |            paths = []
          |        return [InputPartition(p) for p in paths]
          |
-         |    def read(self, path):
-         |        if path is not None:
-         |            assert isinstance(path, InputPartition)
-         |            yield (path.value, 1)
+         |    def read(self, part):
+         |        if part is not None:
+         |            assert isinstance(part, InputPartition)
+         |            yield (part.value, 1)
          |        else:
-         |            yield (path, 1)
+         |            yield (part, 1)
          |
          |class $dataSourceName(DataSource):
          |    @classmethod
@@ -256,7 +261,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source read with custom partitions") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -288,7 +293,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source read with empty partitions") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -316,7 +321,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source read with invalid partitions") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val reader1 =
       s"""
          |class SimpleDataSourceReader(DataSourceReader):

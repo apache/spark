@@ -56,8 +56,11 @@ class PythonTableProvider(shortName: String) extends TableProvider {
       schema: StructType,
       partitioning: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
+    assert(partitioning.isEmpty)
     new PythonTable(shortName, source, schema)
   }
+
+  override def supportsExternalMetadata(): Boolean = true
 }
 
 class PythonTable(shortName: String, source: UserDefinedPythonDataSource, givenSchema: StructType)
@@ -70,8 +73,8 @@ class PythonTable(shortName: String, source: UserDefinedPythonDataSource, givenS
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new ScanBuilder with Batch with Scan {
 
-      private lazy val pythonFunc: PythonFunction = source.createPythonFunction(
-        shortName, options, Some(givenSchema))
+      private lazy val pythonFunc: PythonFunction =
+        source.createPythonFunction(shortName, options, givenSchema)
 
       private lazy val info: PythonDataSourceReadInfo =
         new UserDefinedPythonDataSourceReadRunner(
@@ -163,37 +166,32 @@ class PythonPartitionReaderFactory(
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
-  private var pythonResult: PythonDataSourceCreationResult = _
-
-  private def getOrCreatePythonResult(
+  private def createPythonResult(
       shortName: String,
       options: CaseInsensitiveStringMap,
       userSpecifiedSchema: Option[StructType]): PythonDataSourceCreationResult = {
-    if (pythonResult != null) return pythonResult
-    val runner = new UserDefinedPythonDataSourceRunner(
+    new UserDefinedPythonDataSourceRunner(
       dataSourceCls,
       shortName,
       userSpecifiedSchema,
-      CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap))
-    pythonResult = runner.runInPython()
-    pythonResult
+      CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap)).runInPython()
   }
 
   def inferSchema(
       shortName: String,
       options: CaseInsensitiveStringMap): StructType = {
-    getOrCreatePythonResult(shortName, options, None).schema
+    createPythonResult(shortName, options, None).schema
   }
 
   def createPythonFunction(
       shortName: String,
       options: CaseInsensitiveStringMap,
-      userSpecifiedSchema: Option[StructType]): PythonFunction = {
-    val pickledDataSourceInstance = getOrCreatePythonResult(
-      shortName, options, userSpecifiedSchema).dataSource
+      givenSchema: StructType): PythonFunction = {
+    val dataSource = createPythonResult(
+      shortName, options, Some(givenSchema)).dataSource
 
     SimplePythonFunction(
-      command = pickledDataSourceInstance.toImmutableArraySeq,
+      command = dataSource.toImmutableArraySeq,
       envVars = dataSourceCls.envVars,
       pythonIncludes = dataSourceCls.pythonIncludes,
       pythonExec = dataSourceCls.pythonExec,
