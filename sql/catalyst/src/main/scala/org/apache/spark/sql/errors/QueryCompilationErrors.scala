@@ -1954,20 +1954,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "inputType" -> toSQLType(expression.dataType)))
   }
 
-  def unfoldableInputError(
-      inputName: String,
-      dataType: DataType,
-      expression: Expression): Throwable = {
-    new AnalysisException(
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-      messageParameters = Map(
-        "sqlExpr" -> toSQLExpr(expression),
-        "inputName" -> toSQLId(inputName),
-        "inputType" -> toSQLType(dataType),
-        "inputExpr" -> toSQLExpr(expression)
-      ))
-  }
-
   def unexpectedNullError(exprName: String, expression: Expression): Throwable = {
     new AnalysisException(
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",

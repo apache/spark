@@ -2336,6 +2336,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           if !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
           throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
             owg.prettyName)
+        case owg: SupportsOrderingWithinGroup
+          if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
+          throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+            owg.prettyName, 0, u.orderingWithinGroup.length)
         case f
           if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(

@@ -45,6 +45,166 @@ AS basic_pays(employee_name, department, salary), false, true, LocalTempView, tr
 
 
 -- !query
+SELECT mode(department), mode(salary) FROM basic_pays
+-- !query analysis
+Aggregate [mode(department#x, 0, 0, None) AS mode(department)#x, mode(salary#x, 0, 0, None) AS mode(salary)#x]
++- SubqueryAlias basic_pays
+   +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+      +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
+         +- Project [employee_name#x, department#x, salary#x]
+            +- SubqueryAlias basic_pays
+               +- LocalRelation [employee_name#x, department#x, salary#x]
+
+
+-- !query
+SELECT department, mode(salary) FROM basic_pays GROUP BY department ORDER BY department
+-- !query analysis
+Sort [department#x ASC NULLS FIRST], true
++- Aggregate [department#x], [department#x, mode(salary#x, 0, 0, None) AS mode(salary)#x]
+   +- SubqueryAlias basic_pays
+      +- View (`basic_pays`, [employee_name#x,department#x,salary#x])
+         +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
+            +- Project [employee_name#x, department#x, salary#x]
+               +- SubqueryAlias basic_pays
+                  +- LocalRelation [employee_name#x, department#x, salary#x]
+
+
+-- !query
+SELECT department, mode(DISTINCT salary) FROM basic_pays GROUP BY department ORDER BY department
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`mode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 40,
+    "fragment" : "mode(DISTINCT salary)"
+  } ]
+}
+
+
+-- !query
+SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query analysis
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query analysis
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query analysis
+Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`mode`",
+    "inputSql" : "\"true\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "mode(col, 'true')"
+  } ]
+}
+
+
+-- !query
+SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "`deterministic`",
+    "sqlExpr" : "\"NULL\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "mode(col, null)"
+  } ]
+}
+
+
+-- !query
+SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`mode`",
+    "paramName" : "`deterministic`",
+    "paramType" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "mode(col, b)"
+  } ]
+}
+
+
+-- !query
+SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col)
+-- !query analysis
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col)
+-- !query analysis
+Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
+-- !query analysis
+Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
 SELECT
   mode() WITHIN GROUP (ORDER BY col),
   mode() WITHIN GROUP (ORDER BY col DESC)
@@ -210,6 +370,74 @@ Sort [salary#x ASC NULLS FIRST], true
                         +- Project [employee_name#x, department#x, salary#x]
                            +- SubqueryAlias basic_pays
                               +- LocalRelation [employee_name#x, department#x, salary#x]
+
+
+-- !query
+SELECT
+  mode(DISTINCT salary) WITHIN GROUP (ORDER BY salary)
+FROM basic_pays
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`mode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 61,
+    "fragment" : "mode(DISTINCT salary) WITHIN GROUP (ORDER BY salary)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  mode()
+FROM basic_pays
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "funcName" : "`mode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 15,
+    "fragment" : "mode()"
+  } ]
+}
+
+
+-- !query
+SELECT
+  mode(salary) WITHIN GROUP (ORDER BY salary)
+FROM basic_pays
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
+  "sqlState" : "ID001",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "expectedNum" : "0",
+    "funcName" : "`mode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 52,
+    "fragment" : "mode(salary) WITHIN GROUP (ORDER BY salary)"
+  } ]
+}
 
 
 -- !query

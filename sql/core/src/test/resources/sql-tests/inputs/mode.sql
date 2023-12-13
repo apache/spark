@@ -19,6 +19,21 @@ CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
 ('Barry Jones','SCM',10586)
 AS basic_pays(employee_name, department, salary);
 
+SELECT mode(department), mode(salary) FROM basic_pays;
+SELECT department, mode(salary) FROM basic_pays GROUP BY department ORDER BY department;
+SELECT department, mode(DISTINCT salary) FROM basic_pays GROUP BY department ORDER BY department;
+
+-- SPARK-45034: Support deterministic mode function
+SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b);
+SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col);
+SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col);
+SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col);
+
 SELECT
   mode() WITHIN GROUP (ORDER BY col),
   mode() WITHIN GROUP (ORDER BY col DESC)
@@ -81,6 +96,18 @@ FROM basic_pays
 WHERE salary > 8900
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary;
+
+SELECT
+  mode(DISTINCT salary) WITHIN GROUP (ORDER BY salary)
+FROM basic_pays;
+
+SELECT
+  mode()
+FROM basic_pays;
+
+SELECT
+  mode(salary) WITHIN GROUP (ORDER BY salary)
+FROM basic_pays;
 
 CREATE OR REPLACE TEMPORARY VIEW intervals AS SELECT * FROM VALUES
 (0, INTERVAL '0' MONTH, INTERVAL '0' SECOND, INTERVAL '0' MINUTE),
