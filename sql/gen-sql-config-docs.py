@@ -40,6 +40,10 @@ SQLConfEntry = namedtuple(
 
 
 def get_sql_configs(jvm):
+    """
+    Get all public SQL configurations, grouped by their documentation tag.
+    Note that these tags are created in `SQLConf.scala` via `ConfigBuilder.withTag()`.
+    """
     sql_configs = defaultdict(
         list, {
             "__all": [],
@@ -62,6 +66,39 @@ def get_sql_configs(jvm):
             for tag in sql_config.tags:
                 sql_configs[tag].append(sql_config)
     return sql_configs
+
+
+def get_normalized_default(config):
+    """
+    Get the config's default value and normalize it so that:
+        - Dynamic defaults that are set at runtime are mapped to a non-dynamic definition.
+        - Other values that look like HTML tags are reformatted so they display properly.
+    """
+    value_reference_pattern = re.compile(r"^<value of (\S*)>$")
+
+    if config.name == "spark.sql.session.timeZone":
+        default = "(value of local timezone)"
+    elif config.name == "spark.sql.warehouse.dir":
+        default = "(value of <code>$PWD/spark-warehouse</code>)"
+    elif config.default == "<undefined>":
+        default = "(none)"
+    elif config.default.startswith("<value of "):
+        referenced_config_name = value_reference_pattern.match(config.default).group(1)
+        default = "(value of <code>{}</code>)".format(referenced_config_name)
+    else:
+        default = config.default
+
+    if default.startswith("<"):
+        raise RuntimeError(
+            "Unhandled reference in SQL config docs. Config '{name}' "
+            "has default '{default}' that looks like an HTML tag."
+            .format(
+                name=config.name,
+                default=config.default,
+            )
+        )
+
+    return default
 
 
 def generate_sql_configs_table_html(sql_configs, path, group):
@@ -87,8 +124,6 @@ def generate_sql_configs_table_html(sql_configs, path, group):
     </table>
     ```
     """
-    value_reference_pattern = re.compile(r"^<value of (\S*)>$")
-
     with open(path, 'w') as f:
         f.write(dedent(
             """
@@ -97,28 +132,6 @@ def generate_sql_configs_table_html(sql_configs, path, group):
             """
         ))
         for config in sorted(sql_configs, key=lambda x: x.name):
-            if config.name == "spark.sql.session.timeZone":
-                default = "(value of local timezone)"
-            elif config.name == "spark.sql.warehouse.dir":
-                default = "(value of <code>$PWD/spark-warehouse</code>)"
-            elif config.default == "<undefined>":
-                default = "(none)"
-            elif config.default.startswith("<value of "):
-                referenced_config_name = value_reference_pattern.match(config.default).group(1)
-                default = "(value of <code>{}</code>)".format(referenced_config_name)
-            else:
-                default = config.default
-
-            if default.startswith("<"):
-                raise RuntimeError(
-                    "Unhandled reference in SQL config docs. Config '{name}' "
-                    "has default '{default}' that looks like an HTML tag."
-                    .format(
-                        name=config.name,
-                        default=config.default,
-                    )
-                )
-
             f.write(dedent(
                 """
                 <tr id="{anchor}">
@@ -136,7 +149,7 @@ def generate_sql_configs_table_html(sql_configs, path, group):
                     # even if a config happens to show up multiple times on a given page.
                     anchor=f"{config.name}-{group}",
                     name=config.name,
-                    default=default,
+                    default=get_normalized_default(config),
                     description=markdown.markdown(config.description),
                     version=config.version,
                 )
