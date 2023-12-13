@@ -17,7 +17,6 @@
 
 package org.apache.spark.internal.config
 
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.regex.PatternSyntaxException
 
@@ -199,9 +198,12 @@ private[spark] case class ConfigBuilder(key: String) {
     this
   }
 
+  /**
+   * Assigns a configuration to a documentation group. These tags are referenced by
+   * sql/gen-sql-config-docs.py when generating docs.
+   */
   def withTag(tag: String): ConfigBuilder = {
-    require(!tag.contains(" "))
-    require(tag.toLowerCase(Locale.ROOT) == tag)
+    require(tag.matches("[a-z0-9-]+"))
     _tags = _tags :+ tag
     this
   }
