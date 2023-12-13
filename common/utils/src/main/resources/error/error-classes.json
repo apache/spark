@@ -6958,6 +6958,21 @@
       "<message>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3101" : {
+    "message" : [
+      "The input is not a correct window column: <windowTime>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3102" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3103" : {
+    "message" : [
+      "Namespace '<namespace>' is non empty. <details>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
