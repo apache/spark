@@ -849,7 +849,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   private def checkScalarSubqueryInAgg(a: Aggregate): Unit = {
     if (a.groupingExpressions.exists(hasCorrelatedScalarSubquery) &&
         !a.aggregateExpressions.exists(hasCorrelatedScalarSubquery)) {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         s"Fail to rewrite correlated scalar subqueries in Aggregate:\n$a")
     }
   }

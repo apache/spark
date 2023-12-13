@@ -407,6 +407,12 @@
     ],
     "sqlState" : "22003"
   },
+  "CATALOG_NOT_FOUND" : {
+    "message" : [
+      "The catalog <catalogName> not found. Consider to set the SQL config <config> to a catalog plugin."
+    ],
+    "sqlState" : "42P08"
+  },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
       "Checkpoint block <rddBlockId> not found!",
@@ -6697,6 +6703,259 @@
   "_LEGACY_ERROR_TEMP_3042" : {
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3050" : {
+    "message" : [
+      "Cannot modify the value of a static config: <k>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3051" : {
+    "message" : [
+      "When resolving <u>, fail to find subplan with plan_id=<planId> in <q>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3052" : {
+    "message" : [
+      "Unexpected resolved action: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3053" : {
+    "message" : [
+      "Unexpected WHEN NOT MATCHED action: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3054" : {
+    "message" : [
+      "<expr> is not currently supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3055" : {
+    "message" : [
+      "ScalarFunction '<scalarFunc.name>' neither implement magic method nor override 'produceResult'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3056" : {
+    "message" : [
+      "Unexpected row-level read relations (allow multiple = <allowMultipleReads>): <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3057" : {
+    "message" : [
+      "Cannot retrieve row-level operation from <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3058" : {
+    "message" : [
+      "Found duplicate column(s) <checkType>: <duplicateColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3059" : {
+    "message" : [
+      "The positions provided (<pos>) cannot be resolved in",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3060" : {
+    "message" : [
+      "Couldn't find column <i> in:",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3061" : {
+    "message" : [
+      "<e>",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3062" : {
+    "message" : [
+      "Expected <columnPath> to be a nested data type, but found <o>. Was looking for the index of <attr> in a nested field"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3063" : {
+    "message" : [
+      "pivot is not supported on a streaming DataFrames/Datasets"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3064" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3065" : {
+    "message" : [
+      "<clazz>: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3066" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3067" : {
+    "message" : [
+      "Streaming aggregation doesn't support group aggregate pandas UDF"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3068" : {
+    "message" : [
+      "Global aggregation with session window in streaming query is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3069" : {
+    "message" : [
+      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3070" : {
+    "message" : [
+      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3071" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3072" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3073" : {
+    "message" : [
+      "Unexpected instruction: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3074" : {
+    "message" : [
+      "field <fieldName> not found from given schema <schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3075" : {
+    "message" : [
+      "Couldn't find scan attribute for <tableAttr> in <scanAttrs>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3076" : {
+    "message" : [
+      "Redefining watermark is disallowed. You can set the config '<config>' to 'false' to restore the previous behavior. Note that multiple stateful operators will be disallowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3077" : {
+    "message" : [
+      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3078" : {
+    "message" : [
+      "Can not match ParquetTable in the query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3079" : {
+    "message" : [
+      "Dynamic partition cannot be the parent of a static partition."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3080" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3081" : {
+    "message" : [
+      "Save mode <mode> not allowed for Kafka. Allowed save modes are <append> and <errorIfExists> (default)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3082" : {
+    "message" : [
+      "Creating bucketed Hive serde table is not supported yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3083" : {
+    "message" : [
+      "Unable to infer the schema. The schema specification is required to create the table <tableName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3084" : {
+    "message" : [
+      "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3085" : {
+    "message" : [
+      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3086" : {
+    "message" : [
+      "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3087" : {
+    "message" : [
+      "Cannot set or change the preserved property key: 'EXTERNAL'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3088" : {
+    "message" : [
+      "The metadata is corrupted. Unable to find the partition column names from the schema. schema: <schema>. Partition columns: <partColumnNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3089" : {
+    "message" : [
+      "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3090" : {
+    "message" : [
+      "Raw list type in java is unsupported because Spark cannot infer the element type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3091" : {
+    "message" : [
+      "Raw map type in java is unsupported because Spark cannot infer key and value types."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3092" : {
+    "message" : [
+      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because Spark cannot infer the data type for these type parameters."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3093" : {
+    "message" : [
+      "Unsupported java type <c>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3094" : {
+    "message" : [
+      "<dt> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3095" : {
+    "message" : [
+      "<dt> cannot be converted to Hive TypeInfo"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3096" : {
+    "message" : [
+      "Converted table has <resLen> columns,",
+      "but source Hive table has <relLen> columns.",
+      "Set <key> to false,",
+      "or recreate table <ident> to workaround."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3097" : {
+    "message" : [
+      "Column in converted table has different data type with source Hive table's.",
+      "Set <key> to false,",
+      "or recreate table <ident> to workaround."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3100" : {
+    "message" : [
+      "<message>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

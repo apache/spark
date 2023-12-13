@@ -196,13 +196,21 @@ private[client] object GrpcExceptionConverter {
         errorClass = params.errorClass.orNull,
         messageParameters = params.messageParameters,
         queryContext = params.queryContext)),
-    errorConstructor(params =>
-      new AnalysisException(
-        params.message,
-        cause = params.cause,
-        errorClass = params.errorClass,
-        messageParameters = params.messageParameters,
-        context = params.queryContext)),
+    errorConstructor(params => {
+      if (params.errorClass.isEmpty) {
+        new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3100",
+          messageParameters = Map("message" -> params.message),
+          cause = params.cause,
+          context = params.queryContext)
+      } else {
+        new AnalysisException(
+          errorClass = params.errorClass.get,
+          messageParameters = params.messageParameters,
+          cause = params.cause,
+          context = params.queryContext)
+      }
+    }),
     errorConstructor(params =>
       new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>

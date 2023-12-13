@@ -416,7 +416,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             s"Child of a domain inner join shouldn't contain another domain join.\n$child")
           child
         case o =>
-          throw new IllegalStateException(s"Unexpected domain join type $o")
+          throw SparkException.internalError(s"Unexpected domain join type $o")
       }
 
       // We should only rewrite a domain join when all corresponding outer plan attributes
@@ -442,7 +442,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case _ => Join(domain, newChild, joinType, outerJoinCondition, JoinHint.NONE)
         }
       } else {
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"Unable to rewrite domain join with conditions: $conditions\n$d.")
       }
     case s @ (_ : Union | _: SetOperation) =>

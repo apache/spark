@@ -134,9 +134,9 @@ case class PythonDataSourcePartitions(
 }
 
 object PythonDataSourcePartitions {
-  def getOutputAttrs: Seq[Attribute] = {
-    toAttributes(new StructType().add("partition", BinaryType))
-  }
+  def schema: StructType = new StructType().add("partition", BinaryType)
+
+  def getOutputAttrs: Seq[Attribute] = toAttributes(schema)
 }
 
 /**

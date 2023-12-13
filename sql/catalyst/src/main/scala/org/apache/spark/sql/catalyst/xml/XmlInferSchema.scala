@@ -118,7 +118,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      Some(inferObject(parser, rootAttributes))
+      val schema = Some(inferObject(parser, rootAttributes))
+      parser.close()
+      schema
     } catch {
       case NonFatal(_) if options.parseMode == PermissiveMode =>
         Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
