@@ -1658,7 +1658,7 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
   test("no partition pruning when the build side is a stream") {
     withTable("fact") {
       val input = MemoryStream[Int]
-      val stream = input.toDF.select($"value" as "one", ($"value" * 3) as "code")
+      val stream = input.toDF().select($"value" as "one", ($"value" * 3) as "code")
       spark.range(100).select(
         $"id",
         ($"id" + 1).as("one"),

@@ -50,7 +50,15 @@ from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject,
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkIndexError,
+    PySparkRuntimeError,
+    PySparkAttributeError,
+    PySparkKeyError,
+)
 
 if has_numpy:
     import numpy as np
@@ -138,6 +146,9 @@ class DataType:
         Converts an internal SQL object into a native Python object.
         """
         return obj
+
+    def _as_nullable(self) -> "DataType":
+        return self
 
     @classmethod
     def fromDDL(cls, ddl: str) -> "DataType":
@@ -466,7 +477,10 @@ class DayTimeIntervalType(AnsiIntervalType):
 
         fields = DayTimeIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
-            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+            raise PySparkRuntimeError(
+                error_class="INVALID_INTERVAL_CASTING",
+                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+            )
         self.startField = cast(int, startField)
         self.endField = cast(int, endField)
 
@@ -521,7 +535,10 @@ class YearMonthIntervalType(AnsiIntervalType):
 
         fields = YearMonthIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
-            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+            raise PySparkRuntimeError(
+                error_class="INVALID_INTERVAL_CASTING",
+                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+            )
         self.startField = cast(int, startField)
         self.endField = cast(int, endField)
 
@@ -592,6 +609,41 @@ class ArrayType(DataType):
 
     def simpleString(self) -> str:
         return "array<%s>" % self.elementType.simpleString()
+
+    def _as_nullable(self) -> "ArrayType":
+        return ArrayType(self.elementType._as_nullable(), containsNull=True)
+
+    def toNullable(self) -> "ArrayType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`ArrayType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> ArrayType(IntegerType(), containsNull=False).toNullable()
+        ArrayType(IntegerType(), True)
+
+        Example 2: Nested nullability conversion
+
+        >>> ArrayType(
+        ...     StructType([
+        ...         StructField("b", IntegerType(), nullable=False),
+        ...         StructField("c", ArrayType(IntegerType(), containsNull=False))
+        ...     ]),
+        ...     containsNull=False
+        ... ).toNullable()
+        ArrayType(StructType([StructField('b', IntegerType(), True),
+        StructField('c', ArrayType(IntegerType(), True), True)]), True)
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "ArrayType(%s, %s)" % (self.elementType, str(self.containsNull))
@@ -670,6 +722,44 @@ class MapType(DataType):
 
     def simpleString(self) -> str:
         return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
+
+    def _as_nullable(self) -> "MapType":
+        return MapType(
+            self.keyType._as_nullable(), self.valueType._as_nullable(), valueContainsNull=True
+        )
+
+    def toNullable(self) -> "MapType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`MapType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> MapType(IntegerType(), StringType(), valueContainsNull=False).toNullable()
+        MapType(IntegerType(), StringType(), True)
+
+        Example 2: Nested nullability conversion
+
+        >>> MapType(
+        ...     StringType(),
+        ...     MapType(
+        ...         IntegerType(),
+        ...         ArrayType(IntegerType(), containsNull=False),
+        ...         valueContainsNull=False
+        ...     ),
+        ...     valueContainsNull=False
+        ... ).toNullable()
+        MapType(StringType(), MapType(IntegerType(), ArrayType(IntegerType(), True), True), True)
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "MapType(%s, %s, %s)" % (self.keyType, self.valueType, str(self.valueContainsNull))
@@ -769,8 +859,8 @@ class StructField(DataType):
         return StructField(
             json["name"],
             _parse_datatype_json_value(json["type"]),
-            json["nullable"],
-            json["metadata"],
+            json.get("nullable", True),
+            json.get("metadata"),
         )
 
     def needConversion(self) -> bool:
@@ -961,12 +1051,17 @@ class StructType(DataType):
             for field in self:
                 if field.name == key:
                     return field
-            raise KeyError("No StructField named {0}".format(key))
+            raise PySparkKeyError(
+                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(key)}
+            )
         elif isinstance(key, int):
             try:
                 return self.fields[key]
             except IndexError:
-                raise IndexError("StructType index out of range")
+                raise PySparkIndexError(
+                    error_class="INDEX_OUT_OF_RANGE",
+                    message_parameters={"arg_name": "StructType", "index": str(key)},
+                )
         elif isinstance(key, slice):
             return StructType(self.fields[key])
         else:
@@ -977,6 +1072,54 @@ class StructType(DataType):
 
     def simpleString(self) -> str:
         return "struct<%s>" % (",".join(f.simpleString() for f in self))
+
+    def _as_nullable(self) -> "StructType":
+        fields = []
+        for field in self.fields:
+            fields.append(
+                StructField(
+                    field.name,
+                    field.dataType._as_nullable(),
+                    nullable=True,
+                    metadata=field.metadata,
+                )
+            )
+        return StructType(fields)
+
+    def toNullable(self) -> "StructType":
+        """
+        Returns the same data type but set all nullability fields are true
+        (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`StructType`
+
+        Examples
+        --------
+        Example 1: Simple nullability conversion
+
+        >>> StructType([StructField("a", IntegerType(), nullable=False)]).toNullable()
+        StructType([StructField('a', IntegerType(), True)])
+
+        Example 2: Nested nullability conversion
+
+        >>> StructType([
+        ...     StructField("a",
+        ...         StructType([
+        ...             StructField("b", IntegerType(), nullable=False),
+        ...             StructField("c", StructType([
+        ...                 StructField("d", IntegerType(), nullable=False)
+        ...             ]))
+        ...         ]),
+        ...         nullable=False)
+        ... ]).toNullable()
+        StructType([StructField('a', StructType([StructField('b', IntegerType(), True),
+        StructField('c', StructType([StructField('d', IntegerType(), True)]), True)]), True)])
+        """
+        return self._as_nullable()
 
     def __repr__(self) -> str:
         return "StructType([%s])" % ", ".join(str(field) for field in self)
@@ -2431,26 +2574,37 @@ class Row(tuple):
             idx = self.__fields__.index(item)
             return super(Row, self).__getitem__(idx)
         except IndexError:
-            raise KeyError(item)
+            raise PySparkKeyError(
+                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(item)}
+            )
         except ValueError:
             raise PySparkValueError(item)
 
     def __getattr__(self, item: str) -> Any:
         if item.startswith("__"):
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
         try:
             # it will be slow when it has many fields,
             # but this will not be used in normal cases
             idx = self.__fields__.index(item)
             return self[idx]
         except IndexError:
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
         except ValueError:
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
 
     def __setattr__(self, key: Any, value: Any) -> None:
         if key != "__fields__":
-            raise RuntimeError("Row is read-only")
+            raise PySparkRuntimeError(
+                error_class="READ_ONLY",
+                message_parameters={"object": "Row"},
+            )
         self.__dict__[key] = value
 
     def __reduce__(

@@ -30,6 +30,7 @@ import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Utility functions to simplify and speed-up file listing.
@@ -91,15 +92,15 @@ private[spark] object HadoopFSUtils extends Logging {
       val remoteIter = path.getFileSystem(hadoopConf).listFiles(path, true)
       val statues = new Iterator[LocatedFileStatus]() {
         def next(): LocatedFileStatus = remoteIter.next
-        def hasNext(): Boolean = remoteIter.hasNext
+        def hasNext: Boolean = remoteIter.hasNext
       }.filterNot(status => shouldFilterOutPath(status.getPath.toString.substring(prefixLength)))
         .filter(f => filter.accept(f.getPath))
         .toArray
-      Seq((path, statues))
+      Seq((path, statues.toImmutableArraySeq))
     } catch {
       case _: FileNotFoundException =>
         logWarning(s"The root directory $path was not found. Was it deleted very recently?")
-        Seq((path, Array.empty[FileStatus]))
+        Seq((path, Seq.empty[FileStatus]))
     }
   }
 
@@ -168,7 +169,7 @@ private[spark] object HadoopFSUtils extends Logging {
               parallelismMax = 0)
             (path, leafFiles)
           }
-        }.collect()
+        }.collect().toImmutableArraySeq
     } finally {
       sc.setJobDescription(previousJobDescription)
     }
@@ -209,7 +210,7 @@ private[spark] object HadoopFSUtils extends Logging {
           val remoteIter = fs.listLocatedStatus(path)
           new Iterator[LocatedFileStatus]() {
             def next(): LocatedFileStatus = remoteIter.next
-            def hasNext(): Boolean = remoteIter.hasNext
+            def hasNext: Boolean = remoteIter.hasNext
           }.toArray
         case _ => fs.listStatus(path)
       }
@@ -244,10 +245,10 @@ private[spark] object HadoopFSUtils extends Logging {
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val filteredNestedFiles: Seq[FileStatus] = contextOpt match {
-        case Some(context) if dirs.size > parallelismThreshold =>
+        case Some(context) if dirs.length > parallelismThreshold =>
           parallelListLeafFilesInternal(
             context,
-            dirs.map(_.getPath),
+            dirs.map(_.getPath).toImmutableArraySeq,
             hadoopConf = hadoopConf,
             filter = filter,
             isRootLevel = false,
@@ -268,7 +269,7 @@ private[spark] object HadoopFSUtils extends Logging {
               isRootPath = false,
               parallelismThreshold = parallelismThreshold,
               parallelismMax = parallelismMax)
-          }
+          }.toImmutableArraySeq
       }
       val filteredTopLevelFiles = if (filter != null) {
         topLevelFiles.filter(f => filter.accept(f.getPath))
@@ -326,7 +327,7 @@ private[spark] object HadoopFSUtils extends Logging {
         s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
     }
 
-    resolvedLeafStatuses
+    resolvedLeafStatuses.toImmutableArraySeq
   }
   // scalastyle:on argcount
 

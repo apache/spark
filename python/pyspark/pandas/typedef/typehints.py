@@ -31,6 +31,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
 from pandas.api.extensions import ExtensionDtype
 
+
 extension_dtypes: Tuple[type, ...]
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -147,8 +148,10 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-    if sys.version_info >= (3, 8):
+    from pyspark.loose_version import LooseVersion
+
+    # For NumPy typing, NumPy version should be 1.21+
+    if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
             hasattr(tpe, "__origin__")
             and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]
@@ -796,9 +799,21 @@ def _new_type_holders(
         isinstance(param, slice) and param.step is None and param.stop is not None
         for param in params
     )
-    is_unnamed_params = all(
-        not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
-    )
+    if sys.version_info < (3, 11):
+        is_unnamed_params = all(
+            not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
+        )
+    else:
+        # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11
+        is_unnamed_params = all(
+            not isinstance(param, slice)
+            and (
+                not isinstance(param, Iterable)
+                or isinstance(param, typing.GenericAlias)
+                or isinstance(param, typing._GenericAlias)
+            )
+            for param in params
+        )
 
     if is_named_params:
         # DataFrame["id": int, "A": int]

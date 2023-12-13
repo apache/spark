@@ -385,7 +385,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
   /** Generate blocks infos using random ids */
   def generateBlockInfos(blockCount: Int = 5): Seq[ReceivedBlockInfo] = {
     List.fill(blockCount)(ReceivedBlockInfo(streamId, Some(0L), None,
-      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)), Some(0L))))
+      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt())), Some(0L))))
   }
 
   /**
@@ -395,7 +395,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     val writer = HdfsUtils.getOutputStream(filePath, hadoopConf)
     events.foreach { event =>
       val bytes = Utils.serialize(event)
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
     }
     writer.close()
@@ -416,7 +416,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
    * Get all the data written in the given write ahead log files. By default, it will read all
    * files in the test log directory.
    */
-  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles)
+  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles())
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq

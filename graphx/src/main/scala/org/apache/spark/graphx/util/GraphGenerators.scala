@@ -132,7 +132,7 @@ object GraphGenerators extends Logging {
     val edges = mutable.Set.empty[Edge[Int]]
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
-        logDebug(edges.size + " edges")
+        logDebug(s"${edges.size} edges")
       }
       edges += addEdge(numVertices)
     }

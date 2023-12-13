@@ -812,7 +812,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect
+        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect()
       },
       errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
@@ -879,7 +879,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "funcName" -> s"`$funcName`",
           "paramName" -> "`format`",
-          "paramType" -> "\"STRING\""))
+          "paramType" -> "\"STRING\""),
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           df2.select(func(col("input"), lit("invalid_format"))).collect()
@@ -888,7 +891,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "parameter" -> "`format`",
           "functionName" -> s"`$funcName`",
-          "invalidFormat" -> "'invalid_format'"))
+          "invalidFormat" -> "'invalid_format'"),
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"select $funcName('a', 'b', 'c')")

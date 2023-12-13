@@ -297,7 +297,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 </div>
 
 Each row in the source has the following schema:
-<table class="table table-striped">
+<table>
 <thead><tr><th>Column</th><th>Type</th></tr></thead>
 <tr>
   <td>key</td>
@@ -336,7 +336,7 @@ Each row in the source has the following schema:
 The following options must be set for the Kafka source
 for both batch and streaming queries.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
 <tr>
   <td>assign</td>
@@ -368,7 +368,7 @@ for both batch and streaming queries.
 
 The following configurations are optional:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr></thead>
 <tr>
   <td>startingTimestamp</td>
@@ -607,7 +607,7 @@ The caching key is built up from the following information:
 
 The following properties are available to configure the consumer pool:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.consumer.cache.capacity</td>
@@ -657,7 +657,7 @@ Note that it doesn't leverage Apache Commons Pool due to the difference of chara
 
 The following properties are available to configure the fetched data pool:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.timeout</td>
@@ -685,7 +685,7 @@ solution to remove duplicates when reading the written data could be to introduc
 that can be used to perform de-duplication when reading.
 
 The Dataframe being written to Kafka should have the following columns in schema:
-<table class="table table-striped">
+<table>
 <thead><tr><th>Column</th><th>Type</th></tr></thead>
 <tr>
   <td>key (optional)</td>
@@ -725,7 +725,7 @@ will be used.
 The following options must be set for the Kafka sink
 for both batch and streaming queries.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
 <tr>
   <td>kafka.bootstrap.servers</td>
@@ -736,7 +736,7 @@ for both batch and streaming queries.
 
 The following configurations are optional:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr></thead>
 <tr>
   <td>topic</td>
@@ -912,7 +912,7 @@ It will use different Kafka producer when delegation token is renewed; Kafka pro
 
 The following properties are available to configure the producer pool:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.producer.cache.timeout</td>
@@ -1039,7 +1039,7 @@ When none of the above applies then unsecure connection assumed.
 
 Delegation tokens can be obtained from multiple clusters and <code>${cluster}</code> is an arbitrary unique identifier which helps to group different configurations.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.auth.bootstrap.servers</code></td>

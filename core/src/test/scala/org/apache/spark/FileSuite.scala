@@ -86,11 +86,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     data.saveAsTextFile(compressedOutputDir, classOf[DefaultCodec])
 
     val normalFile = new File(normalDir, "part-00000")
-    val normalContent = sc.textFile(normalDir).collect
+    val normalContent = sc.textFile(normalDir).collect()
     assert(normalContent === Array.fill(10000)("a"))
 
     val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
-    val compressedContent = sc.textFile(compressedOutputDir).collect
+    val compressedContent = sc.textFile(compressedOutputDir).collect()
     assert(compressedContent === Array.fill(10000)("a"))
 
     assert(compressedFile.length < normalFile.length)
@@ -125,11 +125,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       data.saveAsSequenceFile(compressedOutputDir, Some(codec.getClass))
 
       val normalFile = new File(normalDir, "part-00000")
-      val normalContent = sc.sequenceFile[String, String](normalDir).collect
+      val normalContent = sc.sequenceFile[String, String](normalDir).collect()
       assert(normalContent === Array.fill(100)(("abc", "abc")))
 
       val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
-      val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect
+      val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect()
       assert(compressedContent === Array.fill(100)(("abc", "abc")))
 
       assert(compressedFile.length < normalFile.length)
@@ -236,7 +236,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       // Try reading the output back as an object file
       val ct = reflect.ClassTag[Any](Utils.classForName(className, noSparkClassLoader = true))
       val output = sc.objectFile[Any](outputDir)
-      assert(output.collect().size === 3)
+      assert(output.collect().length === 3)
       assert(output.collect().head.getClass.getName === className)
     }
   }
@@ -288,7 +288,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val (infile, indata) = inRdd.collect().head
     // Make sure the name and array match
     assert(infile.contains(outFile.toURI.getPath)) // a prefix may get added
-    assert(indata.toArray === testOutput)
+    assert(indata.toArray() === testOutput)
   }
 
   test("portabledatastream caching tests") {
@@ -298,7 +298,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val inRdd = sc.binaryFiles(outFile.getAbsolutePath).cache()
     inRdd.foreach(_._2.toArray()) // force the file to read
     // Try reading the output back as an object file
-    assert(inRdd.values.collect().head.toArray === testOutput)
+    assert(inRdd.values.collect().head.toArray() === testOutput)
   }
 
   test("portabledatastream persist disk storage") {
@@ -307,7 +307,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val outFile = writeBinaryData(testOutput, 1)
     val inRdd = sc.binaryFiles(outFile.getAbsolutePath).persist(StorageLevel.DISK_ONLY)
     inRdd.foreach(_._2.toArray()) // force the file to read
-    assert(inRdd.values.collect().head.toArray === testOutput)
+    assert(inRdd.values.collect().head.toArray() === testOutput)
   }
 
   test("portabledatastream flatmap tests") {
@@ -320,7 +320,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val copyArr = copyRdd.collect()
     assert(copyArr.length == numOfCopies)
     for (i <- copyArr.indices) {
-      assert(copyArr(i).toArray === testOutput)
+      assert(copyArr(i).toArray() === testOutput)
     }
   }
 
@@ -354,7 +354,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       "mapreduce.input.fileinputformat.split.minsize.per.rack", 5123456)
 
     val (_, data) = sc.binaryFiles(outFile.getAbsolutePath).collect().head
-    assert(data.toArray === testOutput)
+    assert(data.toArray() === testOutput)
   }
 
   test("fixed record length binary file as byte array") {
@@ -363,7 +363,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val testOutputCopies = 10
     val outFile = writeBinaryData(testOutput, testOutputCopies)
     val inRdd = sc.binaryRecords(outFile.getAbsolutePath, testOutput.length)
-    assert(inRdd.count == testOutputCopies)
+    assert(inRdd.count() == testOutputCopies)
     val inArr = inRdd.collect()
     for (i <- inArr.indices) {
       assert(inArr(i) === testOutput.map(b => (b + i).toByte))
@@ -380,12 +380,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test("file caching") {
     sc = new SparkContext("local", "test")
-    val out = new FileWriter(tempDir + "/input")
+    val out = new FileWriter(s"$tempDir/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
     out.write("Goodbye\n")
     out.close()
-    val rdd = sc.textFile(tempDir + "/input").cache()
+    val rdd = sc.textFile(s"$tempDir/input").cache()
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
@@ -596,7 +596,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 
@@ -639,7 +639,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 
@@ -699,7 +699,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     intercept[org.apache.hadoop.mapreduce.lib.input.InvalidInputException] {
       // Exception happens when NewHadoopRDD.getPartitions
       sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
-        classOf[LongWritable], classOf[Text]).collect
+        classOf[LongWritable], classOf[Text]).collect()
     }
 
     e = intercept[SparkException] {

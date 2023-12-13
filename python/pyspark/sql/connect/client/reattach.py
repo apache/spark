@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.client.retries import Retrying, RetryException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -22,7 +23,7 @@ from threading import RLock
 import warnings
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
+from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
 from multiprocessing.pool import ThreadPool
 import os
 
@@ -31,6 +32,7 @@ from grpc_status import rpc_status
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+from pyspark.errors import PySparkRuntimeError
 
 
 class ExecutePlanResponseReattachableIterator(Generator):
@@ -83,12 +85,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
         self,
         request: pb2.ExecutePlanRequest,
         stub: grpc_lib.SparkConnectServiceStub,
-        retry_policy: Dict[str, Any],
+        retrying: Callable[[], Retrying],
         metadata: Iterable[Tuple[str, str]],
     ):
         ExecutePlanResponseReattachableIterator._initialize_pool_if_necessary()
         self._request = request
-        self._retry_policy = retry_policy
+        self._retrying = retrying
         if request.operation_id:
             self._operation_id = request.operation_id
         else:
@@ -143,17 +145,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
         return ret
 
     def _has_next(self) -> bool:
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
-
         if self._result_complete:
             # After response complete response
             return False
         else:
             try:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         if self._current is None:
                             try:
@@ -199,16 +196,11 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if self._result_complete:
             return
 
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
-
         request = self._create_release_execute_request(until_response_id)
 
         def target() -> None:
             try:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
@@ -228,16 +220,11 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if self._result_complete:
             return
 
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
-
         request = self._create_release_execute_request(None)
 
         def target() -> None:
             try:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
@@ -269,10 +256,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             status = rpc_status.from_call(cast(grpc.Call, e))
             if status is not None and "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message:
                 if self._last_returned_response_id is not None:
-                    raise RuntimeError(
-                        "OPERATION_NOT_FOUND on the server but "
-                        "responses were already received from it.",
-                        e,
+                    raise PySparkRuntimeError(
+                        error_class="RESPONSE_ALREADY_RECEIVED",
+                        message_parameters={},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(
@@ -331,10 +317,3 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     def __del__(self) -> None:
         return self.close()
-
-
-class RetryException(Exception):
-    """
-    An exception that can be thrown upstream when inside retry and which will be retryable
-    regardless of policy.
-    """

@@ -89,7 +89,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
     for (width <- widthsToTest) {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       benchmark.addCase(s"$width select expressions") { iter =>
-        spark.range(1).toDF.selectExpr(selectExpr: _*)
+        spark.range(1).toDF().selectExpr(selectExpr: _*)
       }
     }
     benchmark.run()
@@ -114,7 +114,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       // normalize by width to keep constant data size
       val numRows = scaleFactor / width
       val selectExpr = (1 to width).map(i => s"id as a_$i")
-      val df = spark.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
+      val df = spark.range(numRows).toDF().selectExpr(selectExpr: _*).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width cols x $numRows rows", "a_1")
     }
@@ -209,7 +209,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
       val datum = Tuple1((1 to width).map(i => ("value_" + i -> 1)).toMap)
-      val df = spark.range(numRows).map(_ => datum).toDF.cache()
+      val df = spark.range(numRows).map(_ => datum).toDF().cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "_1[\"value_1\"]")
     }

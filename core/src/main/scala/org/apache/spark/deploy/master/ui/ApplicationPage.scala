@@ -98,6 +98,11 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
                     <a href={UIUtils.makeHref(parent.master.reverseProxy,
                       app.id, app.desc.appUiUrl)}>Application Detail UI</a>
                 </strong></li>
+              } else if (parent.master.historyServerUrl.nonEmpty) {
+                <li><strong>
+                    <a href={s"${parent.master.historyServerUrl.get}/history/${app.id}"}>
+                      Application History UI</a>
+                </strong></li>
               }
             }
           </ul>

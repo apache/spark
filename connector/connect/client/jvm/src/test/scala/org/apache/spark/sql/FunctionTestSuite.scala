@@ -237,6 +237,12 @@ class FunctionTestSuite extends ConnectFunSuite {
     from_xml(a, schema, Map.empty[String, String].asJava),
     from_xml(a, schema, Collections.emptyMap[String, String]),
     from_xml(a, lit(schema.json), Collections.emptyMap[String, String]))
+  testEquals(
+    "schema_of_xml",
+    schema_of_xml(lit("<p><a>1.0</a><b>test</b></p>")),
+    schema_of_xml("<p><a>1.0</a><b>test</b></p>"),
+    schema_of_xml(lit("<p><a>1.0</a><b>test</b></p>"), Collections.emptyMap()))
+  testEquals("to_xml", to_xml(a), to_xml(a, Collections.emptyMap[String, String]))
 
   testEquals(
     "from_avro",

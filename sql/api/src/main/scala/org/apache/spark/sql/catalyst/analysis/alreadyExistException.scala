@@ -22,6 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier, quoteNameParts}
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
@@ -49,14 +50,7 @@ class NamespaceAlreadyExistsException private(
 
   def this(namespace: Array[String]) = {
     this(errorClass = "SCHEMA_ALREADY_EXISTS",
-      Map("schemaName" -> quoteNameParts(namespace)))
-  }
-
-  def this(message: String) = {
-    this(
-      message,
-      errorClass = Some("SCHEMA_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
+      Map("schemaName" -> quoteNameParts(namespace.toImmutableArraySeq)))
   }
 }
 
@@ -105,21 +99,13 @@ class TableAlreadyExistsException private(
       messageParameters = Map("relationName" -> quoted(tableIdent)),
       cause = None)
   }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("TABLE_OR_VIEW_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
-  }
 }
 
 class TempTableAlreadyExistsException private(
-  message: String,
-  cause: Option[Throwable],
-  errorClass: Option[String],
-  messageParameters: Map[String, String])
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
   extends AnalysisException(
     message,
     cause = cause,
@@ -142,14 +128,6 @@ class TempTableAlreadyExistsException private(
       errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName"
         -> quoteNameParts(AttributeNameParser.parseAttributeName(table))))
-  }
-
-  def this(message: String, cause: Option[Throwable]) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("TEMP_TABLE_OR_VIEW_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -201,13 +179,5 @@ class IndexAlreadyExistsException private(
 
   def this(indexName: String, tableName: String, cause: Option[Throwable]) = {
     this("INDEX_ALREADY_EXISTS", Map("indexName" -> indexName, "tableName" -> tableName), cause)
-  }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("INDEX_ALREADY_EXISTS"),
-      messageParameters = Map.empty[String, String])
   }
 }

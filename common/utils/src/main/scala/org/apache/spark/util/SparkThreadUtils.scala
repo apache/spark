@@ -49,7 +49,7 @@ private[spark] object SparkThreadUtils {
     } catch {
       case e: SparkFatalException =>
         throw e.throwable
-      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
+      // TimeoutException is thrown in the current thread, so not need to warp
       // the exception.
       case NonFatal(t)
         if !t.isInstanceOf[TimeoutException] =>

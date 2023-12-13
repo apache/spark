@@ -1106,7 +1106,9 @@ class LocIndexer(LocIndexerLike):
                 return None, None, None
             elif (
                 depth > self._internal.index_level
-                or not index.droplevel(list(range(self._internal.index_level)[depth:])).is_monotonic
+                or not index.droplevel(
+                    list(range(self._internal.index_level)[depth:])
+                ).is_monotonic_increasing
             ):
                 raise KeyError(
                     "Key length ({}) was greater than MultiIndex sort depth".format(depth)

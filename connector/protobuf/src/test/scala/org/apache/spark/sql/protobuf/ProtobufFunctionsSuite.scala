@@ -503,9 +503,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
     }
     assert(
-      toProtoDfToFromProtoDf.select("toProtoToFromProto.value").take(1).toSeq(0).get(0) == null)
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.value").first().isNullAt(0))
     assert(
-      toProtoDfToFromProtoDf.select("toProtoToFromProto.actual.*").take(1).toSeq(0).get(0) == null)
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.actual.*").first().isNullAt(0))
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
@@ -558,27 +558,27 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       functions.to_protobuf($"requiredMsg", "requiredMsg", testFileDesc)
         .as("to_proto"))
 
-    val binary = toProtobuf.take(1).toSeq(0).get(0).asInstanceOf[Array[Byte]]
+    val binary = toProtobuf.first().get(0).asInstanceOf[Array[Byte]]
 
     val messageDescriptor = ProtobufUtils.buildDescriptor(testFileDesc, "requiredMsg")
     val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
 
     assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
+      == inputDf.select("requiredMsg.key").first().get(0))
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_2"))
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
+      == inputDf.select("requiredMsg.col_2").first().get(0))
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_1")) == 0)
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
 
     val fromProtoDf = toProtobuf.select(
-      functions.from_protobuf($"to_proto", "requiredMsg", testFileDesc) as 'from_proto)
+      functions.from_protobuf($"to_proto", "requiredMsg", testFileDesc) as Symbol("from_proto"))
 
-    assert(fromProtoDf.select("from_proto.key").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_2").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_1").take(1).toSeq(0).get(0) == null)
-    assert(fromProtoDf.select("from_proto.col_3").take(1).toSeq(0).get(0) == null)
+    assert(fromProtoDf.select("from_proto.key").first().get(0)
+      == inputDf.select("requiredMsg.key").first().get(0))
+    assert(fromProtoDf.select("from_proto.col_2").first().get(0)
+      == inputDf.select("requiredMsg.col_2").first().get(0))
+    assert(fromProtoDf.select("from_proto.col_1").first().isNullAt(0))
+    assert(fromProtoDf.select("from_proto.col_3").first().isNullAt(0))
   }
 
   test("from_protobuf filter to_protobuf") {
@@ -601,12 +601,15 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val df = Seq(basicMessage.toByteArray).toDF("value")
 
     val resultFrom = df
-      .select(from_protobuf_wrapper($"value", "BasicMessage", Some(testFileDesc)) as 'sample)
+      .select(from_protobuf_wrapper($"value", "BasicMessage",
+        Some(testFileDesc)) as Symbol("sample"))
       .where("sample.string_value == \"slam\"")
 
     val resultToFrom = resultFrom
-      .select(to_protobuf_wrapper($"sample", "BasicMessage", Some(testFileDesc)) as 'value)
-      .select(from_protobuf_wrapper($"value", "BasicMessage", Some(testFileDesc)) as 'sample)
+      .select(to_protobuf_wrapper($"sample", "BasicMessage",
+        Some(testFileDesc)) as Symbol("value"))
+      .select(from_protobuf_wrapper($"value", "BasicMessage",
+        Some(testFileDesc)) as Symbol("sample"))
       .where("sample.string_value == \"slam\"")
 
     assert(resultFrom.except(resultToFrom).isEmpty)
@@ -633,20 +636,22 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     checkWithFileAndClassName("timeStampMsg") {
       case (name, descFilePathOpt) =>
         val toProtoDf = inputDf
-          .select(to_protobuf_wrapper($"timeStampMsg", name, descFilePathOpt) as 'to_proto)
+          .select(to_protobuf_wrapper($"timeStampMsg", name,
+            descFilePathOpt) as Symbol("to_proto"))
 
         val fromProtoDf = toProtoDf
-          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt) as 'timeStampMsg)
+          .select(from_protobuf_wrapper($"to_proto", name,
+            descFilePathOpt) as Symbol("timeStampMsg"))
 
         val actualFields = fromProtoDf.schema.fields.toList
         val expectedFields = inputDf.schema.fields.toList
 
         assert(actualFields.size === expectedFields.size)
         assert(actualFields === expectedFields)
-        assert(fromProtoDf.select("timeStampMsg.key").take(1).toSeq(0).get(0)
-          === inputDf.select("timeStampMsg.key").take(1).toSeq(0).get(0))
-        assert(fromProtoDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0)
-          === inputDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("timeStampMsg.key").first().get(0)
+          === inputDf.select("timeStampMsg.key").first().get(0))
+        assert(fromProtoDf.select("timeStampMsg.stmp").first().get(0)
+          === inputDf.select("timeStampMsg.stmp").first().get(0))
     }
   }
 
@@ -674,20 +679,22 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     checkWithFileAndClassName("durationMsg") {
       case (name, descFilePathOpt) =>
         val toProtoDf = inputDf
-          .select(to_protobuf_wrapper($"durationMsg", name, descFilePathOpt) as 'to_proto)
+          .select(to_protobuf_wrapper($"durationMsg", name,
+            descFilePathOpt) as Symbol("to_proto"))
 
         val fromProtoDf = toProtoDf
-          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt) as 'durationMsg)
+          .select(from_protobuf_wrapper($"to_proto", name,
+            descFilePathOpt) as Symbol("durationMsg"))
 
         val actualFields = fromProtoDf.schema.fields.toList
         val expectedFields = inputDf.schema.fields.toList
 
         assert(actualFields.size === expectedFields.size)
         assert(actualFields === expectedFields)
-        assert(fromProtoDf.select("durationMsg.key").take(1).toSeq(0).get(0)
-          === inputDf.select("durationMsg.key").take(1).toSeq(0).get(0))
-        assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
-          === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("durationMsg.key").first().get(0)
+          === inputDf.select("durationMsg.key").first().get(0))
+        assert(fromProtoDf.select("durationMsg.duration").first().get(0)
+          === inputDf.select("durationMsg.duration").first().get(0))
     }
   }
 
@@ -696,7 +703,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val descWithoutImports = descriptorSetWithoutImports(testFileDesc, "BasicMessage")
 
     val e = intercept[AnalysisException] {
-      df.select(functions.from_protobuf($"value", "BasicMessage", descWithoutImports) as 'sample)
+      df.select(functions.from_protobuf($"value", "BasicMessage",
+          descWithoutImports) as Symbol("sample"))
         .where("sample.string_value == \"slam\"").show()
     }
     checkError(
@@ -719,11 +727,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     checkWithFileAndClassName("OneOfEvent") {
       case (name, descFilePathOpt) =>
         val fromProtoDf = df.select(
-          from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
+          from_protobuf_wrapper($"value", name, descFilePathOpt) as Symbol("sample"))
         val toDf = fromProtoDf.select(
-          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as Symbol("toProto"))
         val toFromDf = toDf.select(
-          from_protobuf_wrapper($"toProto", name, descFilePathOpt) as 'fromToProto)
+          from_protobuf_wrapper($"toProto", name, descFilePathOpt) as Symbol("fromToProto"))
         checkAnswer(fromProtoDf, toFromDf)
         val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
         descriptor.getFields.asScala.map(f => {
@@ -767,7 +775,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         )
         val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
         val dataDfToProto = dataDf.select(
-          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as Symbol("toProto"))
 
         val toProtoResults = dataDfToProto.select("toProto").collect()
         val eventFromSparkSchema = OneOfEvent.parseFrom(toProtoResults(0).getAs[Array[Byte]](0))
@@ -810,15 +818,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     options.put("recursive.fields.max.depth", "2")
 
     val fromProtoDf = df.select(
-      functions.from_protobuf($"protoEvent", "Employee", testFileDesc, options) as 'sample)
+      functions.from_protobuf($"protoEvent", "Employee", testFileDesc,
+        options) as Symbol("sample"))
 
     val toDf = fromProtoDf.select(
-      functions.to_protobuf($"sample", "Employee", testFileDesc) as 'toProto)
+      functions.to_protobuf($"sample", "Employee", testFileDesc) as Symbol("toProto"))
     val toFromDf = toDf.select(
       functions.from_protobuf($"toProto",
         "Employee",
         testFileDesc,
-        options) as 'fromToProto)
+        options) as Symbol("fromToProto"))
 
     checkAnswer(fromProtoDf, toFromDf)
 
@@ -867,14 +876,15 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val fromProtoDf = df.select(
       functions.from_protobuf($"value",
         "OneOfEventWithRecursion",
-        testFileDesc, options) as 'sample)
+        testFileDesc, options) as Symbol("sample"))
     val toDf = fromProtoDf.select(
-      functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+      functions.to_protobuf($"sample", "OneOfEventWithRecursion",
+        testFileDesc) as Symbol("toProto"))
     val toFromDf = toDf.select(
       functions.from_protobuf($"toProto",
         "OneOfEventWithRecursion",
         testFileDesc,
-        options) as 'fromToProto)
+        options) as Symbol("fromToProto"))
 
     checkAnswer(fromProtoDf, toFromDf)
 
@@ -951,11 +961,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       )
     )
     val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
-    val dataDfToProto = dataDf.select(
-      functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+    val dataDfToProto = dataDf.select(functions.to_protobuf($"sample",
+      "OneOfEventWithRecursion", testFileDesc) as Symbol("toProto"))
 
     val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
-      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+      dataDfToProto.select("toProto").first().getAs[Array[Byte]](0))
     recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveOneOffInA
     assert(recursiveField.getKey.equals("keyNested0"))
     assert(recursiveField.getValue.equals("valueNested0"))
@@ -1021,7 +1031,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         |         bff: STRUCT<name: STRING> -- 2nd level. Inner 3rd level Person is dropped.
         |     >
         | >
-        |""".stripMargin).asInstanceOf[StructType]
+        |""".stripMargin)
     val expectedWrapperDfTwo = spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(Row(Row(Row("person0", Row("person1", null)))))),
       wrapperSchemaOne)
@@ -1590,6 +1600,52 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("test unsigned integer types") {
+    // Test that we correctly handle unsigned integer parsing.
+    // We're using Integer/Long's `MIN_VALUE` as it has a 1 in the sign bit.
+    val sample = spark.range(1).select(
+      lit(
+        SimpleMessage
+          .newBuilder()
+          .setUint32Value(Integer.MIN_VALUE)
+          .setUint64Value(Long.MinValue)
+          .build()
+          .toByteArray
+      ).as("raw_proto"))
+
+    val expectedWithoutFlag = spark.range(1).select(
+      lit(Integer.MIN_VALUE).as("uint32_value"),
+      lit(Long.MinValue).as("uint64_value")
+    )
+
+    val expectedWithFlag = spark.range(1).select(
+      lit(Integer.toUnsignedLong(Integer.MIN_VALUE).longValue).as("uint32_value"),
+      lit(BigDecimal(java.lang.Long.toUnsignedString(Long.MinValue))).as("uint64_value")
+    )
+
+    checkWithFileAndClassName("SimpleMessage") { case (name, descFilePathOpt) =>
+      List(
+        Map.empty[String, String],
+        Map("upcast.unsigned.ints" -> "false")).foreach(opts => {
+        checkAnswer(
+          sample.select(
+              from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opts).as("proto"))
+            .select("proto.uint32_value", "proto.uint64_value"),
+          expectedWithoutFlag)
+      })
+
+      checkAnswer(
+        sample.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("upcast.unsigned.ints" -> "true")).as("proto"))
+          .select("proto.uint32_value", "proto.uint64_value"),
+        expectedWithFlag)
+    }
+  }
+
 
   def testFromProtobufWithOptions(
     df: DataFrame,
@@ -1597,7 +1653,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     options: java.util.HashMap[String, String],
     messageName: String): Unit = {
     val fromProtoDf = df.select(
-      functions.from_protobuf($"value", messageName, testFileDesc, options) as 'sample)
+      functions.from_protobuf($"value", messageName, testFileDesc, options) as Symbol("sample"))
     assert(expectedDf.schema === fromProtoDf.schema)
     checkAnswer(fromProtoDf, expectedDf)
   }

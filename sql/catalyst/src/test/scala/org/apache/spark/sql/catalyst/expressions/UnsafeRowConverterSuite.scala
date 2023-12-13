@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase
     with ExpressionEvalHelper {
@@ -40,7 +41,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
     val converter = factory.create(fieldTypes)
-    val row = new SpecificInternalRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
     row.setLong(0, 0)
     row.setLong(1, 1)
     row.setInt(2, 2)
@@ -79,7 +80,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val fieldTypes: Array[DataType] = Array(LongType, StringType, BinaryType)
     val converter = factory.create(fieldTypes)
 
-    val row = new SpecificInternalRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
     row.setLong(0, 0)
     row.update(1, UTF8String.fromString("Hello"))
     row.update(2, "World".getBytes(StandardCharsets.UTF_8))
@@ -100,7 +101,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val fieldTypes: Array[DataType] = Array(LongType, StringType, DateType, TimestampType)
     val converter = factory.create(fieldTypes)
 
-    val row = new SpecificInternalRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
     row.setLong(0, 0)
     row.update(1, UTF8String.fromString("Hello"))
     row.update(2, DateTimeUtils.fromJavaDate(Date.valueOf("1970-01-01")))
@@ -131,7 +132,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val fieldTypes: Array[DataType] = Array(LongType, StringType, CalendarIntervalType)
     val converter = factory.create(fieldTypes)
 
-    val row = new SpecificInternalRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
     row.setLong(0, 0)
     row.update(1, UTF8String.fromString("Hello"))
     val interval1 = new CalendarInterval(3, 1, 1000L)
@@ -175,7 +176,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val converter = factory.create(fieldTypes)
 
     val rowWithAllNullColumns: InternalRow = {
-      val r = new SpecificInternalRow(fieldTypes)
+      val r = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
       for (i <- fieldTypes.indices) {
         r.setNullAt(i)
       }
@@ -204,7 +205,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // columns, then the serialized row representation should be identical to what we would get by
     // creating an entirely null row via the converter
     val rowWithNoNullColumns: InternalRow = {
-      val r = new SpecificInternalRow(fieldTypes)
+      val r = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
       r.setNullAt(0)
       r.setBoolean(1, false)
       r.setByte(2, 20)
@@ -282,7 +283,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val fieldTypes: Array[DataType] = Array(CalendarIntervalType, CalendarIntervalType)
     val converter = factory.create(fieldTypes)
 
-    val row = new SpecificInternalRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
     for (i <- 0 until row.numFields) {
       row.setInterval(i, null)
     }
@@ -312,11 +313,12 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val fieldTypes: Array[DataType] = Array(ArrayType(CalendarIntervalType))
     val converter = factory.create(fieldTypes)
 
-    val row = new SpecificInternalRow(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
     val values = Array(new CalendarInterval(0, 7, 0L), null)
-    row.update(0, createArray(values: _*))
+
+    row.update(0, createArray(values.toImmutableArraySeq: _*))
     val unsafeRow: UnsafeRow = converter.apply(row)
-    testArrayInterval(unsafeRow.getArray(0), values)
+    testArrayInterval(unsafeRow.getArray(0), values.toImmutableArraySeq)
   }
 
   testBothCodegenAndInterpreted("basic conversion with struct type") {

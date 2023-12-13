@@ -1,3 +1,0 @@
-awscli==1.16.46
-pytest-benchmark==3.1.1
-pytest-html==1.19.0

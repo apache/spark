@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions.{length, struct, sum}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Comprehensive tests for Dataset.unpivot.
@@ -242,7 +243,7 @@ class DatasetUnpivotSuite extends QueryTest
         Row(row.id, "int1", row.int1.orNull),
         Row(row.id, "long1", row.long1.orNull)
       )
-    })
+    }.toImmutableArraySeq)
   }
 
   test("unpivot with id and value expressions") {
@@ -275,7 +276,7 @@ class DatasetUnpivotSuite extends QueryTest
           // length of str2 if set, or null otherwise
           Option(row.str2).map(_.length).orNull)
       )
-    })
+    }.toImmutableArraySeq)
   }
 
   test("unpivot with variable / value columns") {
@@ -373,7 +374,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`1`",
-        "proposal" -> "`id`, `int1`, `str1`, `long1`, `str2`"))
+        "proposal" -> "`id`, `int1`, `str1`, `long1`, `str2`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
 
     // unpivoting where value column does not exist
     val e2 = intercept[AnalysisException] {
@@ -389,7 +391,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`does`",
-        "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
+        "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
 
     // unpivoting without values where potential value columns are of incompatible types
     val e3 = intercept[AnalysisException] {
@@ -456,7 +459,8 @@ class DatasetUnpivotSuite extends QueryTest
 
   test("unpivot after pivot") {
     // see test "pivot courses" in DataFramePivotSuite
-    val pivoted = courseSales.groupBy("year").pivot("course", Array("dotNET", "Java"))
+    val pivoted = courseSales.groupBy("year")
+      .pivot("course", Array("dotNET", "Java").toImmutableArraySeq)
       .agg(sum($"earnings"))
     val unpivoted = pivoted.unpivot(Array($"year"), "course", "earnings")
     val expected = courseSales.groupBy("year", "course").sum("earnings")
@@ -506,7 +510,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`an`.`id`",
-        "proposal" -> "`an.id`, `int1`, `long1`, `str.one`, `str.two`"))
+        "proposal" -> "`an.id`, `int1`, `long1`, `str.one`, `str.two`"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("unpivot with struct fields") {

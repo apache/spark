@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Array abstraction in {@link ColumnVector}.
@@ -158,6 +159,11 @@ public final class ColumnarArray extends ArrayData {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     return data.getInterval(offset + ordinal);
+  }
+
+  @Override
+  public VariantVal getVariant(int ordinal) {
+    return data.getVariant(offset + ordinal);
   }
 
   @Override

@@ -116,7 +116,7 @@ private[spark] class ExecutorPodsLifecycleManager(
     // This makes sure that we don't keep growing that set indefinitely, in case we end up missing
     // an update for some pod.
     if (inactivatedPods.nonEmpty && snapshots.nonEmpty) {
-      inactivatedPods.retain(snapshots.last.executorPods.contains(_))
+      inactivatedPods.filterInPlace(snapshots.last.executorPods.contains(_))
     }
 
     // Reconcile the case where Spark claims to know about an executor but the corresponding pod

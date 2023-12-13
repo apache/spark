@@ -16,9 +16,11 @@
 # limitations under the License.
 #
 
+from itertools import chain
 from pyspark.sql import Column, Row
+from pyspark.sql import functions as sf
 from pyspark.sql.types import StructType, StructField, LongType
-from pyspark.errors import AnalysisException, PySparkTypeError
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -206,6 +208,45 @@ class ColumnTestsMixin:
         self.assertTrue("b" not in result["a1"] and "c" in result["a1"] and "d" in result["a1"])
 
         self.assertTrue("e" not in result["a2"]["d"] and "f" in result["a2"]["d"])
+
+    def test_getitem_column(self):
+        mapping = {"A": "20", "B": "28", "C": "34"}
+        mapping_expr = sf.create_map([sf.lit(x) for x in chain(*mapping.items())])
+        df = self.spark.createDataFrame(
+            data=[["A", "10"], ["B", "14"], ["C", "17"]],
+            schema=["key", "value"],
+        ).withColumn("square_value", mapping_expr[sf.col("key")])
+        self.assertEqual(df.count(), 3)
+
+    def test_alias_negative(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.range(1).id.alias("a", "b", metadata={})
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+            message_parameters={"arg_name": "metadata"},
+        )
+
+    def test_cast_negative(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(1).id.cast(123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DATATYPE_OR_STR",
+            message_parameters={"arg_name": "dataType", "arg_type": "int"},
+        )
+
+    def test_over_negative(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(1).id.over(123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_WINDOWSPEC",
+            message_parameters={"arg_name": "window", "arg_type": "int"},
+        )
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

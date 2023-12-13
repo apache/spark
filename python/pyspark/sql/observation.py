@@ -14,14 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 from typing import Any, Dict, Optional
 
 from py4j.java_gateway import JavaObject, JVMView
 
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.utils import try_remote_observation
+from pyspark.sql.utils import is_remote
 
 __all__ = ["Observation"]
 
@@ -67,6 +69,13 @@ class Observation:
     {'count': 2, 'max(age)': 5}
     """
 
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.observation import Observation as ConnectObservation
+
+            return ConnectObservation(*args, **kwargs)
+        return super().__new__(cls)
+
     def __init__(self, name: Optional[str] = None) -> None:
         """Constructs a named or unnamed Observation instance.
 
@@ -77,14 +86,19 @@ class Observation:
         """
         if name is not None:
             if not isinstance(name, str):
-                raise TypeError("name should be a string")
+                raise PySparkTypeError(
+                    error_class="NOT_STR",
+                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+                )
             if name == "":
-                raise ValueError("name should not be empty")
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_NON_EMPTY_STR",
+                    message_parameters={"arg_name": "name", "arg_value": name},
+                )
         self._name = name
         self._jvm: Optional[JVMView] = None
         self._jo: Optional[JavaObject] = None
 
-    @try_remote_observation
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         """Attaches this observation to the given :class:`DataFrame` to observe aggregations.
 
@@ -111,9 +125,7 @@ class Observation:
         )
         return DataFrame(observed_df, df.sparkSession)
 
-    # Note that decorated property only works with Python 3.9+ which Spark Connect requires.
     @property
-    @try_remote_observation
     def get(self) -> Dict[str, Any]:
         """Get the observed metrics.
 

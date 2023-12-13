@@ -197,7 +197,7 @@ class KafkaDataConsumerSuite
     @volatile var error: Throwable = null
 
     def consume(i: Int): Unit = {
-      val taskContext = if (Random.nextBoolean) {
+      val taskContext = if (Random.nextBoolean()) {
         new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), 1,
           null, null, null)
       } else {

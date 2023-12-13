@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
@@ -47,17 +48,27 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     categoricalDataPointsRDD =
-      sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints()).map(_.asML)
+      sc.parallelize(
+        OldDecisionTreeSuite.generateCategoricalDataPoints().toImmutableArraySeq).map(_.asML)
     orderedLabeledPointsWithLabel0RDD =
-      sc.parallelize(OldDecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()).map(_.asML)
+      sc.parallelize(
+        OldDecisionTreeSuite.generateOrderedLabeledPointsWithLabel0().toImmutableArraySeq)
+        .map(_.asML)
     orderedLabeledPointsWithLabel1RDD =
-      sc.parallelize(OldDecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()).map(_.asML)
+      sc.parallelize(
+        OldDecisionTreeSuite.generateOrderedLabeledPointsWithLabel1().toImmutableArraySeq)
+        .map(_.asML)
     categoricalDataPointsForMulticlassRDD =
-      sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlass()).map(_.asML)
+      sc.parallelize(
+        OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlass().toImmutableArraySeq)
+        .map(_.asML)
     continuousDataPointsForMulticlassRDD =
-      sc.parallelize(OldDecisionTreeSuite.generateContinuousDataPointsForMulticlass()).map(_.asML)
+      sc.parallelize(
+        OldDecisionTreeSuite.generateContinuousDataPointsForMulticlass().toImmutableArraySeq)
+        .map(_.asML)
     categoricalDataPointsForMulticlassForOrderedFeaturesRDD = sc.parallelize(
-      OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures())
+      OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
+        .toImmutableArraySeq)
       .map(_.asML)
   }
 
@@ -117,7 +128,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(2.0)),
       LabeledPoint(1.0, Vectors.dense(3.0)))
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
       .setMaxDepth(4)
@@ -131,7 +142,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
       LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
       LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 2.0)))))
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
       .setMaxDepth(4)
@@ -201,7 +212,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
       LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
       LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
       .setMaxDepth(2)
@@ -218,7 +229,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
       LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
       LabeledPoint(0.0, Vectors.dense(0.0, 0.0)))
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
       .setMaxBins(2)
@@ -234,7 +245,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
       LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
       LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
 
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -340,7 +351,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     val data = TreeTests.getSingleTreeLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
-    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    val df = sc.parallelize(data.toImmutableArraySeq, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Double, predictedLeafId: Double) =>

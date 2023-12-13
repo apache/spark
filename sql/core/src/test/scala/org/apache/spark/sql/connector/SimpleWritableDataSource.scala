@@ -157,6 +157,7 @@ class CSVReaderFactory(conf: SerializableConfiguration)
     val fs = filePath.getFileSystem(conf.value)
 
     new PartitionReader[InternalRow] {
+      import org.apache.spark.util.ArrayImplicits._
       private val inputStream = fs.open(filePath)
       private val lines = new BufferedReader(new InputStreamReader(inputStream))
         .lines().iterator().asScala
@@ -172,7 +173,8 @@ class CSVReaderFactory(conf: SerializableConfiguration)
         }
       }
 
-      override def get(): InternalRow = InternalRow(currentLine.split(",").map(_.trim.toInt): _*)
+      override def get(): InternalRow =
+        InternalRow(currentLine.split(",").map(_.trim.toInt).toImmutableArraySeq: _*)
 
       override def close(): Unit = {
         inputStream.close()

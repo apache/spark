@@ -727,7 +727,6 @@ class SparkFrameMethods:
         See Also
         --------
         read_table
-        DataFrame.to_spark_io
         DataFrame.spark.to_spark_io
         DataFrame.to_parquet
 
@@ -761,8 +760,7 @@ class SparkFrameMethods:
         index_col: Optional[Union[str, List[str]]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:
-        """Write the DataFrame out to a Spark data source. :meth:`DataFrame.spark.to_spark_io`
-        is an alias of :meth:`DataFrame.to_spark_io`.
+        """Write the DataFrame out to a Spark data source.
 
         Parameters
         ----------
@@ -801,7 +799,6 @@ class SparkFrameMethods:
         DataFrame.to_delta
         DataFrame.to_parquet
         DataFrame.to_table
-        DataFrame.to_spark_io
         DataFrame.spark.to_spark_io
 
         Examples
@@ -816,7 +813,7 @@ class SparkFrameMethods:
         1 2012-02-29 12:00:00      US     2
         2 2012-03-31 12:00:00      JP     3
 
-        >>> df.to_spark_io(path='%s/to_spark_io/foo.json' % path, format='json')
+        >>> df.spark.to_spark_io(path='%s/to_spark_io/foo.json' % path, format='json')
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]

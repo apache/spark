@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, Generic
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -609,7 +610,7 @@ case class NewInstance(
       null
     } else {
       try {
-        constructor(evaluatedArgs)
+        constructor(evaluatedArgs.toImmutableArraySeq)
       } catch {
         // Re-throw the original exception.
         case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
@@ -627,7 +628,7 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
-    val constructorCall = cls.getConstructors.size match {
+    val constructorCall = cls.getConstructors.length match {
       // If there are no constructors, the `new` method will fail. In
       // this case we can try to call the apply method constructor
       // that might be defined on the companion object.
@@ -811,7 +812,7 @@ case class UnresolvedMapObjects(
   override lazy val resolved = false
 
   override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
-    throw QueryExecutionErrors.customCollectionClsNotResolvedError
+    throw QueryExecutionErrors.customCollectionClsNotResolvedError()
   }
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedMapObjects =
@@ -902,13 +903,13 @@ case class MapObjects private(
     case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[scala.collection.Seq[_]].toSeq
     case ObjectType(cls) if cls.isArray =>
-      _.asInstanceOf[Array[_]].toSeq
+      _.asInstanceOf[Array[_]].toImmutableArraySeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[java.util.List[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
       (inputCollection) => {
         if (inputCollection.getClass.isArray) {
-          inputCollection.asInstanceOf[Array[_]].toSeq
+          inputCollection.asInstanceOf[Array[_]].toImmutableArraySeq
         } else {
           inputCollection.asInstanceOf[scala.collection.Seq[_]]
         }
@@ -1441,7 +1442,7 @@ case class ExternalMapToCatalyst private(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = {
-    val rowBuffer = InternalRow.fromSeq(Array[Any](1))
+    val rowBuffer = InternalRow.fromSeq(Array[Any](1).toImmutableArraySeq)
     def rowWrapper(data: Any): InternalRow = {
       rowBuffer.update(0, data)
       rowBuffer
@@ -1461,7 +1462,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1483,7 +1484,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1898,7 +1899,7 @@ case class GetExternalRowField(
   override def eval(input: InternalRow): Any = {
     val inputRow = child.eval(input).asInstanceOf[Row]
     if (inputRow == null) {
-      throw QueryExecutionErrors.inputExternalRowCannotBeNullError
+      throw QueryExecutionErrors.inputExternalRowCannotBeNullError()
     }
     if (inputRow.isNullAt(index)) {
       throw QueryExecutionErrors.fieldCannotBeNullError(index, fieldName)

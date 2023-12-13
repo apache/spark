@@ -124,11 +124,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         execute(lastConsumedStreamIndex)
       } finally {
         executeHolder.removeGrpcResponseSender(this)
-        if (!executeHolder.reattachable) {
-          // Non reattachable executions release here immediately.
-          // (Reattachable executions release with ReleaseExecute RPC.)
-          SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
-        }
+        // Non reattachable executions release here immediately.
+        // (Reattachable executions release with ReleaseExecute RPC.)
+        SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
       }
     }
   }

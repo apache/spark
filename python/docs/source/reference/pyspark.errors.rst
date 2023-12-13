@@ -28,16 +28,35 @@ Classes
 .. autosummary::
     :toctree: api/
 
-    PySparkException
     AnalysisException
-    TempTableAlreadyExistsException
-    ParseException
+    ArithmeticException
+    ArrayIndexOutOfBoundsException
+    DateTimeException
     IllegalArgumentException
-    StreamingQueryException
-    QueryExecutionException
+    NumberFormatException
+    ParseException
+    PySparkAssertionError
+    PySparkAttributeError
+    PySparkException
+    PySparkKeyError
+    PySparkNotImplementedError
+    PySparkPicklingError
+    PySparkRuntimeError
+    PySparkTypeError
+    PySparkValueError
+    PySparkImportError
+    PySparkIndexError
     PythonException
-    UnknownException
+    QueryExecutionException
+    RetriesExceeded
+    SessionNotSameException
+    SparkRuntimeException
     SparkUpgradeException
+    SparkNoSuchElementException
+    StreamingQueryException
+    TempTableAlreadyExistsException
+    UnknownException
+    UnsupportedOperationException
 
 
 Methods

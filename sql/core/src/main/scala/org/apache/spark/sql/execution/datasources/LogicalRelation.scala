@@ -71,7 +71,7 @@ case class LogicalRelation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = relation match {
     case relation: HadoopFsRelation =>
-      metadataOutputWithOutConflicts(Seq(relation.fileFormat.createFileMetadataCol))
+      metadataOutputWithOutConflicts(Seq(relation.fileFormat.createFileMetadataCol()))
     case _ => Nil
   }
 

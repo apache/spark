@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
 public final class ReloadingX509TrustManager
         implements X509TrustManager, Runnable {
 
-  private final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManager.class);
 
   private final String type;
   private final File file;
@@ -180,7 +180,8 @@ public final class ReloadingX509TrustManager
     canonicalPath = latestCanonicalFile.getPath();
     lastLoaded = latestCanonicalFile.lastModified();
     try (FileInputStream in = new FileInputStream(latestCanonicalFile)) {
-      ks.load(in, password.toCharArray());
+      char[] passwordCharacters = password != null? password.toCharArray() : null;
+      ks.load(in, passwordCharacters);
       logger.debug("Loaded truststore '" + file + "'");
     }
 
@@ -189,8 +190,8 @@ public final class ReloadingX509TrustManager
     trustManagerFactory.init(ks);
     TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
     for (TrustManager trustManager1 : trustManagers) {
-      if (trustManager1 instanceof X509TrustManager) {
-        trustManager = (X509TrustManager) trustManager1;
+      if (trustManager1 instanceof X509TrustManager x509TrustManager) {
+        trustManager = x509TrustManager;
         break;
       }
     }

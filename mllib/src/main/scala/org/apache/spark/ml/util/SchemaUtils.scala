@@ -120,7 +120,7 @@ private[spark] object SchemaUtils {
       size: Int): StructType = {
     require(size > 0)
     val attrGroup = new AttributeGroup(colName, size)
-    val field = attrGroup.toStructField
+    val field = attrGroup.toStructField()
     updateField(schema, field, true)
   }
 
@@ -138,7 +138,7 @@ private[spark] object SchemaUtils {
     val attr = NominalAttribute.defaultAttr
       .withName(colName)
       .withNumValues(numValues)
-    val field = attr.toStructField
+    val field = attr.toStructField()
     updateField(schema, field, true)
   }
 
@@ -153,7 +153,7 @@ private[spark] object SchemaUtils {
       colName: String): StructType = {
     val attr = NumericAttribute.defaultAttr
       .withName(colName)
-    val field = attr.toStructField
+    val field = attr.toStructField()
     updateField(schema, field, true)
   }
 

@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /*
  * Optimization rules defined in this file should not affect the structure of the logical plan.
@@ -116,7 +117,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
  */
 object ConstantPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(LITERAL, FILTER), ruleId) {
+    _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
     case f: Filter =>
       val (newCondition, _) = traverse(f.condition, replaceChildren = true, nullIsFalse = true)
       if (newCondition.isDefined) {
@@ -147,6 +148,8 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   private def traverse(condition: Expression, replaceChildren: Boolean, nullIsFalse: Boolean)
     : (Option[Expression], AttributeMap[(Literal, BinaryComparison)]) =
     condition match {
+      case _ if !condition.containsAllPatterns(LITERAL, BINARY_COMPARISON) =>
+        (None, AttributeMap.empty)
       case e @ EqualTo(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
         (None, AttributeMap(Map(left -> (right, e))))
@@ -206,7 +209,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
-    condition transform {
+    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
       case b: BinaryComparison if !predicates.contains(b) => b transform {
         case a: AttributeReference => constantsMap.getOrElse(a, a)
       }
@@ -653,38 +656,41 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] {
       case u @ UnaryExpression(i @ If(_, trueValue, falseValue))
           if supportedUnaryExpression(u) && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
-          trueValue = u.withNewChildren(Array(trueValue)),
-          falseValue = u.withNewChildren(Array(falseValue)))
+          trueValue = u.withNewChildren(Array(trueValue).toImmutableArraySeq),
+          falseValue = u.withNewChildren(Array(falseValue).toImmutableArraySeq))
 
       case u @ UnaryExpression(c @ CaseWhen(branches, elseValue))
           if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
-          branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
-          Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
+          branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2).toImmutableArraySeq))),
+          Some(u.withNewChildren(
+            Array(elseValue.getOrElse(Literal(null, c.dataType))).toImmutableArraySeq)))
 
       case SupportedBinaryExpr(b, i @ If(_, trueValue, falseValue), right)
           if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
-          trueValue = b.withNewChildren(Array(trueValue, right)),
-          falseValue = b.withNewChildren(Array(falseValue, right)))
+          trueValue = b.withNewChildren(Array(trueValue, right).toImmutableArraySeq),
+          falseValue = b.withNewChildren(Array(falseValue, right).toImmutableArraySeq))
 
       case SupportedBinaryExpr(b, left, i @ If(_, trueValue, falseValue))
           if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
-          trueValue = b.withNewChildren(Array(left, trueValue)),
-          falseValue = b.withNewChildren(Array(left, falseValue)))
+          trueValue = b.withNewChildren(Array(left, trueValue).toImmutableArraySeq),
+          falseValue = b.withNewChildren(Array(left, falseValue).toImmutableArraySeq))
 
       case SupportedBinaryExpr(b, c @ CaseWhen(branches, elseValue), right)
           if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
-          branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
-          Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right).toImmutableArraySeq))),
+          Some(b.withNewChildren(
+            Array(elseValue.getOrElse(Literal(null, c.dataType)), right).toImmutableArraySeq)))
 
       case SupportedBinaryExpr(b, left, c @ CaseWhen(branches, elseValue))
           if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
-          branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
-          Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2).toImmutableArraySeq))),
+          Some(b.withNewChildren(
+            Array(left, elseValue.getOrElse(Literal(null, c.dataType))).toImmutableArraySeq)))
     }
   }
 }
@@ -1057,6 +1063,8 @@ object SimplifyCasts extends Rule[LogicalPlan] {
         if fromKey == toKey && fromValue == toValue => e
       case _ => c
       }
+    case IsNotNull(Cast(e, dataType: NumericType, _, _)) if isWiderCast(e.dataType, dataType) =>
+      IsNotNull(e)
   }
 
   // Returns whether the from DataType can be safely casted to the to DataType without losing

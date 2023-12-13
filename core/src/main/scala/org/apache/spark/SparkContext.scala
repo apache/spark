@@ -71,6 +71,7 @@ import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.{TriggerHeapHistogram, TriggerThreadDump}
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.logging.DriverLogger
 
 /**
@@ -576,6 +577,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this, _resources.asJava)
+    _env.initializeShuffleManager()
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
@@ -1688,7 +1690,7 @@ class SparkContext(config: SparkConf) extends Logging {
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal, serializedOnly)
-    val callSite = getCallSite
+    val callSite = getCallSite()
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
@@ -2417,7 +2419,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
-    val callSite = getCallSite
+    val callSite = getCallSite()
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     if (conf.getBoolean("spark.logLineage", false)) {
@@ -2539,7 +2541,7 @@ class SparkContext(config: SparkConf) extends Logging {
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
     assertNotStopped()
-    val callSite = getCallSite
+    val callSite = getCallSite()
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val cleanedFunc = clean(func)
@@ -2569,7 +2571,7 @@ class SparkContext(config: SparkConf) extends Logging {
   {
     assertNotStopped()
     val cleanF = clean(processPartition)
-    val callSite = getCallSite
+    val callSite = getCallSite()
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),
@@ -2604,6 +2606,17 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
     dagScheduler.cancelJobGroup(groupId)
+  }
+
+  /**
+   * Cancel active jobs for the specified group, as well as the future jobs in this job group.
+   * Note: the maximum number of job groups that can be tracked is set by
+   * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
+   * is to be added, the oldest job group tracked will be discarded.
+   */
+  def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true)
   }
 
   /**
@@ -2699,7 +2712,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return the cleaned closure
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    ClosureCleaner.clean(f, checkSerializable)
+    SparkClosureCleaner.clean(f, checkSerializable)
     f
   }
 
@@ -2733,7 +2746,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: Int = {
     assertNotStopped()
-    taskScheduler.defaultParallelism
+    taskScheduler.defaultParallelism()
   }
 
   /**
@@ -2803,7 +2816,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val addedArchivePaths = allAddedArchives.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
         schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths,
-        env.metricsSystem.metricsProperties.asScala.toMap)
+        env.metricsSystem.metricsProperties().asScala.toMap)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }
@@ -2817,7 +2830,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
     // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
     driverUpdates.put(EventLoggingListener.DRIVER_STAGE_KEY, new ExecutorMetrics(currentMetrics))
-    val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
+    val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0).toImmutableArraySeq
     listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
       driverUpdates))
   }

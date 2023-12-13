@@ -683,7 +683,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
       Iterator.empty
     }
-    implicit val intEncoder = ExpressionEncoder[Int]
+    implicit val intEncoder = ExpressionEncoder[Int]()
 
     left.cogroup[Int, Int, Int, Int](
       right,

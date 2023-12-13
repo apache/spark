@@ -38,7 +38,14 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.session import SparkSession
 
-__all__ = ["AnalyzeArgument", "AnalyzeResult", "UDTFRegistration"]
+__all__ = [
+    "AnalyzeArgument",
+    "AnalyzeResult",
+    "PartitioningColumn",
+    "OrderingColumn",
+    "SkipRestOfInputTableException",
+    "UDTFRegistration",
+]
 
 
 @dataclass(frozen=True)
@@ -48,23 +55,30 @@ class AnalyzeArgument:
 
     Parameters
     ----------
-    data_type : :class:`DataType`
+    dataType : :class:`DataType`
         The argument's data type
-    value : Optional[Any]
+    value : any, optional
         The calculated value if the argument is foldable; otherwise None
-    is_table : bool
+    isTable : bool
         If True, the argument is a table argument.
     """
 
-    data_type: DataType
+    dataType: DataType
     value: Optional[Any]
-    is_table: bool
+    isTable: bool
 
 
 @dataclass(frozen=True)
 class PartitioningColumn:
     """
-    Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
+    Represents an expression that the UDTF is specifying for Catalyst to partition the input table
+    by. This can be either the name of a single column from the input table (such as "columnA"), or
+    a SQL expression based on the column names of the input table (such as "columnA + columnB").
+
+    Parameters
+    ----------
+    name : str
+        The contents of the partitioning column name or expression represented as a SQL string.
     """
 
     name: str
@@ -73,15 +87,24 @@ class PartitioningColumn:
 @dataclass(frozen=True)
 class OrderingColumn:
     """
-    Represents a single ordering column name for purposes of returning metadata from the 'analyze'
-    method.
+    Represents an expression that the UDTF is specifying for Catalyst to order the input partition
+    by. This can be either the name of a single column from the input table (such as "columnA"),
+    or a SQL expression based on the column names of the input table (such as "columnA + columnB").
+
+    Parameters
+    ----------
+    name : str
+        The contents of the ordering column name or expression represented as a SQL string.
+    ascending : bool, default True
+        This is if this expression specifies an ascending sorting order.
+    overrideNullsFirst : str, optional
+        If this is None, use the default behavior to sort NULL values first when sorting in
+        ascending order, or last when sorting in descending order. Otherwise, if this is
+        True or False, we override the default behavior accordingly.
     """
 
     name: str
     ascending: bool = True
-    # If this is None, use the default behavior to sort NULL values first when sorting in ascending
-    # order, or last when sorting in descending order. Otherwise, if this is True or False, override
-    # the default behavior accordingly.
     overrideNullsFirst: Optional[bool] = None
 
 
@@ -97,25 +120,35 @@ class AnalyzeResult:
     ----------
     schema : :class:`StructType`
         The schema that the Python UDTF will return.
-    with_single_partition : bool
+    withSinglePartition : bool
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partition_by : Sequence[PartitioningColumn]
-        If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
+    partitionBy : sequence of :class:`PartitioningColumn`
+        If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
-        mutually exclusive with 'with_single_partition'.
-    order_by: Sequence[OrderingColumn]
-        If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
-        sort the input TABLE argument by. Note that the 'partition_by' list must also be non-empty
+        mutually exclusive with 'withSinglePartition'.
+    orderBy: sequence of :class:`OrderingColumn`
+        If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
+        sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
     """
 
     schema: StructType
-    with_single_partition: bool = False
-    partition_by: Sequence[PartitioningColumn] = field(default_factory=tuple)
-    order_by: Sequence[OrderingColumn] = field(default_factory=tuple)
+    withSinglePartition: bool = False
+    partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
+    orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+
+
+class SkipRestOfInputTableException(Exception):
+    """
+    This represents an exception that the 'eval' method may raise to indicate that it is done
+    consuming rows from the current partition of the input table. Then the UDTF's 'terminate'
+    method runs (if any).
+    """
+
+    pass
 
 
 def _create_udtf(

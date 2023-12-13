@@ -95,7 +95,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "/tmp",
       "",
       true,
-      KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID", Some("fast"), Some("512mb"))
+      KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID", Some("fast"), Some("512M"))
     )
     val driverConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val driverStep = new MountVolumesFeatureStep(driverConf)

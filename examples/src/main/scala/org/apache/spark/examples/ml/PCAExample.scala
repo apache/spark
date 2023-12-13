@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import scala.collection.immutable
+
 // $example on$
 import org.apache.spark.ml.feature.PCA
 import org.apache.spark.ml.linalg.Vectors
@@ -27,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 object PCAExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("PCAExample")
       .getOrCreate()
 
@@ -37,7 +39,8 @@ object PCAExample {
       Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
     )
-    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+    val df = spark.createDataFrame(immutable.ArraySeq.unsafeWrapArray(data.map(Tuple1.apply)))
+      .toDF("features")
 
     val pca = new PCA()
       .setInputCol("features")
