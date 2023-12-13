@@ -594,45 +594,39 @@ class XmlTokenizer(
    * @param value  the object that will be written
    * @return whether it reads successfully
    */
-  def next(): Option[String] = {
-    try {
-      if (readUntilStartElement()) {
-        buffer.append(currentStartTag)
-        // Don't check whether the end element was found. Even if not, return everything
-        // that was read, which will invariably cause a parse error later
-        readUntilEndElement(currentStartTag.endsWith(">"))
-        val str = buffer.toString()
-        buffer = new StringBuilder()
-        return Some(str)
-      }
-    } catch {
-      case e: FileNotFoundException if options.ignoreMissingFiles =>
-        logWarning(
-          "Skipping the rest of" +
-          " the content in the missing file during schema inference",
-          e)
-      case NonFatal(e) =>
-        ExceptionUtils.getRootCause(e) match {
-          case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
-            logWarning(
-              "Skipping the rest of" +
-              " the content in the corrupted file during schema inference",
-              e
-            )
-          case o =>
-            reader.close()
-            reader = null
-            throw o
+    def next(): Option[String] = {
+      var nextString: Option[String] = None
+      try {
+        if (readUntilStartElement()) {
+          buffer.append(currentStartTag)
+          // Don't check whether the end element was found. Even if not, return everything
+          // that was read, which will invariably cause a parse error later
+          readUntilEndElement(currentStartTag.endsWith(">"))
+          nextString = Some(buffer.toString())
+          buffer = new StringBuilder()
         }
-      case e: Throwable =>
-        reader.close()
-        reader = null
-        throw e
+      } catch {
+        case e: FileNotFoundException if options.ignoreMissingFiles =>
+          logWarning(
+            "Skipping the rest of" +
+              " the content in the missing file during schema inference",
+            e)
+        case NonFatal(e) =>
+          ExceptionUtils.getRootCause(e) match {
+            case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+              logWarning(
+                "Skipping the rest of" +
+                  " the content in the corrupted file during schema inference",
+                e)
+          }
+      } finally {
+        if (nextString.isEmpty) {
+          reader.close()
+          reader = null
+        }
+      }
+      nextString
     }
-    reader.close()
-    reader = null
-    None
-  }
 
   private def readUntilStartElement(): Boolean = {
     currentStartTag = startTag
