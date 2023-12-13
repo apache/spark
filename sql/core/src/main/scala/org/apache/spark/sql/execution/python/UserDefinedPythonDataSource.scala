@@ -47,54 +47,68 @@ import org.apache.spark.util.ArrayImplicits._
  * Data Source V2 wrapper for Python Data Source.
  */
 class PythonTableProvider(shortName: String) extends TableProvider {
+  private var pythonResult: PythonDataSourceCreationResult = _
   private lazy val source: UserDefinedPythonDataSource =
     SparkSession.active.sessionState.dataSourceManager.lookupDataSource(shortName)
-  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
-    source.inferSchema(shortName, options)
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    if (pythonResult == null) {
+      pythonResult = source.createPythonResult(shortName, options, None)
+    }
+    pythonResult.schema
+  }
 
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
     assert(partitioning.isEmpty)
-    new PythonTable(shortName, source, schema)
-  }
+    val givenSchema = schema
+    new Table with SupportsRead {
+      override def name(): String = shortName
 
-  override def supportsExternalMetadata(): Boolean = true
-}
+      override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
+        BATCH_READ, BATCH_WRITE)
 
-class PythonTable(shortName: String, source: UserDefinedPythonDataSource, givenSchema: StructType)
-      extends Table with SupportsRead {
-  override def name(): String = shortName
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new ScanBuilder with Batch with Scan {
 
-  override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
-    BATCH_READ, BATCH_WRITE)
+          private lazy val pythonFunc: PythonFunction = {
+            if (pythonResult == null) {
+              pythonResult = source.createPythonResult(shortName, options, Some(givenSchema))
+            }
+            SimplePythonFunction(
+              command = pythonResult.dataSource.toImmutableArraySeq,
+              envVars = source.dataSourceCls.envVars,
+              pythonIncludes = source.dataSourceCls.pythonIncludes,
+              pythonExec = source.dataSourceCls.pythonExec,
+              pythonVer = source.dataSourceCls.pythonVer,
+              broadcastVars = source.dataSourceCls.broadcastVars,
+              accumulator = source.dataSourceCls.accumulator)
+          }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ScanBuilder with Batch with Scan {
+          private lazy val info: PythonDataSourceReadInfo =
+            new UserDefinedPythonDataSourceReadRunner(
+              pythonFunc, PythonDataSourcePartitions.schema, givenSchema).runInPython()
 
-      private lazy val pythonFunc: PythonFunction =
-        source.createPythonFunction(shortName, options, givenSchema)
+          override def build(): Scan = this
 
-      private lazy val info: PythonDataSourceReadInfo =
-        new UserDefinedPythonDataSourceReadRunner(
-          pythonFunc, PythonDataSourcePartitions.schema, givenSchema).runInPython()
+          override def toBatch: Batch = this
 
-      override def build(): Scan = this
+          override def readSchema(): StructType = givenSchema
 
-      override def toBatch: Batch = this
+          override def planInputPartitions(): Array[InputPartition] =
+            info.partitions.zipWithIndex.map(p => PythonInputPartition(p._2, p._1)).toArray
 
-      override def readSchema(): StructType = givenSchema
+          override def createReaderFactory(): PartitionReaderFactory =
+            new PythonPartitionReaderFactory(info, pythonFunc, givenSchema)
+        }
+      }
 
-      override def planInputPartitions(): Array[InputPartition] =
-        info.partitions.zipWithIndex.map(p => PythonInputPartition(p._2, p._1)).toArray
-
-      override def createReaderFactory(): PartitionReaderFactory =
-        new PythonPartitionReaderFactory(info, pythonFunc, givenSchema)
+      override def schema(): StructType = givenSchema
     }
   }
 
-  override def schema(): StructType = givenSchema
+  override def supportsExternalMetadata(): Boolean = true
 }
 
 case class PythonInputPartition(index: Int, pickedPartition: Array[Byte]) extends InputPartition
@@ -165,8 +179,7 @@ class PythonPartitionReaderFactory(
  * @param dataSourceCls The Python data source class.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
-
-  private def createPythonResult(
+  def createPythonResult(
       shortName: String,
       options: CaseInsensitiveStringMap,
       userSpecifiedSchema: Option[StructType]): PythonDataSourceCreationResult = {
@@ -175,29 +188,6 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       shortName,
       userSpecifiedSchema,
       CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap)).runInPython()
-  }
-
-  def inferSchema(
-      shortName: String,
-      options: CaseInsensitiveStringMap): StructType = {
-    createPythonResult(shortName, options, None).schema
-  }
-
-  def createPythonFunction(
-      shortName: String,
-      options: CaseInsensitiveStringMap,
-      givenSchema: StructType): PythonFunction = {
-    val dataSource = createPythonResult(
-      shortName, options, Some(givenSchema)).dataSource
-
-    SimplePythonFunction(
-      command = dataSource.toImmutableArraySeq,
-      envVars = dataSourceCls.envVars,
-      pythonIncludes = dataSourceCls.pythonIncludes,
-      pythonExec = dataSourceCls.pythonExec,
-      pythonVer = dataSourceCls.pythonVer,
-      broadcastVars = dataSourceCls.broadcastVars,
-      accumulator = dataSourceCls.accumulator)
   }
 }
 

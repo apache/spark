@@ -57,7 +57,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(df.rdd.getNumPartitions == 2)
     val plan = df.queryExecution.optimizedPlan
     plan match {
-      case s: DataSourceV2ScanRelation if s.relation.table.isInstanceOf[PythonTable] =>
+      case s: DataSourceV2ScanRelation
+        if s.relation.table.getClass.toString.contains("PythonTable") =>
       case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
     }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
