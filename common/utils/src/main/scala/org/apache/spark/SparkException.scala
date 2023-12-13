@@ -113,9 +113,9 @@ object SparkException {
    * @param errorClass The error class to type if the requirement isn't passed
    * @param messageParameters Message parameters to append to the message
    */
-  def sparkRequire(requirement: Boolean,
-                   errorClass: String,
-                   messageParameters: Map[String, String]): Unit = {
+  def checkArgs(requirement: Boolean,
+                errorClass: String,
+                messageParameters: Map[String, String]): Unit = {
     if (!requirement) {
       throw new SparkIllegalArgumentException(errorClass, messageParameters)
     }
