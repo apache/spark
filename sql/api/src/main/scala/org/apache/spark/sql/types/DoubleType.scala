@@ -42,8 +42,6 @@ class DoubleType private() extends FractionalType {
 @Stable
 case object DoubleType extends DoubleType {
 
-  // Traits below copied from Scala 2.12; not present in 2.13
-  // TODO: SPARK-30011 revisit once Scala 2.12 support is dropped
   trait DoubleIsConflicted extends Numeric[Double] {
     def plus(x: Double, y: Double): Double = x + y
     def minus(x: Double, y: Double): Double = x - y
@@ -56,8 +54,7 @@ case object DoubleType extends DoubleType {
     def toDouble(x: Double): Double = x
     // logic in Numeric base trait mishandles abs(-0.0)
     override def abs(x: Double): Double = math.abs(x)
-    // Added from Scala 2.13; don't override to work in 2.12
-    def parseString(str: String): Option[Double] =
+    override def parseString(str: String): Option[Double] =
       Try(java.lang.Double.parseDouble(str)).toOption
 
   }

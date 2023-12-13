@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
@@ -756,10 +756,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
 
       val expected = new ListBuffer[Row]()
-      expected.append(
+      expected.appendAll(Seq(
         Row(1, "1", 1, 1), Row(1, "1", 1, 2),
         Row(2, "2", 2, 1), Row(2, "2", 2, 2),
-        Row(3, "3", 3, 1), Row(3, "3", 3, 2)
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2))
       )
       for (i <- 4 to 100) {
         expected.append(Row(i, i.toString, null, null))
@@ -830,10 +830,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
 
       val expected = new ListBuffer[Row]()
-      expected.append(
+      expected.appendAll(Seq(
         Row(1, "1", 1, 1), Row(1, "1", 1, 2),
         Row(2, "2", 2, 1), Row(2, "2", 2, 2),
-        Row(3, "3", 3, 1), Row(3, "3", 3, 2)
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2))
       )
       for (i <- 4 to 100) {
         expected.append(Row(i, i.toString, null, null))
@@ -1714,7 +1714,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val dsA = Seq((1, "a")).toDF("id", "c1")
     val dsB = Seq((2, "b")).toDF("id", "c2")
     val dsC = Seq((3, "c")).toDF("id", "c3")
-    val joined = dsA.join(dsB, Stream("id"), "full_outer").join(dsC, Stream("id"), "full_outer")
+    val joined = dsA.join(dsB, LazyList("id"), "full_outer").join(dsC, LazyList("id"), "full_outer")
 
     val expected = Seq(Row(1, "a", null, null), Row(2, null, "b", null), Row(3, null, null, "c"))
 
@@ -1723,10 +1723,36 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("SPARK-44132: FULL OUTER JOIN by streamed column name fails with invalid access") {
     val ds = Seq((1, "a")).toDF("id", "c1")
-    val joined = ds.join(ds, Stream("id"), "full_outer").join(ds, Stream("id"), "full_outer")
+    val joined = ds.join(ds, LazyList("id"), "full_outer").join(ds, LazyList("id"), "full_outer")
 
     val expected = Seq(Row(1, "a", "a", "a"))
 
     checkAnswer(joined, expected)
+  }
+
+  test("SPARK-45882: BroadcastHashJoinExec propagate partitioning should respect " +
+    "CoalescedHashPartitioning") {
+    val cached = spark.sql(
+      """
+        |select /*+ broadcast(testData) */ key, value, a
+        |from testData join (
+        | select a from testData2 group by a
+        |)tmp on key = a
+        |""".stripMargin).cache()
+    try {
+      val df = cached.groupBy("key").count()
+      val expected = Seq(Row(1, 1), Row(2, 1), Row(3, 1))
+      assert(find(df.queryExecution.executedPlan) {
+        case _: ShuffleExchangeLike => true
+        case _ => false
+      }.size == 1, df.queryExecution)
+      checkAnswer(df, expected)
+      assert(find(df.queryExecution.executedPlan) {
+        case _: ShuffleExchangeLike => true
+        case _ => false
+      }.isEmpty, df.queryExecution)
+    } finally {
+      cached.unpersist()
+    }
   }
 }

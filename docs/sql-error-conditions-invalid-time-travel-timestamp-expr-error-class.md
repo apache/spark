@@ -33,6 +33,10 @@ Cannot be casted to the "TIMESTAMP" type.
 
 Must be deterministic.
 
+## OPTION
+
+Timestamp string in the options must be able to cast to TIMESTAMP type.
+
 ## UNEVALUABLE
 
 Must be evaluable.

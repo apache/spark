@@ -43,6 +43,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /** Common tests for WriteAheadLogs that we would like to test with different configurations. */
 abstract class CommonWriteAheadLogTests(
@@ -614,9 +615,9 @@ object WriteAheadLogSuite {
     val writer = HdfsUtils.getOutputStream(file, hadoopConf)
     def writeToStream(bytes: Array[Byte]): Unit = {
       val offset = writer.getPos
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
-      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.size)
+      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.length)
     }
     if (allowBatching) {
       writeToStream(wrapArrayArrayByte(data.toArray[String]).array())
@@ -718,7 +719,7 @@ object WriteAheadLogSuite {
     val wal = createWriteAheadLog(logDirectory, closeFileAfterWrite, allowBatching)
     val data = wal.readAll().asScala.map(byteBufferToString).toArray
     wal.close()
-    data
+    data.toImmutableArraySeq
   }
 
   /** Get the log files in a directory. */
@@ -732,7 +733,7 @@ object WriteAheadLogSuite {
         _.getName().split("-")(1).toLong
       }.map {
         _.toString.stripPrefix("file:")
-      }
+      }.toImmutableArraySeq
     } else {
       Seq.empty
     }

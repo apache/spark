@@ -69,9 +69,9 @@ final class StaxXmlGeneratorSuite extends SharedSparkSession {
     val df = dataset.toDF().orderBy("booleanDatum")
     val targetFile =
       Files.createTempDirectory("StaxXmlGeneratorSuite").resolve("roundtrip.xml").toString
-    df.write.format("xml").save(targetFile)
+    df.write.option("rowTag", "ROW").xml(targetFile)
     val newDf =
-      spark.read.schema(df.schema).format("xml").load(targetFile).orderBy("booleanDatum")
+      spark.read.option("rowTag", "ROW").schema(df.schema).xml(targetFile).orderBy("booleanDatum")
     assert(df.collect().toSeq === newDf.collect().toSeq)
   }
 

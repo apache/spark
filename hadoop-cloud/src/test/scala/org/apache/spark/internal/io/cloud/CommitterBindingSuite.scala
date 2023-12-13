@@ -62,7 +62,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
     val tContext: TaskAttemptContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val parquet = new BindingParquetOutputCommitter(path, tContext)
-    val inner = parquet.boundCommitter.asInstanceOf[StubPathOutputCommitterWithDynamicPartioning]
+    val inner = parquet.boundCommitter().asInstanceOf[StubPathOutputCommitterWithDynamicPartioning]
     parquet.setupJob(tContext)
     assert(inner.jobSetup, s"$inner job not setup")
     parquet.setupTask(tContext)

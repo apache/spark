@@ -31,7 +31,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
-  test(s"throw SparkException with null filename in stack trace elements") {
+  test("throw SparkException with null filename in stack trace elements") {
     withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
       val session = spark
       import session.implicits._
@@ -63,7 +63,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         })
 
       val ex = intercept[SparkException] {
-        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
       }
 
       assert(ex.getCause.isInstanceOf[SparkException])
@@ -85,6 +85,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
                 |""".stripMargin)
             .collect()
         }
+        assert(ex.getErrorClass != null)
         if (enrichErrorEnabled) {
           assert(ex.getCause.isInstanceOf[DateTimeException])
         } else {
@@ -94,7 +95,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     }
   }
 
-  test(s"throw SparkException with large cause exception") {
+  test("throw SparkException with large cause exception") {
     withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
       val session = spark
       import session.implicits._
@@ -103,7 +104,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         udf((_: String) => throw new SparkException("test" * 10000))
 
       val ex = intercept[SparkException] {
-        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
       }
 
       assert(ex.getErrorClass != null)
@@ -136,8 +137,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         assert(
           ex.getStackTrace
             .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
-            .isDefined
-            == isServerStackTraceEnabled)
+            .isDefined)
       }
     }
   }
@@ -157,8 +157,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(ex.getErrorClass != null)
   }
 
-  test("throw NoSuchTableException") {
-    val ex = intercept[NoSuchTableException] {
+  test("table not found for spark.catalog.getTable") {
+    val ex = intercept[AnalysisException] {
       spark.catalog.getTable("test_table")
     }
     assert(ex.getErrorClass != null)
@@ -872,6 +872,64 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
   }
 
+  test("SPARK-45509: ambiguous column reference") {
+    val session = spark
+    import session.implicits._
+    val df1 = Seq(1 -> "a").toDF("i", "j")
+    val df1_filter = df1.filter(df1("i") > 0)
+    val df2 = Seq(2 -> "b").toDF("i", "y")
+
+    checkSameResult(
+      Seq(Row(1)),
+      // df1("i") is not ambiguous, and it's still valid in the filtered df.
+      df1_filter.select(df1("i")))
+
+    val e1 = intercept[AnalysisException] {
+      // df1("i") is not ambiguous, but it's not valid in the projected df.
+      df1.select((df1("i") + 1).as("plus")).select(df1("i")).collect()
+    }
+    assert(e1.getMessage.contains("MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT"))
+
+    checkSameResult(
+      Seq(Row(1, "a")),
+      // All these column references are not ambiguous and are still valid after join.
+      df1.join(df2, df1("i") + 1 === df2("i")).sort(df1("i").desc).select(df1("i"), df1("j")))
+
+    val e2 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both join sides.
+      df1.join(df1, df1("i") === 1).collect()
+    }
+    assert(e2.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    val e3 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both join sides.
+      df1.join(df1).select(df1("i")).collect()
+    }
+    assert(e3.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    val e4 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both join sides (df1_filter contains df1).
+      df1.join(df1_filter, df1("i") === 1).collect()
+    }
+    assert(e4.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    checkSameResult(
+      Seq(Row("a")),
+      // df1_filter("i") is not ambiguous as df1_filter does not exist in the join left side.
+      df1.join(df1_filter, df1_filter("i") === 1).select(df1_filter("j")))
+
+    val e5 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both sides of the first join.
+      df1.join(df1_filter, df1_filter("i") === 1).join(df2, df1("i") === 1).collect()
+    }
+    assert(e5.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    checkSameResult(
+      Seq(Row("a")),
+      // df1_filter("i") is not ambiguous as df1_filter only appears once.
+      df1.join(df1_filter).join(df2, df1_filter("i") === 1).select(df1_filter("j")))
+  }
+
   test("broadcast join") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
       val left = spark.range(100).select(col("id"), rand(10).as("a"))
@@ -1011,9 +1069,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(df1.sameSemantics(df3) === false)
     assert(df3.sameSemantics(df4) === true)
 
-    assert(df1.semanticHash === df2.semanticHash)
-    assert(df1.semanticHash !== df3.semanticHash)
-    assert(df3.semanticHash === df4.semanticHash)
+    assert(df1.semanticHash() === df2.semanticHash())
+    assert(df1.semanticHash() !== df3.semanticHash())
+    assert(df3.semanticHash() === df4.semanticHash())
   }
 
   test("toJSON") {
@@ -1414,7 +1472,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val r4 = uuid()
     val r5 = shuffle(col("a"))
     df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
-      .collect
+      .collect()
       .foreach { row =>
         (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
       }

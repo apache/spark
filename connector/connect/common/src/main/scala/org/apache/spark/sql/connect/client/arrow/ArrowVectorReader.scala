@@ -134,7 +134,7 @@ private[arrow] class SmallIntVectorReader(v: SmallIntVector)
 private[arrow] class IntVectorReader(v: IntVector) extends TypedArrowVectorReader[IntVector](v) {
   override def getInt(i: Int): Int = vector.get(i)
   override def getLong(i: Int): Long = getInt(i)
-  override def getFloat(i: Int): Float = getInt(i)
+  override def getFloat(i: Int): Float = getInt(i).toFloat
   override def getDouble(i: Int): Double = getInt(i)
   override def getString(i: Int): String = String.valueOf(getInt(i))
   override def getJavaDecimal(i: Int): JBigDecimal = JBigDecimal.valueOf(getInt(i))
@@ -143,8 +143,8 @@ private[arrow] class IntVectorReader(v: IntVector) extends TypedArrowVectorReade
 private[arrow] class BigIntVectorReader(v: BigIntVector)
     extends TypedArrowVectorReader[BigIntVector](v) {
   override def getLong(i: Int): Long = vector.get(i)
-  override def getFloat(i: Int): Float = getLong(i)
-  override def getDouble(i: Int): Double = getLong(i)
+  override def getFloat(i: Int): Float = getLong(i).toFloat
+  override def getDouble(i: Int): Double = getLong(i).toDouble
   override def getString(i: Int): String = String.valueOf(getLong(i))
   override def getJavaDecimal(i: Int): JBigDecimal = JBigDecimal.valueOf(getLong(i))
   override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(getLong(i) * MICROS_PER_SECOND)

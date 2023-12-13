@@ -175,6 +175,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -225,6 +226,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -358,7 +360,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER"
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "sqlState" : "42836"
 }
 
 
@@ -407,6 +410,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -462,6 +466,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -490,6 +495,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -544,6 +550,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -598,6 +605,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -621,6 +629,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -739,6 +748,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

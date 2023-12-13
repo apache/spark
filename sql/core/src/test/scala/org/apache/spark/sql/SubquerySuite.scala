@@ -1197,7 +1197,7 @@ class SubquerySuite extends QueryTest
 
   test("SPARK-23316: AnalysisException after max iteration reached for IN query") {
     // before the fix this would throw AnalysisException
-    spark.range(10).where("(id,id) in (select id, null from range(3))").count
+    spark.range(10).where("(id,id) in (select id, null from range(3))").count()
   }
 
   test("SPARK-24085 scalar subquery in partitioning expression") {
@@ -2709,6 +2709,76 @@ class SubquerySuite extends QueryTest
       assert(filter.isEmpty,
         "Filter should be removed after OptimizeSubqueries and OptimizeOneRowRelationSubquery")
       checkAnswer(df, Row(1, "foo", 1, "foo"))
+    }
+  }
+
+  test("SPARK-45584: subquery execution should not fail with ORDER BY and LIMIT") {
+    withTable("t1") {
+      sql(
+        """
+          |CREATE TABLE t1 USING PARQUET
+          |AS SELECT * FROM VALUES
+          |(1, "a"),
+          |(2, "a"),
+          |(3, "a") t(id, value)
+          |""".stripMargin)
+      val df = sql(
+        """
+          |WITH t2 AS (
+          |  SELECT * FROM t1 ORDER BY id
+          |)
+          |SELECT *, (SELECT COUNT(*) FROM t2) FROM t2 LIMIT 10
+          |""".stripMargin)
+      // This should not fail with IllegalArgumentException.
+      checkAnswer(
+        df,
+        Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
+    }
+  }
+
+  test("SPARK-45580: Handle case where a nested subquery becomes an existence join") {
+    withTempView("t1", "t2", "t3") {
+      Seq((1), (2), (3), (7)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq((1), (2), (3)).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq((3), (9)).toDF("col1").persist().createOrReplaceTempView("t3")
+
+      val query1 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df1 = sql(query1)
+      checkAnswer(df1, Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      val query2 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a IN (
+          |  SELECT c1
+          |  FROM t2
+          |  where a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df2 = sql(query2)
+      checkAnswer(df2, Row(3))
+
+      val query3 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE NOT EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df3 = sql(query3)
+      checkAnswer(df3, Row(7))
     }
   }
 }

@@ -67,8 +67,10 @@ class PandasMapOpsMixin:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+
+        Filter rows with id equal to 1:
+
         >>> def filter_func(iterator):
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
@@ -79,6 +81,36 @@ class PandasMapOpsMixin:
         +---+---+
         |  1| 21|
         +---+---+
+
+        Compute the mean age for each id:
+
+        >>> def mean_age(iterator):
+        ...     for pdf in iterator:
+        ...         yield pdf.groupby("id").mean().reset_index()
+        ...
+        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKIP
+        +---+----+
+        | id| age|
+        +---+----+
+        |  1|21.0|
+        |  2|30.0|
+        +---+----+
+
+        Add a new column with the double of the age:
+
+        >>> def double_age(iterator):
+        ...     for pdf in iterator:
+        ...         pdf["double_age"] = pdf["age"] * 2
+        ...         yield pdf
+        ...
+        >>> df.mapInPandas(
+        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKIP
+        +---+---+----------+
+        | id|age|double_age|
+        +---+---+----------+
+        |  1| 21|        42|
+        |  2| 30|        60|
+        +---+---+----------+
 
         Set ``barrier`` to ``True`` to force the ``mapInPandas`` stage running in the
         barrier mode, it ensures all Python workers in the stage will be

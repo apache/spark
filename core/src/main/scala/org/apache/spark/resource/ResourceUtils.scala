@@ -22,7 +22,7 @@ import java.util.Optional
 
 import scala.util.control.NonFatal
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -31,6 +31,7 @@ import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
 import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -155,7 +156,7 @@ private[spark] object ResourceUtils extends Logging {
           s"config: $componentName.$RESOURCE_PREFIX.$key")
       }
       key.substring(0, index)
-    }.distinct.map(name => new ResourceID(componentName, name))
+    }.distinct.map(name => new ResourceID(componentName, name)).toImmutableArraySeq
   }
 
   def parseAllResourceRequests(
@@ -252,7 +253,7 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
     withResourcesJson[ResourceAllocation](resourcesFile) { json =>
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       parse(json).extract[Seq[ResourceAllocation]]
     }
   }
@@ -273,7 +274,8 @@ private[spark] object ResourceUtils extends Logging {
     val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
       if (request.amount > 0) {
-        Some(ResourceAllocation(id, discoverResource(sparkConf, request).addresses))
+        Some(ResourceAllocation(id,
+          discoverResource(sparkConf, request).addresses.toImmutableArraySeq))
       } else {
         None
       }
@@ -301,7 +303,7 @@ private[spark] object ResourceUtils extends Logging {
       allocations: Map[String, ResourceInformation],
       execReqs: Map[String, ExecutorResourceRequest]): Unit = {
     execReqs.foreach { case (rName, req) =>
-      require(allocations.contains(rName) && allocations(rName).addresses.size >= req.amount,
+      require(allocations.contains(rName) && allocations(rName).addresses.length >= req.amount,
         s"Resource: ${rName}, with addresses: " +
           s"${allocations(rName).addresses.mkString(",")} " +
           s"is less than what the user requested: ${req.amount})")
@@ -474,7 +476,7 @@ private[spark] object ResourceUtils extends Logging {
       if (maxTaskPerExec < (execAmount * numParts / taskAmount)) {
         val origTaskAmount = treq.amount
         val taskReqStr = s"${origTaskAmount}/${numParts}"
-        val resourceNumSlots = Math.floor(execAmount * numParts / taskAmount).toInt
+        val resourceNumSlots = (execAmount * numParts / taskAmount).toInt
         val message = s"The configuration of resource: ${treq.resourceName} " +
           s"(exec = ${execAmount}, task = ${taskReqStr}, " +
           s"runnable tasks = ${resourceNumSlots}) will " +

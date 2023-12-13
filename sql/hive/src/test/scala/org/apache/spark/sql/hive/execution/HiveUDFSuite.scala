@@ -453,12 +453,12 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
       // EXTERNAL OpenCSVSerde table pointing to LOCATION
 
-      val file1 = new File(tempDir + "/data1")
+      val file1 = new File(s"$tempDir/data1")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("1,2")
       }
 
-      val file2 = new File(tempDir + "/data2")
+      val file2 = new File(s"$tempDir/data2")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("1,2")
       }
@@ -493,7 +493,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
       assert(answer1.contains("data1") || answer1.contains("data2"))
 
-      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count
+      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count()
       assert(count2 == 2)
       sql("DROP TABLE external_t5")
     }
@@ -515,7 +515,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_parquet").head().getString(0)
       assert(answer3.contains("external_parquet"))
 
-      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count
+      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count()
       assert(count3 == 1)
       sql("DROP TABLE external_parquet")
     }
@@ -527,7 +527,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)
     assert(answer4.contains("parquet_tmp"))
 
-    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
+    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count()
     assert(count4 == 1)
     sql("DROP TABLE parquet_tmp")
   }
@@ -754,7 +754,9 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             "functionName" ->
               "`org`.`apache`.`hadoop`.`hive`.`ql`.`udf`.`generic`.`GenericUDFAssertTrue`",
             "signature" -> "boolean",
-            "result" -> "void"))
+            "result" -> "void",
+            "reason" ->
+              "org.apache.hadoop.hive.ql.metadata.HiveException: ASSERT_TRUE(): assertion failed."))
       }
     }
   }
@@ -778,6 +780,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       withTable("HiveSimpleUDFTable") {
         sql(s"create table HiveSimpleUDFTable as select false as v")
         val df = sql("SELECT CodeGenHiveSimpleUDF(v) from HiveSimpleUDFTable")
+
+        val reason = """
+          |org.apache.hadoop.hive.ql.metadata.HiveException: Unable to execute method public
+          |boolean org.apache.spark.sql.hive.execution.SimpleUDFAssertTrue.evaluate(boolean) with
+          |arguments {false}:ASSERT_TRUE(): assertion failed."""
+          .stripMargin.replaceAll("\n", " ").trim
+
         checkError(
           exception = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException],
           errorClass = "FAILED_EXECUTE_UDF",
@@ -785,7 +794,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             "functionName" ->
               "`org`.`apache`.`spark`.`sql`.`hive`.`execution`.`SimpleUDFAssertTrue`",
             "signature" -> "boolean",
-            "result" -> "boolean"
+            "result" -> "boolean",
+            "reason" -> reason
           )
         )
       }

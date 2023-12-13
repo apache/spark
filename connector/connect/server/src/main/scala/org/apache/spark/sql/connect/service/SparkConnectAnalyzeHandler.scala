@@ -27,6 +27,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
+import org.apache.spark.util.ArrayImplicits._
 
 private[connect] class SparkConnectAnalyzeHandler(
     responseObserver: StreamObserver[proto.AnalyzePlanResponse])
@@ -128,7 +129,7 @@ private[connect] class SparkConnectAnalyzeHandler(
         builder.setInputFiles(
           proto.AnalyzePlanResponse.InputFiles
             .newBuilder()
-            .addAllFiles(inputFiles.toSeq.asJava)
+            .addAllFiles(inputFiles.toImmutableArraySeq.asJava)
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
@@ -201,7 +202,9 @@ private[connect] class SparkConnectAnalyzeHandler(
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
-    builder.setSessionId(request.getSessionId)
+    builder
+      .setSessionId(request.getSessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
     builder.build()
   }
 }

@@ -29,6 +29,7 @@ import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -361,7 +362,7 @@ package object dsl {
       }
 
       def fillValueMap(valueMap: Map[String, Any]): Relation = {
-        val (cols, values) = valueMap.mapValues(toLiteralProto).toSeq.unzip
+        val (cols, values) = valueMap.transform((_, v) => toLiteralProto(v)).toSeq.unzip
         Relation
           .newBuilder()
           .setFillNa(
@@ -473,8 +474,8 @@ package object dsl {
             proto.StatApproxQuantile
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllCols(cols.toSeq.asJava)
-              .addAllProbabilities(probabilities.toSeq.map(Double.box).asJava)
+              .addAllCols(cols.toImmutableArraySeq.asJava)
+              .addAllProbabilities(probabilities.toImmutableArraySeq.map(Double.box).asJava)
               .setRelativeError(relativeError)
               .build())
           .build()
@@ -500,7 +501,7 @@ package object dsl {
             proto.StatFreqItems
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllCols(cols.toSeq.asJava)
+              .addAllCols(cols.toImmutableArraySeq.asJava)
               .setSupport(support)
               .build())
           .build()
@@ -520,7 +521,7 @@ package object dsl {
         .setProject(
           Project
             .newBuilder()
-            .addAllExpressions(exprs.toIterable.asJava)
+            .addAllExpressions(exprs.asJava)
             .build())
         .build()
     }
@@ -533,7 +534,7 @@ package object dsl {
             Project
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllExpressions(exprs.toIterable.asJava)
+              .addAllExpressions(exprs.asJava)
               .build())
           .build()
       }
@@ -800,6 +801,27 @@ package object dsl {
         Relation.newBuilder().setAggregate(agg.build()).build()
       }
 
+      def groupingSets(groupingSets: Seq[Seq[Expression]], groupingExprs: Expression*)(
+          aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS)
+        for (groupingSet <- groupingSets) {
+          val groupingSetMsg = Aggregate.GroupingSets.newBuilder()
+          for (groupCol <- groupingSet) {
+            groupingSetMsg.addGroupingSet(groupCol)
+          }
+          agg.addGroupingSets(groupingSetMsg)
+        }
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
       def except(otherPlan: Relation, isAll: Boolean): Relation = {
         Relation
           .newBuilder()
@@ -1061,7 +1083,7 @@ package object dsl {
           weights.sum > 0,
           s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
 
-        val sum = weights.toSeq.sum
+        val sum = weights.toImmutableArraySeq.sum
         val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
         normalizedCumWeights
           .sliding(2)

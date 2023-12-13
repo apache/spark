@@ -21,6 +21,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 class BinarizerSuite extends MLTest with DefaultReadWriteTest {
 
@@ -203,7 +204,7 @@ class BinarizerSuite extends MLTest with DefaultReadWriteTest {
       .setInputCols(Array("input"))
       .setOutputCols(Array("result1", "result2"))
       .setThreshold(1.0)
-    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0).toImmutableArraySeq)
       .map(Tuple1.apply).toDF("input")
     intercept[IllegalArgumentException] {
       binarizer.transform(df).count()

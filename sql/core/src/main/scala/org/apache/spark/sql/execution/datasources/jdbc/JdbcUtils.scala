@@ -47,6 +47,7 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDiale
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
 /**
@@ -78,7 +79,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
-    executeStatement(conn, options, s"DROP TABLE $table")
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.dropTable(table))
   }
 
   /**
@@ -114,22 +116,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
       isCaseSensitive: Boolean,
       dialect: JdbcDialect): String = {
     val columns = if (tableSchema.isEmpty) {
-      rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
+      rddSchema.fields
     } else {
       // The generated insert statement needs to follow rddSchema's column sequence and
       // tableSchema's column names. When appending data into some case-sensitive DBMSs like
       // PostgreSQL/Oracle, we need to respect the existing case-sensitive column names instead of
       // RDD column names for user convenience.
-      val tableColumnNames = tableSchema.get.fieldNames
       rddSchema.fields.map { col =>
-        val normalizedName = tableColumnNames.find(f => conf.resolver(f, col.name)).getOrElse {
+        tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
           throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
         }
-        dialect.quoteIdentifier(normalizedName)
-      }.mkString(",")
+      }
     }
-    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
-    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    dialect.insertIntoTable(table, columns)
   }
 
   /**
@@ -340,7 +339,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
-      private[this] val mutableRow = new SpecificInternalRow(schema.fields.map(x => x.dataType))
+      private[this] val mutableRow =
+        new SpecificInternalRow(schema.fields.map(x => x.dataType).toImmutableArraySeq)
 
       override protected def close(): Unit = {
         try {

@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -90,7 +91,7 @@ abstract class WholeTextFileSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       val df1 = spark.range(0, 1000).selectExpr("CAST(id AS STRING) AS s").repartition(1)
-      df1.write.option("compression", "gzip").mode("overwrite").text(path)
+      df1.write.option("compression", GZIP.lowerCaseName()).mode("overwrite").text(path)
       // On reading through wholetext mode, one file will be read as a single row, i.e. not
       // delimited by "next line" character.
       val expected = Row(df1.collect().map(_.getString(0)).mkString("", "\n", "\n"))

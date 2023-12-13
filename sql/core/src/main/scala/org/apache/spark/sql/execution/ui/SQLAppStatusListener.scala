@@ -131,9 +131,9 @@ class SQLAppStatusListener(
 
     // Reset the metrics tracking object for the new attempt.
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { stage =>
-      if (stage.attemptId != event.stageInfo.attemptNumber) {
+      if (stage.attemptId != event.stageInfo.attemptNumber()) {
         stageMetrics.put(event.stageInfo.stageId,
-          new LiveStageMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber,
+          new LiveStageMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber(),
             stage.numTasks, stage.accumIdsToMetricType))
       }
     }

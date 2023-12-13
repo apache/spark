@@ -10,7 +10,7 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`cte_tbl`, ErrorI
       :        +- OneRowRelation
       +- Project [col#x]
          +- SubqueryAlias s
-            +- CTERelationRef xxxx, true, [col#x], false
+            +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -32,7 +32,7 @@ CreateViewCommand `cte_view`, WITH s AS (SELECT 42 AS col) SELECT * FROM s, fals
       :        +- OneRowRelation
       +- Project [col#x]
          +- SubqueryAlias s
-            +- CTERelationRef xxxx, true, [col#x], false
+            +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -49,7 +49,7 @@ Project [col#x]
             :        +- OneRowRelation
             +- Project [col#x]
                +- SubqueryAlias s
-                  +- CTERelationRef xxxx, true, [col#x], false
+                  +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -64,7 +64,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
    :        +- OneRowRelation
    +- Project [col#x]
       +- SubqueryAlias S
-         +- CTERelationRef xxxx, true, [col#x], false
+         +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -86,7 +86,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
    :        +- OneRowRelation
    +- Project [col#x]
       +- SubqueryAlias s
-         +- CTERelationRef xxxx, true, [col#x], false
+         +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query

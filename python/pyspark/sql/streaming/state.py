@@ -20,7 +20,7 @@ from typing import Tuple, Optional
 
 from pyspark.sql.types import DateType, Row, StructType
 from pyspark.sql.utils import has_numpy
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
 
 __all__ = ["GroupState", "GroupStateTimeout"]
 
@@ -185,9 +185,12 @@ class GroupState:
             )
 
         if self._timeout_conf != GroupStateTimeout.ProcessingTimeTimeout:
-            raise RuntimeError(
-                "Cannot set timeout duration without enabling processing time timeout in "
-                "applyInPandasWithState"
+            raise PySparkRuntimeError(
+                error_class="CANNOT_WITHOUT",
+                message_parameters={
+                    "condition1": "set timeout duration",
+                    "condition2": "enabling processing time timeout in applyInPandasWithState",
+                },
             )
 
         if durationMs <= 0:
@@ -208,9 +211,12 @@ class GroupState:
         Event time timeout must be enabled.
         """
         if self._timeout_conf != GroupStateTimeout.EventTimeTimeout:
-            raise RuntimeError(
-                "Cannot set timeout duration without enabling processing time timeout in "
-                "applyInPandasWithState"
+            raise PySparkRuntimeError(
+                error_class="CANNOT_WITHOUT",
+                message_parameters={
+                    "condition1": "set timeout duration",
+                    "condition2": "enabling processing time timeout in applyInPandasWithState",
+                },
             )
 
         if isinstance(timestampMs, datetime.datetime):
@@ -245,9 +251,12 @@ class GroupState:
         In a streaming query, this can be called only when watermark is set.
         """
         if not self._watermark_present:
-            raise RuntimeError(
-                "Cannot get event time watermark timestamp without setting watermark before "
-                "applyInPandasWithState"
+            raise PySparkRuntimeError(
+                error_class="CANNOT_WITHOUT",
+                message_parameters={
+                    "condition1": "get event time watermark timestamp",
+                    "condition2": "setting watermark before applyInPandasWithState",
+                },
             )
         return self._event_time_watermark_ms
 

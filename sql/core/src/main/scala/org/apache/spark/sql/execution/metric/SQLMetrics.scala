@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -63,7 +63,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
       this.getClass.getName, other.getClass.getName)
   }
 
-  override def isZero(): Boolean = _value == _zeroValue
+  override def isZero: Boolean = _value == _zeroValue
 
   override def add(v: Long): Unit = {
     if (_value < 0) _value = 0
@@ -230,7 +230,7 @@ object SQLMetrics {
       } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
-        throw new IllegalStateException(s"unexpected metrics type: $metricsType")
+        throw SparkException.internalError(s"unexpected metrics type: $metricsType")
       }
 
       val validValues = values.filter(_ >= 0)

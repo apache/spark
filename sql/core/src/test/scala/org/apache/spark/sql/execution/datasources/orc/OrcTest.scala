@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * OrcTest
@@ -126,13 +127,13 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
           assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
         } else {
           assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
-          val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+          val maybeFilter = OrcFilters
+            .createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
           assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for " +
             s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         }
 
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
+      case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 

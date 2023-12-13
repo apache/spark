@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, Optional
 
 from py4j.protocol import Py4JJavaError
 
@@ -44,6 +44,7 @@ from pyspark.sql.functions import (
     AnalyzeResult,
     OrderingColumn,
     PartitioningColumn,
+    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -273,20 +274,21 @@ class BaseUDTFTestsMixin:
         df = self.spark.sql("SELECT * FROM testUDTF(null)")
         self.assertEqual(df.collect(), [Row(a=None)])
 
+    # These are expected error message substrings to be used in test cases below.
+    tooManyPositionalArguments = "too many positional arguments"
+    missingARequiredArgument = "missing a required argument"
+    multipleValuesForArgument = "multiple values for argument"
+
     def test_udtf_with_wrong_num_input(self):
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a, a + 1
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) missing 1 required positional argument: 'a'"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.missingARequiredArgument):
             TestUDTF().collect()
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.tooManyPositionalArguments):
             TestUDTF(lit(1), lit(2)).collect()
 
     def test_udtf_init_with_additional_args(self):
@@ -298,9 +300,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a,
 
-        with self.assertRaisesRegex(
-            PythonException, r"__init__\(\) missing 1 required positional argument: 'a'"
-        ):
+        with self.assertRaisesRegex(PythonException, r".*constructor has more than one argument.*"):
             TestUDTF(lit(1)).show()
 
     def test_udtf_terminate_with_additional_args(self):
@@ -1244,10 +1244,10 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(a, AnalyzeArgument)
-                assert isinstance(a.data_type, DataType)
+                assert isinstance(a.dataType, DataType)
                 assert a.value is not None
-                assert a.is_table is False
-                return AnalyzeResult(StructType().add("a", a.data_type))
+                assert a.isTable is False
+                return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
                 yield a,
@@ -1333,7 +1333,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
 
             def eval(self, a, b):
                 yield a, b
@@ -1364,7 +1364,7 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(*args: AnalyzeArgument) -> AnalyzeResult:
                 return AnalyzeResult(
-                    StructType([StructField(f"col{i}", a.data_type) for i, a in enumerate(args)])
+                    StructType([StructField(f"col{i}", a.dataType) for i, a in enumerate(args)])
                 )
 
             def eval(self, *args):
@@ -1397,10 +1397,10 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(a, AnalyzeArgument)
-                assert isinstance(a.data_type, StructType)
+                assert isinstance(a.dataType, StructType)
                 assert a.value is None
-                assert a.is_table is True
-                return AnalyzeResult(StructType().add("a", a.data_type[0].dataType))
+                assert a.isTable is True
+                return AnalyzeResult(StructType().add("a", a.dataType[0].dataType))
 
             def eval(self, a: Row):
                 if a["id"] > 5:
@@ -1417,9 +1417,9 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                assert isinstance(a.data_type, StructType)
-                assert a.is_table is True
-                return AnalyzeResult(a.data_type.add("is_even", BooleanType()))
+                assert isinstance(a.dataType, StructType)
+                assert a.isTable is True
+                return AnalyzeResult(a.dataType.add("is_even", BooleanType()))
 
             def eval(self, a: Row):
                 yield a["id"], a["id"] % 2 == 0
@@ -1449,11 +1449,11 @@ class BaseUDTFTestsMixin:
                 if n.value is None or not isinstance(n.value, int) or (n.value < 1 or n.value > 10):
                     raise Exception("The first argument must be a scalar integer between 1 and 10")
 
-                if row.is_table is False:
+                if row.isTable is False:
                     raise Exception("The second argument must be a table argument")
 
-                assert isinstance(row.data_type, StructType)
-                return AnalyzeResult(row.data_type)
+                assert isinstance(row.dataType, StructType)
+                return AnalyzeResult(row.dataType)
 
             def eval(self, n: int, row: Row):
                 for _ in range(n):
@@ -1581,8 +1581,9 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "Output of `analyze` static method of Python UDTFs expects "
-            "a pyspark.sql.udtf.AnalyzeResult but got: <class 'pyspark.sql.types.StringType'>",
+            "'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult, "
+            "but instead this method returned a value of type: "
+            "<class 'pyspark.sql.types.StringType'>",
         ):
             func().collect()
 
@@ -1604,7 +1605,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add("a", a.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
                 yield a,
@@ -1619,27 +1620,18 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
 
-            def eval(self, a):
+            def eval(self, a, b):
                 yield a, a + 1
 
         func = udtf(TestUDTF)
 
-        with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) missing 1 required positional argument: 'b'"
-        ):
+        with self.assertRaisesRegex(AnalysisException, r"arguments"):
             func(lit(1)).collect()
 
-        with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 2 positional arguments but 3 were given"
-        ):
+        with self.assertRaisesRegex(AnalysisException, r"arguments"):
             func(lit(1), lit(2), lit(3)).collect()
-
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
-        ):
-            func(lit(1), lit(2)).collect()
 
     def test_udtf_with_analyze_taking_keyword_arguments(self):
         @udtf
@@ -1659,12 +1651,12 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf(a=>1)"), expected)
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 0 positional arguments but 1 was given"
+            AnalysisException, BaseUDTFTestsMixin.tooManyPositionalArguments
         ):
             TestUDTF(lit(1)).collect()
 
         with self.assertRaisesRegex(
-            AnalysisException, r"analyze\(\) takes 0 positional arguments but 2 were given"
+            AnalysisException, BaseUDTFTestsMixin.tooManyPositionalArguments
         ):
             self.spark.sql("SELECT * FROM test_udtf(1, 'x')").collect()
 
@@ -1675,7 +1667,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                return AnalyzeResult(StructType().add(colname.value, a.data_type))
+                return AnalyzeResult(StructType().add(colname.value, a.dataType))
 
             def eval(self, a):
                 assert colname.value == "col1"
@@ -1700,7 +1692,7 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 test_accum.add(1)
-                return AnalyzeResult(StructType().add("col1", a.data_type))
+                return AnalyzeResult(StructType().add("col1", a.dataType))
 
             def eval(self, a):
                 test_accum.add(10)
@@ -1739,7 +1731,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.call_my_func() == "col1"
@@ -1779,7 +1771,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.call_my_func(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.call_my_func() == "col1"
@@ -1826,7 +1818,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.read_my_archive(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.read_my_archive(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.read_my_archive() == "col1"
@@ -1867,7 +1859,7 @@ class BaseUDTFTestsMixin:
 
                 @staticmethod
                 def analyze(a: AnalyzeArgument) -> AnalyzeResult:
-                    return AnalyzeResult(StructType().add(TestUDTF.read_my_file(), a.data_type))
+                    return AnalyzeResult(StructType().add(TestUDTF.read_my_file(), a.dataType))
 
                 def eval(self, a):
                     assert TestUDTF.read_my_file() == "col1"
@@ -1923,14 +1915,10 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
             self.spark.sql("SELECT * FROM test_udtf(a => 10, 'x')").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) got an unexpected keyword argument 'c'"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.missingARequiredArgument):
             self.spark.sql("SELECT * FROM test_udtf(c => 'x')").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"eval\(\) got multiple values for argument 'a'"
-        ):
+        with self.assertRaisesRegex(PythonException, BaseUDTFTestsMixin.multipleValuesForArgument):
             self.spark.sql("SELECT * FROM test_udtf(10, a => 100)").show()
 
     def test_udtf_with_kwargs(self):
@@ -1967,9 +1955,15 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
+                assert isinstance(kwargs["a"].dataType, IntegerType)
+                assert kwargs["a"].value == 10
+                assert not kwargs["a"].isTable
+                assert isinstance(kwargs["b"].dataType, StringType)
+                assert kwargs["b"].value == "x"
+                assert not kwargs["b"].isTable
                 return AnalyzeResult(
                     StructType(
-                        [StructField(key, arg.data_type) for key, arg in sorted(kwargs.items())]
+                        [StructField(key, arg.dataType) for key, arg in sorted(kwargs.items())]
                     )
                 )
 
@@ -1994,7 +1988,7 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(a, b):
-                return AnalyzeResult(StructType().add("a", a.data_type))
+                return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a, b):
                 yield a,
@@ -2021,12 +2015,19 @@ class BaseUDTFTestsMixin:
         @udtf
         class TestUDTF:
             @staticmethod
-            def analyze(a, b=None):
-                schema = StructType().add("a", a.data_type)
+            def analyze(a: AnalyzeArgument, b: Optional[AnalyzeArgument] = None):
+                assert isinstance(a.dataType, IntegerType)
+                assert a.value == 10
+                assert not a.isTable
+                if b is not None:
+                    assert isinstance(b.dataType, StringType)
+                    assert b.value == "z"
+                    assert not b.isTable
+                schema = StructType().add("a", a.dataType)
                 if b is None:
                     return AnalyzeResult(schema.add("b", IntegerType()))
                 else:
-                    return AnalyzeResult(schema.add("b", b.data_type))
+                    return AnalyzeResult(schema.add("b", b.dataType))
 
             def eval(self, a, b=100):
                 yield a, b
@@ -2285,8 +2286,8 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    with_single_partition=True,
-                    order_by=[OrderingColumn("input"), OrderingColumn("partition_col")],
+                    withSinglePartition=True,
+                    orderBy=[OrderingColumn("input"), OrderingColumn("partition_col")],
                 )
 
             def eval(self, row: Row):
@@ -2339,8 +2340,8 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    partition_by=[PartitioningColumn("partition_col")],
-                    order_by=[
+                    partitionBy=[PartitioningColumn("partition_col")],
+                    orderBy=[
                         OrderingColumn(name="input", ascending=True, overrideNullsFirst=False)
                     ],
                 )
@@ -2420,16 +2421,16 @@ class BaseUDTFTestsMixin:
             def analyze(argument, _):
                 if (
                     argument.value is None
-                    or argument.is_table
+                    or argument.isTable
                     or not isinstance(argument.value, str)
                     or len(argument.value) == 0
                 ):
                     raise Exception("The first argument must be non-empty string")
-                assert argument.data_type == StringType()
-                assert not argument.is_table
+                assert argument.dataType == StringType()
+                assert not argument.isTable
                 return AnalyzeResultWithBuffer(
                     schema=StructType().add("total", IntegerType()).add("buffer", StringType()),
-                    with_single_partition=True,
+                    withSinglePartition=True,
                     buffer=argument.value,
                 )
 
@@ -2452,6 +2453,56 @@ class BaseUDTFTestsMixin:
                 """
             ),
             [Row(count=20, buffer="abc")],
+        )
+
+    def test_udtf_with_skip_rest_of_input_table_exception(self):
+        @udtf(returnType="current: int, total: int")
+        class TestUDTF:
+            def __init__(self):
+                self._current = 0
+                self._total = 0
+
+            def eval(self, input: Row):
+                self._current = input["id"]
+                self._total += 1
+                if self._total >= 4:
+                    raise SkipRestOfInputTableException("Stop at self._total >= 4")
+
+            def terminate(self):
+                yield self._current, self._total
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows after the fourth input row is consumed.
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT current, total
+                FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY id)
+                """
+            ),
+            [Row(current=4, total=4)],
+        )
+
+        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+        # SkipRestOfInputTableException stops scanning rows for each of the two partitions
+        # separately.
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT current, total
+                FROM test_udtf(TABLE(t) PARTITION BY floor(id / 10) ORDER BY id)
+                ORDER BY ALL
+                """
+            ),
+            [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
         )
 
 

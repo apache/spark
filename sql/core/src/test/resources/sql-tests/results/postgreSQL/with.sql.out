@@ -199,6 +199,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.DATA_TYPE",
+  "sqlState" : "42836",
   "messageParameters" : {
     "fromDataType" : "\"STRING\"",
     "toDataType" : "\"BIGINT\""
@@ -833,6 +834,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -852,6 +854,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -871,6 +874,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -890,6 +894,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -909,6 +914,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -969,6 +975,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -990,6 +997,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1011,6 +1019,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1054,6 +1063,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1073,6 +1083,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1092,6 +1103,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1111,6 +1123,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -1156,16 +1169,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
-    "objectName" : "`id`"
+    "objectName" : "`id`",
+    "proposal" : "`a`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 139,
-    "stopIndex" : 140,
+    "startIndex" : 73,
+    "stopIndex" : 74,
     "fragment" : "id"
   } ]
 }
@@ -1184,7 +1198,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER"
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "sqlState" : "42836"
 }
 
 
@@ -1202,7 +1217,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER"
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "sqlState" : "42836"
 }
 
 
@@ -1219,7 +1235,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER"
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "sqlState" : "42836"
 }
 
 
@@ -1236,7 +1253,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER"
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "sqlState" : "42836"
 }
 
 
@@ -1252,6 +1270,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.DATA_TYPE",
+  "sqlState" : "42836",
   "messageParameters" : {
     "fromDataType" : "\"INT\"",
     "toDataType" : "\"DECIMAL(10,0)\""
@@ -1278,6 +1297,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.DATA_TYPE",
+  "sqlState" : "42836",
   "messageParameters" : {
     "fromDataType" : "\"DECIMAL(3,0)\"",
     "toDataType" : "\"DECIMAL(10,0)\""

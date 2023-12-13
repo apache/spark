@@ -40,6 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -164,8 +165,10 @@ case class RowDataSourceScanExec(
     Map("ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
-        Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
-          "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
+        Map("PushedAggregates" -> seqToString(
+          v.aggregateExpressions.map(_.describe()).toImmutableArraySeq),
+          "PushedGroupByExpressions" ->
+            seqToString(v.groupByExpressions.map(_.describe()).toImmutableArraySeq))} ++
       topNOrLimitInfo ++
       offsetInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
@@ -290,7 +293,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
         val filePruningRunner = new FilePruningRunner(dynamicDataFilters)
         ret = ret.map(filePruningRunner.prune)
       }
-      setFilesNumAndSizeMetric(ret, false)
+      setFilesNumAndSizeMetric(ret.toImmutableArraySeq, false)
       val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
       driverMetrics("pruningTime").set(timeTakenMs)
       ret
@@ -687,11 +690,11 @@ case class FileSourceScanExec(
    * @param selectedPartitions Hive-style partition that are part of the read.
    */
   private def createReadRDD(
-      readFile: (PartitionedFile) => Iterator[InternalRow],
+      readFile: PartitionedFile => Iterator[InternalRow],
       selectedPartitions: Array[PartitionDirectory]): RDD[InternalRow] = {
     val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
-      FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
+      FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions.toImmutableArraySeq)
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
@@ -711,7 +714,6 @@ case class FileSourceScanExec(
           val isSplitable = relation.fileFormat.isSplitable(
               relation.sparkSession, relation.options, file.getPath)
           PartitionedFileUtil.splitFiles(
-            sparkSession = relation.sparkSession,
             file = file,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
@@ -723,8 +725,8 @@ case class FileSourceScanExec(
       }
     }.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
-    val partitions =
-      FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
+    val partitions = FilePartition
+      .getFilePartitions(relation.sparkSession, splitFiles.toImmutableArraySeq, maxSplitBytes)
 
     new FileScanRDD(relation.sparkSession, readFile, partitions,
       new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),

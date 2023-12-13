@@ -110,12 +110,13 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
           // Recursive references can be resolved from the anchor term.
           if (ref.recursive) {
             if (cteDef.recursionAnchorResolved) {
-              ref.copy(_resolved = true, output = cteDef.recursionAnchor.get.output)
+              ref.copy(_resolved = true, output = cteDef.recursionAnchor.get.output,
+                isStreaming = cteDef.isStreaming)
             } else {
               ref
             }
           } else if (cteDef.resolved) {
-            ref.copy(_resolved = true, output = cteDef.output)
+            ref.copy(_resolved = true, output = cteDef.output, isStreaming = cteDef.isStreaming)
           } else {
             ref
           }

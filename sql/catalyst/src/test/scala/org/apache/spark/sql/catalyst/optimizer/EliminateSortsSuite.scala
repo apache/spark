@@ -478,4 +478,16 @@ class EliminateSortsSuite extends AnalysisTest {
 
     comparePlans(Optimize.execute(originalPlan.analyze), correctAnswer.analyze)
   }
+
+  test("SPARK-46378: Still remove Sort after converting Aggregate to Project") {
+    val originalPlan = testRelation.orderBy($"a".asc)
+      .groupBy($"a")($"a")
+      .limit(1)
+
+    val correctAnswer = testRelation.localLimit(1)
+      .select($"a")
+      .limit(1)
+
+    comparePlans(Optimize.execute(originalPlan.analyze), correctAnswer.analyze)
+  }
 }

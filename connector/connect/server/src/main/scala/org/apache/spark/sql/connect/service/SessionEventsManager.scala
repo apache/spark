@@ -81,9 +81,7 @@ case class SessionEventsManager(sessionHolder: SessionHolder, clock: Clock) {
   private def assertStatus(
       validStatuses: List[SessionStatus],
       eventStatus: SessionStatus): Unit = {
-    if (!validStatuses
-        .find(s => s == status)
-        .isDefined) {
+    if (validStatuses.find(s => s == status).isEmpty) {
       throw new IllegalStateException(s"""
         sessionId: $sessionId with status ${status}
         is not within statuses $validStatuses for event $eventStatus
