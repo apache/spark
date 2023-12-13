@@ -18,9 +18,10 @@
 package org.apache.spark.sql.internal
 
 import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.util.Utils
 
@@ -170,7 +171,6 @@ private[sql] object EasilyFlattenable {
     } else if (passThruAttribs.size + tinkeredOrNewNamedExprs.size == currentOutputAttribs.size
       && passThruAttribsContainedInCurrentOutput && tinkeredOrNewNamedExprs.forall {
         case Alias(_: AttributeReference, _) => true
-
         case _ => false
       }) {
       OpType.RemapOnly
