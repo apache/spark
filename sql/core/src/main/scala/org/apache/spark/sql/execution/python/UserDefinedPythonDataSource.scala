@@ -42,19 +42,19 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-
 /**
  * Data Source V2 wrapper for Python Data Source.
  */
 class PythonTableProvider(shortName: String) extends TableProvider {
-  private var pythonResult: PythonDataSourceCreationResult = _
+  private var dataSourceInPython: PythonDataSourceCreationResult = _
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private lazy val source: UserDefinedPythonDataSource =
     SparkSession.active.sessionState.dataSourceManager.lookupDataSource(shortName)
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    if (pythonResult == null) {
-      pythonResult = source.createPythonResult(shortName, options, None)
+    if (dataSourceInPython == null) {
+      dataSourceInPython = source.createDataSourceInPython(shortName, options, None)
     }
-    pythonResult.schema
+    dataSourceInPython.schema
   }
 
   override def getTable(
@@ -62,7 +62,7 @@ class PythonTableProvider(shortName: String) extends TableProvider {
       partitioning: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
     assert(partitioning.isEmpty)
-    val givenSchema = schema
+    val outputSchema = schema
     new Table with SupportsRead {
       override def name(): String = shortName
 
@@ -72,39 +72,32 @@ class PythonTableProvider(shortName: String) extends TableProvider {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new ScanBuilder with Batch with Scan {
 
-          private lazy val pythonFunc: PythonFunction = {
-            if (pythonResult == null) {
-              pythonResult = source.createPythonResult(shortName, options, Some(givenSchema))
+          private lazy val infoInPython: PythonDataSourceReadInfo = {
+            if (dataSourceInPython == null) {
+              dataSourceInPython = source
+                .createDataSourceInPython(shortName, options, Some(outputSchema))
             }
-            SimplePythonFunction(
-              command = pythonResult.dataSource.toImmutableArraySeq,
-              envVars = source.dataSourceCls.envVars,
-              pythonIncludes = source.dataSourceCls.pythonIncludes,
-              pythonExec = source.dataSourceCls.pythonExec,
-              pythonVer = source.dataSourceCls.pythonVer,
-              broadcastVars = source.dataSourceCls.broadcastVars,
-              accumulator = source.dataSourceCls.accumulator)
+            source.createReadInfoInPython(dataSourceInPython, outputSchema)
           }
-
-          private lazy val info: PythonDataSourceReadInfo =
-            new UserDefinedPythonDataSourceReadRunner(
-              pythonFunc, PythonDataSourcePartitions.schema, givenSchema).runInPython()
 
           override def build(): Scan = this
 
           override def toBatch: Batch = this
 
-          override def readSchema(): StructType = givenSchema
+          override def readSchema(): StructType = outputSchema
 
           override def planInputPartitions(): Array[InputPartition] =
-            info.partitions.zipWithIndex.map(p => PythonInputPartition(p._2, p._1)).toArray
+            infoInPython.partitions.zipWithIndex.map(p => PythonInputPartition(p._2, p._1)).toArray
 
-          override def createReaderFactory(): PartitionReaderFactory =
-            new PythonPartitionReaderFactory(info, pythonFunc, givenSchema)
+          override def createReaderFactory(): PartitionReaderFactory = {
+            val readerFunc = infoInPython.func
+            new PythonPartitionReaderFactory(
+              source, readerFunc, outputSchema, jobArtifactUUID)
+          }
         }
       }
 
-      override def schema(): StructType = givenSchema
+      override def schema(): StructType = outputSchema
     }
   }
 
@@ -114,55 +107,19 @@ class PythonTableProvider(shortName: String) extends TableProvider {
 case class PythonInputPartition(index: Int, pickedPartition: Array[Byte]) extends InputPartition
 
 class PythonPartitionReaderFactory(
-      info: PythonDataSourceReadInfo, dataSource: PythonFunction, schema: StructType)
-    extends PartitionReaderFactory {
-
-  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+    source: UserDefinedPythonDataSource,
+    pickledReadFunc: Array[Byte],
+    outputSchema: StructType,
+    jobArtifactUUID: Option[String])
+  extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    val partitionInfo = partition.asInstanceOf[PythonInputPartition]
-
-    val readerFunc = SimplePythonFunction(
-      command = info.func.toImmutableArraySeq,
-      envVars = dataSource.envVars,
-      pythonIncludes = dataSource.pythonIncludes,
-      pythonExec = dataSource.pythonExec,
-      pythonVer = dataSource.pythonVer,
-      broadcastVars = dataSource.broadcastVars,
-      accumulator = dataSource.accumulator)
-
-    val partitionPlan = PythonDataSourcePartitions(
-      PythonDataSourcePartitions.getOutputAttrs, info.partitions)
-
-    val pythonEvalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
-
-    val pythonUDF = PythonUDF(
-      name = "read_from_data_source",
-      func = readerFunc,
-      dataType = schema,
-      children = partitionPlan.output,
-      evalType = pythonEvalType,
-      udfDeterministic = false)
-
-    val conf = SQLConf.get
-
-    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
-    val evaluatorFactory = new MapInBatchEvaluatorFactory(
-      toAttributes(schema),
-      Seq(ChainedPythonFunctions(Seq(pythonUDF.func))),
-      PythonDataSourcePartitions.schema,
-      conf.arrowMaxRecordsPerBatch,
-      pythonEvalType,
-      conf.sessionLocalTimeZone,
-      conf.arrowUseLargeVarTypes,
-      pythonRunnerConf,
-      None,
-      jobArtifactUUID)
-
     new PartitionReader[InternalRow] {
-
-      private val outputIter = evaluatorFactory.createEvaluator().eval(
-        partitionInfo.index, Iterator.single(InternalRow(partitionInfo.pickedPartition)))
+      private val outputIter = source.createPartitionReadIteratorInPython(
+        partition.asInstanceOf[PythonInputPartition],
+        pickledReadFunc,
+        outputSchema,
+        jobArtifactUUID)
 
       override def next(): Boolean = outputIter.hasNext
 
@@ -175,11 +132,17 @@ class PythonPartitionReaderFactory(
 
 /**
  * A user-defined Python data source. This is used by the Python API.
+ * Defines the interation between Python and JVM.
  *
  * @param dataSourceCls The Python data source class.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
-  def createPythonResult(
+
+  /**
+   * (Driver-side) Run Python process, and get the pickled Python Data Source
+   * instance and its schema.
+   */
+  def createDataSourceInPython(
       shortName: String,
       options: CaseInsensitiveStringMap,
       userSpecifiedSchema: Option[StructType]): PythonDataSourceCreationResult = {
@@ -188,6 +151,68 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       shortName,
       userSpecifiedSchema,
       CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap)).runInPython()
+  }
+
+  /**
+   * (Driver-side) Run Python process, and get the partition read functions, and
+   * partition information.
+   */
+  def createReadInfoInPython(
+      pythonResult: PythonDataSourceCreationResult,
+      outputSchema: StructType): PythonDataSourceReadInfo = {
+    new UserDefinedPythonDataSourceReadRunner(
+      createPythonFunction(
+        pythonResult.dataSource), PythonDataSourcePartitions.schema, outputSchema).runInPython()
+  }
+
+  /**
+   * (Executor-side) Create an iterator that reads the input partitions.
+   */
+  def createPartitionReadIteratorInPython(
+      partition: PythonInputPartition,
+      pickledReadFunc: Array[Byte],
+      outputSchema: StructType,
+      jobArtifactUUID: Option[String]): Iterator[InternalRow] = {
+    val readerFunc = createPythonFunction(pickledReadFunc)
+
+    val pythonEvalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+
+    val pythonUDF = PythonUDF(
+      name = "read_from_data_source",
+      func = readerFunc,
+      dataType = outputSchema,
+      children = PythonDataSourcePartitions.getOutputAttrs,
+      evalType = pythonEvalType,
+      udfDeterministic = false)
+
+    val conf = SQLConf.get
+
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
+    val evaluatorFactory = new MapInBatchEvaluatorFactory(
+      toAttributes(outputSchema),
+      Seq(ChainedPythonFunctions(Seq(pythonUDF.func))),
+      PythonDataSourcePartitions.schema,
+      conf.arrowMaxRecordsPerBatch,
+      pythonEvalType,
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      pythonRunnerConf,
+      None,
+      jobArtifactUUID)
+
+    evaluatorFactory.createEvaluator().eval(
+      partition.index, Iterator.single(InternalRow(partition.pickedPartition)))
+  }
+
+  private def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
+    SimplePythonFunction(
+      command = pickledFunc.toImmutableArraySeq,
+      envVars = dataSourceCls.envVars,
+      pythonIncludes = dataSourceCls.pythonIncludes,
+      pythonExec = dataSourceCls.pythonExec,
+      pythonVer = dataSourceCls.pythonVer,
+      broadcastVars = dataSourceCls.broadcastVars,
+      accumulator = dataSourceCls.accumulator)
   }
 }
 
