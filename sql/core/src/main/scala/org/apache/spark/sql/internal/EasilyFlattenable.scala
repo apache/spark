@@ -33,7 +33,7 @@ private[sql] object EasilyFlattenable {
   def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
-      case p @ Project(projList, child: LogicalPlan) if child.children.size < 2 =>
+      case p @ Project(projList, child: LogicalPlan) =>
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition {
@@ -46,7 +46,7 @@ private[sql] object EasilyFlattenable {
             currentOutputAttribs.exists(_.name == attribute.name))
         val opType = identifyOp(passThruAttribs, currentOutputAttribs, tinkeredOrNewNamedExprs,
           passThruAttribsContainedInCurrentOutput)
-
+        val ambiguousAttribs = p.output.groupBy(_.name).filter(_._2.size > 1).keys.toSet
         opType match {
           case OpType.AddNewColumnsOnly =>
             // case of new columns being added only
@@ -71,7 +71,8 @@ private[sql] object EasilyFlattenable {
               case ex: AggregateExpression => ex
               case ex: WindowExpression => ex
               case ex: UserDefinedExpression => ex
-              case u: UnresolvedAttribute if u.nameParts.size != 1 => u
+              case u: UnresolvedAttribute if u.nameParts.size != 1 |
+                ambiguousAttribs.contains(u.name) => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
             }.nonEmpty)) {
