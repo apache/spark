@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
@@ -49,8 +50,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
 
-  private def parseIdent(name: String): Seq[String] = {
-    sparkSession.sessionState.sqlParser.parseMultipartIdentifier(name)
+  /**
+   * Helper function for parsing identifiers.
+   * @param fallbackOnException if true, when parsing fails, return the original name.
+   */
+  private def parseIdent(name: String, fallbackOnException: Boolean = false): Seq[String] = {
+    try {
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(name)
+    } catch {
+      case _: ParseException if fallbackOnException => Seq(name)
+    }
   }
 
   private def qualifyV1Ident(nameParts: Seq[String]): Seq[String] = {
@@ -95,18 +104,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def listDatabasesInternal(patternOpt: Option[String]): Dataset[Database] = {
     val plan = ShowNamespaces(UnresolvedNamespace(Nil), patternOpt)
-    // execute ShowNamespaces with legacy output always turned off so that the database names are
-    // always quoted (if needed)
-    val newConf = SQLConf.get.clone()
-    newConf.setConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA, false)
-    val (catalog, databaseNames) = SQLConf.withExistingConf(newConf) {
-      val qe = sparkSession.sessionState.executePlan(plan)
-      val catalog = qe.analyzed.collectFirst {
-        case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
-      }.get
-      (catalog, qe.toRdd.collect().map { row => row.getString(0) })
+    val qe = sparkSession.sessionState.executePlan(plan)
+    val catalog = qe.analyzed.collectFirst {
+      case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
+    }.get
+    val databases = qe.toRdd.collect().map { row =>
+      // dbName can either be a quoted identifier (single or multi part) or an unquoted single part
+      val dbName = row.getString(0)
+      makeDatabase(Some(catalog.name()), dbName)
     }
-    val databases = databaseNames.map { makeDatabase(Some(catalog.name()), _) }
     CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
 
@@ -429,9 +435,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     makeDatabase(None, dbName)
   }
 
+  // when catalogName is specified, dbName should be a valid quoted multi-part identifier, or a
+  // valid unquoted single part identifier.
   private def makeDatabase(catalogNameOpt: Option[String], dbName: String): Database = {
     val idents = catalogNameOpt match {
-      case Some(catalogName) => catalogName +: parseIdent(dbName)
+      case Some(catalogName) => catalogName +: parseIdent(dbName, fallbackOnException = true)
       case None => resolveNamespace(dbName)
     }
     val plan = UnresolvedNamespace(idents, fetchMetadata = true)

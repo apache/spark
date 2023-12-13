@@ -177,9 +177,19 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         spark.sharedState.externalCatalog.createDatabase(utils.newDb("my`db2"), false)
         assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
           Set("default", "`my-db1`", "`my``db2`"))
-        assert(spark.catalog.listDatabases("my*").collect().map(_.name).toSet == Set.empty)
-        assert(spark.catalog.listDatabases("`my*`").collect().map(_.name).toSet ==
-          Set("`my-db1`", "`my``db2`"))
+        if (legacy) {
+          assert(
+            spark.catalog.listDatabases("my*").collect().map(_.name).toSet ==
+              Set("`my-db1`", "`my``db2`")
+          )
+          assert(spark.catalog.listDatabases("`my*`").collect().map(_.name).toSet == Set.empty)
+        } else {
+          assert(spark.catalog.listDatabases("my*").collect().map(_.name).toSet == Set.empty)
+          assert(
+            spark.catalog.listDatabases("`my*`").collect().map(_.name).toSet ==
+              Set("`my-db1`", "`my``db2`")
+          )
+        }
         assert(spark.catalog.listDatabases("you*").collect().map(_.name).toSet ==
           Set.empty[String])
         dropDatabase("my-db1")
