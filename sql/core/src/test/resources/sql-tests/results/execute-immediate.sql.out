@@ -70,20 +70,11 @@ struct<id:int,name:string>
 
 
 -- !query
-EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'tbl_view_tmp' as tblName
+EXECUTE IMMEDIATE 'REFRESH TABLE IDENTIFIER(:tblName)' USING 'x' as tblName
 -- !query schema
-struct<col_name:string,data_type:string,comment:string>
+struct<>
 -- !query output
-id                  	int                 	                    
-name                	string
 
-
--- !query
-EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'x' as tblName
--- !query schema
-struct<col_name:string,data_type:string,comment:string>
--- !query output
-id                  	int
 
 
 -- !query
@@ -460,7 +451,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELCT F(
+EXECUTE IMMEDIATE 'SELCT Fa'
 -- !query schema
 struct<>
 -- !query output
@@ -469,16 +460,21 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'''",
+    "error" : "'SELCT'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 28,
+    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa'"
+  } ]
 }
 
 
 -- !query
-a'
-
-EXECUTE IMMEDIATE b
+EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id
 -- !query schema
 struct<>
 -- !query output
@@ -487,8 +483,30 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'a'",
+    "error" : "'SELCT'",
     "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 40,
+    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "varType" : "int"
   }
 }
 
@@ -643,6 +661,21 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42701",
   "messageParameters" : {
     "nameList" : "`res_id`"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\''
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NESTED_EXECUTE_IMMEDIATE",
+  "sqlState" : "07502",
+  "messageParameters" : {
+    "sqlString" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = ? USING 10'"
   }
 }
 

@@ -41,11 +41,11 @@ import org.apache.spark.sql.types.StringType
  *   variables to store the result of the query
  */
 case class ExecuteImmediateQuery(
-  args: Seq[Expression],
-  query: Either[String, UnresolvedAttribute],
-  targetVariables: Option[Seq[UnresolvedAttribute]],
-  parser: ParserInterface)
-    extends UnresolvedLeafNode {
+    args: Seq[Expression],
+    query: Either[String, UnresolvedAttribute],
+    targetVariables: Option[Seq[UnresolvedAttribute]],
+    parser: ParserInterface)
+  extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
 
@@ -54,8 +54,8 @@ case class ExecuteImmediateQuery(
  * or session parameter.
  */
 class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
-    extends Rule[LogicalPlan]
-    with ColumnResolutionHelper {
+  extends Rule[LogicalPlan]
+  with ColumnResolutionHelper {
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -153,28 +153,41 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     }
 
   private def parseStatement(
-    parser: ParserInterface,
-    queryString: String,
-    targetVariables: Option[Seq[Expression]]): LogicalPlan = {
+      parser: ParserInterface,
+      queryString: String,
+      targetVariables: Option[Seq[Expression]]): LogicalPlan = {
     // If targetVariables is defined, statement needs to be a query.
     // Otherwise, it can be anything.
-    targetVariables.map { expressions =>
-      try {
-        parser.parseQuery(queryString)
-      } catch {
-        case e: ParseException =>
-          // Since we do not have a way of telling that parseQuery failed because of
-          // actual parsing error or because statement was passed where query was expected,
-          // we need to make sure that parsePlan wouldn't throw
-          parser.parsePlan(queryString)
+    targetVariables
+      .map { expressions =>
+        try {
+          parser.parseQuery(queryString)
+        } catch {
+          case e: ParseException =>
+            // Since we do not have a way of telling that parseQuery failed because of
+            // actual parsing error or because statement was passed where query was expected,
+            // we need to make sure that parsePlan wouldn't throw
+            parser.parsePlan(queryString)
 
-          // Plan was sucessfully parsed, but query wasn't - throw.
-          throw new AnalysisException(
-            errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-            messageParameters = Map("sqlString" -> queryString),
-            cause = Some(e))
+            // Plan was sucessfully parsed, but query wasn't - throw.
+            throw new AnalysisException(
+              errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+              messageParameters = Map("sqlString" -> queryString),
+              cause = Some(e))
+        }
       }
-    }.getOrElse { parser.parsePlan(queryString) }
+      .getOrElse {
+        val plan = parser.parsePlan(queryString)
+
+        // do not allow nested execute immediate
+        if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
+          throw new AnalysisException(
+            errorClass = "NESTED_EXECUTE_IMMEDIATE",
+            messageParameters = Map("sqlString" -> queryString))
+        }
+
+        plan
+      }
   }
 
   private def getVariableReference(nameParts: Seq[String]): VariableReference = {

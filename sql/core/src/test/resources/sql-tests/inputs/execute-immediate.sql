@@ -18,8 +18,8 @@ SET VAR sql_string = 'SELECT * from tbl_view where name = \'name1\'';
 EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true';
 EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName;
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp';
-EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'tbl_view_tmp' as tblName;
-EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:tblName)' USING 'x' as tblName;
+
+EXECUTE IMMEDIATE 'REFRESH TABLE IDENTIFIER(:tblName)' USING 'x' as tblName;
 
 -- test execute immediate without parameters
 EXECUTE IMMEDIATE sql_string;
@@ -94,7 +94,10 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id;
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1, 'name2' as first;
 
 -- internal syntax error
-EXECUTE IMMEDIATE 'SELCT F(;a'
+EXECUTE IMMEDIATE 'SELCT Fa';
+
+-- internal syntax error - test that both parseQuery and parsePlan fail
+EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id;
 
 -- Parameter passed must be STRING
 EXECUTE IMMEDIATE b;
@@ -122,5 +125,8 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first,
 
 -- duplicate into entry
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id;
+
+-- nested execute immediate
+EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\'';
 
 DROP TABLE x;
