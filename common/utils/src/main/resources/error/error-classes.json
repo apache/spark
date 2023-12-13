@@ -1012,12 +1012,6 @@
     ],
     "sqlState" : "54006"
   },
-  "NESTED_EXECUTE_IMMEDIATE" : {
-    "message": [
-      "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
-    ],
-    "sqlState": "07502"
-  },
   "EXCEPT_NESTED_COLUMN_INVALID_TYPE" : {
     "message" : [
       "EXCEPT column <columnName> was resolved and expected to be StructType, but found type <dataType>."
@@ -2594,6 +2588,12 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ],
     "sqlState" : "42607"
+  },
+  "NESTED_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
+    ],
+    "sqlState" : "07502"
   },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [

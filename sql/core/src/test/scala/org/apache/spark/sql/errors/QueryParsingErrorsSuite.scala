@@ -38,7 +38,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     checkError(
       exception = parseException(query),
       errorClass = "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
-      parameters = Map("aliases"-> "`second`, `first`"),
+      parameters = Map("aliases" -> "`second`, `first`"),
       context = ExpectedContext(
         query,
         start = 0,
@@ -46,7 +46,20 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     )
   }
 
-test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
+  test("PARSE_SYNTAX_ERROR: Execute immediate syntax error with INTO specified") {
+    val query = "EXECUTE IMMEDIATE 'SELCT 1707 WHERE ? = 1' INTO a USING 1"
+    checkError(
+      exception = parseException(query),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'SELCT'", "hint" -> ""),
+      context = ExpectedContext(
+        start = 0,
+        stop = 56,
+        fragment = "EXECUTE IMMEDIATE 'SELCT 1707 WHERE ? = 1' INTO a USING 1")
+    )
+  }
+
+  test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
     withSQLConf("spark.sql.allowNamedFunctionArguments" -> "false") {
       checkError(
         exception = parseException("SELECT explode(arr => array(10, 20))"),

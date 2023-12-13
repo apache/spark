@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.jdk.CollectionConverters._
+import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -58,7 +60,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
+class AstBuilder(val parser: ParserInterface)
+    extends DataTypeAstBuilder with SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -555,6 +558,67 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       matchedActions.toSeq,
       notMatchedActions.toSeq,
       notMatchedBySourceActions.toSeq)
+  }
+
+  /**
+   * Returns the parameters for [[ExecuteImmediateQuery]] logical plan.
+   * Expected format:
+   * {{{
+   *   EXECUTE IMMEDIATE {query_string|string_literal}
+   *   [INTO target1, target2] [USING param1, param2, ...]
+   * }}}
+   */
+  override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
+    // Because of how parsing rules are written, we know that either
+    // queryParam or targetVariable is non null - hence use Either to represent this.
+    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(string(visitStringLit(sl))))
+    val queryVariable = Option(ctx.queryParam.multipartIdentifier)
+      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
+    val targetVars = Option(ctx.targetVariable)
+      .map(v => visitMultipartIdentifierList(v))
+    val exprs = Option(ctx.executeImmediateUsing)
+      .map(ctx => visitExecuteImmediateUsing(ctx)).getOrElse(Seq.empty)
+
+    ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars, parser)
+  }
+
+  override def visitExecuteImmediateUsing(ctx: ExecuteImmediateUsingContext): Seq[Expression] = {
+    val exprs = visitExecuteImmediateArgumentSeq(ctx.params)
+    validateExecImmediateArguments(exprs, ctx.params)
+    exprs
+  }
+
+  override def visitExecuteImmediateArgumentSeq
+    (ctx: ExecuteImmediateArgumentSeqContext) : Seq[Expression] = {
+    Option(ctx).toSeq
+      .flatMap(c => c.executeImmediateArgument.asScala).map { c =>
+        val reference : Option[Expression] = Option(c.multipartIdentifier)
+          .map(r => UnresolvedAttribute(visitMultipartIdentifier(r)))
+        val literal : Option[Expression] = Option(c.constant)
+          .map(typedVisit[Literal])
+        val arg = reference.getOrElse(literal.get)
+        Option(c.name)
+          .map(n => Alias(arg, n.getText)())
+          .getOrElse(arg);
+      }
+  }
+
+  /**
+   * Performs validation on the arguments to EXECUTE IMMEDIATE.
+   */
+  private def validateExecImmediateArguments(
+    expressions: Seq[Expression],
+    ctx : ExecuteImmediateArgumentSeqContext) : Unit = {
+    val duplicateAliases = expressions
+      .filter(_.isInstanceOf[Alias])
+      .groupBy {
+        case Alias(arg, name) => name
+      }.filter(group => group._2.size > 1)
+
+    if (duplicateAliases.nonEmpty) {
+      throw QueryParsingErrors.duplicateArgumentNamesError(duplicateAliases.keys.toSeq, ctx)
+    }
   }
 
   override def visitMultipartIdentifierList(

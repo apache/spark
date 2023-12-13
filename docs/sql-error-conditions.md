@@ -1503,6 +1503,12 @@ Set "spark.sql.allowNamedFunctionArguments" to "true" to turn on feature.
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
 
+### NESTED_EXECUTE_IMMEDIATE
+
+SQLSTATE: 07502
+
+Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
+
 ### NON_FOLDABLE_ARGUMENT
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
