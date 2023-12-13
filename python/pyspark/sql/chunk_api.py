@@ -16,6 +16,7 @@
 #
 
 import os
+from collections import namedtuple
 
 import pyarrow as pa
 
@@ -26,7 +27,10 @@ from pyspark.serializers import write_with_length
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
 
-def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int) -> list[tuple[str, int, int]]:
+ChunkMeta = namedtuple("ChunkMeta", ["id", "row_count", "byte_count"])
+
+
+def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int) -> list[ChunkMeta]:
     """
     Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
     It tries to persist data to spark worker memory firstly, if memory is not sufficient,
@@ -35,13 +39,13 @@ def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int
     This function is only available when it is called from spark driver process.
     """
     sc = SparkSession.getActiveSession().sparkContext
-    chunk_info_list = list(
+    chunk_meta_list = list(
         sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils
         .persistDataFrameAsArrowBatchChunks(dataframe._jdf, max_records_per_batch)
     )
     return [
-        (chunk_info_java._1(), chunk_info_java._2(), chunk_info_java._3())
-        for chunk_info_java in chunk_info_list
+        ChunkMeta(java_chunk_meta.id(), java_chunk_meta.rowCount(), java_chunk_meta.byteCount())
+        for java_chunk_meta in chunk_meta_list
     ]
 
 

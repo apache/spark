@@ -29,11 +29,17 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 
 
+case class ChunkMeta(
+  id: String,
+  rowCount: Long,
+  byteCount: Long,
+)
+
 object ChunkReadUtils {
 
   def persistDataFrameAsArrowBatchChunks(
       dataFrame: DataFrame, maxRecordsPerBatch: Int
-  ): Array[(String, Long, Long)] = {
+  ): Array[ChunkMeta] = {
     val sparkSession = SparkSession.getActiveSession.get
     val rdd = dataFrame.toArrowBatchRddWithBatchRowCount(maxRecordsPerBatch)
     val schemaJson = dataFrame.schema.json
@@ -43,7 +49,7 @@ object ChunkReadUtils {
     rdd.mapPartitions { iter: Iterator[(Array[Byte], Long)] =>
       val blockManager = SparkEnv.get.blockManager
       val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
-      val chunkInfoList = new ArrayBuffer[(String, Long, Long)]()
+      val chunkMetaList = new ArrayBuffer[ChunkMeta]()
 
       try {
         for ((arrowBatch, rowCount) <- iter) {
@@ -63,16 +69,16 @@ object ChunkReadUtils {
           blockManager.putSingle[Array[Byte]](
             blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true
           )
-          chunkInfoList.append(
-            (blockId.toString, rowCount, blockData.length)
+          chunkMetaList.append(
+            ChunkMeta(blockId.toString, rowCount, blockData.length)
           )
         }
       } catch {
         case e: Exception =>
           // Clean cached chunks
-          for ((chunkId, _, _) <- chunkInfoList) {
+          for (chunkMeta <- chunkMetaList) {
             try {
-              blockManager.master.removeBlock(BlockId(chunkId))
+              blockManager.master.removeBlock(BlockId(chunkMeta.id))
             } catch {
               case _: Exception => ()
             }
@@ -80,7 +86,7 @@ object ChunkReadUtils {
           throw e
       }
 
-      chunkInfoList.iterator
+      chunkMetaList.iterator
     }.collect()
   }
 
