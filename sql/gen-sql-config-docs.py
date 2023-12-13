@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-import os
 import re
 
 from collections import namedtuple, defaultdict
+from pathlib import Path
 from textwrap import dedent
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
@@ -26,6 +26,7 @@ from mkdocs.structure.pages import markdown
 
 from pyspark.java_gateway import launch_gateway
 
+SPARK_PROJECT_ROOT = Path(__file__).parents[1]
 
 SQLConfEntry = namedtuple(
     "SQLConfEntry", [
@@ -145,9 +146,11 @@ def generate_sql_configs_table_html(sql_configs, path, group):
 
 if __name__ == "__main__":
     jvm = launch_gateway().jvm
-    docs_root_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs")
+    generated_dir = SPARK_PROJECT_ROOT / "docs" / "_generated"
+    generated_dir.mkdir(exist_ok=True)
 
     sql_configs = get_sql_configs(jvm)
     for group in sql_configs:
-        html_table_path = os.path.join(docs_root_dir, f"generated-sql-config-table-{group}.html")
+        html_table_path = generated_dir / f"generated-sql-config-table-{group}.html"
         generate_sql_configs_table_html(sql_configs[group], path=html_table_path, group=group)
+        print(f"Generated: {html_table_path}")
