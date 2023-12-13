@@ -715,7 +715,7 @@ ERROR_CLASSES_JSON = """
   "NO_OBSERVE_BEFORE_GET" : {
     "message" : [
       "Should observe by calling `DataFrame.observe` before `get`."
-    ]  
+    ]
   },
   "NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME" : {
     "message" : [
