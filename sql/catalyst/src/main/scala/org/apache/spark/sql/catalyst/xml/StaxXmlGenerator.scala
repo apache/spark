@@ -26,7 +26,7 @@ import com.sun.xml.txw2.output.IndentingXMLStreamWriter
 import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -47,6 +47,13 @@ class StaxXmlGenerator(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
+
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInWrite,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false,
+    forTimestampNTZ = true)
 
   private val dateFormatter = DateFormatter(
     options.dateFormatInWrite,
@@ -166,6 +173,8 @@ class StaxXmlGenerator(
       gen.writeCharacters(timestampFormatter.format(v.toInstant()))
     case (TimestampType, v: Long) =>
       gen.writeCharacters(timestampFormatter.format(v))
+    case (TimestampNTZType, v: Long) =>
+      gen.writeCharacters(timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(v)))
     case (DateType, v: Int) =>
       gen.writeCharacters(dateFormatter.format(v))
     case (IntegerType, v: Int) => gen.writeCharacters(v.toString)
