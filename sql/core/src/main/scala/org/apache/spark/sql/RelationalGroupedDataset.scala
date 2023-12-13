@@ -422,7 +422,9 @@ class RelationalGroupedDataset protected[sql](
    */
   def pivot(pivotColumn: Column): RelationalGroupedDataset = {
     if (df.isStreaming) {
-      throw new AnalysisException("pivot is not supported on a streaming DataFrames/Datasets")
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3063",
+        messageParameters = Map.empty)
     }
     // This is to prevent unintended OOM errors when the number of distinct values is large
     val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
