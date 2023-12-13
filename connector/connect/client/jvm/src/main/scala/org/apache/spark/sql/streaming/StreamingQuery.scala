@@ -109,30 +109,31 @@ trait StreamingQuery {
   def lastProgress: StreamingQueryProgress
 
   /**
-   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be thrown.
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception. If
+   * the query has terminated with an exception, then the exception will be thrown.
    *
    * If the query has terminated, then all subsequent calls to this method will either return
-   * immediately (if the query was terminated by `stop()`), or throw the exception
-   * immediately (if the query has terminated with exception).
+   * immediately (if the query was terminated by `stop()`), or throw the exception immediately (if
+   * the query has terminated with exception).
    *
-   * @throws StreamingQueryException if the query has terminated with an exception.
+   * @throws StreamingQueryException
+   *   if the query has terminated with an exception.
    * @since 3.5.0
    */
   @throws[StreamingQueryException]
   def awaitTermination(): Unit
 
   /**
-   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be thrown.
-   * Otherwise, it returns whether the query has terminated or not within the `timeoutMs`
-   * milliseconds.
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception. If
+   * the query has terminated with an exception, then the exception will be thrown. Otherwise, it
+   * returns whether the query has terminated or not within the `timeoutMs` milliseconds.
    *
    * If the query has terminated, then all subsequent calls to this method will either return
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException if the query has terminated with an exception
+   * @throws StreamingQueryException
+   *   if the query has terminated with an exception
    * @since 3.5.0
    */
   @throws[StreamingQueryException]

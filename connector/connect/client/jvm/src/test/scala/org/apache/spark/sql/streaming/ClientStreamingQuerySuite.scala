@@ -216,8 +216,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
           exception.getCause.getCause.getCause.getMessage
             .contains("java.lang.RuntimeException: Number 2 encountered!"))
       }
-    }
-    finally {
+    } finally {
       spark.streams.resetTerminated()
     }
   }
