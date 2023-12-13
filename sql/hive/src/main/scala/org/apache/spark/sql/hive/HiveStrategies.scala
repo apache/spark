@@ -161,7 +161,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoStatement(
         r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _)
-        if DDLUtils.isHiveTable(r.tableMeta) =>
+        if DDLUtils.isHiveTable(r.tableMeta) && query.resolved =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
 
