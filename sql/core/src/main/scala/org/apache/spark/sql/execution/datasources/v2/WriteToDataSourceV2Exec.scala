@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterF
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -76,7 +76,6 @@ case class CreateTableAsSelectExec(
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
         return Nil
@@ -86,11 +85,6 @@ case class CreateTableAsSelectExec(
     val table = catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
-    // Check if the table schema matches the schema of the query.
-    if (!DataType.equalsIgnoreNullability(table.columns().asSchema, query.schema)) {
-      throw QueryCompilationErrors.dataSourceTableSchemaMismatchError(
-        table.columns().asSchema, query.schema)
-    }
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }

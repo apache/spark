@@ -494,7 +494,7 @@ Failed to find the data source: `<provider>`. Please find packages at `https://s
 
 ### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The schema of the data source table `<tableSchema>` does not match the actual schema `<actualSchema>`. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
 

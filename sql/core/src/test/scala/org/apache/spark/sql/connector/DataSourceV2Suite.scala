@@ -725,6 +725,20 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-46272: create table - schema mismatch") {
+    withTable("test") {
+      val cls = classOf[WritableDataSourceSupportsExternalMetadata]
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE test (x INT, y INT) USING ${cls.getName}")
+        },
+        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+        parameters = Map(
+          "tableSchema" -> "\"STRUCT<i: INT, j: INT>\"",
+          "actualSchema" -> "\"STRUCT<x: INT, y: INT>\""))
+    }
+  }
+
   test("SPARK-46272: create table as select") {
     val cls = classOf[WritableDataSourceSupportsExternalMetadata]
     withTable("test") {
