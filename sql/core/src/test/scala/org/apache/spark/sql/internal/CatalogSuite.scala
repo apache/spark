@@ -177,6 +177,9 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         spark.sharedState.externalCatalog.createDatabase(utils.newDb("my`db2"), false)
         assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
           Set("default", "`my-db1`", "`my``db2`"))
+        // TODO: ideally there should be no difference between legacy and non-legacy mode. However,
+        //  in non-legacy mode, the ShowNamespacesExec does the quoting before pattern matching,
+        //  requiring the pattern to be quoted. This is not ideal, we should fix it in the future.
         if (legacy) {
           assert(
             spark.catalog.listDatabases("my*").collect().map(_.name).toSet ==
