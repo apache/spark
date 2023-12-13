@@ -130,7 +130,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map("inputSchema" -> "INT", "dataType" -> "\"INT\""))
   }
 
-  test("test dataSourceExists") {
+  test("register data source") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
@@ -148,6 +148,31 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    checkAnswer(
+      spark.read.format(dataSourceName).load(),
+      Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+
+    // Should be able to override an already registered data source.
+    val newScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def read(self, partition):
+         |        yield (0, )
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val newDataSource = createUserDefinedPythonDataSource(dataSourceName, newScript)
+    spark.dataSource.registerPython(dataSourceName, newDataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    checkAnswer(
+      spark.read.format(dataSourceName).load(),
+      Seq(Row(0)))
   }
 
   test("load data source") {
