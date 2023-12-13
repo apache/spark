@@ -836,7 +836,7 @@ ERROR_CLASSES_JSON = """
   "REUSE_OBSERVATION" : {
     "message" : [
       "An Observation can be used with a DataFrame only once."
-    ]  
+    ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
