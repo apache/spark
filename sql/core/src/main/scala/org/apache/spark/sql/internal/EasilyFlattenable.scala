@@ -18,9 +18,9 @@
 package org.apache.spark.sql.internal
 
 import scala.util.{Failure, Success, Try}
-
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.util.Utils
 
@@ -65,8 +65,13 @@ private[sql] object EasilyFlattenable {
             }).toMap
 
             if (tinkeredOrNewNamedExprs.exists(_.collectFirst {
+              // we will not flatten if expressions contain windows or aggregate as if they
+              // are collapsed it can cause recalculation of functions and inefficiency with
+              // separate group by clauses
               case ex if !ex.deterministic => ex
-              case ex if ex.isInstanceOf[UserDefinedExpression] => ex
+              case ex: AggregateExpression => ex
+              case ex: WindowExpression => ex
+              case ex: UserDefinedExpression => ex
               case u: UnresolvedAttribute if u.nameParts.size != 1 => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
