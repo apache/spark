@@ -288,6 +288,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     SessionHolderInfo(
       userId = userId,
       sessionId = sessionId,
+      serverSessionId = serverSessionId,
       status = eventManager.status,
       startTimeMs = startTimeMs,
       lastAccessTimeMs = lastAccessTimeMs,
@@ -390,6 +391,7 @@ object SessionHolder {
 case class SessionHolderInfo(
     userId: String,
     sessionId: String,
+    serverSessionId: String,
     status: SessionStatus,
     customInactiveTimeoutMs: Option[Long],
     startTimeMs: Long,
