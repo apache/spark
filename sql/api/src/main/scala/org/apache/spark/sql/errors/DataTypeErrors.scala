@@ -267,9 +267,8 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def valueIsNullError(index: Int): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2232",
-      messageParameters = Map(
-        "index" -> index.toString),
+      errorClass = "NULL_INDEX",
+      messageParameters = Map("index" -> index.toString),
       cause = null)
   }
 

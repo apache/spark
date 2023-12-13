@@ -2914,6 +2914,12 @@
     ],
     "sqlState" : "42000"
   },
+  "NULL_INDEX" : {
+    "message" : [
+      "Value at index <index> is null."
+    ],
+    "sqlState" : "2200E"
+  },
   "NULL_MAP_KEY" : {
     "message" : [
       "Cannot use null as map key."
@@ -6434,11 +6440,6 @@
   "_LEGACY_ERROR_TEMP_2231" : {
     "message" : [
       "fieldIndex on a Row without schema is undefined."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2232" : {
-    "message" : [
-      "Value at index <index> is null."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {
