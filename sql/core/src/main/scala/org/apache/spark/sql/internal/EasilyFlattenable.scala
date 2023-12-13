@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnaryNode}
 
 private[sql] object EasilyFlattenable {
   object OpType extends Enumeration {
@@ -33,7 +33,7 @@ private[sql] object EasilyFlattenable {
   def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
     val (logicalPlan, newProjList) = tuple
     logicalPlan match {
-      case p@Project(projList, child) =>
+      case p @ Project(projList, child: UnaryNode) =>
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition {
