@@ -136,8 +136,10 @@ def generate_sql_configs_table_html(sql_configs, path, group):
                 """
                 <tr id="{anchor}">
                     <td>
-                        <a href="#{anchor}"><code>#</code></a>
-                        <code>{name}</code>
+                        <span style="white-space:nowrap">
+                            <a href="#{anchor}"><code>#</code></a>
+                            <code>{name}</code>
+                        </span>
                     </td>
                     <td>{default}</td>
                     <td>{description}</td>
