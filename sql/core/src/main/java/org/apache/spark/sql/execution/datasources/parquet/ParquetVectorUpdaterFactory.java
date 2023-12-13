@@ -68,12 +68,12 @@ public class ParquetVectorUpdaterFactory {
     PrimitiveType.PrimitiveTypeName typeName = descriptor.getPrimitiveType().getPrimitiveTypeName();
 
     switch (typeName) {
-      case BOOLEAN:
+      case BOOLEAN -> {
         if (sparkType == DataTypes.BooleanType) {
           return new BooleanUpdater();
         }
-        break;
-      case INT32:
+      }
+      case INT32 -> {
         if (sparkType == DataTypes.IntegerType || canReadAsIntDecimal(descriptor, sparkType)) {
           return new IntegerUpdater();
         } else if (sparkType == DataTypes.LongType && isUnsignedIntTypeMatched(32)) {
@@ -95,8 +95,8 @@ public class ParquetVectorUpdaterFactory {
         } else if (sparkType instanceof YearMonthIntervalType) {
           return new IntegerUpdater();
         }
-        break;
-      case INT64:
+      }
+      case INT64 -> {
         // This is where we implement support for the valid type conversions.
         if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
           if (DecimalType.is32BitDecimalType(sparkType)) {
@@ -109,7 +109,8 @@ public class ParquetVectorUpdaterFactory {
           // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary
           // fallbacks. We read them as decimal values.
           return new UnsignedLongUpdater();
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
+        } else if (isTimestamp(sparkType) &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
           validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongUpdater();
@@ -117,7 +118,8 @@ public class ParquetVectorUpdaterFactory {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new LongWithRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
+        } else if (isTimestamp(sparkType) &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
           validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongAsMicrosUpdater();
@@ -128,18 +130,18 @@ public class ParquetVectorUpdaterFactory {
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
         }
-        break;
-      case FLOAT:
+      }
+      case FLOAT -> {
         if (sparkType == DataTypes.FloatType) {
           return new FloatUpdater();
         }
-        break;
-      case DOUBLE:
+      }
+      case DOUBLE -> {
         if (sparkType == DataTypes.DoubleType) {
           return new DoubleUpdater();
         }
-        break;
-      case INT96:
+      }
+      case INT96 -> {
         if (sparkType == DataTypes.TimestampNTZType) {
           convertErrorForTimestampNTZ(typeName.name());
         } else if (sparkType == DataTypes.TimestampType) {
@@ -161,14 +163,14 @@ public class ParquetVectorUpdaterFactory {
             }
           }
         }
-        break;
-      case BINARY:
+      }
+      case BINARY -> {
         if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
           canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new BinaryUpdater();
         }
-        break;
-      case FIXED_LEN_BYTE_ARRAY:
+      }
+      case FIXED_LEN_BYTE_ARRAY -> {
         int arrayLen = descriptor.getPrimitiveType().getTypeLength();
         if (canReadAsIntDecimal(descriptor, sparkType)) {
           return new FixedLenByteArrayAsIntUpdater(arrayLen);
@@ -179,9 +181,8 @@ public class ParquetVectorUpdaterFactory {
         } else if (sparkType == DataTypes.BinaryType) {
           return new FixedLenByteArrayUpdater(arrayLen);
         }
-        break;
-      default:
-        break;
+      }
+      default -> {}
     }
 
     // If we get here, it means the combination of Spark and Parquet type is invalid or not
@@ -190,8 +191,8 @@ public class ParquetVectorUpdaterFactory {
   }
 
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
-    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
-      ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
+      annotation.getUnit() == unit;
   }
 
   void validateTimestampType(DataType sparkType) {
@@ -210,9 +211,8 @@ public class ParquetVectorUpdaterFactory {
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {
-    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation &&
-      !((IntLogicalTypeAnnotation) logicalTypeAnnotation).isSigned() &&
-      ((IntLogicalTypeAnnotation) logicalTypeAnnotation).getBitWidth() == bitWidth;
+    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation annotation &&
+      !annotation.isSigned() && annotation.getBitWidth() == bitWidth;
   }
 
   private static class BooleanUpdater implements ParquetVectorUpdater {
@@ -1147,6 +1147,10 @@ public class ParquetVectorUpdaterFactory {
       return d.precision() == 20 && d.scale() == 0;
     }
     return false;
+  }
+
+  private static boolean isTimestamp(DataType dt) {
+    return dt == DataTypes.TimestampType || dt == DataTypes.TimestampNTZType;
   }
 
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {

@@ -58,7 +58,7 @@ import org.apache.spark.tags.DockerTest
  *  $ ./buildContainerImage.sh -v 23.2.0 -f
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
  *
- * This procedure has been validated with Oracle Databae Free version 23.2.0,
+ * This procedure has been validated with Oracle Database Free version 23.2.0,
  * and with Oracle Express Edition versions 18.4.0 and 21.3.0
  */
 @DockerTest
@@ -162,7 +162,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   test("SPARK-16625 : Importing Oracle numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
     val rows = df.collect()
-    assert(rows.size == 1)
+    assert(rows.length == 1)
     val row = rows(0)
     // The main point of the below assertions is not to make sure that these Oracle types are
     // mapped to decimal types, but to make sure that the returned values are correct.
@@ -413,7 +413,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     // read records from oracle_types
     val dfRead = sqlContext.read.jdbc(jdbcUrl, tableName, new Properties)
     val rows = dfRead.collect()
-    assert(rows.size == 1)
+    assert(rows.length == 1)
 
     // check data types
     val types = dfRead.schema.map(field => field.dataType)
@@ -460,7 +460,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
           """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
           """"D" >= '2018-07-15'"""))
     }
-    assert(df1.collect.toSet === expectedResult)
+    assert(df1.collect().toSet === expectedResult)
 
     // TimestampType partition column
     val df2 = spark.read.format("jdbc")
@@ -482,7 +482,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
           """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
           """"T" >= '2018-07-15 20:50:32.5'"""))
     }
-    assert(df2.collect.toSet === expectedResult)
+    assert(df2.collect().toSet === expectedResult)
   }
 
   test("query JDBC option") {
@@ -499,7 +499,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .option("query", query)
       .option("oracle.jdbc.mapDateToTimestamp", "false")
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
 
     // query option in the create table path.
     sql(
@@ -510,7 +510,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
          |   query '$query',
          |   oracle.jdbc.mapDateToTimestamp false)
        """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
+    assert(sql("select id, d, t from queryOption").collect().toSet == expectedResult)
   }
 
   test("SPARK-32992: map Oracle's ROWID type to StringType") {

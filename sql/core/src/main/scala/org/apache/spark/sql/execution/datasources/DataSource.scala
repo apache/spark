@@ -29,9 +29,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
@@ -50,9 +49,10 @@ import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, Tex
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -270,7 +270,7 @@ case class DataSource(
         SourceInfo(
           s"FileSource[$path]",
           StructType(sourceDataSchema ++ partitionSchema),
-          partitionSchema.fieldNames)
+          partitionSchema.fieldNames.toImmutableArraySeq)
 
       case _ =>
         throw QueryExecutionErrors.streamedOperatorUnsupportedByDataSourceError(
@@ -390,7 +390,7 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val useCatalogFileIndex = sparkSession.sqlContext.conf.manageFilesourcePartitions &&
+        val useCatalogFileIndex = sparkSession.sessionState.conf.manageFilesourcePartitions &&
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
@@ -503,6 +503,7 @@ case class DataSource(
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = true)
+        disallowWritingVariant(outputColumns.map(_.dataType))
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
@@ -512,7 +513,7 @@ case class DataSource(
         qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
-      case _ => throw new IllegalStateException(
+      case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
   }
@@ -524,12 +525,13 @@ case class DataSource(
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = true)
+        disallowWritingVariant(data.schema.map(_.dataType))
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
         DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
-      case _ => throw new IllegalStateException(
+      case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
   }
@@ -559,6 +561,14 @@ case class DataSource(
       TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
+  }
+
+  private def disallowWritingVariant(dataTypes: Seq[DataType]): Unit = {
+    dataTypes.foreach { dt =>
+      if (dt.existsRecursively(_.isInstanceOf[VariantType])) {
+        throw QueryCompilationErrors.cannotSaveVariantIntoExternalStorageError()
+      }
+    }
   }
 }
 
@@ -699,7 +709,13 @@ object DataSource extends Logging {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
     val cls = lookupDataSource(provider, conf)
-    cls.getDeclaredConstructor().newInstance() match {
+    val instance = try {
+      cls.getDeclaredConstructor().newInstance()
+    } catch {
+      // Throw the original error from the data source implementation.
+      case e: java.lang.reflect.InvocationTargetException => throw e.getCause
+    }
+    instance match {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
@@ -790,9 +806,9 @@ object DataSource extends Logging {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
+    val optionsWithoutPath = options.filter { case (k, _) => k.toLowerCase(Locale.ROOT) != "path" }
     CatalogStorageFormat.empty.copy(
-      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
   }
 
   /**
@@ -813,28 +829,6 @@ object DataSource extends Logging {
 
     if (!shouldAllowEmptySchema && hasEmptySchema(schema)) {
       throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
-    }
-  }
-
-  /**
-   * Resolve partition columns using output columns of the query plan.
-   */
-  def resolvePartitionColumns(
-      partitionColumns: Seq[Attribute],
-      outputColumns: Seq[Attribute],
-      plan: LogicalPlan,
-      resolver: Resolver): Seq[Attribute] = {
-    partitionColumns.map { col =>
-      // The partition columns created in `planForWritingFileFormat` should always be
-      // `UnresolvedAttribute` with a single name part.
-      assert(col.isInstanceOf[UnresolvedAttribute])
-      val unresolved = col.asInstanceOf[UnresolvedAttribute]
-      assert(unresolved.nameParts.length == 1)
-      val name = unresolved.nameParts.head
-      outputColumns.find(a => resolver(a.name, name)).getOrElse {
-        throw QueryCompilationErrors.cannotResolveAttributeError(
-          name, plan.output.map(_.name).mkString(", "))
-      }
     }
   }
 }

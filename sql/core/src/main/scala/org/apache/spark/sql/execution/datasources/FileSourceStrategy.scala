@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{PLAN_EXPRESSION, SCALAR_
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -258,9 +259,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         metadataStruct.dataType.asInstanceOf[StructType].fields.foreach {
           case FileSourceGeneratedMetadataStructField(field, internalName) =>
             if (schemaColumns.contains(internalName)) {
-              throw new AnalysisException(internalName +
-                s"${internalName} is a reserved column name that cannot be read in combination " +
-                s"with ${FileFormat.METADATA_NAME}.${field.name} column.")
+              throw new AnalysisException(
+                errorClass = "_LEGACY_ERROR_TEMP_3069",
+                messageParameters = Map(
+                  "internalName" -> internalName,
+                  "colName" -> s"${FileFormat.METADATA_NAME}.${field.name}"
+                ))
             }
 
             // NOTE: Readers require the internal column to be nullable because it's not part of the
@@ -275,7 +279,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             metadataColumnsByName.put(field.name, attr)
             constantMetadataColumns += attr
 
-          case field => throw new AnalysisException(s"Unrecognized file metadata field: $field")
+          case field => throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3070",
+            messageParameters = Map("field" -> field.toString))
         }
       }
 
@@ -335,7 +341,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         // Here, we *explicitly* enforce the not null to `CreateStruct(structColumns)`
         // to avoid any risk of inconsistent schema nullability
         val metadataAlias =
-          Alias(KnownNotNull(CreateStruct(structColumns)),
+          Alias(KnownNotNull(CreateStruct(structColumns.toImmutableArraySeq)),
             FileFormat.METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)

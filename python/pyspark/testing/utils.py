@@ -22,6 +22,7 @@ import sys
 import unittest
 import difflib
 import functools
+import math
 from decimal import Decimal
 from time import time, sleep
 from typing import (
@@ -56,7 +57,8 @@ from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, AtomicType, StructField
+from pyspark.sql.types import StructType, StructField
+from pyspark.sql.functions import col, when
 
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
@@ -291,7 +293,13 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertSchemaEqual(actual: StructType, expected: StructType):
+def assertSchemaEqual(
+    actual: StructType,
+    expected: StructType,
+    ignoreNullable: bool = True,
+    ignoreColumnOrder: bool = False,
+    ignoreColumnName: bool = False,
+):
     r"""
     A util function to assert equality between DataFrame schemas `actual` and `expected`.
 
@@ -303,6 +311,31 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
         The DataFrame schema that is being compared or tested.
     expected : StructType
         The expected schema, for comparison with the actual schema.
+    ignoreNullable : bool, default True
+        Specifies whether a column’s nullable property is included when checking for
+        schema equality.
+        When set to `True` (default), the nullable property of the columns being compared
+        is not taken into account and the columns will be considered equal even if they have
+        different nullable settings.
+        When set to `False`, columns are considered equal only if they have the same nullable
+        setting.
+        .. versionadded:: 4.0.0
+    ignoreColumnOrder : bool, default False
+        Specifies whether to compare columns in the order they appear in the DataFrame or by
+        column name.
+        If set to `False` (default), columns are compared in the order they appear in the
+        DataFrames.
+        When set to `True`, a column in the expected DataFrame is compared to the column with the
+        same name in the actual DataFrame.
+        .. versionadded:: 4.0.0
+    ignoreColumnName : bool, default False
+        Specifies whether to fail the initial schema equality check if the column names in the two
+        DataFrames are different.
+        When set to `False` (default), column names are checked and the function fails if they are
+        different.
+        When set to `True`, the function will succeed even if column names are different.
+        Column data types are compared for columns in the order they appear in the DataFrames.
+        .. versionadded:: 4.0.0
 
     Notes
     -----
@@ -316,6 +349,21 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> assertSchemaEqual(s1, s2)  # pass, schemas are identical
 
+    Different schemas with `ignoreNullable=False` would fail.
+
+    >>> s3 = StructType([StructField("names", ArrayType(DoubleType(), True), False)])
+    >>> assertSchemaEqual(s1, s3, ignoreNullable=False)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
+    --- actual
+    +++ expected
+    - StructType([StructField('names', ArrayType(DoubleType(), True), True)])
+    ?                                                                 ^^^
+    + StructType([StructField('names', ArrayType(DoubleType(), True), False)])
+    ?                                                                 ^^^^
+
+
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "number"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 5000)], schema=["id", "amount"])
     >>> assertSchemaEqual(df1.schema, df2.schema)  # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -328,6 +376,26 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     ?                               ^^                               ^^^^^
     + StructType([StructField('id', StringType(), True), StructField('amount', LongType(), True)])
     ?                               ^^^^                              ++++ ^
+
+    Compare two schemas ignoring the column order.
+
+    >>> s1 = StructType(
+    ...     [StructField("a", IntegerType(), True), StructField("b", DoubleType(), True)]
+    ... )
+    >>> s2 = StructType(
+    ...     [StructField("b", DoubleType(), True), StructField("a", IntegerType(), True)]
+    ... )
+    >>> assertSchemaEqual(s1, s2, ignoreColumnOrder=True)
+
+    Compare two schemas ignoring the column names.
+
+    >>> s1 = StructType(
+    ...     [StructField("a", IntegerType(), True), StructField("c", DoubleType(), True)]
+    ... )
+    >>> s2 = StructType(
+    ...     [StructField("b", IntegerType(), True), StructField("d", DoubleType(), True)]
+    ... )
+    >>> assertSchemaEqual(s1, s2, ignoreColumnName=True)
     """
     if not isinstance(actual, StructType):
         raise PySparkAssertionError(
@@ -371,12 +439,26 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
         else:
             return False
 
-    # ignore nullable flag by default
-    if not compare_schemas_ignore_nullable(actual, expected):
+    if ignoreColumnOrder:
+        actual = StructType(sorted(actual, key=lambda x: x.name))
+        expected = StructType(sorted(expected, key=lambda x: x.name))
+
+    if ignoreColumnName:
+        actual = StructType(
+            [StructField(str(i), field.dataType, field.nullable) for i, field in enumerate(actual)]
+        )
+        expected = StructType(
+            [
+                StructField(str(i), field.dataType, field.nullable)
+                for i, field in enumerate(expected)
+            ]
+        )
+
+    if (ignoreNullable and not compare_schemas_ignore_nullable(actual, expected)) or (
+        not ignoreNullable and actual != expected
+    ):
         generated_diff = difflib.ndiff(str(actual).splitlines(), str(expected).splitlines())
-
         error_msg = "\n".join(generated_diff)
-
         raise PySparkAssertionError(
             error_class="DIFFERENT_SCHEMA",
             message_parameters={"error_msg": error_msg},
@@ -396,6 +478,13 @@ def assertDataFrameEqual(
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
+    ignoreNullable: bool = True,
+    ignoreColumnOrder: bool = False,
+    ignoreColumnName: bool = False,
+    ignoreColumnType: bool = False,
+    maxErrors: Optional[int] = None,
+    showOnlyDiff: bool = False,
+    includeDiffRows=False,
 ):
     r"""
     A util function to assert equality between `actual` and `expected`
@@ -424,6 +513,60 @@ def assertDataFrameEqual(
     atol : float, optional
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
+    ignoreNullable : bool, default True
+        Specifies whether a column’s nullable property is included when checking for
+        schema equality.
+        When set to `True` (default), the nullable property of the columns being compared
+        is not taken into account and the columns will be considered equal even if they have
+        different nullable settings.
+        When set to `False`, columns are considered equal only if they have the same nullable
+        setting.
+
+        .. versionadded:: 4.0.0
+    ignoreColumnOrder : bool, default False
+        Specifies whether to compare columns in the order they appear in the DataFrame or by
+        column name.
+        If set to `False` (default), columns are compared in the order they appear in the
+        DataFrames.
+        When set to `True`, a column in the expected DataFrame is compared to the column with the
+        same name in the actual DataFrame.
+
+        .. versionadded:: 4.0.0
+    ignoreColumnName : bool, default False
+        Specifies whether to fail the initial schema equality check if the column names in the two
+        DataFrames are different.
+        When set to `False` (default), column names are checked and the function fails if they are
+        different.
+        When set to `True`, the function will succeed even if column names are different.
+        Column data types are compared for columns in the order they appear in the DataFrames.
+
+        .. versionadded:: 4.0.0
+    ignoreColumnType : bool, default False
+        Specifies whether to ignore the data type of the columns when comparing.
+        When set to `False` (default), column data types are checked and the function fails if they
+        are different.
+        When set to `True`, the schema equality check will succeed even if column data types are
+        different and the function will attempt to compare rows.
+
+        .. versionadded:: 4.0.0
+    maxErrors : bool, optional
+        The maximum number of row comparison failures to encounter before returning.
+        When this number of row comparisons have failed, the function returns independent of how
+        many rows have been compared.
+        Set to None by default which means compare all rows independent of number of failures.
+
+        .. versionadded:: 4.0.0
+    showOnlyDiff : bool, default False
+        If set to `True`, the error message will only include rows that are different.
+        If set to `False` (default), the error message will include all rows
+        (when there is at least one row that is different).
+
+        .. versionadded:: 4.0.0
+    includeDiffRows: bool, False
+        If set to `True`, the unequal rows are included in PySparkAssertionError for further
+        debugging. If set to `False` (default), the unequal rows are not returned as a data set.
+
+        .. versionadded:: 4.0.0
 
     Notes
     -----
@@ -439,6 +582,9 @@ def assertDataFrameEqual(
     Two float/decimal values a and b are approximately equal if the following equation is True:
 
     ``absolute(a - b) <= (atol + rtol * absolute(b))``.
+
+    `ignoreColumnOrder` cannot be set to `True` if `ignoreColumnNames` is also set to `True`.
+    `ignoreColumnNames` cannot be set to `True` if `ignoreColumnOrder` is also set to `True`.
 
     Examples
     --------
@@ -469,12 +615,119 @@ def assertDataFrameEqual(
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
     *** actual ***
     ! Row(id='1', amount=1000.0)
-    Row(id='2', amount=3000.0)
+      Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2000.0)
     *** expected ***
     ! Row(id='1', amount=1001.0)
-    Row(id='2', amount=3000.0)
+      Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2003.0)
+
+    Example for ignoreNullable
+
+    >>> from pyspark.sql.types import StructType, StructField, StringType, LongType
+    >>> df1_nullable = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")],
+    ...     schema=StructType(
+    ...         [StructField("amount", LongType(), True), StructField("id", StringType(), True)]
+    ...     )
+    ... )
+    >>> df2_nullable = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")],
+    ...     schema=StructType(
+    ...         [StructField("amount", LongType(), True), StructField("id", StringType(), False)]
+    ...     )
+    ... )
+    >>> assertDataFrameEqual(df1_nullable, df2_nullable, ignoreNullable=True)  # pass
+    >>> assertDataFrameEqual(
+    ...     df1_nullable, df2_nullable, ignoreNullable=False
+    ... )  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
+    --- actual
+    +++ expected
+    - StructType([StructField('amount', LongType(), True), StructField('id', StringType(), True)])
+    ?                                                                                      ^^^
+    + StructType([StructField('amount', LongType(), True), StructField('id', StringType(), False)])
+    ?                                                                                      ^^^^
+
+    Example for ignoreColumnOrder
+
+    >>> df1_col_order = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "id"]
+    ... )
+    >>> df2_col_order = spark.createDataFrame(
+    ...     data=[("1", 1000), ("2", 5000)], schema=["id", "amount"]
+    ... )
+    >>> assertDataFrameEqual(df1_col_order, df2_col_order, ignoreColumnOrder=True)
+
+    Example for ignoreColumnName
+
+    >>> df1_col_names = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "identity"]
+    ... )
+    >>> df2_col_names = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "id"]
+    ... )
+    >>> assertDataFrameEqual(df1_col_names, df2_col_names, ignoreColumnName=True)
+
+    Example for ignoreColumnType
+
+    >>> df1_col_types = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "id"]
+    ... )
+    >>> df2_col_types = spark.createDataFrame(
+    ...     data=[(1000.0, "1"), (5000.0, "2")], schema=["amount", "id"]
+    ... )
+    >>> assertDataFrameEqual(df1_col_types, df2_col_types, ignoreColumnType=True)
+
+    Example for maxErrors (will only report the first mismatching row)
+
+    >>> df1 = spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")])
+    >>> df2 = spark.createDataFrame([(1, "A"), (2, "X"), (3, "Y")])
+    >>> assertDataFrameEqual(df1, df2, maxErrors=1)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 33.33333 % )
+    *** actual ***
+      Row(_1=1, _2='A')
+    ! Row(_1=2, _2='B')
+    *** expected ***
+      Row(_1=1, _2='A')
+    ! Row(_1=2, _2='X')
+
+    Example for showOnlyDiff (will only report the mismatching rows)
+
+    >>> df1 = spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")])
+    >>> df2 = spark.createDataFrame([(1, "A"), (2, "X"), (3, "Y")])
+    >>> assertDataFrameEqual(df1, df2, showOnlyDiff=True)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
+    *** actual ***
+    ! Row(_1=2, _2='B')
+    ! Row(_1=3, _2='C')
+    *** expected ***
+    ! Row(_1=2, _2='X')
+    ! Row(_1=3, _2='Y')
+
+    The `includeDiffRows` parameter can be used to include the rows that did not match
+    in the PySparkAssertionError. This can be useful for debugging or further analysis.
+
+    >>> df1 = spark.createDataFrame(
+    ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(
+    ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
+    >>> try:
+    ...     assertDataFrameEqual(df1, df2, includeDiffRows=True)
+    ... except PySparkAssertionError as e:
+    ...     spark.createDataFrame(e.data).show()  # doctest: +NORMALIZE_WHITESPACE
+    +-----------+-----------+
+    |         _1|         _2|
+    +-----------+-----------+
+    |{1, 1000.0}|{1, 1001.0}|
+    |{3, 2000.0}|{3, 2003.0}|
+    +-----------+-----------+
     """
     if actual is None and expected is None:
         return True
@@ -546,6 +799,37 @@ def assertDataFrameEqual(
                 },
             )
 
+    if ignoreColumnOrder:
+        actual = actual.select(*sorted(actual.columns))
+        expected = expected.select(*sorted(expected.columns))
+
+    def rename_dataframe_columns(df: DataFrame) -> DataFrame:
+        """Rename DataFrame columns to sequential numbers for comparison"""
+        renamed_columns = [str(i) for i in range(len(df.columns))]
+        return df.toDF(*renamed_columns)
+
+    if ignoreColumnName:
+        actual = rename_dataframe_columns(actual)
+        expected = rename_dataframe_columns(expected)
+
+    def cast_columns_to_string(df: DataFrame) -> DataFrame:
+        """Cast all DataFrame columns to string for comparison"""
+        for col_name in df.columns:
+            # Add logic to remove trailing .0 for float columns that are whole numbers
+            df = df.withColumn(
+                col_name,
+                when(
+                    (col(col_name).cast("float").isNotNull())
+                    & (col(col_name).cast("float") == col(col_name).cast("int")),
+                    col(col_name).cast("int").cast("string"),
+                ).otherwise(col(col_name).cast("string")),
+            )
+        return df
+
+    if ignoreColumnType:
+        actual = cast_columns_to_string(actual)
+        expected = cast_columns_to_string(expected)
+
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
             if isinstance(val1, list) and isinstance(val2, list):
@@ -578,40 +862,60 @@ def assertDataFrameEqual(
 
         return compare_vals(r1, r2)
 
-    def assert_rows_equal(rows1: List[Row], rows2: List[Row]):
+    def assert_rows_equal(
+        rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
+    ):
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
-        diff_rows = False
+        diff_rows = []
+        has_diff_rows = False
 
         rows_str1 = ""
         rows_str2 = ""
 
         # count different rows
         for r1, r2 in zipped:
-            rows_str1 += str(r1) + "\n"
-            rows_str2 += str(r2) + "\n"
             if not compare_rows(r1, r2):
                 diff_rows_cnt += 1
-                diff_rows = True
+                has_diff_rows = True
+                if includeDiffRows:
+                    diff_rows.append((r1, r2))
+                rows_str1 += str(r1) + "\n"
+                rows_str2 += str(r2) + "\n"
+                if maxErrors is not None and diff_rows_cnt >= maxErrors:
+                    break
+            elif not showOnlyDiff:
+                rows_str1 += str(r1) + "\n"
+                rows_str2 += str(r2) + "\n"
 
         generated_diff = _context_diff(
             actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
         )
 
-        if diff_rows:
+        if has_diff_rows:
             error_msg = "Results do not match: "
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + "\n".join(generated_diff)
+            data = diff_rows if includeDiffRows else None
             raise PySparkAssertionError(
-                error_class="DIFFERENT_ROWS",
-                message_parameters={"error_msg": error_msg},
+                error_class="DIFFERENT_ROWS", message_parameters={"error_msg": error_msg}, data=data
             )
 
-    # convert actual and expected to list
+    # only compare schema if expected is not a List
     if not isinstance(actual, list) and not isinstance(expected, list):
-        # only compare schema if expected is not a List
-        assertSchemaEqual(actual.schema, expected.schema)
+        if ignoreNullable:
+            assertSchemaEqual(actual.schema, expected.schema)
+        elif actual.schema != expected.schema:
+            generated_diff = difflib.ndiff(
+                str(actual.schema).splitlines(), str(expected.schema).splitlines()
+            )
+            error_msg = "\n".join(generated_diff)
+
+            raise PySparkAssertionError(
+                error_class="DIFFERENT_SCHEMA",
+                message_parameters={"error_msg": error_msg},
+            )
 
     if not isinstance(actual, list):
         actual_list = actual.collect()
@@ -628,7 +932,7 @@ def assertDataFrameEqual(
         actual_list = sorted(actual_list, key=lambda x: str(x))
         expected_list = sorted(expected_list, key=lambda x: str(x))
 
-    assert_rows_equal(actual_list, expected_list)
+    assert_rows_equal(actual_list, expected_list, maxErrors=maxErrors, showOnlyDiff=showOnlyDiff)
 
 
 def _test() -> None:

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * For lazy computing, be sure the generator.terminate() called in the very last
@@ -97,7 +98,7 @@ case class GenerateExec(
           // we should always set the left (required child output)
           joinedRow.withLeft(pruneChildForResult(row))
           val outputRows = boundGenerator.eval(row)
-          if (outer && outputRows.isEmpty) {
+          if (outer && outputRows.iterator.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil
           } else {
             outputRows.iterator.map(joinedRow.withRight)
@@ -110,7 +111,7 @@ case class GenerateExec(
       } else {
         iter.flatMap { row =>
           val outputRows = boundGenerator.eval(row)
-          if (outer && outputRows.isEmpty) {
+          if (outer && outputRows.iterator.isEmpty) {
             Seq(generatorNullRow)
           } else {
             outputRows
@@ -186,7 +187,7 @@ case class GenerateExec(
       case ArrayType(st: StructType, nullable) if e.inline =>
         val row = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
         val fieldChecks = checks ++ optionalCode(nullable, row.isNull)
-        val columns = st.fields.toSeq.zipWithIndex.map { case (f, i) =>
+        val columns = st.fields.toImmutableArraySeq.zipWithIndex.map { case (f, i) =>
           codeGenAccessor(
             ctx,
             row.value,
@@ -258,7 +259,7 @@ case class GenerateExec(
     val checks = optionalCode(outer, s"!$hasNext")
     val values = e.dataType match {
       case ArrayType(st: StructType, nullable) =>
-        st.fields.toSeq.zipWithIndex.map { case (f, i) =>
+        st.fields.toImmutableArraySeq.zipWithIndex.map { case (f, i) =>
           codeGenAccessor(ctx, current, s"st_col${i}", s"$i", f.dataType, f.nullable, checks)
         }
     }

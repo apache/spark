@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, FileNotFoundException, IOException}
 import java.net.InetAddress
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
@@ -39,6 +39,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -219,7 +220,7 @@ private[spark] class SparkHadoopUtil extends Logging {
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
       val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDirectory)
-      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
+      (leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))).toImmutableArraySeq
     }
 
     if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
@@ -236,7 +237,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
   def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
     Option(fs.globStatus(pattern)).map { statuses =>
-      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toImmutableArraySeq
     }.getOrElse(Seq.empty[Path])
   }
 
@@ -592,4 +593,11 @@ private[spark] object SparkHadoopUtil extends Logging {
     }
   }
 
+  def isFile(fs: FileSystem, path: Path): Boolean = {
+    try {
+      fs.getFileStatus(path).isFile
+    } catch {
+      case _: FileNotFoundException => false
+    }
+  }
 }

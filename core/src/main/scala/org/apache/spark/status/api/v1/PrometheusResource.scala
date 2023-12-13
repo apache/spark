@@ -48,8 +48,8 @@ private[v1] class PrometheusResource extends ApiRequestContext {
     store.executorList(true).foreach { executor =>
       val prefix = "metrics_executor_"
       val labels = Seq(
-        "application_id" -> store.applicationInfo.id,
-        "application_name" -> store.applicationInfo.name,
+        "application_id" -> store.applicationInfo().id,
+        "application_name" -> store.applicationInfo().name,
         "executor_id" -> executor.id
       ).map { case (k, v) => s"""$k="$v"""" }.mkString("{", ", ", "}")
       sb.append(s"${prefix}rddBlocks$labels ${executor.rddBlocks}\n")

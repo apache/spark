@@ -114,20 +114,16 @@ class YarnShuffleServiceMetrics implements MetricsSource {
           m.getOneMinuteRate())
         .addGauge(new ShuffleServiceMetricsInfo(name + "_rateMean", "Mean rate of meter " + name),
           m.getMeanRate());
-    } else if (metric instanceof Gauge) {
-      final Object gaugeValue = ((Gauge) metric).getValue();
-      if (gaugeValue instanceof Integer) {
-        metricsRecordBuilder.addGauge(
-          getShuffleServiceMetricsInfoForGauge(name), (Integer) gaugeValue);
-      } else if (gaugeValue instanceof Long) {
-        metricsRecordBuilder.addGauge(
-          getShuffleServiceMetricsInfoForGauge(name), (Long) gaugeValue);
-      } else if (gaugeValue instanceof Float) {
-        metricsRecordBuilder.addGauge(
-          getShuffleServiceMetricsInfoForGauge(name), (Float) gaugeValue);
-      } else if (gaugeValue instanceof Double) {
-        metricsRecordBuilder.addGauge(
-          getShuffleServiceMetricsInfoForGauge(name), (Double) gaugeValue);
+    } else if (metric instanceof Gauge gauge) {
+      final Object gaugeValue = gauge.getValue();
+      if (gaugeValue instanceof Integer integer) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), integer);
+      } else if (gaugeValue instanceof Long longVal) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), longVal);
+      } else if (gaugeValue instanceof Float floatVal) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), floatVal);
+      } else if (gaugeValue instanceof Double doubleVal) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), doubleVal);
       } else {
         throw new IllegalStateException(
                 "Not supported class type of metric[" + name + "] for value " + gaugeValue);
@@ -153,24 +149,6 @@ class YarnShuffleServiceMetrics implements MetricsSource {
       valueName + " value of " + baseName);
   }
 
-  private static class ShuffleServiceMetricsInfo implements MetricsInfo {
-
-    private final String name;
-    private final String description;
-
-    ShuffleServiceMetricsInfo(String name, String description) {
-      this.name = name;
-      this.description = description;
-    }
-
-    @Override
-    public String name() {
-      return name;
-    }
-
-    @Override
-    public String description() {
-      return description;
-    }
+  private record ShuffleServiceMetricsInfo(String name, String description) implements MetricsInfo {
   }
 }

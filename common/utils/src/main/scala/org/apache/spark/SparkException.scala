@@ -133,7 +133,7 @@ private[spark] case class ExecutorDeadException(message: String)
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
-private[spark] class SparkUpgradeException private(
+private[spark] class SparkUpgradeException(
   message: String,
   cause: Option[Throwable],
   errorClass: Option[String],
@@ -169,7 +169,7 @@ private[spark] class SparkUpgradeException private(
 /**
  * Arithmetic exception thrown from Spark with an error class.
  */
-private[spark] class SparkArithmeticException private(
+private[spark] class SparkArithmeticException(
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String],
@@ -207,7 +207,7 @@ private[spark] class SparkArithmeticException private(
 /**
  * Unsupported operation exception thrown from Spark with an error class.
  */
-private[spark] class SparkUnsupportedOperationException private(
+private[spark] class SparkUnsupportedOperationException(
   message: String,
   errorClass: Option[String],
   messageParameters: Map[String, String])
@@ -271,7 +271,7 @@ private[spark] class SparkConcurrentModificationException(
 /**
  * Datetime exception thrown from Spark with an error class.
  */
-private[spark] class SparkDateTimeException private(
+private[spark] class SparkDateTimeException(
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String],
@@ -324,7 +324,7 @@ private[spark] class SparkFileNotFoundException(
 /**
  * Number format exception thrown from Spark with an error class.
  */
-private[spark] class SparkNumberFormatException private(
+private[spark] class SparkNumberFormatException private[spark](
     message: String,
     errorClass: Option[String],
     messageParameters: Map[String, String],
@@ -363,7 +363,7 @@ private[spark] class SparkNumberFormatException private(
 /**
  * Illegal argument exception thrown from Spark with an error class.
  */
-private[spark] class SparkIllegalArgumentException private(
+private[spark] class SparkIllegalArgumentException(
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
@@ -403,7 +403,7 @@ private[spark] class SparkIllegalArgumentException private(
   override def getQueryContext: Array[QueryContext] = context
 }
 
-private[spark] class SparkRuntimeException private(
+private[spark] class SparkRuntimeException(
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
@@ -480,7 +480,7 @@ private[spark] class SparkSecurityException(
 /**
  * Array index out of bounds exception thrown from Spark with an error class.
  */
-private[spark] class SparkArrayIndexOutOfBoundsException private(
+private[spark] class SparkArrayIndexOutOfBoundsException(
   message: String,
   errorClass: Option[String],
   messageParameters: Map[String, String],

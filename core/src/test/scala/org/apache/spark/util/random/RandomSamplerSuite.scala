@@ -731,7 +731,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     val s1 = sampler.sample(data.iterator).toArray
     s1.length should be > 0
 
-    sampler = base.cloneComplement
+    sampler = base.cloneComplement()
     sampler.setSeed(seed)
     val s2 = sampler.sample(data.iterator).toArray
     s2.length should be > 0

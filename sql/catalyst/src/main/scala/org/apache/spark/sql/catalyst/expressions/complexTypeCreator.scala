@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
@@ -34,6 +35,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
@@ -625,10 +627,10 @@ trait StructFieldsOperation extends Expression with Unevaluable {
 
   val resolver: Resolver = SQLConf.get.resolver
 
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "StructFieldsOperation.dataType should not be called.")
 
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "StructFieldsOperation.nullable should not be called.")
 
   /**
@@ -729,7 +731,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
     }
     val fieldsWithIndex = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex
     val existingFieldExprs: Seq[(StructField, Expression)] =
-      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }
+      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }.toImmutableArraySeq
     fieldOps.foldLeft(existingFieldExprs)((exprs, op) => op(exprs))
   }
 

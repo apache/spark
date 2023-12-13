@@ -284,6 +284,7 @@ class SSLOptionsSuite extends SparkFunSuite {
   test("get passwords from environment") {
     val conf = new SparkConfWithEnv(Map(
       SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "val1",
+      SSLOptions.ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> "val4",
       SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "val2",
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "val3"))
     val hadoopConf = new Configuration()
@@ -292,6 +293,7 @@ class SSLOptionsSuite extends SparkFunSuite {
 
     val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
     assert(opts.keyPassword === Some("val1"))
+    assert(opts.privateKeyPassword === Some("val4"))
     assert(opts.keyStorePassword === Some("val2"))
     assert(opts.trustStorePassword === Some("val3"))
   }

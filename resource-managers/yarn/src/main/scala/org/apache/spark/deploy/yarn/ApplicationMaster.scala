@@ -104,7 +104,7 @@ private[spark] class ApplicationMaster(
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = getDefaultFinalStatus
+  @volatile private var finalStatus = getDefaultFinalStatus()
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -515,7 +515,7 @@ private[spark] class ApplicationMaster(
         val driverRef = rpcEnv.setupEndpointRef(
           RpcAddress(host, port),
           YarnSchedulerBackend.ENDPOINT_NAME)
-        createAllocator(driverRef, userConf, rpcEnv, appAttemptId, distCacheConf)
+        createAllocator(driverRef, userConf, rpcEnv, appAttemptId, distCacheConf())
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
@@ -553,7 +553,7 @@ private[spark] class ApplicationMaster(
       YarnSchedulerBackend.ENDPOINT_NAME)
     addAmIpFilter(Some(driverRef),
       System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
-    createAllocator(driverRef, sparkConf, rpcEnv, appAttemptId, distCacheConf)
+    createAllocator(driverRef, sparkConf, rpcEnv, appAttemptId, distCacheConf())
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()

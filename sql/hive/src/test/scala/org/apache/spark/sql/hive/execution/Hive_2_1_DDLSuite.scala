@@ -62,7 +62,7 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
     new HiveExternalCatalog(sparkConf, hadoopConf)
   }
 
-  override def afterEach: Unit = {
+  override def afterEach(): Unit = {
     catalog.listTables("default").foreach { t =>
       catalog.dropTable("default", t, true, false)
     }
@@ -107,8 +107,12 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
           "CREATE TABLE t1 (c1 string) USING parquet",
           StructType(Array(StructField("c2", IntegerType))))
       },
-      errorClass = null,
-      parameters = Map.empty
+      errorClass = "_LEGACY_ERROR_TEMP_3065",
+      parameters = Map(
+        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+        "msg" -> ("Unable to alter table. " +
+          "The following columns have types incompatible with the existing columns " +
+          "in their respective positions :\ncol"))
     )
   }
 

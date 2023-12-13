@@ -31,6 +31,7 @@ import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -128,7 +129,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
   def setJars(jars: Array[String]): SparkConf = {
-    setJars(jars.toSeq)
+    setJars(jars.toImmutableArraySeq)
   }
 
   /**
@@ -157,7 +158,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * (Java-friendly version.)
    */
   def setExecutorEnv(variables: Array[(String, String)]): SparkConf = {
-    setExecutorEnv(variables.toSeq)
+    setExecutorEnv(variables.toImmutableArraySeq)
   }
 
   /**
@@ -323,7 +324,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * @throws NumberFormatException If the value cannot be interpreted as bytes
    */
   def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key, defaultValue + "B"))
+    Utils.byteStringAsBytes(get(key, s"${defaultValue}B"))
   }
 
   /**
@@ -440,7 +441,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
-    getAllWithPrefix("spark.executorEnv.")
+    getAllWithPrefix("spark.executorEnv.").toImmutableArraySeq
   }
 
   /**

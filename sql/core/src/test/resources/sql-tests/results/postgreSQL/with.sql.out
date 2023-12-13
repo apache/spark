@@ -1156,16 +1156,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
-    "objectName" : "`id`"
+    "objectName" : "`id`",
+    "proposal" : "`a`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 139,
-    "stopIndex" : 140,
+    "startIndex" : 73,
+    "stopIndex" : 74,
     "fragment" : "id"
   } ]
 }

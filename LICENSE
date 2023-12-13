@@ -216,13 +216,13 @@ core/src/main/resources/org/apache/spark/ui/static/bootstrap*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
 connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
-
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
 
 Python Software Foundation License
 ----------------------------------
 
 python/pyspark/loose_version.py
-python/docs/source/_static/copybutton.js
 
 BSD 3-Clause
 ------------

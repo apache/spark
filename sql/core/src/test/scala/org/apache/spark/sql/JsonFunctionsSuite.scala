@@ -195,7 +195,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"json_tuple(a, 1)\"",
         "funcName" -> "`json_tuple`"
-      )
+      ),
+      context =
+        ExpectedContext(fragment = "json_tuple", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -648,7 +650,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_MAP_KEY_TYPE",
       parameters = Map(
         "schema" -> "\"MAP<STRUCT<f: INT>, STRING>\"",
-        "sqlExpr" -> "\"entries\""))
+        "sqlExpr" -> "\"entries\""),
+      context =
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -940,7 +944,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val json_tuple_result = Seq(s"""{"test":"$str"}""").toDF("json")
         .withColumn("result", json_tuple($"json", "test"))
         .select($"result")
-        .as[String].head.length
+        .as[String].head().length
       assert(json_tuple_result === len)
     }
   }
@@ -958,7 +962,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           .select(from_json($"json", $"schema", options)).collect()
       },
       errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
-      parameters = Map("inputSchema" -> "\"schema\"")
+      parameters = Map("inputSchema" -> "\"schema\""),
+      context = ExpectedContext(fragment = "from_json", getCurrentClassCallSitePattern)
     )
   }
 
@@ -1170,7 +1175,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val invalidDataType = "MAP<INT, cow>"
     val invalidDataTypeReason = "Unrecognized token 'MAP': " +
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n " +
-      "at [Source: (String)\"MAP<INT, cow>\"; line: 1, column: 4]"
+      "at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); " +
+      "line: 1, column: 4]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
@@ -1185,7 +1191,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val invalidTableSchema = "x INT, a cow"
     val invalidTableSchemaReason = "Unrecognized token 'x': " +
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n" +
-      " at [Source: (String)\"x INT, a cow\"; line: 1, column: 2]"
+      " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); " +
+      "line: 1, column: 2]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
@@ -1284,7 +1291,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35982: from_json/to_json for map types where value types are year-month intervals") {
-    val ymDF = Seq(Period.of(1, 2, 0)).toDF
+    val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(
       (YearMonthIntervalType(), """{"key":"INTERVAL '1-2' YEAR TO MONTH"}""", Period.of(1, 2, 0)),
       (YearMonthIntervalType(YEAR), """{"key":"INTERVAL '1' YEAR"}""", Period.of(1, 0, 0)),
@@ -1308,7 +1315,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35983: from_json/to_json for map types where value types are day-time intervals") {
-    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF()
     Seq(
       (DayTimeIntervalType(), """{"key":"INTERVAL '1 02:03:04' DAY TO SECOND"}""",
         Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)),
@@ -1350,7 +1357,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36491: Make from_json/to_json to handle timestamp_ntz type properly") {
     val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
-    val df = Seq(localDT).toDF
+    val df = Seq(localDT).toDF()
     val toJsonDF = df.select(to_json(map(lit("key"), $"value")) as "json")
     checkAnswer(toJsonDF, Row("""{"key":"2021-08-12T15:16:23.000"}"""))
     val fromJsonDF = toJsonDF

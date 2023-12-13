@@ -20,6 +20,11 @@
 # This file is used for Binder integration to install PySpark available in
 # Jupyter notebook.
 
+# SPARK-45706: Should fail fast. Otherwise, the Binder image is successfully
+# built, and it cannot be rebuilt.
+set -o pipefail
+set -e
+
 VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
 TAG=$(git describe --tags --exact-match 2>/dev/null)
 
@@ -38,7 +43,7 @@ else
   pip install plotly "pandas<2.0.0" "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
 fi
 
-# Set 'PYARROW_IGNORE_TIMEZONE' to surpress warnings from PyArrow.
+# Set 'PYARROW_IGNORE_TIMEZONE' to suppress warnings from PyArrow.
 echo "export PYARROW_IGNORE_TIMEZONE=1" >> ~/.profile
 
 # Add sbin to PATH to run `start-connect-server.sh`.
@@ -50,8 +55,8 @@ echo "export SPARK_HOME=${SPARK_HOME}" >> ~/.profile
 SPARK_VERSION=$(python -c "import pyspark; print(pyspark.__version__)")
 echo "export SPARK_VERSION=${SPARK_VERSION}" >> ~/.profile
 
-# Surpress warnings from Spark jobs, and UI progress bar.
+# Suppress warnings from Spark jobs, and UI progress bar.
 mkdir -p ~/.ipython/profile_default/startup
-echo """from pyspark.sql import SparkSession
+echo "from pyspark.sql import SparkSession
 SparkSession.builder.config('spark.ui.showConsoleProgress', 'false').getOrCreate().sparkContext.setLogLevel('FATAL')
-""" > ~/.ipython/profile_default/startup/00-init.py
+" > ~/.ipython/profile_default/startup/00-init.py

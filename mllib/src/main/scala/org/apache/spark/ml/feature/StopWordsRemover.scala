@@ -28,6 +28,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A feature transformer that filters out stop words from input.
@@ -171,7 +172,10 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
       t(col(inputColName))
     }
     val outputMetadata = outputColNames.map(outputSchema(_).metadata)
-    dataset.withColumns(outputColNames, outputCols, outputMetadata)
+    dataset.withColumns(
+      outputColNames.toImmutableArraySeq,
+      outputCols.toImmutableArraySeq,
+      outputMetadata.toImmutableArraySeq)
   }
 
   @Since("1.5.0")

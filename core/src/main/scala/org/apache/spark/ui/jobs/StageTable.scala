@@ -90,13 +90,6 @@ private[ui] class StageTableRowData(
     val shuffleWrite: Long,
     val shuffleWriteWithUnit: String)
 
-private[ui] class MissingStageTableRowData(
-    stageInfo: v1.StageData,
-    stageId: Int,
-    attemptId: Int) extends StageTableRowData(
-  stageInfo, None, stageId, attemptId, "", None, new Date(0), "", -1, "", 0, "", 0, "", 0, "", 0,
-    "")
-
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
     store: AppStatusStore,

@@ -75,7 +75,7 @@ def _to_java_expr(col: "ColumnOrName") -> JavaObject:
 
 @overload
 def _to_seq(sc: SparkContext, cols: Iterable[JavaObject]) -> JavaObject:
-    pass
+    ...
 
 
 @overload
@@ -84,7 +84,7 @@ def _to_seq(
     cols: Iterable["ColumnOrName"],
     converter: Optional[Callable[["ColumnOrName"], JavaObject]],
 ) -> JavaObject:
-    pass
+    ...
 
 
 def _to_seq(
@@ -924,10 +924,20 @@ class Column:
 
         Examples
         --------
+
+        Example 1. Using integers for the input arguments.
+
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
+
+        Example 2. Using columns for the input arguments.
+
+        >>> df = spark.createDataFrame(
+        ...      [(3, 4, "Alice"), (2, 3, "Bob")], ["sidx", "eidx", "name"])
+        >>> df.select(df.name.substr(df.sidx, df.eidx).alias("col")).collect()
+        [Row(col='ice'), Row(col='ob')]
         """
         if type(startPos) != type(length):
             raise PySparkTypeError(
@@ -1199,7 +1209,7 @@ class Column:
             else:
                 return Column(getattr(self._jc, "as")(alias[0]))
         else:
-            if metadata:
+            if metadata is not None:
                 raise PySparkValueError(
                     error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
                     message_parameters={"arg_name": "metadata"},
@@ -1388,16 +1398,50 @@ class Column:
 
         Examples
         --------
+        Example 1: Using :func:`when` with conditions and values to create a new Column
+
         >>> from pyspark.sql import functions as sf
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.select(df.name, sf.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> result = df.select(df.name, sf.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0))
+        >>> result.show()
         +-----+------------------------------------------------------------+
         | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
         +-----+------------------------------------------------------------+
         |Alice|                                                          -1|
         |  Bob|                                                           1|
         +-----+------------------------------------------------------------+
+
+        Example 2: Chaining multiple :func:`when` conditions
+
+        >>> from pyspark.sql import functions as sf
+        >>> df = spark.createDataFrame([(1, "Alice"), (4, "Bob"), (6, "Charlie")], ["age", "name"])
+        >>> result = df.select(
+        ...     df.name,
+        ...     sf.when(df.age < 3, "Young").when(df.age < 5, "Middle-aged").otherwise("Old")
+        ... )
+        >>> result.show()
+        +-------+---------------------------------------------------------------------------+
+        |   name|CASE WHEN (age < 3) THEN Young WHEN (age < 5) THEN Middle-aged ELSE Old END|
+        +-------+---------------------------------------------------------------------------+
+        |  Alice|                                                                      Young|
+        |    Bob|                                                                Middle-aged|
+        |Charlie|                                                                        Old|
+        +-------+---------------------------------------------------------------------------+
+
+        Example 3: Using literal values as conditions
+
+        >>> from pyspark.sql import functions as sf
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> result = df.select(
+        ...     df.name, sf.when(sf.lit(True), 1).otherwise(
+        ...         sf.raise_error("unreachable")).alias("when"))
+        >>> result.show()
+        +-----+----+
+        | name|when|
+        +-----+----+
+        |Alice|   1|
+        |  Bob|   1|
+        +-----+----+
 
         See Also
         --------

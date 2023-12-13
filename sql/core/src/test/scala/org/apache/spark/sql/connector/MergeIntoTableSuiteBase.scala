@@ -32,6 +32,38 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
 
+  test("SPARK-45974: merge into non filter attributes table") {
+    val tableName: String = "cat.ns1.non_partitioned_table"
+    withTable(tableName) {
+      withTempView("source") {
+        val sourceRows = Seq(
+          (1, 100, "hr"),
+          (2, 200, "finance"),
+          (3, 300, "hr"))
+        sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+        sql(s"CREATE TABLE $tableName (pk INT NOT NULL, salary INT, dep STRING)".stripMargin)
+
+        val df = sql(
+          s"""MERGE INTO $tableName t
+             |USING (select * from source) s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = s.salary
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableName"),
+          Seq(
+            Row(1, 100, "hr"), // insert
+            Row(2, 200, "finance"), // insert
+            Row(3, 300, "hr"))) // insert
+      }
+    }
+  }
+
   test("merge into empty table with NOT MATCHED clause") {
     withTempView("source") {
       createTable("pk INT NOT NULL, salary INT, dep STRING")

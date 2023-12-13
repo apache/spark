@@ -1437,7 +1437,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           "tableName" -> "spark_catalog.default.partitionedtable",
           "specifiedPartCols" -> "", "existingPartCols" -> "a, b")
       )
-      assert(sql("select * from partitionedTable").collect().size == 1)
+      assert(sql("select * from partitionedTable").collect().length == 1)
       // Inserts new data successfully when partition columns are correctly specified in
       // partitionBy(...).
       // TODO: Right now, partition columns are always treated in a case-insensitive way.
@@ -2184,12 +2184,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   test("Refresh table before drop database cascade") {
     withTempDir { tempDir =>
-      val file1 = new File(tempDir + "/first.csv")
+      val file1 = new File(s"$tempDir/first.csv")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("first")
       }
 
-      val file2 = new File(tempDir + "/second.csv")
+      val file2 = new File(s"$tempDir/second.csv")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("second")
       }
@@ -2405,6 +2405,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "operation" -> "generated columns")
     )
   }
+
+  test("SPARK-44837: Error when altering partition column in non-delta table") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT, j INT, k INT) USING parquet PARTITIONED BY (i, j)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t ALTER COLUMN i COMMENT 'comment'")
+        },
+        errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+        sqlState = "428FR",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`i`")
+      )
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
@@ -2416,8 +2431,6 @@ object FakeLocalFsFileSystem {
 // it has only one ACL status for all paths.
 class FakeLocalFsFileSystem extends RawLocalFileSystem {
   import FakeLocalFsFileSystem._
-
-  override def getScheme(): String = "fakelocalfs"
 
   override def delete(f: Path, recursive: Boolean): Boolean = {
     aclStatus = new AclStatus.Builder().build()

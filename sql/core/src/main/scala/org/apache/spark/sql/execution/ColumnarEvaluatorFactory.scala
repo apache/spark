@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 
 class ColumnarToRowEvaluatorFactory(
     childOutput: Seq[Attribute],
@@ -73,9 +74,9 @@ class RowToColumnarEvaluatorFactory(
       new Iterator[ColumnarBatch] {
         private lazy val converters = new RowToColumnConverter(schema)
         private lazy val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
-          OffHeapColumnVector.allocateColumns(numRows, schema)
+          OffHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
         } else {
-          OnHeapColumnVector.allocateColumns(numRows, schema)
+          OnHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
         }
         private lazy val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
 

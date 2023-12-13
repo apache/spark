@@ -36,6 +36,7 @@ import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -79,9 +80,9 @@ private[spark] class DiskBlockManager(
   private val shutdownHook = addShutdownHook()
 
   // If either of these features are enabled, we must change permissions on block manager
-  // directories and files to accomodate the shuffle service deleting files in a secure environment.
-  // Parent directories are assumed to be restrictive to prevent unauthorized users from accessing
-  // or modifying world readable files.
+  // directories and files to accommodate the shuffle service deleting files in a secure
+  // environment. Parent directories are assumed to be restrictive to prevent unauthorized users
+  // from accessing or modifying world readable files.
   private val permissionChangingRequired = conf.get(config.SHUFFLE_SERVICE_ENABLED) && (
     conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED) ||
     conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -167,8 +168,8 @@ private[spark] class DiskBlockManager(
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files.toSeq else Seq.empty
-    }
+      if (files != null) files.toImmutableArraySeq else Seq.empty
+    }.toImmutableArraySeq
   }
 
   /** List all the blocks currently stored on disk by the disk manager. */

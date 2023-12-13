@@ -36,6 +36,7 @@ from pyspark.errors.exceptions.base import (
     QueryExecutionException as BaseQueryExecutionException,
     SparkRuntimeException as BaseSparkRuntimeException,
     SparkUpgradeException as BaseSparkUpgradeException,
+    SparkNoSuchElementException as BaseNoSuchElementException,
     StreamingQueryException as BaseStreamingQueryException,
     UnknownException as BaseUnknownException,
 )
@@ -55,16 +56,16 @@ class CapturedException(PySparkException):
             origin is None and desc is not None and stackTrace is not None
         )
 
-        self.desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
+        self._desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
         assert SparkContext._jvm is not None
-        self.stackTrace = (
+        self._stackTrace = (
             stackTrace
             if stackTrace is not None
             else (SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(origin))
         )
-        self.cause = convert_exception(cause) if cause is not None else None
-        if self.cause is None and origin is not None and origin.getCause() is not None:
-            self.cause = convert_exception(origin.getCause())
+        self._cause = convert_exception(cause) if cause is not None else None
+        if self._cause is None and origin is not None and origin.getCause() is not None:
+            self._cause = convert_exception(origin.getCause())
         self._origin = origin
 
     def __str__(self) -> str:
@@ -80,9 +81,9 @@ class CapturedException(PySparkException):
         except BaseException:
             pass
 
-        desc = self.desc
+        desc = self._desc
         if debug_enabled:
-            desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
+            desc = desc + "\n\nJVM stacktrace:\n%s" % self._stackTrace
         return str(desc)
 
     def getErrorClass(self) -> Optional[str]:
@@ -103,11 +104,11 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return self._origin.getMessageParameters()
+            return dict(self._origin.getMessageParameters())
         else:
             return None
 
-    def getSqlState(self) -> Optional[str]:  # type: ignore[override]
+    def getSqlState(self) -> Optional[str]:
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
@@ -116,6 +117,24 @@ class CapturedException(PySparkException):
             return self._origin.getSqlState()
         else:
             return None
+
+    def getMessage(self) -> str:
+        assert SparkContext._gateway is not None
+        gw = SparkContext._gateway
+
+        if self._origin is not None and is_instance_of(
+            gw, self._origin, "org.apache.spark.SparkThrowable"
+        ):
+            error_class = self._origin.getErrorClass()
+            message_parameters = self._origin.getMessageParameters()
+
+            error_message = gw.jvm.org.apache.spark.SparkThrowableHelper.getMessage(
+                error_class, message_parameters
+            )
+
+            return error_message
+        else:
+            return ""
 
 
 def convert_exception(e: Py4JJavaError) -> CapturedException:
@@ -152,6 +171,8 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
         return SparkRuntimeException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkUpgradeException"):
         return SparkUpgradeException(origin=e)
+    elif is_instance_of(gw, e, "org.apache.spark.SparkNoSuchElementException"):
+        return SparkNoSuchElementException(origin=e)
 
     c: Py4JJavaError = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
@@ -301,7 +322,13 @@ class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
 
 
+class SparkNoSuchElementException(CapturedException, BaseNoSuchElementException):
+    """
+    No such element exception.
+    """
+
+
 class UnknownException(CapturedException, BaseUnknownException):
     """
-    None of the above exceptions.
+    None of the other exceptions.
     """

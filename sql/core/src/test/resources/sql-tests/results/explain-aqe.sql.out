@@ -55,7 +55,7 @@ EXPLAIN EXTENDED
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'Project [unresolvedalias('sum(distinct 'val), None)]
+'Project [unresolvedalias('sum(distinct 'val))]
 +- 'UnresolvedRelation [explain_temp1], [], false
 
 == Analyzed Logical Plan ==

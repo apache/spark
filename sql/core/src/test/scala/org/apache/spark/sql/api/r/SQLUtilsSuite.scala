@@ -27,7 +27,7 @@ class SQLUtilsSuite extends SharedSparkSession {
     val df = Seq(
       (1, 2, 3),
       (4, 5, 6)
-    ).toDF
+    ).toDF()
     assert(SQLUtils.dfToCols(df) === Array(
       Array(1, 4),
       Array(2, 5),

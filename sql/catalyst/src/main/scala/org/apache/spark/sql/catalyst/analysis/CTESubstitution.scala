@@ -149,15 +149,17 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cteDefs: ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case w @ UnresolvedWith(child, relations, allowRecursion) =>
+      case cte @ UnresolvedWith(child, relations, allowRecursion) =>
         if (allowRecursion) {
-          w.failAnalysis(
+          cte.failAnalysis(
             errorClass = "RECURSIVE_CTE_IN_LEGACY_MODE",
             messageParameters = Map.empty)
         }
         val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true,
           forceInline = false, Seq.empty, cteDefs, allowRecursion)
-        substituteCTE(child, alwaysInline = true, resolvedCTERelations, None)._1
+        val substituted = substituteCTE(child, alwaysInline = true, resolvedCTERelations, None)._1
+        substituted.copyTagsFrom(cte)
+        substituted
     }
   }
 
@@ -207,9 +209,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
     var firstSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsDownWithPruning(
         _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
-      case w @ UnresolvedWith(child, relations, allowRecursion) =>
+      case cte @ UnresolvedWith(child, relations, allowRecursion) =>
         if (allowRecursion && forceInline) {
-          w.failAnalysis(
+          cte.failAnalysis(
             errorClass = "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED",
             messageParameters = Map.empty)
         }
@@ -224,6 +226,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         if (firstSubstituted.isEmpty) {
           firstSubstituted = Some(substituted)
         }
+        substituted.copyTagsFrom(cte)
         substituted
 
       case other =>
@@ -366,9 +369,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
               }
               // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
               SubqueryAlias(table,
-                CTERelationRef(d.id, d.resolved, d.output, recursive = d.recursive))
+                CTERelationRef(d.id, d.resolved, d.output, d.isStreaming, recursive = d.recursive))
             }
-          }.getOrElse(u)
+        }.getOrElse(u)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.

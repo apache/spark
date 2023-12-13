@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -153,8 +154,12 @@ object InMemoryFileIndex extends Logging {
       sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
     val ignoreMissingFiles =
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles
-    val useListFiles = paths.size == 1 &&
-      fileSystemList.contains(paths.head.getFileSystem(hadoopConf).getScheme)
+    val useListFiles = try {
+      val scheme = paths.head.getFileSystem(hadoopConf).getScheme
+      paths.size == 1 && fileSystemList.contains(scheme)
+    } catch {
+      case NonFatal(_) => false
+    }
     if (useListFiles) {
       HadoopFSUtils.listFiles(
         path = paths.head,

@@ -44,7 +44,7 @@ WithCTE
 :                 +- UnionLoopRef xxxx, [level#x], false
 +- Project [level#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x], false
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -67,7 +67,7 @@ WithCTE
 :                    +- UnionLoopRef xxxx, [level#x], false
 +- Project [level#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x], false
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -91,7 +91,7 @@ WithCTE
 :                    +- UnionLoopRef xxxx, [c#x], false
 +- Project [c#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [c#x], false
+      +- CTERelationRef xxxx, true, [c#x], false, false
 
 
 -- !query
@@ -113,7 +113,7 @@ WithCTE
 :                 +- UnionLoopRef xxxx, [level#x], false
 +- Project [level#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x], false
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -137,7 +137,7 @@ WithCTE
    +- LocalLimit 10
       +- Project [level#x]
          +- SubqueryAlias r
-            +- CTERelationRef xxxx, true, [level#x], false
+            +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -162,7 +162,7 @@ WithCTE
 :              +- UnionLoopRef xxxx, [level#x], true
 +- Project [level#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x], false
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -187,7 +187,7 @@ WithCTE
       +- Sort [level#x ASC NULLS FIRST], true
          +- Project [level#x, level#x]
             +- SubqueryAlias r
-               +- CTERelationRef xxxx, true, [level#x], false
+               +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -399,7 +399,7 @@ WithCTE
 :                          +- OneRowRelation
 +- Project [level#x, data#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x, data#x], false
+      +- CTERelationRef xxxx, true, [level#x, data#x], false, false
 
 
 -- !query
@@ -457,7 +457,7 @@ WithCTE
 :                       +- UnionLoopRef xxxx, [level#x, data#x], false
 +- Project [level#x, data#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x, data#x], false
+      +- CTERelationRef xxxx, true, [level#x, data#x], false, false
 
 
 -- !query
@@ -541,7 +541,7 @@ WithCTE
 :                          +- OneRowRelation
 +- Project [level#x, data#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x, data#x], false
+      +- CTERelationRef xxxx, true, [level#x, data#x], false, false
 
 
 -- !query
@@ -598,7 +598,7 @@ WithCTE
 :                          +- OneRowRelation
 +- Project [level#x, data#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x, data#x], false
+      +- CTERelationRef xxxx, true, [level#x, data#x], false, false
 
 
 -- !query
@@ -671,10 +671,10 @@ SELECT * FROM r, false, false, LocalTempView, true
       :           +- Project [(level#x + 1) AS (level + 1)#x]
       :              +- Filter (level#x < 9)
       :                 +- SubqueryAlias r
-      :                    +- CTERelationRef xxxx, true, [level#x], true
+      :                    +- CTERelationRef xxxx, true, [level#x], false, true
       +- Project [level#x]
          +- SubqueryAlias r
-            +- CTERelationRef xxxx, true, [level#x], false
+            +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -696,7 +696,7 @@ Project [level#x]
             :                    +- UnionLoopRef xxxx, [level#x], false
             +- Project [level#x]
                +- SubqueryAlias r
-                  +- CTERelationRef xxxx, true, [level#x], false
+                  +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -732,7 +732,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
    :                    +- UnionLoopRef xxxx, [level#x], false
    +- Project [level#x]
       +- SubqueryAlias r
-         +- CTERelationRef xxxx, true, [level#x], false
+         +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -824,9 +824,9 @@ WithCTE
 +- Project [level#x, level#x]
    +- Join Inner, (level#x = (level#x + 10))
       :- SubqueryAlias r1
-      :  +- CTERelationRef xxxx, true, [level#x], false
+      :  +- CTERelationRef xxxx, true, [level#x], false, false
       +- SubqueryAlias r2
-         +- CTERelationRef xxxx, true, [level#x], false
+         +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -853,10 +853,10 @@ WithCTE
    +- Join Inner, (level#x = level#x)
       :- SubqueryAlias r1
       :  +- SubqueryAlias r
-      :     +- CTERelationRef xxxx, true, [level#x], false
+      :     +- CTERelationRef xxxx, true, [level#x], false, false
       +- SubqueryAlias r2
          +- SubqueryAlias r
-            +- CTERelationRef xxxx, true, [level#x], false
+            +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -887,14 +887,14 @@ WithCTE
 :     +- UnionLoop xxxx
 :        :- Project [0 AS outerlevel#x, innerlevel#x]
 :        :  +- SubqueryAlias r1
-:        :     +- CTERelationRef xxxx, true, [innerlevel#x], false
+:        :     +- CTERelationRef xxxx, true, [innerlevel#x], false, false
 :        +- Project [(outerlevel#x + 1) AS (outerlevel + 1)#x, innerlevel#x]
 :           +- Filter (outerlevel#x < 3)
 :              +- SubqueryAlias r2
 :                 +- UnionLoopRef xxxx, [outerlevel#x, innerlevel#x], false
 +- Project [outerlevel#x, innerlevel#x]
    +- SubqueryAlias r2
-      +- CTERelationRef xxxx, true, [outerlevel#x, innerlevel#x], false
+      +- CTERelationRef xxxx, true, [outerlevel#x, innerlevel#x], false, false
 
 
 -- !query
@@ -926,14 +926,14 @@ WithCTE
 :        +- Union false, false
 :           :- Project [level#x]
 :           :  +- SubqueryAlias r
-:           :     +- CTERelationRef xxxx, true, [level#x], false
+:           :     +- CTERelationRef xxxx, true, [level#x], false, false
 :           +- Project [(level#x + 1) AS (level + 1)#x]
 :              +- Filter (level#x < 3)
 :                 +- SubqueryAlias r
-:                    +- CTERelationRef xxxx, true, [level#x], false
+:                    +- CTERelationRef xxxx, true, [level#x], false, false
 +- Project [level#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x], false
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -965,14 +965,14 @@ WithCTE
 :        +- UnionLoop xxxx
 :           :- Project [level#x]
 :           :  +- SubqueryAlias r
-:           :     +- CTERelationRef xxxx, true, [level#x], false
+:           :     +- CTERelationRef xxxx, true, [level#x], false, false
 :           +- Project [(level#x + 1) AS (level + 1)#x]
 :              +- Filter (level#x < 3)
 :                 +- SubqueryAlias r
 :                    +- UnionLoopRef xxxx, [level#x], false
 +- Project [level#x]
    +- SubqueryAlias r
-      +- CTERelationRef xxxx, true, [level#x], false
+      +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -1020,7 +1020,7 @@ WithCTE
 :                    +- UnionLoopRef xxxx, [destination#x, path#x, length#x], false
 +- Project [destination#x, path#x, length#x]
    +- SubqueryAlias destinations_from_new_york
-      +- CTERelationRef xxxx, true, [destination#x, path#x, length#x], false
+      +- CTERelationRef xxxx, true, [destination#x, path#x, length#x], false, false
 
 
 -- !query
@@ -1051,4 +1051,4 @@ WithCTE
 +- Sort [a#x ASC NULLS FIRST], true
    +- Project [a#x]
       +- SubqueryAlias fibonacci
-         +- CTERelationRef xxxx, true, [a#x, b#x], false
+         +- CTERelationRef xxxx, true, [a#x, b#x], false, false

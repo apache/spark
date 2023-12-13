@@ -25,14 +25,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesAsOfMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_asof(self):
         pser = pd.Series([1, 2, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
         psser = ps.from_pandas(pser)

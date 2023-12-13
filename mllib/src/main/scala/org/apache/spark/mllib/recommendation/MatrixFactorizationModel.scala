@@ -392,7 +392,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     }
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)

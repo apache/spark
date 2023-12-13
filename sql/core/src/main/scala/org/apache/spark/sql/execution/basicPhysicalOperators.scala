@@ -999,15 +999,15 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.doExecute should never be called")
+    throw SparkException.internalError("SubqueryExec.doExecute should never be called")
   }
 
   override def executeTake(n: Int): Array[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.executeTake should never be called")
+    throw SparkException.internalError("SubqueryExec.executeTake should never be called")
   }
 
   override def executeTail(n: Int): Array[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.executeTail should never be called")
+    throw SparkException.internalError("SubqueryExec.executeTail should never be called")
   }
 
   override def stringArgs: Iterator[Any] = Iterator(name, child) ++ Iterator(s"[id=#$id]")

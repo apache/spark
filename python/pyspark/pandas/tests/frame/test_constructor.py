@@ -22,7 +22,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.typedef.typehints import (
-    extension_dtypes,
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,

@@ -22,6 +22,7 @@ import java.nio.ByteOrder
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.{PhysicalBooleanType, PhysicalByteType, PhysicalDataType, PhysicalDoubleType, PhysicalFloatType, PhysicalIntegerType, PhysicalLongType, PhysicalShortType, PhysicalStringType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -350,7 +351,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           decompress0(columnVector, capacity, getInt, putInt)
         case _: PhysicalLongType =>
           decompress0(columnVector, capacity, getLong, putLong)
-        case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
+        case _ => throw SparkException.internalError("Not supported type in RunLengthEncoding.")
       }
     }
   }
@@ -520,7 +521,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
             }
             pos += 1
           }
-        case _ => throw new IllegalStateException("Not supported type in DictionaryEncoding.")
+        case _ => throw SparkException.internalError("Not supported type in DictionaryEncoding.")
       }
     }
   }
@@ -710,7 +711,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
         }
       }
 
-      to.rewind().asInstanceOf[ByteBuffer]
+      to.rewind()
     }
   }
 
@@ -817,7 +818,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
         }
       }
 
-      to.rewind().asInstanceOf[ByteBuffer]
+      to.rewind()
     }
   }
 

@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Clock
 
 class ContinuousExecution(
@@ -95,7 +96,7 @@ class ContinuousExecution(
     }
 
     val streamingWrite = write.toStreaming
-    val customMetrics = write.supportedCustomMetrics.toSeq
+    val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
     WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
   }
 
@@ -220,7 +221,8 @@ class ContinuousExecution(
         currentBatchId,
         None,
         offsetSeqMetadata,
-        WatermarkPropagator.noop())
+        WatermarkPropagator.noop(),
+        false)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
