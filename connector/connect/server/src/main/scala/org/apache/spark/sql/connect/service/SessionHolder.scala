@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{SystemClock, Utils}
 
 // Unique key identifying session by combination of user, and session id
 case class SessionKey(userId: String, sessionId: String)
@@ -95,8 +95,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Returns the server side session ID and asserts that it must be different from the client-side
   // session ID.
   def serverSessionId: String = {
-    assert(session.sessionUUID != sessionId)
-    session.sessionUUID
+    if (Utils.isTesting && session == null) {
+      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
+      // and don't have an underlying SparkSession.
+      ""
+    } else {
+      assert(session.sessionUUID != sessionId)
+      session.sessionUUID
+    }
   }
 
   /**
@@ -238,7 +244,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
     closedTimeMs = Some(System.currentTimeMillis())
 
-    if (eventManager.status == SessionStatus.Pending) {
+    if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {
       // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
       // and can't be closed.
       return
@@ -288,6 +294,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     SessionHolderInfo(
       userId = userId,
       sessionId = sessionId,
+      serverSessionId = serverSessionId,
       status = eventManager.status,
       startTimeMs = startTimeMs,
       lastAccessTimeMs = lastAccessTimeMs,
@@ -390,6 +397,7 @@ object SessionHolder {
 case class SessionHolderInfo(
     userId: String,
     sessionId: String,
+    serverSessionId: String,
     status: SessionStatus,
     customInactiveTimeoutMs: Option[Long],
     startTimeMs: Long,
