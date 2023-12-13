@@ -95,13 +95,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def listDatabasesInternal(patternOpt: Option[String]): Dataset[Database] = {
     val plan = ShowNamespaces(UnresolvedNamespace(Nil), patternOpt)
-    val qe = sparkSession.sessionState.executePlan(plan)
-    val catalog = qe.analyzed.collectFirst {
-      case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
-    }.get
-    val databases = qe.toRdd.collect().map { row =>
-      makeDatabase(Some(catalog.name()), row.getString(0))
+    // execute ShowNamespaces with legacy output always turned off so that the database names are
+    // always quoted (if needed)
+    val newConf = SQLConf.get.clone()
+    newConf.setConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA, false)
+    val (catalog, databaseNames) = SQLConf.withExistingConf(newConf) {
+      val qe = sparkSession.sessionState.executePlan(plan)
+      val catalog = qe.analyzed.collectFirst {
+        case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
+      }.get
+      (catalog, qe.toRdd.collect().map { row => row.getString(0) })
     }
+    val databases = databaseNames.map { makeDatabase(Some(catalog.name()), _) }
     CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
 
