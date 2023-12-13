@@ -794,6 +794,15 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td>4.0.0</td>
   </tr>
   <tr>
+    <td><code>spark.deploy.recoveryTimeout</code></td>
+    <td>(none)</td>
+    <td>
+      The timeout for recovery process. The default value is the same with
+      <code>spark.worker.timeout</code>.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
     <td><code>spark.deploy.recoveryMode.factory</code></td>
     <td>""</td>
     <td>A class to implement <code>StandaloneRecoveryModeFactory</code> interface</td>

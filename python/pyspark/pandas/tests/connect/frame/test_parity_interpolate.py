@@ -16,17 +16,21 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_ewm import EWMTestsMixin
+from pyspark.pandas.tests.frame.test_interpolate import FrameInterpolateMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class EWMParityTests(EWMTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase, TestUtils):
+class FrameInterpolateParityTests(
+    FrameInterpolateMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_ewm import *  # noqa: F401
+    from pyspark.pandas.tests.connect.frame.test_parity_interpolate import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

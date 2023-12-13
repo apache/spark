@@ -14,24 +14,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.pandas.tests.diff_frames_ops.test_cov_corrwith import DiffFramesCovCorrWithMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+import pyspark.pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.pandas.window import Rolling
 
 
-class DiffFramesParityCovCorrWithTests(
-    DiffFramesCovCorrWithMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class RollingErrorMixin:
+    def test_rolling_error(self):
+        with self.assertRaisesRegex(ValueError, "window must be >= 0"):
+            ps.range(10).rolling(window=-1)
+        with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
+            ps.range(10).rolling(window=1, min_periods=-1)
+
+        with self.assertRaisesRegex(
+            TypeError, "psdf_or_psser must be a series or dataframe; however, got:.*int"
+        ):
+            Rolling(1, 2)
+
+
+class RollingErrorTests(
+    RollingErrorMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_cov_corrwith import *  # noqa
+    import unittest
+    from pyspark.pandas.tests.window.test_rolling_error import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

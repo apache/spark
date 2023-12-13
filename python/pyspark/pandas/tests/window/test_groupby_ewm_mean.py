@@ -19,214 +19,9 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
-from pyspark.pandas.window import ExponentialMoving
 
 
-class EWMTestsMixin:
-    def test_ewm_error(self):
-        with self.assertRaisesRegex(
-            TypeError, "psdf_or_psser must be a series or dataframe; however, got:.*int"
-        ):
-            ExponentialMoving(1, 2)
-
-        psdf = ps.range(10)
-
-        with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
-            psdf.ewm(min_periods=-1, alpha=0.5).mean()
-
-        with self.assertRaisesRegex(ValueError, "com must be >= 0"):
-            psdf.ewm(com=-0.1).mean()
-
-        with self.assertRaisesRegex(ValueError, "span must be >= 1"):
-            psdf.ewm(span=0.7).mean()
-
-        with self.assertRaisesRegex(ValueError, "halflife must be > 0"):
-            psdf.ewm(halflife=0).mean()
-
-        with self.assertRaisesRegex(ValueError, "alpha must be in"):
-            psdf.ewm(alpha=1.7).mean()
-
-        with self.assertRaisesRegex(ValueError, "Must pass one of com, span, halflife, or alpha"):
-            psdf.ewm().mean()
-
-        with self.assertRaisesRegex(
-            ValueError, "com, span, halflife, and alpha are mutually exclusive"
-        ):
-            psdf.ewm(com=0.5, alpha=0.7).mean()
-
-        with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
-            psdf.groupby(psdf.id).ewm(min_periods=-1, alpha=0.5).mean()
-
-        with self.assertRaisesRegex(ValueError, "com must be >= 0"):
-            psdf.groupby(psdf.id).ewm(com=-0.1).mean()
-
-        with self.assertRaisesRegex(ValueError, "span must be >= 1"):
-            psdf.groupby(psdf.id).ewm(span=0.7).mean()
-
-        with self.assertRaisesRegex(ValueError, "halflife must be > 0"):
-            psdf.groupby(psdf.id).ewm(halflife=0).mean()
-
-        with self.assertRaisesRegex(ValueError, "alpha must be in"):
-            psdf.groupby(psdf.id).ewm(alpha=1.7).mean()
-
-        with self.assertRaisesRegex(ValueError, "Must pass one of com, span, halflife, or alpha"):
-            psdf.groupby(psdf.id).ewm().mean()
-
-        with self.assertRaisesRegex(
-            ValueError, "com, span, halflife, and alpha are mutually exclusive"
-        ):
-            psdf.groupby(psdf.id).ewm(com=0.5, alpha=0.7).mean()
-
-    def _test_ewm_func(self, f):
-        pser = pd.Series([1, 2, 3], index=np.random.rand(3), name="a")
-        psser = ps.from_pandas(pser)
-        self.assert_eq(getattr(psser.ewm(com=0.2), f)(), getattr(pser.ewm(com=0.2), f)())
-        self.assert_eq(
-            getattr(psser.ewm(com=0.2), f)().sum(), getattr(pser.ewm(com=0.2), f)().sum()
-        )
-        self.assert_eq(getattr(psser.ewm(span=1.7), f)(), getattr(pser.ewm(span=1.7), f)())
-        self.assert_eq(
-            getattr(psser.ewm(span=1.7), f)().sum(), getattr(pser.ewm(span=1.7), f)().sum()
-        )
-        self.assert_eq(getattr(psser.ewm(halflife=0.5), f)(), getattr(pser.ewm(halflife=0.5), f)())
-        self.assert_eq(
-            getattr(psser.ewm(halflife=0.5), f)().sum(), getattr(pser.ewm(halflife=0.5), f)().sum()
-        )
-        self.assert_eq(getattr(psser.ewm(alpha=0.7), f)(), getattr(pser.ewm(alpha=0.7), f)())
-        self.assert_eq(
-            getattr(psser.ewm(alpha=0.7), f)().sum(), getattr(pser.ewm(alpha=0.7), f)().sum()
-        )
-        self.assert_eq(
-            getattr(psser.ewm(alpha=0.7, min_periods=2), f)(),
-            getattr(pser.ewm(alpha=0.7, min_periods=2), f)(),
-        )
-        self.assert_eq(
-            getattr(psser.ewm(alpha=0.7, min_periods=2), f)().sum(),
-            getattr(pser.ewm(alpha=0.7, min_periods=2), f)().sum(),
-        )
-
-        pdf = pd.DataFrame(
-            {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
-        )
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(getattr(psdf.ewm(com=0.2), f)(), getattr(pdf.ewm(com=0.2), f)())
-        self.assert_eq(getattr(psdf.ewm(com=0.2), f)().sum(), getattr(pdf.ewm(com=0.2), f)().sum())
-        self.assert_eq(getattr(psdf.ewm(span=1.7), f)(), getattr(pdf.ewm(span=1.7), f)())
-        self.assert_eq(
-            getattr(psdf.ewm(span=1.7), f)().sum(), getattr(pdf.ewm(span=1.7), f)().sum()
-        )
-        self.assert_eq(getattr(psdf.ewm(halflife=0.5), f)(), getattr(pdf.ewm(halflife=0.5), f)())
-        self.assert_eq(
-            getattr(psdf.ewm(halflife=0.5), f)().sum(), getattr(pdf.ewm(halflife=0.5), f)().sum()
-        )
-        self.assert_eq(getattr(psdf.ewm(alpha=0.7), f)(), getattr(pdf.ewm(alpha=0.7), f)())
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7), f)().sum(), getattr(pdf.ewm(alpha=0.7), f)().sum()
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, min_periods=2), f)(),
-            getattr(pdf.ewm(alpha=0.7, min_periods=2), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, min_periods=2), f)().sum(),
-            getattr(pdf.ewm(alpha=0.7, min_periods=2), f)().sum(),
-        )
-
-        pdf = pd.DataFrame(
-            {
-                "s1": [None, 2, 3, 4],
-                "s2": [1, None, 3, 4],
-                "s3": [1, 3, 4, 5],
-                "s4": [1, 0, 3, 4],
-                "s5": [None, None, 1, None],
-                "s6": [None, None, None, None],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            getattr(psdf.ewm(com=0.2, ignore_na=True), f)(),
-            getattr(pdf.ewm(com=0.2, ignore_na=True), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(com=0.2, ignore_na=True), f)().sum(),
-            getattr(pdf.ewm(com=0.2, ignore_na=True), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(com=0.2, ignore_na=False), f)(),
-            getattr(pdf.ewm(com=0.2, ignore_na=False), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(com=0.2, ignore_na=False), f)().sum(),
-            getattr(pdf.ewm(com=0.2, ignore_na=False), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(span=1.7, ignore_na=True), f)(),
-            getattr(pdf.ewm(span=1.7, ignore_na=True), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(span=1.7, ignore_na=True), f)().sum(),
-            getattr(pdf.ewm(span=1.7, ignore_na=True), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(span=1.7, ignore_na=False), f)(),
-            getattr(pdf.ewm(span=1.7, ignore_na=False), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(span=1.7, ignore_na=False), f)().sum(),
-            getattr(pdf.ewm(span=1.7, ignore_na=False), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(halflife=0.5, ignore_na=True), f)(),
-            getattr(pdf.ewm(halflife=0.5, ignore_na=True), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(halflife=0.5, ignore_na=True), f)().sum(),
-            getattr(pdf.ewm(halflife=0.5, ignore_na=True), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(halflife=0.5, ignore_na=False), f)(),
-            getattr(pdf.ewm(halflife=0.5, ignore_na=False), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(halflife=0.5, ignore_na=False), f)().sum(),
-            getattr(pdf.ewm(halflife=0.5, ignore_na=False), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=True), f)(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=True), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=True), f)().sum(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=True), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=False), f)(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=False), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=False), f)().sum(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=False), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)().sum(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
-        )
-        self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)().sum(),
-            getattr(pdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)().sum(),
-        )
-
-    def test_ewm_mean(self):
-        self._test_ewm_func("mean")
-
+class GroupByEWMMeanMixin:
     def _test_groupby_ewm_func(self, f):
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
         psser = ps.from_pandas(pser)
@@ -417,13 +212,17 @@ class EWMTestsMixin:
         self._test_groupby_ewm_func("mean")
 
 
-class EWMTests(EWMTestsMixin, PandasOnSparkTestCase, TestUtils):
+class GroupByEWMMeanTests(
+    GroupByEWMMeanMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_ewm import *  # noqa: F401
+    from pyspark.pandas.tests.window.test_groupby_ewm_mean import *  # noqa: F401
 
     try:
         import xmlrunner

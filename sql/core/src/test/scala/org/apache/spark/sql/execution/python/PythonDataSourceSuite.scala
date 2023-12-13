@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{BatchEvalPythonUDTF, PythonDataSourcePartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{PythonDataSourcePartitions, PythonMapInArrow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -40,7 +40,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |""".stripMargin
 
   test("simple data source") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
         |from pyspark.sql.datasource import DataSource
@@ -58,15 +58,14 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(df.rdd.getNumPartitions == 2)
     val plan = df.queryExecution.optimizedPlan
     plan match {
-      case BatchEvalPythonUDTF(pythonUDTF, _, _, _: PythonDataSourcePartitions)
-        if pythonUDTF.name == "python_data_source_read" =>
+      case PythonMapInArrow(_, _, _: PythonDataSourcePartitions, _) =>
       case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
     }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
   test("simple data source with string schema") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -85,7 +84,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("simple data source with StructType schema") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -108,7 +107,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source with invalid schema") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -129,7 +128,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("register data source") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -177,7 +176,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("load data source") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -222,7 +221,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("reader not implemented") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
        s"""
         |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -240,7 +239,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("error creating reader") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
         |from pyspark.sql.datasource import DataSource
@@ -260,7 +259,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source assertion error") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
         |class $dataSourceName:

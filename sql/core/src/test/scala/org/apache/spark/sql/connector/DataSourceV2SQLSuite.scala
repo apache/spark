@@ -1788,23 +1788,31 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("tableCreation: partition column case sensitive resolution") {
-    def checkFailure(statement: String): Unit = {
+    def checkFailure(statement: String, i: String): Unit = {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         checkError(
           exception = intercept[AnalysisException] {
             sql(statement)
           },
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3060",
+          parameters = Map(
+            "i" -> i,
+            "schema" ->
+              """root
+                | |-- a: integer (nullable = true)
+                | |-- b: string (nullable = true)
+                |""".stripMargin))
       }
     }
 
-    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
-    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)", "A")
+    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)",
+      "A")
     checkFailure(
-      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)", "B")
     checkFailure(
-      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)",
+      "B")
   }
 
   test("tableCreation: duplicate column names in the table definition") {
@@ -1866,23 +1874,47 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = analysisException(
         s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
     checkError(
       exception = analysisException(s"CREATE TABLE testcat.tbl (a int, b string) " +
         s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
     checkError(
       exception = analysisException(s"CREATE OR REPLACE TABLE tbl (a int, b string) " +
         s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
     checkError(
       exception = analysisException(s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) " +
         s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS"),
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3060",
+      parameters = Map(
+        "i" -> "c",
+        "schema" ->
+          """root
+            | |-- a: integer (nullable = true)
+            | |-- b: string (nullable = true)
+            |""".stripMargin))
   }
 
   test("tableCreation: bucket column name containing dot") {
@@ -1906,26 +1938,27 @@ class DataSourceV2SQLSuiteV1Filter
   test("tableCreation: column repeated in partition columns") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val dupCol = c1.toLowerCase(Locale.ROOT)
         checkError(
           exception = analysisException(
             s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
         checkError(
           exception = analysisException(s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) " +
             s"USING $v2Source PARTITIONED BY ($c0, $c1)"),
-          errorClass = null,
-          parameters = Map.empty)
+          errorClass = "_LEGACY_ERROR_TEMP_3058",
+          parameters = Map("checkType" -> "in the partitioning", "duplicateColumns" -> dupCol))
       }
     }
   }
@@ -2763,8 +2796,10 @@ class DataSourceV2SQLSuiteV1Filter
       exception = intercept[CatalogNotFoundException] {
         sql("SET CATALOG not_exist_catalog")
       },
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "CATALOG_NOT_FOUND",
+      parameters = Map(
+        "catalogName" -> "`not_exist_catalog`",
+        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
   }
 
   test("SPARK-35973: ShowCatalogs") {

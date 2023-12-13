@@ -878,7 +878,12 @@ private[deploy] class Worker(
       case DriverState.FAILED =>
         logWarning(s"Driver $driverId exited with failure")
       case DriverState.FINISHED =>
-        logInfo(s"Driver $driverId exited successfully")
+        registrationRetryTimer match {
+          case Some(_) =>
+            logWarning(s"Driver $driverId exited successfully while master is disconnected.")
+          case _ =>
+            logInfo(s"Driver $driverId exited successfully")
+        }
       case DriverState.KILLED =>
         logInfo(s"Driver $driverId was killed by user")
       case _ =>
