@@ -23,8 +23,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFu
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.util.Utils
-
 
 private[sql] object EasilyFlattenable {
   object OpType extends Enumeration {
@@ -125,7 +123,7 @@ private[sql] object EasilyFlattenable {
                 case attr: AttributeReference => projList.find(
                   _.toAttribute.canonicalized == attr.canonicalized).get
 
-                case ua: UnresolvedAttribute => projList.find(
+                case ua: UnresolvedAttribute if ua.nameParts.size == 1 => projList.find(
                   _.toAttribute.name.equalsIgnoreCase(ua.name)).
                   getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                     s"  unresolved attribute $ua"))
@@ -138,17 +136,16 @@ private[sql] object EasilyFlattenable {
 
                     case _: AttributeReference => al
                   }.get
+
+                case x => throw new UnsupportedOperationException("Not able to flatten" +
+                  s"  unresolved attribute $x")
               }
             }
             remappedNewProjListResult match {
               case Success(remappedNewProjList) =>
                 Option(p.copy(projectList = remappedNewProjList))
 
-              case Failure(ex) => if (Utils.isTesting) {
-                throw ex
-              } else {
-                None
-              }
+              case Failure(_) => None
             }
 
           case _ => None
