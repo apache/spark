@@ -51,18 +51,6 @@ on:
         default: ''
 
 jobs:
-  label:
-    name: Label pull requests
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/labeler@v5
-        with:
-          repo-token: "${{ secrets.GITHUB_TOKEN }}"
-          sync-labels: true
-
   precondition:
     name: Check changes
     runs-on: ubuntu-22.04
@@ -133,6 +121,18 @@ jobs:
         IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
+
+  label:
+    name: Label pull requests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          sync-labels: true
 
   # Build: build Spark and run the tests for specified modules.
   build:
