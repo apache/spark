@@ -56,6 +56,13 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = HiveVersionInfo.getVersion
 
+  val MAX_SPLIT_SIZE_SET_BY_TABLE =
+    buildConf("spark.sql.hive.maxSplitSizeSetByTable")
+      .doc("Set hdfs sharding size through table. eg tablename1:size1;tablename2:size2.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   val BUILTIN_HIVE_VERSION = buildStaticConf("spark.sql.hive.version")
     .doc("The compiled, a.k.a, builtin Hive version of the Spark distribution bundled with." +
         " Note that, this a read-only conf and only used to report the built-in hive version." +

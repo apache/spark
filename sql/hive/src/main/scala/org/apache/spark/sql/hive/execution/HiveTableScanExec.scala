@@ -102,7 +102,7 @@ case class HiveTableScanExec(
     // append columns ids and names before broadcast
     addColumnMetadataToConf(c)
 
-    conf.mapredMaxSplitSizeByTable.getOrElse("").split(";").map {
+    HiveUtils.MAX_SPLIT_SIZE_SET_BY_TABLE.key.split(";").map {
       tableSize =>
         val tableSizeList = tableSize.split(":")
         if (tableSizeList.size == 2) {
