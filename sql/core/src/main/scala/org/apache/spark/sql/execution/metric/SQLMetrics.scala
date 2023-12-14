@@ -37,9 +37,10 @@ import org.apache.spark.util.AccumulatorContext.internOption
  * the executor side are automatically propagated and shown in the SQL UI through metrics. Updates
  * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
  */
-class SQLMetric(val metricType: String,
-                initValue: Long = 0L,
-                zeroValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+class SQLMetric(
+    val metricType: String,
+    initValue: Long = 0L,
+    zeroValue: Long = 0L) extends AccumulatorV2[Long, Long] {
   // initValue defines the initial value of the metric. zeroValue defines the lowest value
   // considered valid. If a SQLMetric is invalid, it is set to zeroValue upon receiving any
   // updates, and it also reports zeroValue as its value to avoid exposing it to the user
@@ -72,6 +73,8 @@ class SQLMetric(val metricType: String,
   // This is used to filter out metrics. Metrics with value equal to initValue should
   // be filtered out, since they are either invalid or safe to filter without changing
   // the aggregation defined in [[SQLMetrics.stringValue]].
+  // Note that we don't use zeroValue here since we may want to collect zeroValue metrics
+  // for calculating min, max, etc. See SPARK-11013.
   override def isZero: Boolean = _value == initValue
 
   def isValid: Boolean = _value >= zeroValue
