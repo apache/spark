@@ -47,7 +47,7 @@ import org.apache.spark.sql.types.StringType
  * Concrete parser for Spark SQL statements.
  */
 class SparkSqlParser extends AbstractSqlParser {
-  val astBuilder = new SparkSqlAstBuilder(this)
+  val astBuilder = new SparkSqlAstBuilder()
 
   private val substitutor = new VariableSubstitution()
 
@@ -59,7 +59,7 @@ class SparkSqlParser extends AbstractSqlParser {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder(override val parser: ParserInterface) extends AstBuilder(parser) {
+class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

@@ -43,8 +43,7 @@ import org.apache.spark.sql.types.StringType
 case class ExecuteImmediateQuery(
     args: Seq[Expression],
     query: Either[String, UnresolvedAttribute],
-    targetVariables: Option[Seq[UnresolvedAttribute]],
-    parser: ParserInterface)
+    targetVariables: Option[Seq[UnresolvedAttribute]])
   extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
@@ -107,9 +106,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case ExecuteImmediateQuery(expressions, query, targetVariablesOpt, parser) =>
+      case ExecuteImmediateQuery(expressions, query, targetVariablesOpt) =>
         val queryString = extractQueryString(query)
-        val plan = parseStatement(parser, queryString, targetVariablesOpt)
+        val plan =
+          parseStatement(catalogManager.v1SessionCatalog.parser, queryString, targetVariablesOpt)
 
         val posNodes = plan.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })

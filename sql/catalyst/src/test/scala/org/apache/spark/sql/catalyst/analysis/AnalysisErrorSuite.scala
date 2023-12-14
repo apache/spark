@@ -796,8 +796,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     var execImmediatePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Right(UnresolvedAttribute("testVarA")),
-      Some(Seq(UnresolvedAttribute("testVarA"))),
-      CatalystSqlParser)
+      Some(Seq(UnresolvedAttribute("testVarA"))))
 
     assertAnalysisErrorClass(
       inputPlan = execImmediatePlan,
@@ -811,8 +810,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     var execImmediateSetVariablePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Left("SET VAR testVarA = 1"),
-      Some(Seq(UnresolvedAttribute("testVarA"))),
-      CatalystSqlParser)
+      Some(Seq(UnresolvedAttribute("testVarA"))))
 
     assertAnalysisErrorClass(
       inputPlan = execImmediateSetVariablePlan,
