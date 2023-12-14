@@ -30,12 +30,13 @@ import scala.reflect.ClassTag
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{doNothing, mock, when}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{doNothing, mock, times, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+import org.scalatestplus.mockito.MockitoSugar.{mock => smock}
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -1372,6 +1373,60 @@ class MasterSuite extends SparkFunSuite
         eventLogDir = None,
         eventLogCodec = None)
     assert(master.invokePrivate(_createApplication(desc, null)).id === "spark-45756")
+  }
+
+  test("SPARK-46353: handleRegisterWorker in STANDBY mode") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+
+    assert(master.state === RecoveryState.STANDBY)
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(1)).send(meq(MasterInStandby))
+    verify(worker, times(0))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = true)))
+    verify(worker, times(0))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = false)))
+    assert(master.workers.isEmpty)
+    assert(master.idToWorker.isEmpty)
+  }
+
+  test("SPARK-46353: handleRegisterWorker in RECOVERING mode without workers") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+
+    master.state = RecoveryState.RECOVERING
+    master.persistenceEngine = new BlackHolePersistenceEngine()
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(0)).send(meq(MasterInStandby))
+    verify(worker, times(1))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = false)))
+    assert(master.workers.size === 1)
+    assert(master.idToWorker.size === 1)
+  }
+
+  test("SPARK-46353: handleRegisterWorker in RECOVERING mode with a unknown worker") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+    val workerInfo = smock[WorkerInfo]
+    when(workerInfo.state).thenReturn(WorkerState.UNKNOWN)
+
+    master.state = RecoveryState.RECOVERING
+    master.workers.add(workerInfo)
+    master.idToWorker("worker-0") = workerInfo
+    master.persistenceEngine = new BlackHolePersistenceEngine()
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(0)).send(meq(MasterInStandby))
+    verify(worker, times(1))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = true)))
+    assert(master.state === RecoveryState.RECOVERING)
+    assert(master.workers.nonEmpty)
+    assert(master.idToWorker.nonEmpty)
   }
 }
 

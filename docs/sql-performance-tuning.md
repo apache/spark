@@ -30,7 +30,7 @@ Spark SQL can cache tables using an in-memory columnar format by calling `spark.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
 memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableName")` or `dataFrame.unpersist()` to remove the table from memory.
 
-Configuration of in-memory caching can be done using the `setConf` method on `SparkSession` or by running
+Configuration of in-memory caching can be done via `spark.conf.set` or by running
 `SET key=value` commands using SQL.
 
 {% include_relative _generated/generated-sql-config-table-caching-data.html %}
@@ -150,7 +150,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
 
 {% include_relative _generated/generated-sql-config-table-aqe-coalesce-partitions.html %}
 
-### Spliting skewed shuffle partitions
+### Splitting skewed shuffle partitions
 
 {% include_relative _generated/generated-sql-config-table-aqe-skewed-shuffle-partitions.html %}
 

@@ -235,7 +235,9 @@ case class ReplaceData(
       case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
         operation
       case _ =>
-        throw new AnalysisException(s"Cannot retrieve row-level operation from $table")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3057",
+          messageParameters = Map("table" -> table.toString))
     }
   }
 
@@ -313,7 +315,9 @@ case class WriteDelta(
       case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
         operation.asInstanceOf[SupportsDelta]
       case _ =>
-        throw new AnalysisException(s"Cannot retrieve row-level operation from $table")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3057",
+          messageParameters = Map("table" -> table.toString))
     }
   }
 

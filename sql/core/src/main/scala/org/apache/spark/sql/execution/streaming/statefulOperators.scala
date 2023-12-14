@@ -392,9 +392,9 @@ object WatermarkSupport {
       // with allowing them.
       val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
       if (eventTimeColsSet.size > 1) {
-        throw new AnalysisException("More than one event time columns are available. Please " +
-          "ensure there is at most one event time column per stream. event time columns: " +
-          eventTimeCols.mkString("(", ",", ")"))
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
       // With above check, even there are multiple columns in eventTimeCols, all columns must be
