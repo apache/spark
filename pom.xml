@@ -221,7 +221,7 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.6.0</commons-cli.version>
-    <bouncycastle.version>1.70</bouncycastle.version>
+    <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <netty.version>4.1.100.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
@@ -1476,13 +1476,13 @@
       </dependency>
       <dependency>
         <groupId>org.bouncycastle</groupId>
-        <artifactId>bcprov-jdk15on</artifactId>
+        <artifactId>bcprov-jdk18on</artifactId>
         <version>${bouncycastle.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.bouncycastle</groupId>
-        <artifactId>bcpkix-jdk15on</artifactId>
+        <artifactId>bcpkix-jdk18on</artifactId>
         <version>${bouncycastle.version}</version>
         <scope>test</scope>
       </dependency>
@@ -1733,11 +1733,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcprov-jdk15on</artifactId>
+            <artifactId>bcprov-jdk18on</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpkix-jdk15on</artifactId>
+            <artifactId>bcpkix-jdk18on</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.fusesource.leveldbjni</groupId>
