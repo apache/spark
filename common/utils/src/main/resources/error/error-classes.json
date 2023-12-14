@@ -2914,9 +2914,9 @@
     ],
     "sqlState" : "42000"
   },
-  "NULL_INDEX" : {
+  "NULL_ROW_VALUE" : {
     "message" : [
-      "Value at index <index> is null."
+      "Row value at the position <index> is NULL."
     ],
     "sqlState" : "2200E"
   },

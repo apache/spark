@@ -1698,11 +1698,11 @@ Column or field `<name>` is nullable while it's required to be non-nullable.
 
 Row ID attributes cannot be nullable: `<nullableRowIdAttrs>`.
 
-### NULL_INDEX
+### NULL_ROW_VALUE
 
 [SQLSTATE: 2200E](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Value at index `<index>` is null.
+Row value at the position <index> is NULL.
 
 ### NULL_MAP_KEY
 
