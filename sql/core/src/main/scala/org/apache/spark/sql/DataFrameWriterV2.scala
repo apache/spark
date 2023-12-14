@@ -753,8 +753,8 @@ case class WhenNotMatchedBySource[T] (
   }
 
   /**
-   * Specifies an action to insert non-matched rows into the target DataFrame with the provided column
-   * assignments when not matched by the source.
+   * Specifies an action to insert non-matched rows into the target DataFrame with the provided
+   * column assignments when not matched by the source.
    *
    * @param set A Map of column names to Column expressions representing the values to be inserted.
    * @return The DataFrameWriterV2 instance with the insert action configured.
