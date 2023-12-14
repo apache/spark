@@ -66,6 +66,13 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
   val hiveVersion = HiveUtils.builtinHiveVersion
+  private val skipReleaseVersions =
+    sys.env.getOrElse("SKIP_SPARK_RELEASE_VERSIONS", "").split(",").toSet
+  // scalastyle:off println
+  println("-----------------")
+  println(s"Skip release versions: $skipReleaseVersions")
+  println("-----------------")
+  // scalastyle:on println
 
   override def afterAll(): Unit = {
     try {
@@ -161,20 +168,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new String(Files.readAllBytes(contentPath), StandardCharsets.UTF_8)
   }
 
-  private def deleteCorruptedJars(): Unit = {
-    val m2Path = new File(System.getProperty("user.home"), ".m2" + File.separator + "repository")
-    val hive_exec_2_3_9 = new File(m2Path, "org" + File.separator +
-      "apache" + File.separator + "hive" + File.separator +
-      "hive-exec" + File.separator + "2.3.9")
-    val slf4j_api_1_7_30 = new File(m2Path, "org" + File.separator +
-      "slf4j" + File.separator + "slf4j-api" + File.separator + "1.7.30")
-    Utils.deleteRecursively(hive_exec_2_3_9)
-    Utils.deleteRecursively(slf4j_api_1_7_30)
-  }
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-    deleteCorruptedJars()
 
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
@@ -224,45 +219,49 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
-      val sparkHome = new File(sparkTestingDir, s"spark-$version")
-      if (!sparkHome.exists()) {
-        tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
-      }
+      if (!skipReleaseVersions.contains(version)) {
+        val sparkHome = new File(sparkTestingDir, s"spark-$version")
+        if (!sparkHome.exists()) {
+          tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
+        }
 
-      // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
-      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
-      val args = Seq(
-        "--name", "prepare testing tables",
-        "--master", "local[2]",
-        "--conf", s"${UI_ENABLED.key}=false",
-        "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
-        "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
-        "--conf", s"spark.sql.test.version.index=$index",
-        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
-          JavaModuleOptions.defaultModuleOptions(),
-        tempPyFile.getCanonicalPath)
-      runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
+        // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
+        val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
+        val args = Seq(
+          "--name", "prepare testing tables",
+          "--master", "local[2]",
+          "--conf", s"${UI_ENABLED.key}=false",
+          "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+          "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
+          "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+          "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
+          "--conf", s"spark.sql.test.version.index=$index",
+          "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
+            JavaModuleOptions.defaultModuleOptions(),
+          tempPyFile.getCanonicalPath)
+        runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
+      }
     }
 
     tempPyFile.delete()
   }
 
   test("backward compatibility") {
-    assume(PROCESS_TABLES.isPythonVersionAvailable)
-    val args = Seq(
-      "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
-      "--name", "HiveExternalCatalog backward compatibility test",
-      "--master", "local[2]",
-      "--conf", s"${UI_ENABLED.key}=false",
-      "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
-      "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
-      "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
-      "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
-      unusedJar.toString)
-    if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
+    if (!skipReleaseVersions.contains("master")) {
+      assume(PROCESS_TABLES.isPythonVersionAvailable)
+      val args = Seq(
+        "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
+        "--name", "HiveExternalCatalog backward compatibility test",
+        "--master", "local[2]",
+        "--conf", s"${UI_ENABLED.key}=false",
+        "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+        "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
+        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
+        unusedJar.toString)
+      if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
+    }
   }
 }
 
