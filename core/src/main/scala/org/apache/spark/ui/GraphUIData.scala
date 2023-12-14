@@ -20,6 +20,7 @@ package org.apache.spark.ui
 import java.{util => ju}
 import java.lang.{Long => JLong}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.xml.{Node, Unparsed}
@@ -60,7 +61,9 @@ private[spark] class GraphUIData(
   }
 
   def generateTimelineHtml(jsCollector: JsCollector): Seq[Node] = {
+    jsCollector.addImports("import {registerTimeline} from '/static/streaming-page.js';")
     jsCollector.addPreparedStatement(s"registerTimeline($minY, $maxY);")
+    jsCollector.addImports("import {drawTimeline} from '/static/streaming-page.js';")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawTimeline(" +
@@ -77,7 +80,9 @@ private[spark] class GraphUIData(
 
   def generateHistogramHtml(jsCollector: JsCollector): Seq[Node] = {
     val histogramData = s"$dataJavaScriptName.map(function(d) { return d.y; })"
+    jsCollector.addImports("import {registerHistogram} from '/static/streaming-page.js';")
     jsCollector.addPreparedStatement(s"registerHistogram($histogramData, $minY, $maxY);")
+    jsCollector.addImports("import {drawHistogram} from '/static/streaming-page.js';")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawHistogram(" +
@@ -101,20 +106,13 @@ private[spark] class GraphUIData(
     }.mkString("[", ",", "]")
     val jsForLabels = operationLabels.toSeq.sorted.mkString("[\"", "\",\"", "\"]")
 
-    val (maxX, minX, maxY, minY) = if (values != null && values.length > 0) {
-      val xValues = values.map(_._1)
-      val yValues = values.map(_._2.asScala.toSeq.map(_._2.toLong).sum)
-      (xValues.max, xValues.min, yValues.max, yValues.min)
-    } else {
-      (0L, 0L, 0L, 0L)
-    }
-
     dataJavaScriptName = jsCollector.nextVariableName
     jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
     val labels = jsCollector.nextVariableName
     jsCollector.addPreparedStatement(s"var $labels = $jsForLabels;")
+    jsCollector.addImports("import {drawAreaStack} from '/static/structured-streaming-page.js';")
     jsCollector.addStatement(
-      s"drawAreaStack('#$timelineDivId', $labels, $dataJavaScriptName, $minX, $maxX, $minY, $maxY)")
+      s"drawAreaStack('#$timelineDivId', $labels, $dataJavaScriptName)")
     <div id={timelineDivId}></div>
   }
 }
@@ -145,6 +143,8 @@ private[spark] class JsCollector {
    */
   private val statements = ArrayBuffer[String]()
 
+  private val imports = mutable.Set[String]()
+
   def addPreparedStatement(js: String): Unit = {
     preparedStatements += js
   }
@@ -153,17 +153,23 @@ private[spark] class JsCollector {
     statements += js
   }
 
+  def addImports(js: String): Unit = {
+    imports.add(js)
+  }
+
   /**
    * Generate a html snippet that will execute all scripts when the DOM has finished loading.
    */
   def toHtml: Seq[Node] = {
     val js =
       s"""
+         |${imports.mkString("\n")}
+         |
          |$$(document).ready(function() {
          |    ${preparedStatements.mkString("\n")}
          |    ${statements.mkString("\n")}
          |});""".stripMargin
 
-    <script>{Unparsed(js)}</script>
+    <script type="module">{Unparsed(js)}</script>
   }
 }

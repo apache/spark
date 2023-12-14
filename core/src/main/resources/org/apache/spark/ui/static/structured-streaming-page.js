@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-/* global d3, hideBootstrapTooltip, maxMarginLeftForTimeline, showBootstrapTooltip, unitLabelYOffset */
+export { drawAreaStack };
+import { getMaxMarginLeftForTimeline, hideBootstrapTooltip, showBootstrapTooltip } from './streaming-page.js';
+/* global, d3 */
 // pre-define some colors for legends.
 var colorPool = ["#F8C471", "#F39C12", "#B9770E", "#73C6B6", "#16A085", "#117A65", "#B2BABB", "#7F8C8D", "#616A6B"];
 
-/* eslint-disable no-unused-vars */
-function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
+const unitLabelYOffset = -10;
+
+/* eslint-disable no-undef */
+function drawAreaStack(id, labels, values) {
   d3.select(d3.select(id).node().parentNode)
     .style("padding", "8px 0 8px 8px")
     .style("border-right", "0px solid white");
 
   // Setup svg using Bostock's margin convention
-  var margin = {top: 20, right: 40, bottom: 30, left: maxMarginLeftForTimeline};
+  var margin = {top: 20, right: 40, bottom: 30, left: getMaxMarginLeftForTimeline()};
   var width = 850 - margin.left - margin.right;
   var height = 300 - margin.top - margin.bottom;
 
@@ -154,4 +158,4 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
     .attr("font-size", "12px")
     .attr("font-weight", "bold");
 }
-/* eslint-enable no-unused-vars */
+/* eslint-enable no-undef */

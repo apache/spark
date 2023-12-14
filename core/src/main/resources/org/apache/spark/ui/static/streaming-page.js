@@ -16,6 +16,11 @@
  */
 
 /* global $, d3, timeFormat, timeTipStrings */
+export { showBootstrapTooltip, hideBootstrapTooltip,
+  getMaxMarginLeftForTimeline, getOnClickTimelineFunction,
+  registerHistogram, drawHistogram,
+  registerTimeline, drawTimeline
+}
 
 // timeFormat: StreamingPage.scala will generate a global "timeFormat" dictionary to store the time
 // and its formatted string. Because we cannot specify a timezone in JavaScript, to make sure the
@@ -49,6 +54,10 @@ function hideBootstrapTooltip(d3Selection) {
   d3Selection.each(function() {
     $(this).tooltip("dispose");
   });
+}
+
+function getMaxMarginLeftForTimeline() {
+  return maxMarginLeftForTimeline;
 }
 
 /* eslint-disable no-unused-vars */
@@ -327,10 +336,10 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
 }
 /* eslint-enable no-unused-vars */
 
-$(function() {
+$(function () {
   var status = window.localStorage && window.localStorage.getItem("show-streams-detail") == "true";
 
-  $("span.expand-input-rate").click(function() {
+  $("span.expand-input-rate").click(function () {
     status = !status;
     $("#inputs-table").toggle('collapsed');
     // Toggle the class of the arrow between open and closed
