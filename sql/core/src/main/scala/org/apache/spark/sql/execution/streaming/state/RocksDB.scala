@@ -144,12 +144,6 @@ class RocksDB(
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
-  // TODO: support changelog checkpointing with column families
-  if (useColumnFamilies && enableChangelogCheckpointing) {
-    throw new RuntimeException("Changelog checkpointing is not supported with multiple " +
-      "column families")
-  }
-
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
   @GuardedBy("acquireLock")
@@ -205,7 +199,7 @@ class RocksDB(
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
+      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     this
   }
@@ -217,12 +211,18 @@ class RocksDB(
     for (v <- loadedVersion + 1 to endVersion) {
       var changelogReader: StateStoreChangelogReader = null
       try {
-        changelogReader = fileManager.getChangelogReader(v)
-        changelogReader.foreach { case (key, value) =>
-          if (value != null) {
-            put(key, value)
-          } else {
-            remove(key)
+        changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
+        changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
+          if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
+            createColFamilyIfAbsent(colFamilyName)
+          }
+
+          recordType match {
+            case RecordType.PUT_RECORD =>
+              put(key, value, colFamilyName)
+
+            case RecordType.DELETE_RECORD =>
+              remove(key, colFamilyName)
           }
         }
       } finally {
@@ -289,6 +289,7 @@ class RocksDB(
         }
       }
       db.put(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
+      changelogWriter.foreach(_.put(key, value, colFamilyName))
     } else {
       if (conf.trackTotalNumberOfRows) {
         val oldValue = db.get(readOptions, key)
@@ -319,6 +320,7 @@ class RocksDB(
         }
       }
       db.delete(colFamilyNameToHandleMap(colFamilyName), writeOptions, key)
+      changelogWriter.foreach(_.delete(key, colFamilyName))
     } else {
       if (conf.trackTotalNumberOfRows) {
         val value = db.get(readOptions, key)

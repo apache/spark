@@ -59,21 +59,18 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     test(s"version encoding with useColumnFamilies=$useColumnFamilies") {
       import RocksDBStateStoreProvider._
 
-      // TODO: remove check when we add support for col families with changelog checkpointing
-      if (!isChangelogCheckpointingEnabled) {
-        tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
-          val store = provider.getStore(0)
-          val keyRow = dataToKeyRow("a", 0)
-          val valueRow = dataToValueRow(1)
-          store.put(keyRow, valueRow)
-          val iter = provider.rocksDB.iterator()
-          assert(iter.hasNext)
-          val kv = iter.next()
+      tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
+        val store = provider.getStore(0)
+        val keyRow = dataToKeyRow("a", 0)
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow)
+        val iter = provider.rocksDB.iterator()
+        assert(iter.hasNext)
+        val kv = iter.next()
 
-          // Verify the version encoded in first byte of the key and value byte arrays
-          assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-          assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-        }
+        // Verify the version encoded in first byte of the key and value byte arrays
+        assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+        assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
       }
     }
   }
@@ -139,7 +136,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
-        tryWithProviderResource(newStoreProvider()) { provider =>
+        tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
           val store = provider.getStore(0)
           // Verify state after updating
           put(store, "a", 0, 1)
@@ -172,9 +169,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     newStoreProvider(storeId, numColsPrefixKey = 0)
   }
 
+  override def newStoreProvider(storeId: StateStoreId, useColumnFamilies: Boolean):
+    RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, numColsPrefixKey = 0, useColumnFamilies = useColumnFamilies)
+  }
+
   override def newStoreProvider(useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = 0,
-      useColumnFamilies = useColumnFamilies && !isChangelogCheckpointingEnabled)
+      useColumnFamilies = useColumnFamilies)
   }
 
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
@@ -200,14 +202,17 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   override def getLatestData(
-      storeProvider: RocksDBStateStoreProvider): Set[((String, Int), Int)] = {
-    getData(storeProvider, version = -1)
+      storeProvider: RocksDBStateStoreProvider,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    getData(storeProvider, version = -1, useColumnFamilies)
   }
 
   override def getData(
       provider: RocksDBStateStoreProvider,
-      version: Int = -1): Set[((String, Int), Int)] = {
-    tryWithProviderResource(newStoreProvider(provider.stateStoreId)) { reloadedProvider =>
+      version: Int = -1,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    tryWithProviderResource(newStoreProvider(provider.stateStoreId,
+      useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
       reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
     }
