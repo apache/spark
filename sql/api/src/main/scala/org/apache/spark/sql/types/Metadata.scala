@@ -24,6 +24,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -210,10 +211,10 @@ object Metadata {
       // `map.mapValues` return `Map` in Scala 2.12 and return `MapView` in Scala 2.13, call
       // `toMap` for Scala version compatibility.
       case map: Map[_, _] =>
-        map.view.mapValues(hash).toMap.##
+        map.transform((_, v) => hash(v)).##
       case arr: Array[_] =>
         // Seq.empty[T] has the same hashCode regardless of T.
-        arr.toSeq.map(hash).##
+        arr.toImmutableArraySeq.map(hash).##
       case x: Long =>
         x.##
       case x: Double =>

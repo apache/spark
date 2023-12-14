@@ -121,6 +121,8 @@ public interface Scan {
    * Returns an array of custom metrics which are collected with values at the driver side only.
    * Note that these metrics must be included in the supported custom metrics reported by
    * `supportedCustomMetrics`.
+   *
+   * @since 3.4.0
    */
   default CustomTaskMetric[] reportDriverMetrics() {
     return new CustomTaskMetric[]{};

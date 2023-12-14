@@ -98,7 +98,8 @@ jobs:
               \"java-other-versions\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
-              \"breaking-changes-buf\" : \"true\",
+              \"buf\" : \"true\",
+              \"ui\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -149,7 +150,7 @@ jobs:
           - >-
             mllib-local, mllib, graphx
           - >-
-            streaming, sql-kafka-0-10, streaming-kafka-0-10,
+            streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
@@ -240,12 +241,12 @@ jobs:
           ./dev/free_disk_space
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.9
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -267,6 +268,10 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
+        // SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
+        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
+          MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
+        fi
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
@@ -427,7 +432,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -537,7 +542,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -556,11 +561,10 @@ jobs:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
-  breaking-changes-buf:
+  buf:
     needs: [precondition]
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
-    # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
-    name: Breaking change detection with Buf (branch-3.5)
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
+    name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
@@ -579,12 +583,26 @@ jobs:
       uses: bufbuild/buf-setup-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-    - name: Detect breaking changes
+    - name: Protocol Buffers Linter
+      uses: bufbuild/buf-lint-action@v1
+      with:
+        input: core/src/main/protobuf
+    # Change 'branch-3.5' to 'branch-4.0' in master branch after cutting branch-4.0 branch.
+    - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1
       with:
         input: connector/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
-
+    - name: Install Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    - name: Install dependencies for Python CodeGen check
+      run: |
+        python3.9 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==0.982' 'mypy-protobuf==3.3.0'
+        python3.9 -m pip list
+    - name: Python CodeGen check
+      run: ./dev/connect-check-protos.py
 
   # Static analysis, and documentation build
   lint:
@@ -651,7 +669,7 @@ jobs:
           ./dev/free_disk_space_container
         fi
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -696,8 +714,9 @@ jobs:
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
-    - name: Install dependencies for Python code generation check
-      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
+    # Should delete this section after SPARK 3.5 EOL.
+    - name: Install dependencies for Python code generation check for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
         curl -LO https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz
@@ -705,8 +724,9 @@ jobs:
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         rm buf-Linux-x86_64.tar.gz
         python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
-    - name: Python code generation check
-      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
+    # Should delete this section after SPARK 3.5 EOL.
+    - name: Python code generation check for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
     # Should delete this section after SPARK 3.5 EOL.
     - name: Install JavaScript linter dependencies for branch-3.3, branch-3.4, branch-3.5
@@ -741,9 +761,7 @@ jobs:
         Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
     - name: Install dependencies for documentation generation
       run: |
-        # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
-        #   See also https://issues.apache.org/jira/browse/SPARK-38279.
-        python3.9 -m pip install 'sphinx==4.2.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 'markupsafe==2.0.1' 'pyzmq<24.0.0'
+        python3.9 -m pip install 'sphinx==4.2.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
@@ -817,7 +835,7 @@ jobs:
         restore-keys: |
           java${{ matrix.java }}-maven-
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -872,7 +890,7 @@ jobs:
         restore-keys: |
           tpcds-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -979,7 +997,7 @@ jobs:
         restore-keys: |
           docker-integration-coursier-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1039,7 +1057,7 @@ jobs:
           restore-keys: |
             k8s-integration-coursier-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -1074,3 +1092,22 @@ jobs:
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"
+
+  ui:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).ui == 'true'
+    name: Run Spark UI tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: ui-test/package-lock.json
+      - run: |
+          cd ui-test
+          npm install --save-dev
+          node --experimental-vm-modules node_modules/.bin/jest

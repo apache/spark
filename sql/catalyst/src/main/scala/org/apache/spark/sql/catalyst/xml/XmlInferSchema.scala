@@ -31,13 +31,17 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
     with Logging {
+
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormatInRead,
@@ -45,6 +49,13 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
@@ -115,7 +126,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      Some(inferObject(parser, rootAttributes))
+      val schema = Some(inferObject(parser, rootAttributes))
+      parser.close()
+      schema
     } catch {
       case NonFatal(_) if options.parseMode == PermissiveMode =>
         Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
@@ -132,14 +145,17 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
 
     if (options.inferSchema) {
+      lazy val decimalTry = tryParseDecimal(value)
+      lazy val timestampNTZTry = tryParseTimestampNTZ(value)
       value match {
         case null => NullType
         case v if v.isEmpty => NullType
         case v if isLong(v) => LongType
-        case v if isInteger(v) => IntegerType
+        case v if options.prefersDecimal && decimalTry.isDefined => decimalTry.get
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
         case v if isDate(v) => DateType
+        case v if timestampNTZTry.isDefined => timestampNTZTry.get
         case v if isTimestamp(v) => TimestampType
         case _ => StringType
       }
@@ -305,6 +321,43 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  private def tryParseDecimal(value: String): Option[DataType] = {
+    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
+      value.substring(1)
+    } else {
+      value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a decimal. All built-in formats will start with a digit or period.
+    if (signSafeValue.isEmpty ||
+      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
+      return None
+    }
+    // Rule out strings ending in D or F, as they will parse as double but should be disallowed
+    if (signSafeValue.last match {
+      case 'd' | 'D' | 'f' | 'F' => true
+      case _ => false
+    }) {
+      return None
+    }
+
+    try {
+      // The conversion can fail when the `field` is not a form of number.
+      val bigDecimal = decimalParser(signSafeValue)
+      // Because many other formats do not support decimal, it reduces the cases for
+      // decimals by disallowing values having scale (e.g. `1.1`).
+      if (bigDecimal.scale <= 0) {
+        // `DecimalType` conversion can fail when
+        //   1. The precision is bigger than 38.
+        //   2. scale is bigger than precision.
+        return Some(DecimalType(bigDecimal.precision, bigDecimal.scale))
+      }
+    } catch {
+      case _ : Exception =>
+    }
+    None
+  }
+
   private def isDouble(value: String): Boolean = {
     val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
       value.substring(1)
@@ -318,27 +371,13 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       return false
     }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
-    if (value.nonEmpty && (value.last match {
+    if (signSafeValue.last match {
       case 'd' | 'D' | 'f' | 'F' => true
       case _ => false
-    })) {
+    }) {
       return false
     }
     (allCatch opt signSafeValue.toDouble).isDefined
-  }
-
-  private def isInteger(value: String): Boolean = {
-    val signSafeValue = if (value.startsWith("+") || value.startsWith("-")) {
-      value.substring(1)
-    } else {
-      value
-    }
-    // A little shortcut to avoid trying many formatters in the common case that
-    // the input isn't a number. All built-in formats will start with a digit.
-    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
-      return false
-    }
-    (allCatch opt signSafeValue.toInt).isDefined
   }
 
   private def isLong(value: String): Boolean = {
@@ -361,6 +400,23 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     } catch {
       case _: IllegalArgumentException => false
     }
+  }
+
+  private def tryParseTimestampNTZ(field: String): Option[DataType] = {
+    // We can only parse the value as TimestampNTZType if it does not have zone-offset or
+    // time-zone component and can be parsed with the timestamp formatter.
+    // Otherwise, it is likely to be a timestamp with timezone.
+    val timestampType = SQLConf.get.timestampType
+    try {
+      if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+        timestampType == TimestampNTZType) &&
+        timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+        return Some(timestampType)
+      }
+    } catch {
+      case _: Exception =>
+    }
+    None
   }
 
   private def isDate(value: String): Boolean = {
@@ -425,6 +481,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           } else {
             DecimalType(range + scale, scale)
           }
+        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
 
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2)

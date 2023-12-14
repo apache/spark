@@ -168,6 +168,18 @@ private[sql] class ProtobufOptions(
   // instead of string, so use caution if changing existing parsing logic.
   val enumsAsInts: Boolean =
     parameters.getOrElse("enums.as.ints", false.toString).toBoolean
+
+  // Protobuf supports unsigned integer types uint32 and uint64. By default this library
+  // will serialize them as the signed IntegerType and LongType respectively. For very
+  // large unsigned values this can cause overflow, causing these numbers
+  // to be represented as negative (above 2^31 for uint32
+  // and above 2^63 for uint64).
+  //
+  // Enabling this option will upcast unsigned integers into a larger type,
+  // i.e. LongType for uint32 and Decimal(20, 0) for uint64 so their representation
+  // can contain large unsigned values without overflow.
+  val upcastUnsignedInts: Boolean =
+    parameters.getOrElse("upcast.unsigned.ints", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {

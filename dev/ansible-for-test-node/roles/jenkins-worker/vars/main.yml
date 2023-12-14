@@ -1,9 +1,0 @@
----
-minikube_url: '{{ minikube_mirror }}/v{{ minikube_version }}/{{ minikube_target }}'
-
-kubectl_url: '{{ kubectl_mirror }}/{{ kubectl_version }}/bin/linux/amd64/{{ kubectl_target }}'
-
-git_caches:
-  spark:
-    dir: '{{ jenkins_home }}/gitcaches/spark.reference'
-    repo: 'https://github.com/apache/spark.git'

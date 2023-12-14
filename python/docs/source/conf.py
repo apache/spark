@@ -180,6 +180,7 @@ pygments_style = 'sphinx'
 # Look at the first line of the docstring for function and method signatures.
 autodoc_docstring_signature = True
 autosummary_generate = True
+autodoc_typehints = "none"
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -196,13 +197,25 @@ html_context = {
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    "header_links_before_dropdown": 6,
     "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
     "footer_start": ["spark_footer", "sphinx-version"],
     "logo": {
         "image_light": "_static/spark-logo-light.png",
         "image_dark": "_static/spark-logo-dark.png",
     },
-    "github_url": "https://github.com/apache/spark",
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/apache/spark",
+            "icon": "fa-brands fa-github",
+        },
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/pyspark",
+            "icon": "fa-solid fa-box",
+        },
+    ]
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
