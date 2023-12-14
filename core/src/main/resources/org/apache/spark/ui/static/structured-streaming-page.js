@@ -42,9 +42,7 @@ function drawAreaStack(id, labels, values) {
     .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
   var data = values.flatMap(function(d) {
-    return Object.keys(d).filter(function(key) {
-      return key !== 'x';
-    }).map(function(key) {
+    return Object.keys(d).filter(k => k !== "x").map(function(key) {
       return {x: d.x, label: key, duration: +d[key]};
     });
   });

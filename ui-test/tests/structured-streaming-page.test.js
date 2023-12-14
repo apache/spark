@@ -76,10 +76,10 @@ test('drawAreaStack', function () {
 
   expect($('#duration-area-stack-parent').attr("style")).toBe('padding: 8px 0px 8px 8px; border-right: 0px solid white;');
   expect($('#duration-area-stack').find('svg').length).toBe(1);
-  var xAxis = $('[class="x axis"] text');
-  expect(xAxis.length).toBe(2);
 
   // test x axis
+  var xAxis = $('[class="x axis"] text');
+  expect(xAxis.length).toBe(2);
   xAxis.each((index, e) => {
     var xAixsText = "";
     if (index === 0) {
@@ -93,7 +93,6 @@ test('drawAreaStack', function () {
   // test y axis
   var yAxis = $('[class="y axis"] text');
   expect(yAxis.length).toBe(7);
-
   yAxis.each((index, e) => {
     if (index < yAxis.length - 1) {
       expect(e.innerHTML).toBe(5000 * index + "")
