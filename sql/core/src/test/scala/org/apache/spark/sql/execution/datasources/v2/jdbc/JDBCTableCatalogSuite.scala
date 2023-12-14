@@ -267,10 +267,20 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val expectedSchema = new StructType().add("C2", IntegerType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Drop not existing column
-      val msg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tableName DROP COLUMN bad_column")
-      }.getMessage
-      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
+      val sqlText = s"ALTER TABLE $tableName DROP COLUMN bad_column"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        parameters = Map(
+          "fieldName" -> "bad_column",
+          "table" -> "h2.test.alt_table",
+          "schema" ->
+            """root
+              | |-- C2: integer (nullable = true)
+              |""".stripMargin),
+        context = ExpectedContext(sqlText, 0, 51))
     }
     // Drop a column to not existing table and namespace
     Seq(
@@ -297,10 +307,21 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         .add("deptno", DoubleType, true, defaultMetadata)
       assert(t.schema === expectedSchema)
       // Update not existing column
-      val msg1 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column TYPE DOUBLE")
-      }.getMessage
-      assert(msg1.contains("Missing field bad_column in table h2.test.alt_table"))
+      val sqlText = s"ALTER TABLE $tableName ALTER COLUMN bad_column TYPE DOUBLE"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        parameters = Map(
+          "fieldName" -> "bad_column",
+          "table" -> "h2.test.alt_table",
+          "schema" ->
+            """root
+              | |-- ID: double (nullable = true)
+              | |-- deptno: double (nullable = true)
+              |""".stripMargin),
+        context = ExpectedContext(sqlText, 0, 64))
       // Update column to wrong type
       checkError(
         exception = intercept[ParseException] {
