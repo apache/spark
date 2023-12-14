@@ -20,9 +20,10 @@ package org.apache.spark.sql.internal
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, NamedExpression, UserDefinedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.types.MetadataBuilder
 
 private[sql] object EasilyFlattenable {
   object OpType extends Enumeration {
@@ -46,21 +47,20 @@ private[sql] object EasilyFlattenable {
             currentOutputAttribs.exists(_.name == attribute.name))
         val opType = identifyOp(passThruAttribs, currentOutputAttribs, tinkeredOrNewNamedExprs,
           passThruAttribsContainedInCurrentOutput)
-        val ambiguousAttribs = p.output.groupBy(_.name).filter(_._2.size > 1).keys.toSet
         opType match {
           case OpType.AddNewColumnsOnly =>
             // case of new columns being added only
             val childOutput = child.output.map(_.name).toSet
             val attribsRemappedInProj = projList.flatMap(ne => ne match {
-              case _: AttributeReference => Seq.empty[(String, Expression)]
+              case _: AttributeReference => Seq.empty[(String, Alias)]
 
-              case Alias(expr, name) => if (childOutput.contains(name)) {
-                Seq(name -> expr)
+              case al@ Alias(_, name) => if (childOutput.contains(name)) {
+                Seq(name -> al)
               } else {
-                Seq.empty[(String, Expression)]
+                Seq.empty[(String, Alias)]
               }
 
-              case _ => Seq.empty[(String, Expression)]
+              case _ => Seq.empty[(String, Alias)]
             }).toMap
 
             if (tinkeredOrNewNamedExprs.exists(_.collectFirst {
@@ -71,9 +71,7 @@ private[sql] object EasilyFlattenable {
               case ex: AggregateExpression => ex
               case ex: WindowExpression => ex
               case ex: UserDefinedExpression => ex
-              case attr: AttributeReference if ambiguousAttribs.contains(attr.name) => attr
-              case u: UnresolvedAttribute if u.nameParts.size != 1 |
-                ambiguousAttribs.contains(u.name) => u
+              case u: UnresolvedAttribute if u.nameParts.size != 1 => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
             }.nonEmpty)) {
@@ -84,7 +82,11 @@ private[sql] object EasilyFlattenable {
                   case attr: AttributeReference => projList.find(
                     _.toAttribute.canonicalized == attr.canonicalized).map {
                     case _: Attribute => attr
-                    case x => x
+                    case al: Alias =>
+                      val md = new MetadataBuilder().withMetadata(attr.metadata).
+                      withMetadata(al.metadata).build()
+                      al.copy(al.child, al.name)(al.exprId, al.qualifier, Option(md),
+                        al.nonInheritableMetadataKeys)
                   }.getOrElse(attr)
 
                   case ua: UnresolvedAttribute =>
@@ -94,11 +96,21 @@ private[sql] object EasilyFlattenable {
 
                   case anyOtherExpr =>
                     (anyOtherExpr transformUp {
-                      case attr: AttributeReference => attribsRemappedInProj.get(attr.name).orElse(
+                      case attr: AttributeReference => attribsRemappedInProj.get(attr.name).
+                        map(al => {
+                          val md = new MetadataBuilder().withMetadata(attr.metadata).
+                            withMetadata(al.metadata).build()
+                          al.copy(al.child, al.name)(al.exprId, al.qualifier, Option(md),
+                            al.nonInheritableMetadataKeys)
+                        }).orElse(
                         projList.find(
                         _.toAttribute.canonicalized == attr.canonicalized).map {
                         case _: Attribute => attr
-                        case al: Alias => al.child
+                        case al: Alias =>
+                          val md = new MetadataBuilder().withMetadata(attr.metadata).
+                          withMetadata(al.metadata).build()
+                          al.copy(al.child, al.name)(al.exprId, al.qualifier, Option(md),
+                            al.nonInheritableMetadataKeys)
                         case x => x
                       }).getOrElse(attr)
 
@@ -129,8 +141,7 @@ private[sql] object EasilyFlattenable {
                 case attr: AttributeReference => projList.find(
                   _.toAttribute.canonicalized == attr.canonicalized).get
 
-                case ua: UnresolvedAttribute if ua.nameParts.size != 1 |
-                  ambiguousAttribs.exists(_.equalsIgnoreCase(ua.name)) =>
+                case ua: UnresolvedAttribute if ua.nameParts.size != 1 =>
                   throw new UnsupportedOperationException("Not able to flatten" +
                     s"  unresolved attribute $ua")
 
