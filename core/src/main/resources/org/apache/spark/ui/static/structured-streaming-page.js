@@ -129,9 +129,8 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
     .attr("width", 18)
     .attr("height", 18)
     .style("fill", function(d, i) {return colors.slice().reverse()[i];})
-    .on('mouseover', function(event, d, i) {
-      var len = labels.length;
-      showBootstrapTooltip(d3.select(this), labels[len - 1 - i]);
+    .on('mouseover', function(event, d) {
+      showBootstrapTooltip(d3.select(this), labels[labels.length - 1 - colors.indexOf(d)]);
     })
     .on('mouseout',  function() {
       hideBootstrapTooltip(d3.select(this));
