@@ -71,9 +71,9 @@ private[sql] object EasilyFlattenable {
               case ex: AggregateExpression => ex
               case ex: WindowExpression => ex
               case ex: UserDefinedExpression => ex
-              case attr: AttributeReference if ambiguousAttribs.contains(attr.name) => true
+              case attr: AttributeReference if ambiguousAttribs.contains(attr.name) => attr
               case u: UnresolvedAttribute if u.nameParts.size != 1 |
-                ambiguousAttribs.exists(_.equalsIgnoreCase(u.name)) => u
+                ambiguousAttribs.contains(u.name) => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
             }.nonEmpty)) {
@@ -82,7 +82,10 @@ private[sql] object EasilyFlattenable {
               val remappedNewProjListResult = Try {
                 newProjList.map {
                   case attr: AttributeReference => projList.find(
-                    _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+                    _.toAttribute.canonicalized == attr.canonicalized).map {
+                    case _: Attribute => attr
+                    case x => x
+                  }.getOrElse(attr)
 
                   case ua: UnresolvedAttribute =>
                     projList.find(_.toAttribute.name.equalsIgnoreCase(ua.name)).
@@ -94,6 +97,7 @@ private[sql] object EasilyFlattenable {
                       case attr: AttributeReference => attribsRemappedInProj.get(attr.name).orElse(
                         projList.find(
                         _.toAttribute.canonicalized == attr.canonicalized).map {
+                        case _: Attribute => attr
                         case al: Alias => al.child
                         case x => x
                       }).getOrElse(attr)
