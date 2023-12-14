@@ -66,7 +66,9 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.withConnection(options) { conn =>
       val schemaPattern = if (namespace.length == 1) namespace.head else null
       val rs = JdbcUtils.classifyException(
-        s"Failed get tables from: ${namespace.mkString(".")}", dialect) {
+        errorClass = "FAILED_JDBC.GET_TABLES",
+        messageParameters = Map("namespace" -> namespace.mkString(".")),
+        dialect) {
         conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
       }
       new Iterator[Identifier] {
@@ -80,7 +82,10 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    JdbcUtils.classifyException(s"Failed table existence check: $ident", dialect) {
+    JdbcUtils.classifyException(
+      errorClass = "FAILED_JDBC.TABLE_EXISTS",
+      messageParameters = Map("tableName" -> ident.toString),
+      dialect) {
       JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
@@ -100,7 +105,12 @@ class JDBCTableCatalog extends TableCatalog
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     checkNamespace(oldIdent.namespace())
     JdbcUtils.withConnection(options) { conn =>
-      JdbcUtils.classifyException(s"Failed table renaming from $oldIdent to $newIdent", dialect) {
+      JdbcUtils.classifyException(
+        errorClass = "FAILED_JDBC.RENAME_TABLE",
+        messageParameters = Map(
+          "oldName" -> oldIdent.toString,
+          "newName" -> newIdent.toString),
+        dialect) {
         JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
     }
@@ -160,7 +170,10 @@ class JDBCTableCatalog extends TableCatalog
     val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     JdbcUtils.withConnection(options) { conn =>
-      JdbcUtils.classifyException(s"Failed table creation: $ident", dialect) {
+      JdbcUtils.classifyException(
+        errorClass = "FAILED_JDBC.CREATE_TABLE",
+        messageParameters = Map("tableName" -> ident.toString),
+        dialect) {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
     }
@@ -171,7 +184,10 @@ class JDBCTableCatalog extends TableCatalog
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     checkNamespace(ident.namespace())
     JdbcUtils.withConnection(options) { conn =>
-      JdbcUtils.classifyException(s"Failed table altering: $ident", dialect) {
+      JdbcUtils.classifyException(
+        errorClass = "FAILED_JDBC.ALTER_TABLE",
+        messageParameters = Map("tableName" -> ident.toString),
+        dialect) {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
       loadTable(ident)
@@ -181,7 +197,10 @@ class JDBCTableCatalog extends TableCatalog
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
       JdbcUtils.withConnection(options) { conn =>
-        JdbcUtils.classifyException(s"Failed namespace exists: ${namespace.mkString}", dialect) {
+        JdbcUtils.classifyException(
+          errorClass = "FAILED_JDBC.NAMESPACE_EXISTS",
+          messageParameters = Map("namespace" -> namespace.mkString(".")),
+          dialect) {
           JdbcUtils.schemaExists(conn, options, db)
         }
       }
@@ -190,7 +209,10 @@ class JDBCTableCatalog extends TableCatalog
 
   override def listNamespaces(): Array[Array[String]] = {
     JdbcUtils.withConnection(options) { conn =>
-      JdbcUtils.classifyException(s"Failed list namespaces", dialect) {
+      JdbcUtils.classifyException(
+        errorClass = "FAILED_JDBC.LIST_NAMESPACES",
+        messageParameters = Map.empty,
+        dialect) {
         JdbcUtils.listSchemas(conn, options)
       }
     }
@@ -238,7 +260,10 @@ class JDBCTableCatalog extends TableCatalog
         }
       }
       JdbcUtils.withConnection(options) { conn =>
-        JdbcUtils.classifyException(s"Failed create name space: $db", dialect) {
+        JdbcUtils.classifyException(
+          errorClass = "FAILED_JDBC.CREATE_NAMESPACE",
+          messageParameters = Map("namespace" -> db),
+          dialect) {
           JdbcUtils.createSchema(conn, options, db, comment)
         }
       }
@@ -257,7 +282,10 @@ class JDBCTableCatalog extends TableCatalog
           case set: NamespaceChange.SetProperty =>
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
-                JdbcUtils.classifyException(s"Failed create comment on name space: $db", dialect) {
+                JdbcUtils.classifyException(
+                  errorClass = "FAILED_JDBC.CREATE_NAMESPACE_COMMENT",
+                  messageParameters = Map("namespace" -> db),
+                  dialect) {
                   JdbcUtils.alterSchemaComment(conn, options, db, set.value)
                 }
               }
@@ -268,7 +296,10 @@ class JDBCTableCatalog extends TableCatalog
           case unset: NamespaceChange.RemoveProperty =>
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
-                JdbcUtils.classifyException(s"Failed remove comment on name space: $db", dialect) {
+                JdbcUtils.classifyException(
+                  errorClass = "FAILED_JDBC.REMOVE_NAMESPACE_COMMENT",
+                  messageParameters = Map("namespace" -> db),
+                  dialect) {
                   JdbcUtils.removeSchemaComment(conn, options, db)
                 }
               }
@@ -290,7 +321,10 @@ class JDBCTableCatalog extends TableCatalog
       cascade: Boolean): Boolean = namespace match {
     case Array(db) if namespaceExists(namespace) =>
       JdbcUtils.withConnection(options) { conn =>
-        JdbcUtils.classifyException(s"Failed drop name space: $db", dialect) {
+        JdbcUtils.classifyException(
+          errorClass = "FAILED_JDBC.DROP_NAMESPACE",
+          messageParameters = Map("namespace" -> db),
+          dialect) {
           JdbcUtils.dropSchema(conn, options, db, cascade)
           true
         }
