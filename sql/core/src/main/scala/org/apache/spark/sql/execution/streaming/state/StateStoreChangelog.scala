@@ -64,19 +64,23 @@ class StateStoreChangelogWriter(
   var size = 0
 
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base class")
+    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
+      "implementation")
   }
 
   def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base class")
+    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
+      "implementation")
   }
 
   def delete(key: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base class")
+    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
+      "implementation")
   }
 
   def delete(key: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base class")
+    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
+      "implementation")
   }
 
   def abort(): Unit = {
@@ -220,7 +224,8 @@ class StateStoreChangelogReader(
   def close(): Unit = { if (input != null) input.close() }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String) = {
-    throw new UnsupportedOperationException("Iterator operations not supported")
+    throw new UnsupportedOperationException("Iterator operations not supported on base " +
+      "changelog reader implementation")
   }
 }
 
