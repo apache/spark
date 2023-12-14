@@ -1881,6 +1881,32 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Groups the Dataset using the dynamic columns, so that we can run aggregation on them.
+   * See [[RelationalGroupedDataset]] for all the available aggregate functions.
+   *
+   * This is a variant of groupBy that can only group by existing columns using column names
+   * (i.e. cannot construct expressions).
+   *
+   * {{{
+   *   // Compute the average for all numeric columns grouped by department.
+   *   ds.groupBy("department").avg()
+   *
+   *   // Compute the max age and average salary, grouped by department and gender.
+   *   ds.groupBy($"department", $"gender").agg(Map(
+   *     "salary" -> "avg",
+   *     "age" -> "max"
+   *   ))
+   * }}}
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def groupBy(colNames: Seq[String]): RelationalGroupedDataset = {
+    RelationalGroupedDataset(
+      toDF(), colNames.map(colName => resolve(colName)), RelationalGroupedDataset.GroupByType)
+  }
+
+  /**
    * (Scala-specific)
    * Reduces the elements of this Dataset using the specified binary function. The given `func`
    * must be commutative and associative or the result may be non-deterministic.
