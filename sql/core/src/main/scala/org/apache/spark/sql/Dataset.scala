@@ -138,7 +138,7 @@ private[sql] object Dataset {
  * the following creates a new Dataset by applying a filter on the existing one:
  * {{{
  *   val names = people.map(_.name)  // in Scala; names is a Dataset[String]
- *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING));
+ *   Dataset<String> names = people.map((MapFunction<Person, String>) p -> p.name, Encoders.STRING()); // Java
  * }}}
  *
  * Dataset operations can also be untyped, through various domain-specific-language (DSL)
