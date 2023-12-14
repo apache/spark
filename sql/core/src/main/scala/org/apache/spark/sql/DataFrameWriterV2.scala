@@ -202,7 +202,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenMatched` object without any condition.
+   * Initialize a `WhenMatched` action without any condition.
    *
    * This `WhenMatched` can be followed by one of the following merge actions:
    *   - `updateAll`: Update all the target table fields with source dataset fields.
@@ -217,7 +217,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenMatched` object with a condition.
+   * Initialize a `WhenMatched` action with a condition.
    *
    * This `WhenMatched` action will be executed if and only if the specified `condition`
    * is satisfied.
@@ -236,7 +236,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenMatched` object with a specified condition.
+   * Initialize a `WhenMatched` action with a specified condition.
    *
    * This `WhenMatched` action will be executed if and only if the given `condition`
    * is satisfied. The condition is represented as a `String` and internally converted
@@ -248,7 +248,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    *     a subset of fields based on the provided assignment.
    *   - `delete`: Delete all the target table records.
    *
-   * @param condition a `String` representing the condition to be evaluated for the action.
+   * @param condition a `String` representing a column name which specifies the condition
+   *                  to be evaluated for the action.
    * @return a new `WhenMatched` object configured with the specified condition.
    */
   def whenMatched(condition: String): WhenMatched[T] = {
@@ -256,7 +257,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenNotMatched` object without any condition.
+   * Initialize a `WhenNotMatched` action without any condition.
    *
    * This `WhenNotMatched` can be followed by one of the following merge actions:
    *   - `updateAll`: Update all the target table fields with source dataset fields.
@@ -274,7 +275,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenNotMatched` object with a condition.
+   * Initialize a `WhenNotMatched` action with a condition.
    *
    * This `WhenNotMatched` action will be executed if and only if the specified `condition`
    * is satisfied.
@@ -296,7 +297,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenNotMatched` object with a condition.
+   * Initialize a `WhenNotMatched` action with a condition.
    *
    * This `WhenNotMatched` action will be executed if and only if the specified `condition`
    * is satisfied. The condition is represented as a `String` and internally converted
@@ -311,7 +312,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    *     a subset of fields based on the provided assignment.
    *   - `delete`: Delete all the target table records.
    *
-   * @param condition a `String` representing the condition to be evaluated for the action.
+   * @param condition a `String` representing a column name which specifies the condition
+   *                  to be evaluated for the action.
    * @return a new `WhenNotMatched` object configured with the specified condition.
    */
   def whenNotMatched(condition: String): WhenNotMatched[T] = {
@@ -319,7 +321,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenNotMatchedBySource` object without any condition.
+   * Initialize a `WhenNotMatchedBySource` action without any condition.
    *
    * This `WhenNotMatchedBySource` can be followed by one of the following merge actions:
    *   - `updateAll`: Update all the target table fields with source dataset fields.
@@ -337,7 +339,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenNotMatchedBySource` object with a condition.
+   * Initialize a `WhenNotMatchedBySource` action with a condition.
    *
    * This `WhenNotMatchedBySource` action will be executed if and only if the specified `condition`
    * is satisfied.
@@ -359,7 +361,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   /**
-   * Initialize a `WhenNotMatchedBySource` object with a condition.
+   * Initialize a `WhenNotMatchedBySource` action with a condition.
    *
    * This `WhenNotMatchedBySource` action will be executed if and only if the specified `condition`
    * is satisfied. The condition is represented as a `String` and internally converted
@@ -374,7 +376,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    *     a subset of fields based on the provided assignment.
    *   - `delete`: Delete all the target table records.
    *
-   * @param condition a `String` representing the condition to be evaluated for the action.
+   * @param condition a `String` representing a column name which specifies the condition
+   *                  to be evaluated for the action.
    * @return a new `WhenNotMatchedBySource` object configured with the specified condition.
    */
   def whenNotMatchedBySource(condition: String): WhenNotMatchedBySource[T] = {
@@ -385,6 +388,15 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * Executes the merge operation.
    */
   def merge(): Unit = {
+    if (on.isEmpty) {
+      throw new IllegalStateException("The 'on' condition cannot be None")
+    }
+
+    if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
+      throw new IllegalStateException("At least one of matchedActions, notMatchedActions," +
+        " or notMatchedBySourceActions must not be empty")
+    }
+
     val merge = MergeIntoTable(
       UnresolvedRelation(tableName),
       logicalPlan,
@@ -573,80 +585,192 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
   def tableProperty(property: String, value: String): CreateTableWriter[T]
 }
 
+/**
+ * A class for defining actions to be taken when matching rows in a DataFrame during
+ * an update operation.
+ *
+ * @param dfWriter   The DataFrameWriterV2 instance responsible for writing data to a
+ *                   target DataFrame.
+ * @param condition  An optional condition Expression that specifies when the actions
+ *                   should be applied.
+ *                   If the condition is None, the actions will be applied to all matched rows.
+ *
+ * @tparam T         The type of data in the DataFrame.
+ */
 case class WhenMatched[T] (dfWriter: DataFrameWriterV2[T], condition: Option[Expression]) {
+  /**
+   * Specifies an action to update all matched rows in the DataFrame.
+   *
+   * @return The DataFrameWriterV2 instance with the update all action configured.
+   */
   def updateAll(): DataFrameWriterV2[T] = {
     dfWriter.matchedActions = dfWriter.matchedActions :+ UpdateStarAction(condition)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to update matched rows in the DataFrame with the provided column
+   * assignments.
+   *
+   * @param set A Map of column names to Column expressions representing the updates to be applied.
+   * @return The DataFrameWriterV2 instance with the update action configured.
+   */
   def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
     dfWriter.matchedActions = dfWriter.matchedActions :+
       UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to delete matched rows from the DataFrame.
+   *
+   * @return The DataFrameWriterV2 instance with the delete action configured.
+   */
   def delete(): DataFrameWriterV2[T] = {
     dfWriter.matchedActions = dfWriter.matchedActions :+ DeleteAction(condition)
     this.dfWriter
   }
 }
 
+/**
+ * A class for defining actions to be taken when no matching rows are found in a DataFrame
+ * during an update operation.
+ *
+ * @param dfWriter   The DataFrameWriterV2 instance responsible for writing data to a
+ *                   target DataFrame.
+ * @param condition  An optional condition Expression that specifies when the actions
+ *                   defined in this configuration should be applied.
+ *                   If the condition is None, the actions will be applied when there
+ *                   are no matching rows.
+ *
+ * @tparam T         The type of data in the DataFrame.
+ */
 case class WhenNotMatched[T] (dfWriter: DataFrameWriterV2[T], condition: Option[Expression]) {
+  /**
+   * Specifies an action to update all non-matched rows in the DataFrame.
+   *
+   * @return The DataFrameWriterV2 instance with the update all action configured.
+   */
   def updateAll(): DataFrameWriterV2[T] = {
     dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ UpdateStarAction(condition)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to update non-matched rows in the DataFrame with the provided
+   * column assignments.
+   *
+   * @param set A Map of column names to Column expressions representing the updates to be applied.
+   * @return The DataFrameWriterV2 instance with the update action configured.
+   */
   def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
     dfWriter.notMatchedActions = dfWriter.notMatchedActions :+
       UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to insert all non-matched rows into the DataFrame.
+   *
+   * @return The DataFrameWriterV2 instance with the insert all action configured.
+   */
   def insertAll(): DataFrameWriterV2[T] = {
     dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ InsertStarAction(condition)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to insert non-matched rows into the DataFrame with the provided
+   * column assignments.
+   *
+   * @param set A Map of column names to Column expressions representing the values to be inserted.
+   * @return The DataFrameWriterV2 instance with the insert action configured.
+   */
   def insert(set: Map[String, Column]): DataFrameWriterV2[T] = {
     dfWriter.notMatchedActions = dfWriter.notMatchedActions :+
       InsertAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to delete non-matched rows from the DataFrame.
+   *
+   * @return The DataFrameWriterV2 instance with the delete action configured.
+   */
   def delete(): DataFrameWriterV2[T] = {
     dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ DeleteAction(condition)
     this.dfWriter
   }
 }
 
+/**
+ * A class for defining actions to be performed when there is no match by source
+ * during a merge operation in a DataFrameWriterV2.
+ *
+ * @param dfWriter the DataFrameWriterV2 instance to which the merge actions will be applied.
+ * @param condition an optional condition to be used with the merge actions.
+ * @tparam T the type parameter for the DataFrameWriterV2.
+ */
 case class WhenNotMatchedBySource[T] (
     dfWriter: DataFrameWriterV2[T],
     condition: Option[Expression]) {
+
+  /**
+   * Specifies an action to update all non-matched rows in the target DataFrame when
+   * not matched by the source.
+   *
+   * @return The DataFrameWriterV2 instance with the update all action configured.
+   */
   def updateAll(): DataFrameWriterV2[T] = {
     dfWriter.notMatchedBySourceActions =
       dfWriter.notMatchedBySourceActions :+ UpdateStarAction(condition)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to update non-matched rows in the target DataFrame with the provided
+   * column assignments when not matched by the source.
+   *
+   * @param set A Map of column names to Column expressions representing the updates to be applied.
+   * @return The DataFrameWriterV2 instance with the update action configured.
+   */
   def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
     dfWriter.notMatchedBySourceActions = dfWriter.notMatchedBySourceActions :+
       UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to insert all non-matched rows into the target DataFrame when not
+   * matched by the source.
+   *
+   * @return The DataFrameWriterV2 instance with the insert all action configured.
+   */
   def insertAll(): DataFrameWriterV2[T] = {
     dfWriter.notMatchedBySourceActions =
       dfWriter.notMatchedBySourceActions :+ InsertStarAction(condition)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to insert non-matched rows into the target DataFrame with the provided column
+   * assignments when not matched by the source.
+   *
+   * @param set A Map of column names to Column expressions representing the values to be inserted.
+   * @return The DataFrameWriterV2 instance with the insert action configured.
+   */
   def insert(set: Map[String, Column]): DataFrameWriterV2[T] = {
     dfWriter.notMatchedBySourceActions = dfWriter.notMatchedBySourceActions :+
       InsertAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
     this.dfWriter
   }
 
+  /**
+   * Specifies an action to delete non-matched rows from the target DataFrame when not matched by
+   * the source.
+   *
+   * @return The DataFrameWriterV2 instance with the delete action configured.
+   */
   def delete(): DataFrameWriterV2[T] = {
     dfWriter.notMatchedBySourceActions =
       dfWriter.notMatchedBySourceActions :+ DeleteAction(condition)

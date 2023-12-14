@@ -4130,7 +4130,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Create a [[DataFrameWriterV2]] for mergeInto action.
+   * Create a [[DataFrameWriterV2]] for MergeInto action.
    *
    * Scala Examples:
    * {{{
@@ -4151,7 +4151,6 @@ class Dataset[T] private[sql](
    * @since 4.0.0
    */
   def mergeInto(table: String): DataFrameWriterV2[T] = {
-    // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
       logicalPlan.failAnalysis(
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
