@@ -22,7 +22,8 @@ import java.sql.{Connection, SQLFeatureNotSupportedException}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -163,4 +164,29 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 65536)
     }
   }
+
+  test("SPARK-46408: Scan with filter push-down with date time functions") {
+    val tableName = catalogName + ".datetime"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(name varchar(32), date1 DATE, time1 TIMESTAMP)")
+      val df1 = sql(s"SELECT name FROM $tableName where " +
+        "date_add(date1, 1) = '2022-05-20'")
+      checkFilterPushed(df1)
+      val df2 = sql(s"SELECT name FROM $tableName where " +
+        "date_sub(date1, 1) = '2022-05-20'")
+      checkFilterPushed(df2)
+    }
+  }
+
+  private def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
+    val filter = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    if (!pushed) {
+      assert(filter.isEmpty)
+    } else {
+      assert(filter.nonEmpty)
+    }
+  }
+
 }
