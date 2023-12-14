@@ -182,7 +182,7 @@ Example with **PARQUET**
 
 .. code-block:: python
 
-    >>> # Write a Parquet file to the temporary directory, and read it back
+    >>> # Write a Parquet file to a temporary directory and read it back.
     >>> import tempfile
     >>> with tempfile.TemporaryDirectory() as d:
     ...     # Overwrite the path with a new Parquet file
@@ -204,14 +204,14 @@ Example with **ORC**
 
 .. code-block:: python
 
-    >>> # Write a Orc file to the temporary directory, and read it back
+    >>> # Write an ORC file to a temporary directory and read it back.
     >>> import tempfile
     >>> with tempfile.TemporaryDirectory() as d:
     ...     # Overwrite the path with a new Orc file
     ...     spark.createDataFrame(
     ...         [{"age": None, "name": "Michael"}, {"age": 30, "name": "Andy"}]
     ...     ).write.mode("overwrite").format("orc").save(d)
-    ...     # Read the Orc file as a DataFrame
+    ...     # Read the ORC file as a DataFrame
     ...     df = spark.read.format("orc").load(d)
     ...     df.show()
     +----+-------+
