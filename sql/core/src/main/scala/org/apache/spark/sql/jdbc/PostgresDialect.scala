@@ -242,7 +242,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
               tableName = messageParameters("tableName"),
               cause = Some(e))
           case "42P07" if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
-            val newTable = messageParameters("newTable")
+            val newTable = messageParameters("newName")
             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case "42P07" if pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage).nonEmpty =>
             val tableName = pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage)
