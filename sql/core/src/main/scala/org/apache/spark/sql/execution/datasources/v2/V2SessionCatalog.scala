@@ -236,6 +236,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val table = loadTable(ident)
 
     // Check if the schema of the created table matches the given schema.
+    // TODO: move this check in loadTable to match the behavior with
+    // existing file data sources.
     if (schema.nonEmpty) {
       val tableSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
         table.columns().asSchema)
