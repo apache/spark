@@ -27,7 +27,7 @@ import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor.{Artifact, DefaultDependencyDescriptor, DefaultExcludeRule, DefaultModuleDescriptor, ExcludeRule}
 import org.apache.ivy.core.module.id.{ArtifactId, ModuleId, ModuleRevisionId}
-import org.apache.ivy.core.report.ResolveReport
+import org.apache.ivy.core.report.{DownloadStatus, ResolveReport}
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
@@ -132,20 +132,26 @@ private[spark] object MavenUtils extends Logging {
    *
    * @param defaultIvyUserDir
    *   The default user path for Ivy
+   * @param useLocalM2AsCache
+   *   Whether to use the local maven repo as a cache
    * @return
    *   A ChainResolver used by Ivy to search for and resolve dependencies.
    */
-  private[util] def createRepoResolvers(defaultIvyUserDir: File): ChainResolver = {
+  private[util] def createRepoResolvers(
+      defaultIvyUserDir: File,
+      useLocalM2AsCache: Boolean = true): ChainResolver = {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("spark-list")
 
-    val localM2 = new IBiblioResolver
-    localM2.setM2compatible(true)
-    localM2.setRoot(m2Path.toURI.toString)
-    localM2.setUsepoms(true)
-    localM2.setName("local-m2-cache")
-    cr.add(localM2)
+    if (useLocalM2AsCache) {
+      val localM2 = new IBiblioResolver
+      localM2.setM2compatible(true)
+      localM2.setRoot(m2Path.toURI.toString)
+      localM2.setUsepoms(true)
+      localM2.setName("local-m2-cache")
+      cr.add(localM2)
+    }
 
     val localIvy = new FileSystemResolver
     val localIvyRoot = new File(defaultIvyUserDir, "local")
@@ -266,15 +272,17 @@ private[spark] object MavenUtils extends Logging {
    * @return
    *   An IvySettings object
    */
-  def buildIvySettings(remoteRepos: Option[String], ivyPath: Option[String])(implicit
-      printStream: PrintStream): IvySettings = {
+  def buildIvySettings(
+      remoteRepos: Option[String],
+      ivyPath: Option[String],
+      useLocalM2AsCache: Boolean = true)(implicit printStream: PrintStream): IvySettings = {
     val ivySettings: IvySettings = new IvySettings
     processIvyPathArg(ivySettings, ivyPath)
 
     // create a pattern matcher
     ivySettings.addMatcher(new GlobPatternMatcher)
     // create the dependency resolvers
-    val repoResolver = createRepoResolvers(ivySettings.getDefaultIvyUserDir)
+    val repoResolver = createRepoResolvers(ivySettings.getDefaultIvyUserDir, useLocalM2AsCache)
     ivySettings.addResolver(repoResolver)
     ivySettings.setDefaultResolver(repoResolver.getName)
     processRemoteRepoArg(ivySettings, remoteRepos)
@@ -394,6 +402,8 @@ private[spark] object MavenUtils extends Logging {
    *   Comma-delimited string of maven coordinates
    * @param ivySettings
    *   An IvySettings containing resolvers to use
+   * @param noCacheIvySettings
+   *  An no-cache IvySettings containing resolvers to use
    * @param transitive
    *   Whether resolving transitive dependencies, default is true
    * @param exclusions
@@ -405,6 +415,7 @@ private[spark] object MavenUtils extends Logging {
   def resolveMavenCoordinates(
       coordinates: String,
       ivySettings: IvySettings,
+      noCacheIvySettings: Option[IvySettings] = None,
       transitive: Boolean,
       exclusions: Seq[String] = Nil,
       isTest: Boolean = false)(implicit printStream: PrintStream): Seq[String] = {
@@ -432,7 +443,7 @@ private[spark] object MavenUtils extends Logging {
         printStream.println(s"The jars for the packages stored in: $packagesDirectory")
         // scalastyle:on println
 
-        val ivy = Ivy.newInstance(ivySettings)
+        var ivy = Ivy.newInstance(ivySettings)
         // Set resolve options to download transitive dependencies as well
         val resolveOptions = new ResolveOptions
         resolveOptions.setTransitive(transitive)
@@ -454,9 +465,23 @@ private[spark] object MavenUtils extends Logging {
           md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
         }
         // resolve dependencies
-        val rr: ResolveReport = ivy.resolve(md, resolveOptions)
+        var rr: ResolveReport = ivy.resolve(md, resolveOptions)
         if (rr.hasError) {
-          throw new RuntimeException(rr.getAllProblemMessages.toString)
+          // SPARK-46302: When there are some corrupted jars in the maven repo,
+          // we try to continue without the cache
+          val failedReports = rr.getArtifactsReports(DownloadStatus.FAILED, true)
+          if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
+            val failedArtifacts = failedReports.map(
+              fr => fr.getArtifact).mkString("[", ", ", "]")
+            logInfo(s"Download failed: $failedArtifacts, attempt to skip local maven cache.")
+            ivy = Ivy.newInstance(noCacheIvySettings.get)
+            rr = ivy.resolve(md, resolveOptions)
+            if (rr.hasError) {
+              throw new RuntimeException(rr.getAllProblemMessages.toString)
+            }
+          } else {
+            throw new RuntimeException(rr.getAllProblemMessages.toString)
+          }
         }
         // retrieve all resolved dependencies
         retrieveOptions.setDestArtifactPattern(
