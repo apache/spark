@@ -1701,11 +1701,9 @@ class UtilsTestsMixin:
 
         self.assertTrue("apple" in error_message and "banana" not in error_message)
 
-
-class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
-        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
+        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b").collect())
 
     def test_capture_user_friendly_exception(self):
         try:
@@ -1765,6 +1763,10 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
             self.assertIsNone(e.getSqlState())
             self.assertEqual(e.getMessageParameters(), {})
             self.assertEqual(e.getMessage(), "")
+
+
+class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+    pass
 
 
 if __name__ == "__main__":

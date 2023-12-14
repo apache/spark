@@ -55,8 +55,8 @@ def convert_exception(
     classes = []
     sql_state = None
     error_class = None
-
-    stacktrace: Optional[str] = None
+    message_parameters = None
+    query_context = None
 
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
@@ -75,10 +75,15 @@ def convert_exception(
         stacktrace = info.metadata["stackTrace"] if "stackTrace" in info.metadata else None
         display_server_stacktrace = display_server_stacktrace if stacktrace is not None else False
 
+    if resp is not None and resp.errors:
+        message_parameters = dict(
+            resp.errors[resp.root_error_idx].spark_throwable.message_parameters)
+
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -88,6 +93,7 @@ def convert_exception(
         return AnalysisException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -96,6 +102,7 @@ def convert_exception(
         return StreamingQueryException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -104,6 +111,7 @@ def convert_exception(
         return QueryExecutionException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -113,6 +121,7 @@ def convert_exception(
         return NumberFormatException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -121,6 +130,7 @@ def convert_exception(
         return IllegalArgumentException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -129,6 +139,7 @@ def convert_exception(
         return ArithmeticException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -137,6 +148,7 @@ def convert_exception(
         return UnsupportedOperationException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -145,6 +157,7 @@ def convert_exception(
         return ArrayIndexOutOfBoundsException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -161,6 +174,7 @@ def convert_exception(
         return SparkRuntimeException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -169,6 +183,7 @@ def convert_exception(
         return SparkUpgradeException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -182,6 +197,7 @@ def convert_exception(
         return SparkNoSuchElementException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -191,6 +207,7 @@ def convert_exception(
         return SparkException(
             message,
             error_class=error_class,
+            message_parameters=message_parameters,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
@@ -199,6 +216,7 @@ def convert_exception(
         return SparkConnectGrpcException(
             message,
             reason=info.reason,
+            message_parameters=message_parameters,
             error_class=error_class,
             sql_state=sql_state,
             server_stacktrace=stacktrace,
