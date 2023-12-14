@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterator, Optional, cast
+from typing import Any, Callable, Dict, Iterator, Optional, cast, List
 
 import py4j
 from py4j.protocol import Py4JJavaError
@@ -39,6 +39,7 @@ from pyspark.errors.exceptions.base import (
     SparkNoSuchElementException as BaseNoSuchElementException,
     StreamingQueryException as BaseStreamingQueryException,
     UnknownException as BaseUnknownException,
+    QueryContext,
 )
 
 
@@ -135,6 +136,17 @@ class CapturedException(PySparkException):
             return error_message
         else:
             return ""
+
+    def getQueryContext(self) -> List[QueryContext]:
+        assert SparkContext._gateway is not None
+
+        gw = SparkContext._gateway
+        if self._origin is not None and is_instance_of(
+            gw, self._origin, "org.apache.spark.SparkThrowable"
+        ):
+            return [QueryContext(q) for q in self._origin.getQueryContext()]
+        else:
+            return []
 
 
 def convert_exception(e: Py4JJavaError) -> CapturedException:

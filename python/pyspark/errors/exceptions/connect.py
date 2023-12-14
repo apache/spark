@@ -34,6 +34,7 @@ from pyspark.errors.exceptions.base import (
     SparkRuntimeException as BaseSparkRuntimeException,
     SparkNoSuchElementException as BaseNoSuchElementException,
     SparkUpgradeException as BaseSparkUpgradeException,
+    QueryContext,
 )
 
 if TYPE_CHECKING:
@@ -56,7 +57,7 @@ def convert_exception(
     sql_state = None
     error_class = None
     message_parameters = None
-    query_context = None
+    query_contexts = []
 
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
@@ -67,6 +68,7 @@ def convert_exception(
     if "errorClass" in info.metadata:
         error_class = info.metadata["errorClass"]
 
+    stacktrace: Optional[str] = None
     if resp is not None and resp.HasField("root_error_idx"):
         message = resp.errors[resp.root_error_idx].message
         stacktrace = _extract_jvm_stacktrace(resp)
@@ -75,9 +77,16 @@ def convert_exception(
         stacktrace = info.metadata["stackTrace"] if "stackTrace" in info.metadata else None
         display_server_stacktrace = display_server_stacktrace if stacktrace is not None else False
 
-    if resp is not None and resp.errors:
+    if (
+        resp is not None
+        and resp.errors
+        and hasattr(resp.errors[resp.root_error_idx], "spark_throwable")
+    ):
         message_parameters = dict(
-            resp.errors[resp.root_error_idx].spark_throwable.message_parameters)
+            resp.errors[resp.root_error_idx].spark_throwable.message_parameters
+        )
+        for query_context in resp.errors[resp.root_error_idx].spark_throwable.query_contexts:
+            query_contexts.append(QueryContext(query_context))
 
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(
@@ -87,6 +96,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     # Order matters. ParseException inherits AnalysisException.
     elif "org.apache.spark.sql.AnalysisException" in classes:
@@ -97,6 +107,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "org.apache.spark.sql.streaming.StreamingQueryException" in classes:
         return StreamingQueryException(
@@ -265,6 +276,7 @@ class SparkConnectGrpcException(SparkConnectException):
         sql_state: Optional[str] = None,
         server_stacktrace: Optional[str] = None,
         display_server_stacktrace: bool = False,
+        query_contexts: List[QueryContext] = [],
     ) -> None:
         self._message = message  # type: ignore[assignment]
         if reason is not None:
@@ -289,6 +301,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._sql_state: Optional[str] = sql_state
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
+        self._query_contexts: List[QueryContext] = query_contexts
 
     def getSqlState(self) -> Optional[str]:
         if self._sql_state is not None:
@@ -299,11 +312,14 @@ class SparkConnectGrpcException(SparkConnectException):
     def getStackTrace(self) -> Optional[str]:
         return self._stacktrace
 
-    def __str__(self) -> str:
+    def getMessage(self) -> str:
         desc = self._message
         if self._display_stacktrace:
             desc += "\n\nJVM stacktrace:\n%s" % self._stacktrace
         return desc
+
+    def __str__(self) -> str:
+        return self.getMessage()
 
 
 class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):

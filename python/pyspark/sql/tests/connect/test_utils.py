@@ -21,7 +21,7 @@ from pyspark.sql.tests.test_utils import UtilsTestsMixin
 
 
 class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
-    @unittest.skip("SPARK-46397: Should fix it - different exception is thrown")
+    @unittest.skip("SPARK-46397: Different exception thrown")
     def test_capture_illegalargument_exception(self):
         super().test_capture_illegalargument_exception()
 

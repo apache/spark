@@ -1942,25 +1942,6 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "data", "data_type": "DataFrame"},
         )
 
-    def test_invalid_argument_create_dataframe(self):
-        with self.assertRaises(PySparkTypeError) as pe:
-            self.spark.createDataFrame([(1, 2)], schema=123)
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
-        )
-
-        with self.assertRaises(PySparkTypeError) as pe:
-            self.spark.createDataFrame(self.spark.range(1))
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "data", "data_type": "DataFrame"},
-        )
-
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
