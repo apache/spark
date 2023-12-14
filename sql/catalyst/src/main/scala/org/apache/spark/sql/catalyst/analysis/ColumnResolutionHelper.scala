@@ -323,12 +323,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   }
 
   // Resolves `UnresolvedAttribute` to `TempResolvedColumn` via `plan.child.output` if plan is an
-  // `Aggregate`. If `TempResolvedColumn` doesn't end up as aggregate function input or grouping
-  // column, we will undo the column resolution later to avoid confusing error message. E,g,, if
+  // `Aggregate` or `Filter(_, Aggregate)`.
+  // If `TempResolvedColumn` doesn't end up as aggregate function input or grouping
+  // column, we will undo the column resolution later to avoid confusing error message. E.g., if
   // a table `t` has columns `c1` and `c2`, for query `SELECT ... FROM t GROUP BY c1 HAVING c2 = 0`,
   // even though we can resolve column `c2` here, we should undo it and fail with
   // "Column c2 not found".
   protected def resolveColWithAgg(e: Expression, plan: LogicalPlan): Expression = plan match {
+    case Filter(_, agg: Aggregate) => resolveColWithAgg(e, agg)
     case agg: Aggregate =>
       e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE)) {
         case u: UnresolvedAttribute =>

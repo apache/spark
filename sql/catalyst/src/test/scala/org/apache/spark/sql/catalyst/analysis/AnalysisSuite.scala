@@ -1415,6 +1415,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     )
   }
 
+  test("SPARK-28386: Cannot resolve ORDER BY columns with GROUP BY and HAVING") {
+    assertAnalysisSuccess(
+      parsePlan(
+        """
+          |WITH t1 as (SELECT 1 id, 'one' name)
+          |SELECT LENGTH(name), COUNT(id)
+          |FROM t1
+          |GROUP BY LENGTH(name)
+          |HAVING COUNT(id) > 1
+          |ORDER BY LENGTH(name);
+          |""".stripMargin
+      ))
+  }
+
   test("SPARK-39354: should be [TABLE_OR_VIEW_NOT_FOUND]") {
     assertAnalysisErrorClass(parsePlan(
       s"""
