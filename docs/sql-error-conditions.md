@@ -1505,7 +1505,7 @@ It is not allowed to use an aggregate function in the argument of another aggreg
 
 ### NESTED_EXECUTE_IMMEDIATE
 
-SQLSTATE: 07502
+SQLSTATE: 07501
 
 Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
 
