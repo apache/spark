@@ -168,6 +168,13 @@ Data source options of XML can be set via:
   </tr>
 
   <tr>
+    <td><code>timestampNTZFormat</code></td>
+    <td>yyyy-MM-dd'T'HH:mm:ss[.SSS]</td>
+    <td>Sets the string that indicates a timestamp without timezone format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to timestamp without timezone type, note that zone-offset and time-zone components are not supported when writing or reading this data type.</td>
+    <td>read/write</td>
+  </tr>
+
+  <tr>
     <td><code>dateFormat</code></td>
     <td><code>yyyy-MM-dd</code></td>
     <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to date type.</td>
