@@ -59,9 +59,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def resolveNamespace(
-    catalog: CatalogPlugin,
-    ns: Seq[String],
-    fetchMetadata: Boolean): ResolvedNamespace = {
+      catalog: CatalogPlugin,
+      ns: Seq[String],
+      fetchMetadata: Boolean): ResolvedNamespace = {
     catalog match {
       case supportsNS: SupportsNamespaces if fetchMetadata =>
         ResolvedNamespace(

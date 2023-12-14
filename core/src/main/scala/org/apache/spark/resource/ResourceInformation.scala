@@ -19,7 +19,7 @@ package org.apache.spark.resource
 
 import scala.util.control.NonFatal
 
-import org.json4s.{DefaultFormats, Extraction, JValue}
+import org.json4s.{DefaultFormats, Extraction, Formats, JValue}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
@@ -71,7 +71,7 @@ private[spark] object ResourceInformation {
    * Parses a JSON string into a [[ResourceInformation]] instance.
    */
   def parseJson(json: String): ResourceInformation = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     try {
       parse(json).extract[ResourceInformationJson].toResourceInformation
     } catch {
@@ -82,7 +82,7 @@ private[spark] object ResourceInformation {
   }
 
   def parseJson(json: JValue): ResourceInformation = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     try {
       json.extract[ResourceInformationJson].toResourceInformation
     } catch {

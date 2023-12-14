@@ -65,7 +65,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   def checkIfUnique(ss: Seq[Any]): Unit = {
-    val dups = ss.groupBy(identity).view.mapValues(_.size).filter(_._2 > 1).keys.toSeq
+    val dups = ss.groupBy(identity).transform((_, v) => v.size).filter(_._2 > 1).keys.toSeq
     assert(dups.isEmpty, s"Duplicate error classes: ${dups.mkString(", ")}")
   }
 
@@ -152,9 +152,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
-      .view
-      .filterKeys(!_.startsWith("_LEGACY_ERROR_"))
-      .filterKeys(!_.startsWith("INTERNAL_ERROR"))
+      .filter { case (k, _) => !k.startsWith("_LEGACY_ERROR_") }
+      .filter { case (k, _) => !k.startsWith("INTERNAL_ERROR") }
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)

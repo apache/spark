@@ -22,6 +22,7 @@ import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import scala.annotation.varargs
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -241,7 +242,7 @@ class Dataset[T] private[sql](
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
   }
 
-  private implicit def classTag = exprEnc.clsTag
+  private implicit def classTag: ClassTag[T] = exprEnc.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
@@ -1628,7 +1629,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = withOrigin {
-    implicit val encoder = c1.encoder
+    implicit val encoder: ExpressionEncoder[U1] = c1.encoder
     val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
 
     if (!encoder.isSerializedAsStructForTopLevel) {
@@ -2904,18 +2905,29 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = withOrigin {
+    val (colNames, newColNames) = colsMap.toSeq.unzip
+    withColumnsRenamed(colNames, newColNames)
+  }
+
+  private[spark] def withColumnsRenamed(
+    colNames: Seq[String],
+    newColNames: Seq[String]): DataFrame = withOrigin {
+    require(colNames.size == newColNames.size,
+      s"The size of existing column names: ${colNames.size} isn't equal to " +
+        s"the size of new column names: ${newColNames.size}")
+
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output: Seq[NamedExpression] = queryExecution.analyzed.output
 
-    val projectList = colsMap.foldLeft(output) {
+    val projectList = colNames.zip(newColNames).foldLeft(output) {
       case (attrs, (existingName, newName)) =>
-      attrs.map(attr =>
-        if (resolver(attr.name, existingName)) {
-          Alias(attr, newName)()
-        } else {
-          attr
-        }
-      )
+        attrs.map(attr =>
+          if (resolver(attr.name, existingName)) {
+            Alias(attr, newName)()
+          } else {
+            attr
+          }
+        )
     }
     SchemaUtils.checkColumnNameDuplication(
       projectList.map(_.name),
@@ -3454,7 +3466,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = withOrigin {
-    implicit val uEnc = encoder
+    implicit val uEnc: Encoder[U] = encoder
     withTypedPlan(MapElements[T, U](func, logicalPlan))
   }
 

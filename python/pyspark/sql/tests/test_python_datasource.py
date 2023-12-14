@@ -16,9 +16,11 @@
 #
 import os
 import unittest
+from typing import Callable, Union
 
-from pyspark.sql.datasource import DataSource, DataSourceReader
-from pyspark.sql.types import Row
+from pyspark.errors import PythonException
+from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+from pyspark.sql.types import Row, StructType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import SPARK_HOME
@@ -46,7 +48,6 @@ class BasePythonDataSourceTestsMixin:
                 yield None,
 
         reader = MyDataSourceReader()
-        self.assertEqual(list(reader.partitions()), [None])
         self.assertEqual(list(reader.read(None)), [(None,)])
 
     def test_data_source_register(self):
@@ -79,6 +80,107 @@ class BasePythonDataSourceTestsMixin:
         df = self.spark.read.format("TestDataSource").load()
         assertDataFrameEqual(df, [Row(c=0, d=1)])
 
+    def register_data_source(
+        self,
+        read_func: Callable,
+        partition_func: Callable = None,
+        output: Union[str, StructType] = "i int, j int",
+        name: str = "test",
+    ):
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self, schema):
+                self.schema = schema
+
+            def partitions(self):
+                if partition_func is not None:
+                    return partition_func()
+                else:
+                    raise NotImplementedError
+
+            def read(self, partition):
+                return read_func(self.schema, partition)
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return name
+
+            def schema(self):
+                return output
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader(schema)
+
+        self.spark.dataSource.register(TestDataSource)
+
+    def test_data_source_read_output_tuple(self):
+        self.register_data_source(read_func=lambda schema, partition: iter([(0, 1)]))
+        df = self.spark.read.format("test").load()
+        assertDataFrameEqual(df, [Row(0, 1)])
+
+    def test_data_source_read_output_list(self):
+        self.register_data_source(read_func=lambda schema, partition: iter([[0, 1]]))
+        df = self.spark.read.format("test").load()
+        assertDataFrameEqual(df, [Row(0, 1)])
+
+    def test_data_source_read_output_row(self):
+        self.register_data_source(read_func=lambda schema, partition: iter([Row(0, 1)]))
+        df = self.spark.read.format("test").load()
+        assertDataFrameEqual(df, [Row(0, 1)])
+
+    def test_data_source_read_output_none(self):
+        self.register_data_source(read_func=lambda schema, partition: None)
+        df = self.spark.read.format("test").load()
+        with self.assertRaisesRegex(PythonException, "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE"):
+            assertDataFrameEqual(df, [])
+
+    def test_data_source_read_output_empty_iter(self):
+        self.register_data_source(read_func=lambda schema, partition: iter([]))
+        df = self.spark.read.format("test").load()
+        assertDataFrameEqual(df, [])
+
+    def test_data_source_read_cast_output_schema(self):
+        self.register_data_source(
+            read_func=lambda schema, partition: iter([(0, 1)]), output="i long, j string"
+        )
+        df = self.spark.read.format("test").load()
+        assertDataFrameEqual(df, [Row(i=0, j="1")])
+
+    def test_data_source_read_output_with_partition(self):
+        def partition_func():
+            return [InputPartition(0), InputPartition(1)]
+
+        def read_func(schema, partition):
+            if partition.value == 0:
+                return iter([])
+            elif partition.value == 1:
+                yield (0, 1)
+
+        self.register_data_source(read_func=read_func, partition_func=partition_func)
+        df = self.spark.read.format("test").load()
+        assertDataFrameEqual(df, [Row(0, 1)])
+
+    def test_data_source_read_output_with_schema_mismatch(self):
+        self.register_data_source(read_func=lambda schema, partition: iter([(0, 1)]))
+        df = self.spark.read.format("test").schema("i int").load()
+        with self.assertRaisesRegex(
+            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
+        ):
+            df.collect()
+        self.register_data_source(
+            read_func=lambda schema, partition: iter([(0, 1)]), output="i int, j int, k int"
+        )
+        with self.assertRaisesRegex(
+            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
+        ):
+            df.collect()
+
+    def test_read_with_invalid_return_row_type(self):
+        self.register_data_source(read_func=lambda schema, partition: iter([1]))
+        df = self.spark.read.format("test").load()
+        with self.assertRaisesRegex(PythonException, "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE"):
+            df.collect()
+
     def test_in_memory_data_source(self):
         class InMemDataSourceReader(DataSourceReader):
             DEFAULT_NUM_PARTITIONS: int = 3
@@ -91,10 +193,10 @@ class BasePythonDataSourceTestsMixin:
                     num_partitions = int(self.options["num_partitions"])
                 else:
                     num_partitions = self.DEFAULT_NUM_PARTITIONS
-                return range(num_partitions)
+                return [InputPartition(i) for i in range(num_partitions)]
 
             def read(self, partition):
-                yield partition, str(partition)
+                yield partition.value, str(partition.value)
 
         class InMemoryDataSource(DataSource):
             @classmethod

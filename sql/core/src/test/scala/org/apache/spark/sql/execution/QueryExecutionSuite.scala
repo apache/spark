@@ -160,7 +160,7 @@ class QueryExecutionSuite extends SharedSparkSession {
 
     // Throw an AnalysisException - this should be captured.
     spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new AnalysisException("exception"))
+      (_: LogicalPlan) => throw new AnalysisException("_LEGACY_ERROR_TEMP_3078", Map.empty))
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.

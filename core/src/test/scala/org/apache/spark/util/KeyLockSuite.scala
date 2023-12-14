@@ -22,14 +22,14 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
 
-import org.scalatest.concurrent.{ThreadSignaler, TimeLimits}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 
 import org.apache.spark.SparkFunSuite
 
 class KeyLockSuite extends SparkFunSuite with TimeLimits {
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
-  private implicit val defaultSignaler = ThreadSignaler
+  private implicit val defaultSignaler: Signaler = ThreadSignaler
 
   private val foreverMs = 60 * 1000L
 

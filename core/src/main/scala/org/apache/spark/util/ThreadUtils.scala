@@ -379,7 +379,7 @@ private[spark] object ThreadUtils {
   def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
-      implicit val ec = ExecutionContext.fromExecutor(pool)
+      implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(pool)
 
       val futures = in.map(x => Future(f(x)))
       val futureSeq = Future.sequence(futures)

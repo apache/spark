@@ -210,7 +210,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
     val isotonic = (metadata \ "isotonic").extract[Boolean]
     val classNameV1_0 = SaveLoadV1_0.thisClassName

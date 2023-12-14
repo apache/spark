@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, SimplePythonFunction}
-import org.apache.spark.sql.catalyst.expressions.PythonUDTF
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, Project, PythonDataSource, PythonDataSourcePartitions}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, PythonDataSource, PythonDataSourcePartitions, PythonMapInArrow}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.PYTHON_DATA_SOURCE
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSourceReadRunner
@@ -40,18 +40,21 @@ import org.apache.spark.util.ArrayImplicits._
  * class. Post this rule, the plan is transformed into:
  *
  *  Project [output]
- *  +- Generate [python_data_source_read_udtf, ...]
+ *  +- PythonMapInArrow [read_from_data_source, ...]
  *     +- PythonDataSourcePartitions [partition_bytes]
  *
  * The PythonDataSourcePartitions contains a list of serialized partition values for the data
- * source. The `DataSourceReader.read` method will be planned as a UDTF that accepts a partition
- * value and yields the scanning output.
+ * source. The `DataSourceReader.read` method will be planned as a MapInArrow operator that
+ * accepts a partition value and yields the scanning output.
  */
 object PlanPythonDataSourceScan extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsPattern(PYTHON_DATA_SOURCE)) {
     case ds @ PythonDataSource(dataSource: PythonFunction, schema, _) =>
-      val info = new UserDefinedPythonDataSourceReadRunner(dataSource, schema).runInPython()
+      val inputSchema = PythonDataSourcePartitions.schema
+
+      val info = new UserDefinedPythonDataSourceReadRunner(
+        dataSource, inputSchema, schema).runInPython()
 
       val readerFunc = SimplePythonFunction(
         command = info.func.toImmutableArraySeq,
@@ -65,27 +68,22 @@ object PlanPythonDataSourceScan extends Rule[LogicalPlan] {
       val partitionPlan = PythonDataSourcePartitions(
         PythonDataSourcePartitions.getOutputAttrs, info.partitions)
 
-      // Construct a Python UDTF for the reader function.
-      val pythonUDTF = PythonUDTF(
-        name = "python_data_source_read",
+      val pythonUDF = PythonUDF(
+        name = "read_from_data_source",
         func = readerFunc,
-        elementSchema = schema,
+        dataType = schema,
         children = partitionPlan.output,
-        evalType = PythonEvalType.SQL_TABLE_UDF,
-        udfDeterministic = false,
-        pickledAnalyzeResult = None)
+        evalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+        udfDeterministic = false)
 
-      // Later the rule `ExtractPythonUDTFs` will turn this Generate
-      // into a evaluable Python UDTF node.
-      val generate = Generate(
-        generator = pythonUDTF,
-        unrequiredChildIndex = Nil,
-        outer = false,
-        qualifier = None,
-        generatorOutput = ds.output,
-        child = partitionPlan)
+      // Construct the plan.
+      val plan = PythonMapInArrow(
+        pythonUDF,
+        ds.output,
+        partitionPlan,
+        isBarrier = false)
 
       // Project out partition values.
-      Project(ds.output, generate)
+      Project(ds.output, plan)
   }
 }

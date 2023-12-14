@@ -43,7 +43,12 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkIndexError,
+    PySparkAttributeError,
+)
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -3613,8 +3618,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+
         """
         if name not in self.columns:
-            raise AttributeError(
-                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         jc = self._jdf.apply(name)
         return Column(jc)
@@ -6267,7 +6272,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
-        return DataFrame(self._jdf.withColumnsRenamed(colsMap), self.sparkSession)
+        col_names: List[str] = []
+        new_col_names: List[str] = []
+        for k, v in colsMap.items():
+            col_names.append(k)
+            new_col_names.append(v)
+
+        return DataFrame(
+            self._jdf.withColumnsRenamed(
+                _to_seq(self._sc, col_names), _to_seq(self._sc, new_col_names)
+            ),
+            self.sparkSession,
+        )
 
     def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
         """Returns a new :class:`DataFrame` by updating an existing column with metadata.

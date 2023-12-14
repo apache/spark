@@ -69,8 +69,8 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalVariantType) {
       return obj.getVariant(ordinal);
     }
-    if (physicalDataType instanceof PhysicalStructType) {
-      return obj.getStruct(ordinal, ((PhysicalStructType) physicalDataType).fields().length);
+    if (physicalDataType instanceof PhysicalStructType dt) {
+      return obj.getStruct(ordinal, dt.fields().length);
     }
     if (physicalDataType instanceof PhysicalArrayType) {
       return obj.getArray(ordinal);
@@ -78,8 +78,8 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalMapType) {
       return obj.getMap(ordinal);
     }
-    if (handleUserDefinedType && dataType instanceof UserDefinedType) {
-      return obj.get(ordinal, ((UserDefinedType)dataType).sqlType());
+    if (handleUserDefinedType && dataType instanceof UserDefinedType dt) {
+      return obj.get(ordinal, dt.sqlType());
     }
 
     throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());

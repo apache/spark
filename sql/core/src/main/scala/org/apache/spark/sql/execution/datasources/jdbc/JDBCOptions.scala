@@ -62,7 +62,8 @@ class JDBCOptions(
    */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    parameters.originalMap.view.filterKeys(key => !jdbcOptionNames(key.toLowerCase(Locale.ROOT)))
+    parameters.originalMap
+      .filter { case (key, _) => !jdbcOptionNames(key.toLowerCase(Locale.ROOT)) }
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }

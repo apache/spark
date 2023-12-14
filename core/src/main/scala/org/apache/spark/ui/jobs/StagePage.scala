@@ -357,7 +357,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
-                     if (!taskInfo.duration.isDefined) {
+                     if (taskInfo.duration.isEmpty) {
                        s"""<br>Finish Time: ${UIUtils.formatDate(new Date(finishTime))}"""
                      } else {
                         ""

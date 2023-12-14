@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
@@ -102,9 +103,9 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
               StatefulOperatorPartitioning.getCompatibleDistribution(
                 exprs, parts, conf) :: Nil
 
-            case _ =>
-              throw new IllegalStateException("Expected to set the number of partitions before " +
-                "constructing required child distribution!")
+            case _ => throw SparkException.internalError(
+              "Expected to set the number of partitions before " +
+              "constructing required child distribution!")
           }
         } else {
           ClusteredDistribution(exprs) :: Nil

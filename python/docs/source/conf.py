@@ -204,7 +204,18 @@ html_theme_options = {
         "image_light": "_static/spark-logo-light.png",
         "image_dark": "_static/spark-logo-dark.png",
     },
-    "github_url": "https://github.com/apache/spark",
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/apache/spark",
+            "icon": "fa-brands fa-github",
+        },
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/pyspark",
+            "icon": "fa-solid fa-box",
+        },
+    ]
 }
 
 # Add any paths that contain custom themes here, relative to this directory.

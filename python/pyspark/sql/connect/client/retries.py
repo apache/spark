@@ -22,6 +22,7 @@ import typing
 from typing import Optional, Callable, Generator, List, Type
 from types import TracebackType
 from pyspark.sql.connect.client.logging import logger
+from pyspark.errors import PySparkRuntimeError, RetriesExceeded
 
 """
 This module contains retry system. The system is designed to be
@@ -201,7 +202,10 @@ class Retrying:
 
     def _last_exception(self) -> BaseException:
         if self._exception is None:
-            raise RuntimeError("No active exception")
+            raise PySparkRuntimeError(
+                error_class="NO_ACTIVE_EXCEPTION",
+                message_parameters={},
+            )
         return self._exception
 
     def _wait(self) -> None:
@@ -229,7 +233,7 @@ class Retrying:
 
         # Exceeded retries
         logger.debug(f"Given up on retrying. error: {repr(exception)}")
-        raise RetriesExceeded from exception
+        raise RetriesExceeded(error_class="RETRIES_EXCEEDED", message_parameters={}) from exception
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
@@ -311,10 +315,3 @@ class DefaultPolicy(RetryPolicy):
             return True
 
         return False
-
-
-class RetriesExceeded(Exception):
-    """
-    Represents an exception which is considered retriable, but retry limits
-    were exceeded
-    """

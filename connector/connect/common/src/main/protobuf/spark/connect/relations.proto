@@ -776,13 +776,23 @@ message WithColumnsRenamed {
   Relation input = 1;
 
 
-  // (Required)
+  // (Optional)
   //
   // Renaming column names of input relation from A to B where A is the map key
   // and B is the map value. This is a no-op if schema doesn't contain any A. It
   // does not require that all input relation column names to present as keys.
   // duplicated B are not allowed.
-  map<string, string> rename_columns_map = 2;
+  map<string, string> rename_columns_map = 2 [deprecated=true];
+
+  repeated Rename renames = 3;
+
+  message Rename {
+    // (Required) The existing column name.
+    string col_name = 1;
+
+    // (Required) The new column name.
+    string new_col_name = 2;
+  }
 }
 
 // Adding columns or replacing the existing columns that have the same names.

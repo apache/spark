@@ -2864,7 +2864,7 @@ current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
 
 
 def now() -> Column:
-    return _invoke_function("current_timestamp")
+    return _invoke_function("now")
 
 
 now.__doc__ = pysparkfuncs.now.__doc__
@@ -3611,6 +3611,13 @@ def user() -> Column:
 
 
 user.__doc__ = pysparkfuncs.user.__doc__
+
+
+def session_user() -> Column:
+    return _invoke_function("session_user")
+
+
+session_user.__doc__ = pysparkfuncs.session_user.__doc__
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:

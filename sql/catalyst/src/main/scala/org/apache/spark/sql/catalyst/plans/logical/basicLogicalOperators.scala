@@ -101,6 +101,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 
 object Project {
   val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
+  // Project with this tag means it doesn't care about the data order of its input. We only set
+  // this tag when the Project was converted from grouping-only Aggregate.
+  val dataOrderIrrelevantTag: TreeNodeTag[Unit] = TreeNodeTag[Unit]("data_order_irrelevant")
 
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
     assert(plan.resolved)
@@ -778,13 +781,14 @@ object View {
     // as optimization configs but they are still needed during the view resolution.
     // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
     // optimization phase.
-    val retainedConfigs = activeConf.getAllConfs.view.filterKeys(key =>
+    val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
       Seq(
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key) || key.startsWith("spark.sql.catalog."))
+      ).contains(key) || key.startsWith("spark.sql.catalog.")
+    }
     for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
@@ -1082,10 +1086,12 @@ case class Range(
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
     } else {
-      val (minVal, maxVal) = if (step > 0) {
-        (start, start + (numElements - 1) * step)
+      val (minVal, maxVal) = if (!numElements.isValidLong) {
+        (None, None)
+      } else if (step > 0) {
+        (Some(start), Some(start + (numElements.toLong - 1) * step))
       } else {
-        (start + (numElements - 1) * step, start)
+        (Some(start + (numElements.toLong - 1) * step), Some(start))
       }
 
       val histogram = if (conf.histogramEnabled) {
@@ -1096,8 +1102,8 @@ case class Range(
 
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
-        max = Some(maxVal),
-        min = Some(minVal),
+        max = maxVal,
+        min = minVal,
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
         maxLen = Some(LongType.defaultSize),
