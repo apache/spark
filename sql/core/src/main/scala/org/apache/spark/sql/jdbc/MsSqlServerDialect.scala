@@ -194,7 +194,7 @@ private object MsSqlServerDialect extends JdbcDialect {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
-          case 3729 => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case 3729 => throw new NonEmptyNamespaceException(message, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case _ => super.classifyException(message, e)

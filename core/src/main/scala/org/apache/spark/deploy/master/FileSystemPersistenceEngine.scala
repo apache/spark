@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.io._
-import java.nio.file.{Files, Paths}
+import java.nio.file.{FileAlreadyExistsException, Files, Paths}
 
 import scala.reflect.ClassTag
 
@@ -42,7 +42,12 @@ private[master] class FileSystemPersistenceEngine(
     val codec: Option[CompressionCodec] = None)
   extends PersistenceEngine with Logging {
 
-  Files.createDirectories(Paths.get(dir))
+  try {
+    Files.createDirectories(Paths.get(dir))
+  } catch {
+    case _: FileAlreadyExistsException if Files.isSymbolicLink(Paths.get(dir)) =>
+      Files.createDirectories(Paths.get(dir).toRealPath())
+  }
 
   override def persist(name: String, obj: Object): Unit = {
     serializeIntoFile(new File(dir + File.separator + name), obj)

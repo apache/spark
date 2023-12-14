@@ -752,6 +752,16 @@ ERROR_CLASSES_JSON = """
         "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
     ]
   },
+  "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE" : {
+    "message" : [
+        "The data type of the returned value ('<type>') from the Python data source '<name>' is not supported. Supported types: <supported_types>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The number of columns in the result does not match the required schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the 'read' method have the same number of columns as required by the output schema."
+    ]
+  },
   "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
     "message" : [
       "Expected <expected>, but got <actual>."
