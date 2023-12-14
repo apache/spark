@@ -52,7 +52,7 @@ Data source options of XML can be set via:
     * `schema_of_xml`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>rowTag</code></td>
@@ -164,6 +164,13 @@ Data source options of XML can be set via:
     <td><code>timestampFormat</code></td>
     <td><code>yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]</code></td>
     <td>Sets the string that indicates a timestamp format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to timestamp type.</td>
+    <td>read/write</td>
+  </tr>
+
+  <tr>
+    <td><code>timestampNTZFormat</code></td>
+    <td>yyyy-MM-dd'T'HH:mm:ss[.SSS]</td>
+    <td>Sets the string that indicates a timestamp without timezone format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to timestamp without timezone type, note that zone-offset and time-zone components are not supported when writing or reading this data type.</td>
     <td>read/write</td>
   </tr>
 

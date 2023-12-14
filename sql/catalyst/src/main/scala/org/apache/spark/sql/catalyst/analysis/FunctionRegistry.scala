@@ -124,7 +124,8 @@ object FunctionRegistryBase {
       runtimeClass.getConstructors
     }
     // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = constructors.find(_.getParameterTypes.toSeq == Seq(classOf[Seq[_]]))
+    val varargCtor =
+      constructors.find(_.getParameterTypes.toImmutableArraySeq == Seq(classOf[Seq[_]]))
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
@@ -138,7 +139,7 @@ object FunctionRegistryBase {
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+        val f = constructors.find(_.getParameterTypes.toImmutableArraySeq == params).getOrElse {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
@@ -477,6 +478,8 @@ object FunctionRegistry {
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
+    expressionBuilder("percentile_cont", PercentileContBuilder),
+    expressionBuilder("percentile_disc", PercentileDiscBuilder),
     expression[Median]("median"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
@@ -722,7 +725,7 @@ object FunctionRegistry {
 
     // misc functions
     expression[AssertTrue]("assert_true"),
-    expression[RaiseError]("raise_error"),
+    expressionBuilder("raise_error", RaiseErrorExpressionBuilder),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),

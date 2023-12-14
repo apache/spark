@@ -11,7 +11,7 @@ plotly
 mlflow>=2.3.1
 scikit-learn
 matplotlib
-memory-profiler==0.60.0
+memory-profiler>=0.61.0
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -40,8 +40,7 @@ sphinx==4.2.0
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
-# See SPARK-38279.
-markupsafe==2.0.1
+markupsafe
 
 # Development scripts
 jira>=3.5.2
@@ -54,7 +53,6 @@ py
 # Spark Connect (required)
 grpcio>=1.59.3
 grpcio-status>=1.59.3
-protobuf==4.25.1
 googleapis-common-protos>=1.56.4
 
 # Spark Connect python proto generation plugin (optional)

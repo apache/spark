@@ -26,19 +26,6 @@ from pyspark.pandas.utils import name_like_string
 
 
 class FrameMeltMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_melt(self):
         pdf = pd.DataFrame(
             {"A": [1, 3, 5], "B": [2, 4, 6], "C": [7, 8, 9]}, index=np.random.rand(3)

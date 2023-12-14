@@ -370,6 +370,15 @@ class SparkSession:
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
             _num_cols = len(_cols)
 
+        elif schema is not None:
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
+
         if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
             raise PySparkValueError(
                 error_class="INVALID_NDARRAY_DIMENSION",

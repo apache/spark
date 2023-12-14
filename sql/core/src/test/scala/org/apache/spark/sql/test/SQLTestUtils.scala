@@ -243,7 +243,7 @@ private[sql] trait SQLTestUtilsBase
     protected override def _sqlContext: SQLContext = self.spark.sqlContext
   }
 
-  protected override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+  protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
     SparkSession.setActiveSession(spark)
     super.withSQLConf(pairs: _*)(f)
   }

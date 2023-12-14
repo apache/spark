@@ -43,8 +43,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
   // Similar to [[Dataset]], we turn the passed in encoder to `ExpressionEncoder` explicitly.
-  private implicit val kExprEnc = encoderFor(kEncoder)
-  private implicit val vExprEnc = encoderFor(vEncoder)
+  private implicit val kExprEnc: ExpressionEncoder[K] = encoderFor(kEncoder)
+  private implicit val vExprEnc: ExpressionEncoder[V] = encoderFor(vEncoder)
 
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession

@@ -29,6 +29,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` is required when <condition>."
     ]
   },
+  "ARROW_LEGACY_IPC_FORMAT": {
+    "message": [
+      "Arrow legacy IPC format is not supported in PySpark, please unset ARROW_PRE_0_15_IPC_FORMAT."
+    ]
+  },
   "ATTRIBUTE_NOT_CALLABLE" : {
     "message" : [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
@@ -77,6 +82,16 @@ ERROR_CLASSES_JSON = """
   "CANNOT_BE_NONE": {
     "message": [
       "Argument `<arg_name>` cannot be None."
+    ]
+  },
+  "CANNOT_CONFIGURE_SPARK_CONNECT": {
+    "message": [
+      "Spark Connect server cannot be configured: Existing [<existing_url>], New [<new_url>]."
+    ]
+  },
+  "CANNOT_CONFIGURE_SPARK_CONNECT_MASTER": {
+    "message": [
+      "Spark Connect server and Spark master cannot be configured together: Spark master [<master_url>], Spark Connect [<connect_url>]."
     ]
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
@@ -149,9 +164,24 @@ ERROR_CLASSES_JSON = """
       "returnType can not be specified when `<arg_name>` is a user-defined function, but got <return_type>."
     ]
   },
+  "CANNOT_WITHOUT": {
+    "message": [
+      "Cannot <condition1> without <condition2>."
+    ]
+  },
   "COLUMN_IN_LIST": {
     "message": [
       "`<func_name>` does not allow a Column in a list."
+    ]
+  },
+  "CONNECT_URL_ALREADY_DEFINED" : {
+    "message" : [
+      "Only one Spark Connect client URL can be set; however, got a different URL [<new_url>] from the existing [<existing_url>]."
+    ]
+  },
+  "CONNECT_URL_NOT_SET" : {
+    "message" : [
+      "Cannot create a Spark Connect session because the Spark Connect remote URL has not been set. Please define the remote URL by setting either the 'spark.remote' option or the 'SPARK_REMOTE' environment variable."
     ]
   },
   "CONTEXT_ONLY_VALID_ON_DRIVER" : {
@@ -231,6 +261,11 @@ ERROR_CLASSES_JSON = """
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
+  "ERROR_OCCURRED_WHILE_CALLING" : {
+    "message" : [
+      "An error occurred while calling <func_name>: <error_msg>."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -272,6 +307,11 @@ ERROR_CLASSES_JSON = """
       "Invalid URL for Spark Connect: <detail>"
     ]
   },
+  "INVALID_INTERVAL_CASTING": {
+    "message": [
+      "Interval <start_field> to <end_field> is invalid."
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
@@ -287,6 +327,11 @@ ERROR_CLASSES_JSON = """
       "NumPy array input should be of <dimensions> dimensions."
     ]
   },
+  "INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP" : {
+    "message" : [
+      "Invalid number of dataframes in group <dataframes_in_group>."
+    ]
+  },
   "INVALID_PANDAS_UDF" : {
     "message" : [
       "Invalid function: <detail>"
@@ -295,6 +340,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_PANDAS_UDF_TYPE" : {
     "message" : [
       "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
+    ]
+  },
+  "INVALID_RETURN_TYPE_FOR_ARROW_UDF": {
+    "message": [
+      "Grouped and Cogrouped map Arrow UDF should return StructType for <eval_type>, got <return_type>."
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -375,6 +425,11 @@ ERROR_CLASSES_JSON = """
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
       "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
+    ]
+  },
+  "KEY_NOT_EXISTS" : {
+    "message" : [
+      "Key `<key>` is not exists."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED" : {
@@ -642,6 +697,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
+  "NO_ACTIVE_EXCEPTION" : {
+    "message" : [
+      "No active exception."
+    ]
+  },
   "NO_ACTIVE_OR_DEFAULT_SESSION" : {
     "message" : [
       "No active or default Spark session found. Please create a new Spark session before running the code."
@@ -667,6 +727,16 @@ ERROR_CLASSES_JSON = """
       "Only a single trigger is allowed."
     ]
   },
+  "ONLY_SUPPORTED_WITH_SPARK_CONNECT" : {
+    "message" : [
+      "<feature> is only supported with Spark Connect; however, the current Spark session does not use Spark Connect."
+    ]
+  },
+  "PACKAGE_NOT_INSTALLED" : {
+    "message" : [
+      "<package_name> >= <minimum_version> must be installed; however, it was not found."
+    ]
+  },
   "PIPE_FUNCTION_EXITED" : {
     "message" : [
       "Pipe function `<func_name>` exited with error code <error_code>."
@@ -680,6 +750,16 @@ ERROR_CLASSES_JSON = """
   "PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED" : {
     "message" : [
         "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE" : {
+    "message" : [
+        "The data type of the returned value ('<type>') from the Python data source '<name>' is not supported. Supported types: <supported_types>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The number of columns in the result does not match the required schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the 'read' method have the same number of columns as required by the output schema."
     ]
   },
   "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
@@ -708,6 +788,21 @@ ERROR_CLASSES_JSON = """
       "transformation. For more information, see SPARK-5063."
     ]
   },
+  "READ_ONLY" : {
+    "message" : [
+      "<object> is read-only."
+    ]
+  },
+  "RESPONSE_ALREADY_RECEIVED" : {
+    "message" : [
+      "OPERATION_NOT_FOUND on the server but responses were already received from it."
+    ]
+  },
+  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF" : {
+    "message" : [
+      "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
+    ]
+  },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
       "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
@@ -721,6 +816,16 @@ ERROR_CLASSES_JSON = """
   "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF" : {
     "message" : [
       "The length of output in Scalar iterator pandas UDF should be the same with the input's; however, the length of output was <output_length> and the length of input was <input_length>."
+    ]
+  },
+  "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF" : {
+    "message" : [
+      "Columns do not match in their data type: <mismatch>."
+    ]
+  },
+  "RETRIES_EXCEEDED" : {
+    "message" : [
+      "The maximum number of retries has been exceeded."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
@@ -748,9 +853,9 @@ ERROR_CLASSES_JSON = """
       "There should not be an existing Spark Session or Spark Context."
     ]
   },
-  "SHOULD_NOT_DATAFRAME": {
-    "message": [
-      "Argument `<arg_name>` should not be a DataFrame."
+  "SESSION_OR_CONTEXT_NOT_EXISTS" : {
+    "message" : [
+      "SparkContext or SparkSession should be created first.."
     ]
   },
   "SLICE_WITH_STEP" : {
@@ -778,14 +883,19 @@ ERROR_CLASSES_JSON = """
       "Cannot serialize the function `<name>`. If you accessed the Spark session, or a DataFrame defined outside of the function, or any object that contains a Spark session, please be aware that they are not allowed in Spark Connect. For `foreachBatch`, please access the Spark session using `df.sparkSession`, where `df` is the first parameter in your `foreachBatch` function. For `StreamingQueryListener`, please access the Spark session using `self.spark`. For details please check out the PySpark doc for `foreachBatch` and `StreamingQueryListener`."
     ]
   },
+  "TEST_CLASS_NOT_COMPILED" : {
+    "message" : [
+      "<test_class_path> doesn't exist. Spark sql test classes are not compiled."
+    ]
+  },
   "TOO_MANY_VALUES" : {
     "message" : [
       "Expected <expected> values for `<item>`, got <actual>."
     ]
   },
-  "TYPE_HINT_REQUIRED" : {
+  "TYPE_HINT_SHOULD_BE_SPECIFIED" : {
     "message" : [
-      "A <arg_type> is required <where>."
+      "Type hints for <target> should be specified; however, got <sig>."
     ]
   },
   "UDF_RETURN_TYPE" : {
@@ -796,6 +906,21 @@ ERROR_CLASSES_JSON = """
   "UDTF_ARROW_TYPE_CAST_ERROR" : {
     "message" : [
       "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
+  "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because its constructor is invalid: the function implements the 'analyze' method, but its constructor has more than two arguments (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, or one 'self' argument plus another argument for the result of the 'analyze' method, and try the query again."
+    ]
+  },
+  "UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because its constructor is invalid: the function does not implement the 'analyze' method, and its constructor has more than one argument (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, and try the query again."
+    ]
+  },
+  "UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function '<name>' because the function arguments did not match the expected signature of the 'eval' method (<reason>). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its 'eval' method accepts the provided arguments, and then try the query again."
     ]
   },
   "UDTF_EXEC_ERROR" : {
@@ -853,6 +978,11 @@ ERROR_CLASSES_JSON = """
       "Unknown response: <response>."
     ]
   },
+  "UNKNOWN_VALUE_FOR" : {
+    "message" : [
+      "Unknown value for `<var>`."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
@@ -883,6 +1013,11 @@ ERROR_CLASSES_JSON = """
       "Unsupported Literal '<literal>'."
     ]
   },
+  "UNSUPPORTED_LOCAL_CONNECTION_STRING" : {
+    "message" : [
+      "Creating new SparkSessions with `local` connection string is not supported."
+    ]
+  },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
     "message" : [
       "The type of array scalar '<dtype>' is not supported."
@@ -891,6 +1026,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operation> is not supported."
+    ]
+  },
+  "UNSUPPORTED_PACKAGE_VERSION" : {
+    "message" : [
+      "<package_name> >= <minimum_version> must be installed; however, your version is <current_version>."
     ]
   },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
@@ -941,6 +1081,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_PEARSON" : {
     "message" : [
       "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_PLAIN_COLUMN_REFERENCE" : {
+    "message" : [
+      "Value <val> in <field_name> should be a plain column reference such as `df.col` or `col('column')`."
     ]
   },
   "VALUE_NOT_POSITIVE" : {

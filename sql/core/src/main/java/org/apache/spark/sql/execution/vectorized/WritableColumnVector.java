@@ -723,10 +723,18 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
     if (value instanceof Decimal decimal) {
       long unscaled = decimal.toUnscaledLong();
-      if (decimal.precision() < 10) {
+      if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
         return Optional.of(appendInts(length, (int) unscaled));
-      } else {
+      } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
         return Optional.of(appendLongs(length, unscaled));
+      } else {
+        BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
+        byte[] bytes = integer.toByteArray();
+        int result = 0;
+        for (int i = 0; i < length; ++i) {
+          result += appendByteArray(bytes, 0, bytes.length);
+        }
+        return Optional.of(result);
       }
     }
     if (value instanceof Double) {

@@ -78,8 +78,8 @@ public final class ColumnarRow extends InternalRow {
           row.update(i, getBinary(i));
         } else if (pdt instanceof PhysicalDecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
-        } else if (pdt instanceof PhysicalStructType) {
-          row.update(i, getStruct(i, ((PhysicalStructType) pdt).fields().length).copy());
+        } else if (pdt instanceof PhysicalStructType t) {
+          row.update(i, getStruct(i, t.fields().length).copy());
         } else if (pdt instanceof PhysicalArrayType) {
           row.update(i, getArray(i).copy());
         } else if (pdt instanceof PhysicalMapType) {

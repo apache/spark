@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import com.google.rpc.ErrorInfo
 import io.grpc.{ManagedChannel, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
@@ -196,13 +196,21 @@ private[client] object GrpcExceptionConverter {
         errorClass = params.errorClass.orNull,
         messageParameters = params.messageParameters,
         queryContext = params.queryContext)),
-    errorConstructor(params =>
-      new AnalysisException(
-        params.message,
-        cause = params.cause,
-        errorClass = params.errorClass,
-        messageParameters = params.messageParameters,
-        context = params.queryContext)),
+    errorConstructor(params => {
+      if (params.errorClass.isEmpty) {
+        new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3100",
+          messageParameters = Map("message" -> params.message),
+          cause = params.cause,
+          context = params.queryContext)
+      } else {
+        new AnalysisException(
+          errorClass = params.errorClass.get,
+          messageParameters = params.messageParameters,
+          cause = params.cause,
+          context = params.queryContext)
+      }
+    }),
     errorConstructor(params =>
       new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>
@@ -354,7 +362,7 @@ private[client] object GrpcExceptionConverter {
    * truncated error message.
    */
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Throwable = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
     val errorClass = info.getMetadataOrDefault("errorClass", null)

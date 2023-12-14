@@ -513,7 +513,7 @@ case class DataSource(
         qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
-      case _ => throw new IllegalStateException(
+      case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
   }
@@ -531,7 +531,7 @@ case class DataSource(
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
         DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
-      case _ => throw new IllegalStateException(
+      case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
   }
@@ -806,9 +806,9 @@ object DataSource extends Logging {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.view.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
+    val optionsWithoutPath = options.filter { case (k, _) => k.toLowerCase(Locale.ROOT) != "path" }
     CatalogStorageFormat.empty.copy(
-      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
   }
 
   /**

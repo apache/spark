@@ -545,7 +545,7 @@ checkpointed offsets after a failure. See the earlier section on
 [fault-tolerance semantics](#fault-tolerance-semantics).
 Here are the details of all the sources in Spark.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Source</th>
@@ -1819,7 +1819,7 @@ regarding watermark delays and whether data will be dropped or not.
 
 ##### Support matrix for joins in streaming queries
 
-<table class="table table-striped">
+<table>
 <thead>
   <tr>
     <th>Left Input</th>
@@ -2307,7 +2307,7 @@ to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
 
 Here are the configs regarding to RocksDB instance of the state store provider:
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Config Name</th>
@@ -2496,7 +2496,7 @@ More information to be added in future releases.
 Different types of streaming queries support different output modes.
 Here is the compatibility matrix.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Query Type</th>
@@ -2635,7 +2635,7 @@ meant for debugging purposes only. See the earlier section on
 [fault-tolerance semantics](#fault-tolerance-semantics).
 Here are the details of all the sinks in Spark.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Sink</th>
@@ -3223,7 +3223,7 @@ The trigger settings of a streaming query define the timing of streaming data pr
 the query is going to be executed as micro-batch query with a fixed batch interval or as a continuous processing query.
 Here are the different kinds of triggers that are supported.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Trigger Type</th>

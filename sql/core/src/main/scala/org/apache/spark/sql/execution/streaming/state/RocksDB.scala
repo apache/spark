@@ -27,7 +27,7 @@ import scala.ref.WeakReference
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
@@ -150,6 +150,11 @@ class RocksDB(
       "column families")
   }
 
+  // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
+  // Updates and access to recordedMetrics are protected by the DB instance lock
+  @GuardedBy("acquireLock")
+  @volatile private var recordedMetrics: Option[RocksDBMetrics] = None
+
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
@@ -161,6 +166,7 @@ class RocksDB(
   def load(version: Long, readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire()
+    recordedMetrics = None
     logInfo(s"Loading $version")
     try {
       if (loadedVersion != version) {
@@ -519,7 +525,8 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
-      logInfo(s"Committed $newVersion, stats = ${metrics.json}")
+      recordedMetrics = Some(metrics)
+      logInfo(s"Committed $newVersion, stats = ${recordedMetrics.get.json}")
       loadedVersion
     } catch {
       case t: Throwable =>
@@ -617,7 +624,7 @@ class RocksDB(
   def getWriteBufferManagerAndCache(): (WriteBufferManager, Cache) = (writeBufferManager, lruCache)
 
   /** Get current instantaneous statistics */
-  def metrics: RocksDBMetrics = {
+  private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
@@ -629,7 +636,7 @@ class RocksDB(
       "put" -> DB_WRITE,
       "compaction" -> COMPACTION_TIME
     ).toMap
-    val nativeOpsLatencyMicros = nativeOpsHistograms.view.mapValues { typ =>
+    val nativeOpsLatencyMicros = nativeOpsHistograms.transform { (_, typ) =>
       RocksDBNativeHistogram(nativeStats.getHistogramData(typ))
     }
     val nativeOpsMetricTickers = Seq(
@@ -652,7 +659,7 @@ class RocksDB(
       /** Number of bytes written during flush */
       "totalBytesWrittenByFlush" -> FLUSH_WRITE_BYTES
     ).toMap
-    val nativeOpsMetrics = nativeOpsMetricTickers.view.mapValues { typ =>
+    val nativeOpsMetrics = nativeOpsMetricTickers.transform { (_, typ) =>
       nativeStats.getTickerCount(typ)
     }
 
@@ -669,6 +676,25 @@ class RocksDB(
       filesReused = fileManagerMetrics.filesReused,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics.toMap)
+  }
+
+  /**
+   * Function to return RocksDB metrics if the recorded metrics are available and the operator
+   * has reached the commit stage for this state store instance and version. If not, we return None
+   * @return - Return RocksDBMetrics if available and None otherwise
+   */
+  def metricsOpt: Option[RocksDBMetrics] = {
+    var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
+    try {
+      acquire()
+      rocksDBMetricsOpt = recordedMetrics
+    } catch {
+      case ex: Exception =>
+        logInfo(s"Failed to acquire metrics with exception=$ex")
+    } finally {
+      release()
+    }
+    rocksDBMetricsOpt
   }
 
   private def acquire(): Unit = acquireLock.synchronized {
@@ -1048,7 +1074,7 @@ case class RocksDBMetrics(
 }
 
 object RocksDBMetrics {
-  val format = Serialization.formats(NoTypeHints)
+  val format: Formats = Serialization.formats(NoTypeHints)
 }
 
 /** Class to wrap RocksDB's native histogram */

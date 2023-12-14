@@ -457,7 +457,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // right after this check and before the check for stale entities will be identified as stale
       // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
-      val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      val updated = Option(fs.listStatus(new Path(logDir)))
+        .map(_.toImmutableArraySeq).getOrElse(Nil)
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry =>
           if (isProcessing(entry.getPath)) {
@@ -859,7 +860,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           try {
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
-            if (!fs.isFile(new Path(inProgressLog))) {
+            if (!SparkHadoopUtil.isFile(fs, new Path(inProgressLog))) {
               listing.synchronized {
                 listing.delete(classOf[LogInfo], inProgressLog)
               }

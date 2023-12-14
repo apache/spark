@@ -19,7 +19,6 @@ import unittest
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
@@ -39,14 +38,6 @@ class NumOpsTestsMixin:
     returns float32.
     The underlying reason is the respective Spark operations return DoubleType always.
     """
-
-    @property
-    def float_pser(self):
-        return pd.Series([1, 2, 3], dtype=float)
-
-    @property
-    def float_psser(self):
-        return ps.from_pandas(self.float_pser)
 
     def test_and(self):
         psdf = self.psdf
@@ -116,54 +107,6 @@ class NumOpsTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             self.assert_eq(pdf[col].isnull(), psdf[col].isnull())
-
-    def test_astype(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-
-            for int_type in [int, np.int32, np.int16, np.int8]:
-                if not pser.hasnans:
-                    self.assert_eq(pser.astype(int_type), psser.astype(int_type))
-                else:
-                    self.assertRaisesRegex(
-                        ValueError,
-                        "Cannot convert %s with missing "
-                        "values to integer" % psser._dtype_op.pretty_name,
-                        lambda: psser.astype(int_type),
-                    )
-
-            # TODO(SPARK-37039): the np.nan series.astype(bool) should be True
-            if not pser.hasnans:
-                self.assert_eq(pser.astype(bool), psser.astype(bool))
-
-            self.assert_eq(pser.astype(float), psser.astype(float))
-            self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
-            self.assert_eq(pser.astype(str), psser.astype(str))
-            self.assert_eq(pser.astype("category"), psser.astype("category"))
-            cat_type = CategoricalDtype(categories=[2, 1, 3])
-            self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
-        if extension_object_dtypes_available and extension_float_dtypes_available:
-            pser = pd.Series(pd.Categorical([1.0, 2.0, 3.0]), dtype=pd.Float64Dtype())
-            psser = ps.from_pandas(pser)
-            self.assert_eq(pser.astype(pd.BooleanDtype()), psser.astype(pd.BooleanDtype()))
-
-    def test_astype_eager_check(self):
-        psser = self.psdf["float_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
-        ):
-            psser.astype(int)
-        with ps.option_context("compute.eager_check", False):
-            psser.astype(int)
-
-        psser = self.psdf["decimal_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
-        ):
-            psser.astype(int)
-        with ps.option_context("compute.eager_check", False):
-            psser.astype(int)
 
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf

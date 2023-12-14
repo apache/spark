@@ -149,7 +149,7 @@ private object DB2Dialect extends JdbcDialect {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
-          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case "42893" => throw new NonEmptyNamespaceException(message, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case _ => super.classifyException(message, e)
