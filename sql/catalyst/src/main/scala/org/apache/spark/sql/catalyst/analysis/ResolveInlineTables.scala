@@ -17,30 +17,26 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.util.control.NonFatal
-
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper}
-import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
+ * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[TempResolvedInlineTable]].
  */
 object ResolveInlineTables extends Rule[LogicalPlan]
   with CastSupport with AliasHelper with EvalHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsDown(p => ComputeCurrentTime(p)).resolveOperatorsWithPruning(
-      AlwaysProcess.fn, ruleId) {
+    plan.resolveOperatorsWithPruning(AlwaysProcess.fn, ruleId) {
       case table: UnresolvedInlineTable if table.expressionsResolved =>
         validateInputDimension(table)
         validateInputEvaluable(table)
-        convert(table)
+        findCommonTypesAndCast(table)
     }
   }
 
@@ -77,7 +73,10 @@ object ResolveInlineTables extends Rule[LogicalPlan]
     table.rows.foreach { row =>
       row.foreach { e =>
         // Note that nondeterministic expressions are not supported since they are not foldable.
-        if (!e.resolved || !trimAliases(prepareForEval(e)).foldable) {
+        // Only exception are CURRENT_LIKE expressions, which are replaced by a literal
+        // In later stages.
+        if ((!e.resolved && !e.containsPattern(CURRENT_LIKE))
+          || !trimAliases(prepareForEval(e)).foldable) {
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))
@@ -87,14 +86,12 @@ object ResolveInlineTables extends Rule[LogicalPlan]
   }
 
   /**
-   * Convert a valid (with right shape and foldable inputs) [[UnresolvedInlineTable]]
-   * into a [[LocalRelation]].
-   *
    * This function attempts to coerce inputs into consistent types.
    *
    * This is package visible for unit testing.
    */
-  private[analysis] def convert(table: UnresolvedInlineTable): LocalRelation = {
+  private[analysis] def findCommonTypesAndCast(table: UnresolvedInlineTable):
+  TempResolvedInlineTable = {
     // For each column, traverse all the values and find a common data type and nullability.
     val fields = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
@@ -108,26 +105,19 @@ object ResolveInlineTables extends Rule[LogicalPlan]
     val attributes = DataTypeUtils.toAttributes(StructType(fields))
     assert(fields.size == table.names.size)
 
-    val newRows: Seq[InternalRow] = table.rows.map { row =>
-      InternalRow.fromSeq(row.zipWithIndex.map { case (e, ci) =>
-        val targetType = fields(ci).dataType
-        try {
+    val newRows: Seq[Seq[Expression]] = table.rows.map { row =>
+      row.zipWithIndex.map {
+        case (e, ci) =>
+          val targetType = fields(ci).dataType
           val castedExpr = if (DataTypeUtils.sameType(e.dataType, targetType)) {
             e
           } else {
             cast(e, targetType)
           }
-          prepareForEval(castedExpr).eval()
-        } catch {
-          case NonFatal(ex) =>
-            table.failAnalysis(
-              errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
-              messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
-              cause = ex)
-        }
-      })
+          castedExpr
+      }
     }
 
-    LocalRelation(attributes, newRows)
+    TempResolvedInlineTable(newRows, attributes)
   }
 }

@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.optimizer.EvalInlineTables
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{LongType, NullType, TimestampType}
 
@@ -85,19 +86,25 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   test("convert") {
     val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(2L))))
-    val converted = ResolveInlineTables.convert(table)
+    val tempResolvedInlineTable = ResolveInlineTables.findCommonTypesAndCast(table)
 
-    assert(converted.output.map(_.dataType) == Seq(LongType))
-    assert(converted.data.size == 2)
-    assert(converted.data(0).getLong(0) == 1L)
-    assert(converted.data(1).getLong(0) == 2L)
+    assert(tempResolvedInlineTable.output.map(_.dataType) == Seq(LongType))
+    assert(tempResolvedInlineTable.rows.size == 2)
+
+    EvalInlineTables(tempResolvedInlineTable) match {
+      case LocalRelation(output, data, _) =>
+        assert(output.map(_.dataType) == Seq(LongType))
+        assert(data.size == 2)
+        assert(data(0).getLong(0) == 1L)
+        assert(data(1).getLong(0) == 2L)
+    }
   }
 
   test("convert TimeZoneAwareExpression") {
     val table = UnresolvedInlineTable(Seq("c1"),
       Seq(Seq(Cast(lit("1991-12-06 00:00:00.0"), TimestampType))))
     val withTimeZone = ResolveTimeZone.apply(table)
-    val LocalRelation(output, data, _) = ResolveInlineTables.apply(withTimeZone)
+    val LocalRelation(output, data, _) = EvalInlineTables(ResolveInlineTables.apply(withTimeZone))
     val correct = Cast(lit("1991-12-06 00:00:00.0"), TimestampType)
       .withTimeZone(conf.sessionLocalTimeZone).eval().asInstanceOf[Long]
     assert(output.map(_.dataType) == Seq(TimestampType))
@@ -107,11 +114,11 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   test("nullability inference in convert") {
     val table1 = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(2L))))
-    val converted1 = ResolveInlineTables.convert(table1)
+    val converted1 = ResolveInlineTables.findCommonTypesAndCast(table1)
     assert(!converted1.schema.fields(0).nullable)
 
     val table2 = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(Literal(null, NullType))))
-    val converted2 = ResolveInlineTables.convert(table2)
+    val converted2 = ResolveInlineTables.findCommonTypesAndCast(table2)
     assert(converted2.schema.fields(0).nullable)
   }
 }
