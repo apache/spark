@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE}
+import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -60,13 +60,12 @@ class PythonTableProvider(shortName: String) extends TableProvider {
       schema: StructType,
       partitioning: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
-    assert(partitioning.isEmpty)
     val outputSchema = schema
     new Table with SupportsRead {
       override def name(): String = shortName
 
       override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
-        BATCH_READ, BATCH_WRITE)
+        BATCH_READ)
 
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new ScanBuilder with Batch with Scan {
