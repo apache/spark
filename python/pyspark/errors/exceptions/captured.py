@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, cast, List
 
 import py4j
 from py4j.protocol import Py4JJavaError
-from py4j.java_gateway import is_instance_of
+from py4j.java_gateway import is_instance_of, JavaObject
 
 from pyspark import SparkContext
 from pyspark.errors.exceptions.base import (
@@ -39,7 +39,8 @@ from pyspark.errors.exceptions.base import (
     SparkNoSuchElementException as BaseNoSuchElementException,
     StreamingQueryException as BaseStreamingQueryException,
     UnknownException as BaseUnknownException,
-    QueryContext,
+    QueryContext as BaseQueryContext,
+    QueryContextType,
 )
 
 
@@ -137,7 +138,7 @@ class CapturedException(PySparkException):
         else:
             return ""
 
-    def getQueryContext(self) -> List[QueryContext]:
+    def getQueryContext(self) -> List[BaseQueryContext]:
         assert SparkContext._gateway is not None
 
         gw = SparkContext._gateway
@@ -344,3 +345,37 @@ class UnknownException(CapturedException, BaseUnknownException):
     """
     None of the other exceptions.
     """
+
+
+class QueryContext(BaseQueryContext):
+    def __init__(self, q: JavaObject):
+        self._q = q
+
+    def contextType(self) -> QueryContextType:
+        context_type = self._q.contextType().toString()
+        assert context_type in ("SQL", "DataFrame")
+        if context_type == "DataFrame":
+            return QueryContextType.DataFrame
+        else:
+            return QueryContextType.SQL
+
+    def objectType(self) -> str:
+        return str(self._q.objectType())
+
+    def objectName(self) -> str:
+        return str(self._q.objectName())
+
+    def startIndex(self) -> int:
+        return int(self._q.startIndex())
+
+    def stopIndex(self) -> int:
+        return int(self._q.stopIndex())
+
+    def fragment(self) -> str:
+        return str(self._q.fragment())
+
+    def callSite(self) -> str:
+        return str(self._q.callSite())
+
+    def summary(self) -> str:
+        return str(self._q.summary())

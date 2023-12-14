@@ -34,7 +34,8 @@ from pyspark.errors.exceptions.base import (
     SparkRuntimeException as BaseSparkRuntimeException,
     SparkNoSuchElementException as BaseNoSuchElementException,
     SparkUpgradeException as BaseSparkUpgradeException,
-    QueryContext,
+    QueryContext as BaseQueryContext,
+    QueryContextType,
 )
 
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ def convert_exception(
     sql_state = None
     error_class = None
     message_parameters = None
-    query_contexts = []
+    query_contexts: Optional[List[BaseQueryContext]] = None
 
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
@@ -85,6 +86,7 @@ def convert_exception(
         message_parameters = dict(
             resp.errors[resp.root_error_idx].spark_throwable.message_parameters
         )
+        query_contexts = []
         for query_context in resp.errors[resp.root_error_idx].spark_throwable.query_contexts:
             query_contexts.append(QueryContext(query_context))
 
@@ -117,6 +119,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "org.apache.spark.sql.execution.QueryExecutionException" in classes:
         return QueryExecutionException(
@@ -126,6 +129,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     # Order matters. NumberFormatException inherits IllegalArgumentException.
     elif "java.lang.NumberFormatException" in classes:
@@ -136,6 +140,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "java.lang.IllegalArgumentException" in classes:
         return IllegalArgumentException(
@@ -145,6 +150,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "java.lang.ArithmeticException" in classes:
         return ArithmeticException(
@@ -154,6 +160,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "java.lang.UnsupportedOperationException" in classes:
         return UnsupportedOperationException(
@@ -163,6 +170,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "java.lang.ArrayIndexOutOfBoundsException" in classes:
         return ArrayIndexOutOfBoundsException(
@@ -172,6 +180,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "java.time.DateTimeException" in classes:
         return DateTimeException(
@@ -180,6 +189,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "org.apache.spark.SparkRuntimeException" in classes:
         return SparkRuntimeException(
@@ -189,6 +199,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "org.apache.spark.SparkUpgradeException" in classes:
         return SparkUpgradeException(
@@ -198,6 +209,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     elif "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
@@ -212,6 +224,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     # Make sure that the generic SparkException is handled last.
     elif "org.apache.spark.SparkException" in classes:
@@ -222,6 +235,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
     else:
         return SparkConnectGrpcException(
@@ -232,6 +246,7 @@ def convert_exception(
             sql_state=sql_state,
             server_stacktrace=stacktrace,
             display_server_stacktrace=display_server_stacktrace,
+            query_contexts=query_contexts,
         )
 
 
@@ -276,8 +291,10 @@ class SparkConnectGrpcException(SparkConnectException):
         sql_state: Optional[str] = None,
         server_stacktrace: Optional[str] = None,
         display_server_stacktrace: bool = False,
-        query_contexts: List[QueryContext] = [],
+        query_contexts: Optional[List[BaseQueryContext]] = None,
     ) -> None:
+        if query_contexts is None:
+            query_contexts = []
         self._message = message  # type: ignore[assignment]
         if reason is not None:
             self._message = f"({reason}) {self._message}"
@@ -301,7 +318,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._sql_state: Optional[str] = sql_state
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
-        self._query_contexts: List[QueryContext] = query_contexts
+        self._query_contexts: List[BaseQueryContext] = query_contexts
 
     def getSqlState(self) -> Optional[str]:
         if self._sql_state is not None:
@@ -408,3 +425,37 @@ class SparkNoSuchElementException(SparkConnectGrpcException, BaseNoSuchElementEx
     """
     No such element exception.
     """
+
+
+class QueryContext(BaseQueryContext):
+    def __init__(self, q: pb2.FetchErrorDetailsResponse.QueryContext):
+        self._q = q
+
+    def contextType(self) -> QueryContextType:
+        context_type = self._q.context_type
+
+        if int(context_type) == QueryContextType.DataFrame.value:
+            return QueryContextType.DataFrame
+        else:
+            return QueryContextType.SQL
+
+    def objectType(self) -> str:
+        return str(self._q.object_type)
+
+    def objectName(self) -> str:
+        return str(self._q.object_name)
+
+    def startIndex(self) -> int:
+        return int(self._q.start_index)
+
+    def stopIndex(self) -> int:
+        return int(self._q.stop_index)
+
+    def fragment(self) -> str:
+        return str(self._q.fragment)
+
+    def callSite(self) -> str:
+        return str(self._q.callSite)
+
+    def summary(self) -> str:
+        return str(self._q.summary)

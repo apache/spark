@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, Any, List
+from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
 
 from pyspark.errors.utils import ErrorClassesReader
 from pickle import PicklingError
@@ -34,8 +35,10 @@ class PySparkException(Exception):
         message: Optional[str] = None,
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
-        query_contexts: List["QueryContext"] = [],
+        query_contexts: Optional[List["QueryContext"]] = None,
     ):
+        if query_contexts is None:
+            query_contexts = []
         self._error_reader = ErrorClassesReader()
 
         if message is None:
@@ -113,7 +116,7 @@ class PySparkException(Exception):
 
     def getQueryContext(self) -> List["QueryContext"]:
         """
-        Returns full error message.
+        Returns :class:`QueryContext`.
 
         .. versionadded:: 4.0.0
 
@@ -313,67 +316,80 @@ class PySparkImportError(PySparkException, ImportError):
 
 
 class QueryContextType(Enum):
+    """
+    The type of :class:`QueryContext`.
+
+    .. versionadded:: 4.0.0
+    """
+
     SQL = 0
     DataFrame = 1
 
 
-class QueryContext:
-    def __init__(self, q: Any):
-        self._q = q
+class QueryContext(ABC):
+    """
+    Query context of a :class:`PySparkException`. It helps users understand
+    where error occur while executing queries.
 
+    .. versionadded:: 4.0.0
+    """
+
+    @abstractmethod
     def contextType(self) -> QueryContextType:
-        if hasattr(self._q, "contextType"):
-            context_type = self._q.contextType().toString()
-            if context_type == "SQL":
-                context_type = 0
-            else:
-                context_type = 1
-        else:
-            context_type = self._q.context_type
+        """
+        The type of this query context.
+        """
+        ...
 
-        if int(context_type) == QueryContextType.DataFrame.value:
-            return QueryContextType.SQL
-        else:
-            return QueryContextType.DataFrame
-
+    @abstractmethod
     def objectType(self) -> str:
-        if hasattr(self._q, "objectType"):
-            return str(self._q.objectType())
-        else:
-            return str(self._q.object_type)
+        """
+        The object type of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
+        """
+        ...
 
+    @abstractmethod
     def objectName(self) -> str:
-        if hasattr(self._q, "objectName"):
-            return str(self._q.objectName())
-        else:
-            return str(self._q.object_name)
+        """
+        The object name of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the object name. For example, a view name "V1".
+        """
+        ...
 
+    @abstractmethod
     def startIndex(self) -> int:
-        if hasattr(self._q, "startIndex"):
-            return int(self._q.startIndex())
-        else:
-            return int(self._q.start_index)
+        """
+        The starting index in the query text which throws the exception. The index starts from 0.
+        """
+        ...
 
+    @abstractmethod
     def stopIndex(self) -> int:
-        if hasattr(self._q, "stopIndex"):
-            return int(self._q.stopIndex())
-        else:
-            return int(self._q.stop_index)
+        """
+        The stopping index in the query which throws the exception. The index starts from 0.
+        """
+        ...
 
+    @abstractmethod
     def fragment(self) -> str:
-        if callable(self._q.fragment):
-            return str(self._q.fragment())
-        else:
-            return str(self._q.fragment)
+        """
+        The corresponding fragment of the query which throws the exception.
+        """
+        ...
 
+    @abstractmethod
     def callSite(self) -> str:
-        if callable(self._q.callSite):
-            return str(self._q.callSite())
-        else:
-            return str(self._q.callSite)
+        """
+        The user code (call site of the API) that caused throwing the exception.
+        """
+        ...
 
+    @abstractmethod
     def summary(self) -> str:
-        if callable(self._q.summary):
-            return str(self._q.summary())
-        else:
-            return str(self._q.summary)
+        """
+        Summary of the exception cause.
+        """
+        ...

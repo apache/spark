@@ -1765,7 +1765,7 @@ class UtilsTestsMixin:
         self.assertEqual(qc.fragment(), "a")
         self.assertEqual(qc.stopIndex(), 7)
         self.assertEqual(qc.startIndex(), 7)
-        self.assertEqual(qc.contextType(), QueryContextType.DataFrame)
+        self.assertEqual(qc.contextType(), QueryContextType.SQL)
         self.assertEqual(qc.objectName(), "")
         self.assertEqual(qc.objectType(), "")
 
