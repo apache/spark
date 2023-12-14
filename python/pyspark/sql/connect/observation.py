@@ -21,6 +21,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
     IllegalArgumentException,
+    PySparkAssertionError,
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
@@ -68,7 +69,9 @@ class Observation:
 
     @property
     def get(self) -> Dict[str, Any]:
-        assert self._result is not None
+        if self._result is None:
+            raise PySparkAssertionError(error_class="NO_OBSERVE_BEFORE_GET", message_parameters={})
+
         return self._result
 
     get.__doc__ = PySparkObservation.get.__doc__
