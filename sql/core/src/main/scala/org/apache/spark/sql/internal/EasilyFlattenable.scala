@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.types.MetadataBuilder
 
+
 private[sql] object EasilyFlattenable {
   object OpType extends Enumeration {
     type OpType = Value
@@ -128,7 +129,9 @@ private[sql] object EasilyFlattenable {
               }
               remappedNewProjListResult match {
                 case Success(remappedNewProjList) =>
-                  Option(p.copy(projectList = remappedNewProjList))
+                  val newProj = p.copy(projectList = remappedNewProjList)
+                  newProj.copyTagsFrom(p)
+                  Option(newProj)
 
                 case Failure(_) => None
               }
@@ -165,7 +168,9 @@ private[sql] object EasilyFlattenable {
             }
             remappedNewProjListResult match {
               case Success(remappedNewProjList) =>
-                Option(p.copy(projectList = remappedNewProjList))
+                val newProj = p.copy(projectList = remappedNewProjList)
+                newProj.copyTagsFrom(p)
+                Option(newProj)
 
               case Failure(_) => None
             }
