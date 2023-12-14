@@ -227,6 +227,14 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.master.rest.host</code></td>
+  <td>(None)</td>
+  <td>
+    Specifies the host of the Master REST API endpoint.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.master.rest.port</code></td>
   <td><code>6066</code></td>
   <td>
@@ -783,6 +791,15 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td><code>spark.deploy.recoveryCompressionCodec</code></td>
     <td>(none)</td>
     <td>A compression codec for persistence engines. none (default), lz4, lzf, snappy, and zstd. Currently, only FILESYSTEM mode supports this configuration.</td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.recoveryTimeout</code></td>
+    <td>(none)</td>
+    <td>
+      The timeout for recovery process. The default value is the same with
+      <code>spark.worker.timeout</code>.
+    </td>
     <td>4.0.0</td>
   </tr>
   <tr>

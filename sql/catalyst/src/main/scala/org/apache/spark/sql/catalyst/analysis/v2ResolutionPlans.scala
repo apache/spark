@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -77,9 +78,9 @@ case class UnresolvedTableOrView(
     allowTempView: Boolean) extends UnresolvedLeafNode
 
 sealed trait PartitionSpec extends LeafExpression with Unevaluable {
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "PartitionSpec.dataType should not be called.")
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "PartitionSpec.nullable should not be called.")
 }
 
@@ -91,9 +92,9 @@ case class UnresolvedPartitionSpec(
 
 sealed trait FieldName extends LeafExpression with Unevaluable {
   def name: Seq[String]
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "FieldName.dataType should not be called.")
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "FieldName.nullable should not be called.")
 }
 
@@ -103,9 +104,9 @@ case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
 
 sealed trait FieldPosition extends LeafExpression with Unevaluable {
   def position: ColumnPosition
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "FieldPosition.dataType should not be called.")
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "FieldPosition.nullable should not be called.")
 }
 

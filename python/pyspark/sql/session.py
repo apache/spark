@@ -1417,8 +1417,8 @@ class SparkSession(SparkConversionMixin):
         self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
-                error_class="SHOULD_NOT_DATAFRAME",
-                message_parameters={"arg_name": "data"},
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
             )
 
         if isinstance(schema, str):

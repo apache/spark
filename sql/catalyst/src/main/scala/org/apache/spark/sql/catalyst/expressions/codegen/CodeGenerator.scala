@@ -30,7 +30,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{TaskContext, TaskKilledException}
+import org.apache.spark.{SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -1199,7 +1199,7 @@ class CodegenContext extends Logging {
           "the parameter length of at least one split function went over the JVM limit: " +
           MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw new IllegalStateException(errMsg)
+          throw SparkException.internalError(errMsg)
         } else {
           logInfo(errMsg)
           (localSubExprEliminationExprsForNonSplit, Seq.empty)

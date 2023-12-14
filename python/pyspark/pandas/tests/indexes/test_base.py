@@ -1278,11 +1278,10 @@ class IndexesTestsMixin:
         pidx = pd.DatetimeIndex(["2014-01-03", "2014-01-02", "2013-12-31"])
         psidx = ps.from_pandas(pidx)
 
-        # TODO: a pandas bug?
-        # self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
-        # self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
-        # self.assert_eq(psidx.asof("1999-01-02"), pidx.asof("1999-01-02"))
-        # self.assert_eq(repr(psidx.asof("2015-01-02")), repr(pidx.asof("2015-01-02")))
+        self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
+        self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
+        self.assert_eq(psidx.asof("1999-01-02"), pidx.asof("1999-01-02"))
+        self.assert_eq(repr(psidx.asof("2015-01-02")), repr(pidx.asof("2015-01-02")))
         self.assert_eq(psidx.asof("2014-01-01"), pd.Timestamp("2014-01-02 00:00:00"))
         self.assert_eq(psidx.asof("2014-01-02"), pd.Timestamp("2014-01-02 00:00:00"))
         self.assert_eq(psidx.asof("1999-01-02"), pd.Timestamp("2013-12-31 00:00:00"))

@@ -68,5 +68,6 @@ Methods
     :toctree: api/
 
     PySparkException.getErrorClass
+    PySparkException.getMessage
     PySparkException.getMessageParameters
     PySparkException.getSqlState
