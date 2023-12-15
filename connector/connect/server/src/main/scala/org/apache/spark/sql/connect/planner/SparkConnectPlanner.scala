@@ -999,12 +999,16 @@ class SparkConnectPlanner(
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
-    val projectLists = Iterator.single(rel.getAliasesList) ++
-      rel.getStackList.asScala.iterator.map(_.getAliasesList)
-    projectLists.filterNot(_.isEmpty).foldLeft(transformRelation(rel.getInput)) {
-      case (input, projectList) =>
-        transformWithColumn(projectList, input)
+    val stackedPlan = rel.getStackList.asScala.foldLeft(transformRelation(rel.getInput)) {
+      case (input, withColumns) =>
+        val plan = transformWithColumn(withColumns.getAliasesList, input)
+        if (withColumns.hasCommon && withColumns.getCommon.hasPlanId) {
+          plan.setTagValue(LogicalPlan.PLAN_ID_TAG, withColumns.getCommon.getPlanId)
+        }
+        plan
     }
+    // The plan ID is set in transformRelation(..)
+    transformWithColumn(rel.getAliasesList, stackedPlan)
   }
 
   private def transformWithColumn(

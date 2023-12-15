@@ -13,35 +13,41 @@
     },
     "aliases": [{
       "expr": {
-        "expressionString": {
-          "expression": "a + 100"
+        "unresolvedFunction": {
+          "functionName": "concat",
+          "arguments": [{
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "b"
+            }
+          }, {
+            "literal": {
+              "string": "_m"
+            }
+          }]
         }
       },
-      "name": ["z"]
+      "name": ["b"]
     }],
     "stack": [{
+      "common": {
+        "planId": "1"
+      },
+      "aliases": [{
+        "expr": {
+          "expressionString": {
+            "expression": "a + 100"
+          }
+        },
+        "name": ["z"]
+      }]
+    }, {
+      "common": {
+        "planId": "2"
+      },
       "aliases": [{
         "expr": {
           "literal": {
             "string": "redacted"
-          }
-        },
-        "name": ["b"]
-      }]
-    }, {
-      "aliases": [{
-        "expr": {
-          "unresolvedFunction": {
-            "functionName": "concat",
-            "arguments": [{
-              "unresolvedAttribute": {
-                "unparsedIdentifier": "b"
-              }
-            }, {
-              "literal": {
-                "string": "_m"
-              }
-            }]
           }
         },
         "name": ["b"]

@@ -535,21 +535,22 @@ class WithColumns(LogicalPlan):
 
         # Find all chained withColumns plans.
         chain = []
-        input = self
+        input = self._child
         while isinstance(input, WithColumns):
             chain.append(input)
             input = input._child
 
         plan.with_columns.input.CopyFrom(input.plan(session))
 
-        # The start of the chain is added to `aliases`
-        chain.pop().append_aliases(session, plan.with_columns.aliases)
+        # Append the current aliases.
+        append_aliases(session, plan.with_columns.aliases)
 
-        # The remainder of the chain is added to the stack.
+        # Add the chain to the stack.
         for element in reversed(chain):
-            columns = proto.WithColumns.Columns()
-            element.append_aliases(session, columns.aliases)
-            plan.with_columns.stack.append(columns)
+            stacked = proto.WithColumns.StackedWithColumns()
+            element.append_aliases(session, stacked.aliases)
+            stacked.common.plan_id = element._plan_id
+            plan.with_columns.stack.append(stacked)
 
         return plan
 

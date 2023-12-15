@@ -797,8 +797,9 @@ message WithColumnsRenamed {
 
 // Adding columns or replacing the existing columns that have the same names.
 message WithColumns {
-  message Columns {
-    repeated Expression.Alias aliases = 1;
+  message StackedWithColumns {
+    RelationCommon common = 1;
+    repeated Expression.Alias aliases = 2;
   }
 
   // (Required) The input relation.
@@ -816,7 +817,11 @@ message WithColumns {
   repeated Expression.Alias aliases = 2;
 
   // (Optional when `aliases` is set)
-  repeated Columns stack = 3;
+  //
+  // Stack of `withColumn` messages. Each StackedWithColumns message contains the same fields as
+  // a single WithColumns message. When both aliases and a stack are set, the aliases are
+  // interpreted as the last element in the stack.
+  repeated StackedWithColumns stack = 3;
 }
 
 message WithWatermark {

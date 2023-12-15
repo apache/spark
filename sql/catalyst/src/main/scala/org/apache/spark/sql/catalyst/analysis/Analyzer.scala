@@ -3502,7 +3502,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object RewriteWithColumns extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_WITH_COLUMNS), ruleId) {
-      case UnresolvedWithColumns(projectList, child) if child.resolved =>
+      case wc @ UnresolvedWithColumns(projectList, child) if child.resolved =>
         SchemaUtils.checkColumnNameDuplication(
           projectList.map(_.name),
           resolver)
@@ -3536,7 +3536,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               outputProjectListBuilder += alias
             }
         }
-        Project(outputProjectListBuilder.result(), child)
+        val project = Project(outputProjectListBuilder.result(), child)
+        wc.getTagValue(LogicalPlan.PLAN_ID_TAG).foreach { value =>
+          project.setTagValue(LogicalPlan.PLAN_ID_TAG, value)
+        }
+        project
     }
   }
 

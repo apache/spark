@@ -2184,15 +2184,19 @@ class Dataset[T] private[sql] (
     }
     sparkSession.newDataFrame { builder =>
       val withColumsBuilder = builder.getWithColumnsBuilder
-      if (plan.getRoot.hasWithColumns) {
+      val root = plan.getRoot
+      if (root.hasWithColumns) {
+        val withColumns = root.getWithColumns
         withColumsBuilder
-          .mergeFrom(plan.getRoot.getWithColumns)
-          .addStackBuilder().addAllAliases(aliases.asJava)
+          .setInput(withColumns.getInput)
+          .addAllStack(withColumns.getStackList)
+          .addStackBuilder()
+          .setCommon(root.getCommon)
+          .addAllAliases(withColumns.getAliasesList)
       } else {
-        withColumsBuilder
-          .setInput(plan.getRoot)
-          .addAllAliases(aliases.asJava)
+        withColumsBuilder.setInput(root)
       }
+      withColumsBuilder.addAllAliases(aliases.asJava)
     }
   }
 
