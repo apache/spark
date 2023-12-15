@@ -26,14 +26,15 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, Project, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnionLoopRef}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.datasources.v2.RecursiveRDD
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.CTERecursionCacheMode
@@ -747,90 +748,21 @@ case class UnionLoopExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  private def cacheAndCount(plan: LogicalPlan, limit: Option[Long]) = {
-    val limitedPlan = limit.map(l => Limit(Literal(l.toInt), plan)).getOrElse(plan)
-    val df = Dataset.ofRows(session, limitedPlan)
-    val cachedDF = cacheMode match {
-      case CTERecursionCacheMode.NONE => df
-      case CTERecursionCacheMode.REPARTITION => df.repartition()
-      case CTERecursionCacheMode.PERSIST => df.persist()
-      case CTERecursionCacheMode.LOCAL_CHECKPOINT => df.localCheckpoint()
-      case CTERecursionCacheMode.CHECKPOINT => df.checkpoint()
-    }
-    val count = cachedDF.count()
-    (cachedDF, count)
-  }
-
   override protected def doExecute(): RDD[InternalRow] = {
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    val numOutputRows = longMetric("numOutputRows")
-
-    val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
-    var currentLimit = limit.map(_.toLong)
-    var (prevDF, prevCount) = cacheAndCount(anchor, currentLimit)
-
-    var currentLevel = 0
-    while (prevCount > 0 && currentLimit.forall(_ > 0)) {
-      unionDFs += prevDF
-
-      if (levelLimit != -1 && currentLevel > levelLimit) {
-        throw new SparkException(s"Recursion level limit ${levelLimit} reached but query has not " +
-          s"exhausted, try increasing ${SQLConf.CTE_RECURSION_LEVEL_LIMIT.key}")
-      }
-
-      // Inherit stats and constraints from the dataset of the previous iteration
-      val prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
-        .newInstance()
-      unionChildren += prevPlan
-      numOutputRows += prevCount
-      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-
-      val newRecursion = recursion.transform {
-        case r: UnionLoopRef =>
-          val prevRefPlan = if (r.accumulated && unionChildren.length > 1) {
-            Union(unionChildren.toSeq)
-          } else {
-            prevPlan
+    val newRecursion =
+      (rdd: RDD[InternalRow], recursion: LogicalPlan) => {
+        val ses = SparkSession.builder().getOrCreate()
+        ses.withActive {
+          val newPlan = recursion.transform {
+            case r: UnionLoopRef =>
+              LogicalRDD (anchor.output, rdd)(ses)
           }
-          val prevPlanToRefMapping = prevRefPlan.output.zip(r.output).map {
-            case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
-          }
-          Project(prevPlanToRefMapping, prevRefPlan)
-      }
 
-      val (df, count) = cacheAndCount(newRecursion, currentLimit)
-      prevDF = df
-      prevCount = count
-
-      currentLimit = currentLimit.map(_ - count)
-      currentLevel += 1
-    }
-
-    cacheMode match {
-      case CTERecursionCacheMode.PERSIST => prevDF.unpersist()
-      case _ =>
-    }
-
-    if (unionChildren.isEmpty) {
-      new EmptyRDD[InternalRow](sparkContext)
-    } else if (unionChildren.length == 1) {
-      Dataset.ofRows(session, unionChildren.head).queryExecution.toRdd
-    } else {
-      Dataset.ofRows(session, Union(unionChildren.toSeq)).queryExecution.toRdd
-    }
-  }
-
-  override def cleanupResources(): Unit = {
-    try {
-      if (unionDFs != null) {
-        cacheMode match {
-          case CTERecursionCacheMode.PERSIST => unionDFs.foreach(_.unpersist())
-          case _ =>
+          Dataset.ofRows(ses, newPlan).queryExecution.toRdd
         }
       }
-    } finally {
-      super.cleanupResources()
-    }
+
+      new RecursiveRDD(sparkContext, session, anchor, recursion, newRecursion)
   }
 
   override def doCanonicalize(): SparkPlan =

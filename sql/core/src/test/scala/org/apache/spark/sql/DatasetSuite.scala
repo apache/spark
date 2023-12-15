@@ -73,6 +73,22 @@ class DatasetSuite extends QueryTest
 
   private implicit val ordering: Ordering[ClassData] = Ordering.by((c: ClassData) => c.a -> c.b)
 
+  test("milast test") {
+    withDatabase("db2") {
+      val x = spark.sql(
+        """
+          |WITH RECURSIVE r AS (
+          |  SELECT 0 AS level
+          |  UNION ALL
+          |  SELECT level + 1 FROM r WHERE level < 9
+          |)
+          |SELECT * FROM r;
+          |""".stripMargin)
+
+      println(x.show())
+    }
+  }
+
   test("checkAnswer should compare map correctly") {
     val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
     checkAnswer(

@@ -1017,6 +1017,23 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("milast test") {
+    withDatabase("db2") {
+          val x = sql(
+            """
+              |WITH RECURSIVE r AS (
+              |  SELECT 0 AS level
+              |  UNION ALL
+              |  SELECT level + 1 FROM r WHERE level < 9
+              |)
+              |SELECT * FROM r;
+              |""".stripMargin)
+
+          println(x.show())
+    }
+  }
+
+
   test("sparkSession API view resolution with different default database") {
     withDatabase("db2") {
       withView("default.v1") {

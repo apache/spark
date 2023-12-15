@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.language.existentials
+
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
@@ -117,18 +118,14 @@ class DataSourceRDD(
 // columnar scan.
 class RecursiveRDD(
     sc: SparkContext,
-    @transient anchor: LogicalPlan,
-    @transient recursion: LogicalPlan,
+    sessiion: SparkSession,
+    anchor: LogicalPlan,
+    recursion: LogicalPlan,
     generateRecursion: (RDD[InternalRow], LogicalPlan) => RDD[InternalRow])
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    return Array(new RecurisveRDDPartition(0))
-  }
-
-  private def castPartition(split: Partition): RecurisveRDDPartition = split match {
-    case p: RecurisveRDDPartition => p
-    case _ => throw QueryExecutionErrors.notADatasourceRDDPartitionError(split)
+    Array(new RecurisveRDDPartition(0))
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
@@ -136,7 +133,6 @@ class RecursiveRDD(
     val iterator = new Iterator[Object] {
       private var currentIter: Option[Iterator[Object]] = None
       private var currentRdd: Option[RDD[InternalRow]] = None
-      private var currentIndex: Int = 0
 
       override def hasNext: Boolean = currentIter.exists(_.hasNext) || advanceToNextIter()
 
@@ -145,27 +141,40 @@ class RecursiveRDD(
         currentIter.get.next()
       }
 
-      private def computeBaseIterFromPlan(): Iterator[InternalRow] = {
-        val baseRdd = Dataset.ofRows(SparkSession.getActiveSession.orNull, anchor)
-          .queryExecution.executedPlan.execute()
-        val currentRdd = baseRdd.compute(split, context)
-        currentRdd
+      private def computeBaseIterFromPlan(): Iterator[Object] = {
+        val ses = SparkSession.builder().getOrCreate()
+        ses.withActive {
+          val baseRdd = Dataset.ofRows(ses, anchor)
+            .queryExecution.executedPlan.execute()
+          val baseIter = baseRdd.compute(split, context)
+          currentRdd = Some(baseRdd)
+          currentIter = Some(baseIter)
+          currentIter.get
+        }
       }
 
-      private def computeRecursiveIterFromPlan(): Iterator[InternalRow] = {
-        generateRecursion(currentRdd.get, recursion).compute(split, context)
+      private def computeRecursiveIterFromPlan(): Iterator[Object] = {
+        val newRdd = generateRecursion(currentRdd.get, recursion)
+        val newIter = newRdd.compute(split, context)
+        currentRdd = Some(newRdd)
+        currentIter = Some(newIter)
+        currentIter.get
       }
 
       private def advanceToNextIter(): Boolean = {
+        val result = currentIter match {
+          case None =>
+            computeBaseIterFromPlan()
+          case Some(_) =>
+            currentRdd.get.checkpoint()
+            computeRecursiveIterFromPlan()
+        }
 
+        currentIter.get.hasNext
       }
     }
 
     new InterruptibleIterator(context, iterator).asInstanceOf[Iterator[InternalRow]]
-  }
-
-  override def getPreferredLocations(split: Partition): Seq[String] = {
-    castPartition(split).inputPartitions.flatMap(_.preferredLocations())
   }
 }
 

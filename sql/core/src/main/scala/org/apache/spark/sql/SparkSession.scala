@@ -30,7 +30,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException,
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.artifact.ArtifactManager
@@ -1086,10 +1086,6 @@ object SparkSession extends Logging {
     def getOrCreate(): SparkSession = synchronized {
       val sparkConf = new SparkConf()
       options.foreach { case (k, v) => sparkConf.set(k, v) }
-
-      if (!sparkConf.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
-        assertOnDriver()
-      }
 
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
