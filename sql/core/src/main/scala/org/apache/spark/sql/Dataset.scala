@@ -59,7 +59,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{EasilyFlattenable, SQLConf}
+import org.apache.spark.sql.internal.{EarlyCollapsableProjects, SQLConf}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -1575,7 +1575,7 @@ class Dataset[T] private[sql](
       }
       val newProjList = untypedCols.map(_.named)
       (logicalPlan, newProjList, id) match {
-        case EasilyFlattenable(flattendPlan) if !this.isStreaming &&
+        case EarlyCollapsableProjects(flattendPlan) if !this.isStreaming &&
           !logicalPlan.getTagValue(LogicalPlan.SKIP_FLATTENING).getOrElse(false) => flattendPlan
 
         case _ => Project(newProjList, logicalPlan)
@@ -2957,7 +2957,7 @@ class Dataset[T] private[sql](
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
     withPlan(
       (logicalPlan, projectList, id) match {
-        case EasilyFlattenable(flattendPlan) if !this.isStreaming &&
+        case EarlyCollapsableProjects(flattendPlan) if !this.isStreaming &&
           !logicalPlan.getTagValue(LogicalPlan.SKIP_FLATTENING).getOrElse(false) => flattendPlan
 
         case _ => Project(projectList, logicalPlan)

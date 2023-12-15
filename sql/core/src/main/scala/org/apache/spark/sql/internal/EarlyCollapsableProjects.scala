@@ -26,19 +26,17 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 
-
-private[sql] object EasilyFlattenable {
+private[sql] object EarlyCollapsableProjects {
   object OpType extends Enumeration {
     type OpType = Value
     val AddNewColumnsOnly, RemapOnly, Unknown = Value
   }
 
-  def unapply(tuple: (LogicalPlan, Seq[NamedExpression], Long)): Option[LogicalPlan]
-  = {
+  def unapply(tuple: (LogicalPlan, Seq[NamedExpression], Long)): Option[LogicalPlan] = {
     val (logicalPlan, newProjList, did) = tuple
 
     logicalPlan match {
-      case p @ Project(projList, child: LogicalPlan)
+      case p@Project(projList, child: LogicalPlan)
         if newProjList.flatMap(_.collectLeaves()).forall {
           case ar: AttributeReference if ar.metadata.contains(Dataset.DATASET_ID_KEY) &&
             ar.metadata.getLong(Dataset.DATASET_ID_KEY) != did => false
@@ -53,7 +51,7 @@ private[sql] object EasilyFlattenable {
           case _ => false
         }
 
-        val passThruAttribsContainedInCurrentOutput = passThruAttribs.forall( attribute =>
+        val passThruAttribsContainedInCurrentOutput = passThruAttribs.forall(attribute =>
           currentOutputAttribs.contains(attribute) ||
             currentOutputAttribs.exists(_.name == attribute.name))
         val opType = identifyOp(passThruAttribs, currentOutputAttribs, tinkeredOrNewNamedExprs,
@@ -90,35 +88,34 @@ private[sql] object EasilyFlattenable {
             } else {
               val remappedNewProjListResult = Try {
                 newProjList.map {
-
                   case attr: AttributeReference => projList.find(
                     _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
 
-                  case ua: UnresolvedAttribute =>
-                    projList.find(_.toAttribute.name.equals(ua.name)).
+                  case ua: UnresolvedAttribute => projList.find(_.toAttribute.name.equals(ua.name)).
                       getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
-                    s"  unresolved attribute $ua"))
+                        s"  unresolved attribute $ua"))
 
                   case anyOtherExpr =>
                     (anyOtherExpr transformUp {
                       case attr: AttributeReference =>
                         attribsRemappedInProj.get(attr.name).orElse(projList.find(
                           _.toAttribute.canonicalized == attr.canonicalized).map {
-                            case al: Alias => al.child
-                            case x => x
-                          }).getOrElse(attr)
+                          case al: Alias => al.child
+                          case x => x
+                        }).getOrElse(attr)
 
                       case u: UnresolvedAttribute => attribsRemappedInProj.get(u.name).orElse(
-                          projList.find( _.toAttribute.name.equals(u.name)).map {
-                            case al: Alias => al.child
-                            case u: UnresolvedAttribute =>
-                              throw new UnsupportedOperationException("Not able to flatten" +
-                                s"  unresolved attribute $u")
-                            case x => x
-                      }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
+                        projList.find(_.toAttribute.name.equals(u.name)).map {
+                          case al: Alias => al.child
+
+                          case u: UnresolvedAttribute =>
+                            throw new UnsupportedOperationException("Not able to flatten" +
+                              s"  unresolved attribute $u")
+
+                          case x => x
+                        }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                         s"  unresolved attribute $u"))
                     }).asInstanceOf[NamedExpression]
-
                 }
               }
               remappedNewProjListResult match {
@@ -136,16 +133,15 @@ private[sql] object EasilyFlattenable {
                 case attr: AttributeReference => projList.find(
                   _.toAttribute.canonicalized == attr.canonicalized).get
 
-
                 case ua: UnresolvedAttribute if ua.nameParts.size == 1 =>
-                  projList.find( _.toAttribute.name.equals(ua.name)).
+                  projList.find(_.toAttribute.name.equals(ua.name)).
                     getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
-                    s"  unresolved attribute $ua"))
+                      s"  unresolved attribute $ua"))
 
                 case al@Alias(ar: AttributeReference, name) =>
-                   projList.find(_.toAttribute.canonicalized == ar.canonicalized).map {
+                  projList.find(_.toAttribute.canonicalized == ar.canonicalized).map {
 
-                    case alx : Alias => Alias(alx.child, name)(al.exprId, al.qualifier,
+                    case alx: Alias => Alias(alx.child, name)(al.exprId, al.qualifier,
                       al.explicitMetadata, al.nonInheritableMetadataKeys)
 
                     case _: AttributeReference => al
@@ -173,17 +169,16 @@ private[sql] object EasilyFlattenable {
       passThruAttribs: Seq[NamedExpression],
       currentOutputAttribs: AttributeSet,
       tinkeredOrNewNamedExprs: Seq[NamedExpression],
-      passThruAttribsContainedInCurrentOutput: Boolean
-      ): OpType.OpType = {
+      passThruAttribsContainedInCurrentOutput: Boolean): OpType.OpType = {
 
     if (passThruAttribs.size == currentOutputAttribs.size &&
-      passThruAttribsContainedInCurrentOutput && tinkeredOrNewNamedExprs.nonEmpty) {
+          passThruAttribsContainedInCurrentOutput && tinkeredOrNewNamedExprs.nonEmpty) {
       OpType.AddNewColumnsOnly
     } else if (passThruAttribs.size + tinkeredOrNewNamedExprs.size == currentOutputAttribs.size
       && passThruAttribsContainedInCurrentOutput && tinkeredOrNewNamedExprs.forall {
         case Alias(_: AttributeReference, _) => true
         case _ => false
-      }) {
+    }) {
       OpType.RemapOnly
     } else {
       OpType.Unknown
