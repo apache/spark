@@ -106,7 +106,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
       case ExecuteImmediateQuery(expressions, query, targetVariables) =>
         val queryString = extractQueryString(query)
         val plan =
-          parseStatement(catalogManager.v1SessionCatalog.parser, queryString, targetVariables)
+          parseStatement(queryString, targetVariables)
 
         val posNodes = plan.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })
@@ -162,7 +162,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     // Otherwise, it can be anything.
     if (targetVariables.nonEmpty) {
       try {
-        parser.parseQuery(queryString)
+        catalogManager.v1SessionCatalog.parser.parseQuery(queryString)
       } catch {
         case e: ParseException =>
           // Since we do not have a way of telling that parseQuery failed because of
