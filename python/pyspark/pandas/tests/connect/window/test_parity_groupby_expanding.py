@@ -16,22 +16,24 @@
 #
 import unittest
 
+from pyspark.pandas.tests.window.test_groupby_expanding import GroupByExpandingMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.sql.tests.test_utils import UtilsTestsMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
-    @unittest.skip("SPARK-46397: Different exception thrown")
-    def test_capture_illegalargument_exception(self):
-        super().test_capture_illegalargument_exception()
+class GroupByExpandingParityTests(
+    GroupByExpandingMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_utils import *  # noqa: F401
+    from pyspark.pandas.tests.connect.window.test_parity_groupby_expanding import *  # noqa
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

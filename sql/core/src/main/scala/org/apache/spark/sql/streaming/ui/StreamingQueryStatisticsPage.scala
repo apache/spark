@@ -50,8 +50,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
         <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
     // scalastyle:on
   }
 

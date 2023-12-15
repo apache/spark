@@ -14,21 +14,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.sql.tests.test_utils import UtilsTestsMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.pandas.tests.window.test_groupby_expanding import GroupByExpandingTestingFuncMixin
 
 
-class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
-    @unittest.skip("SPARK-46397: Different exception thrown")
-    def test_capture_illegalargument_exception(self):
-        super().test_capture_illegalargument_exception()
+class GroupByExpandingAdvMixin(GroupByExpandingTestingFuncMixin):
+    def test_groupby_expanding_quantile(self):
+        self._test_groupby_expanding_func(
+            lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")
+        )
+
+    def test_groupby_expanding_std(self):
+        self._test_groupby_expanding_func("std")
+
+    def test_groupby_expanding_var(self):
+        self._test_groupby_expanding_func("var")
+
+    def test_groupby_expanding_skew(self):
+        self._test_groupby_expanding_func("skew")
+
+    def test_groupby_expanding_kurt(self):
+        self._test_groupby_expanding_func("kurt")
+
+
+class GroupByExpandingAdvTests(
+    GroupByExpandingAdvMixin,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_utils import *  # noqa: F401
+    from pyspark.pandas.tests.window.test_groupby_expanding_adv import *  # noqa: F401
 
     try:
         import xmlrunner

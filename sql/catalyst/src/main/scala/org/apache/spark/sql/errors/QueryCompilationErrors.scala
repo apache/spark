@@ -1954,6 +1954,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "inputType" -> toSQLType(expression.dataType)))
   }
 
+  def unexpectedNullError(exprName: String, expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      messageParameters = Map(
+        "exprName" -> toSQLId(exprName),
+        "sqlExpr" -> toSQLExpr(expression)
+      ))
+  }
+
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     new ExtendedAnalysisException(
       new AnalysisException(errorClass = "_LEGACY_ERROR_TEMP_1181", messageParameters = Map.empty),

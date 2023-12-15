@@ -14,21 +14,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.sql.tests.test_utils import UtilsTestsMixin
+import pyspark.pandas as ps
+from pyspark.pandas.window import Expanding
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
-    @unittest.skip("SPARK-46397: Different exception thrown")
-    def test_capture_illegalargument_exception(self):
-        super().test_capture_illegalargument_exception()
+class ExpandingErrorMixin:
+    def test_expanding_error(self):
+        with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
+            ps.range(10).expanding(-1)
+
+        with self.assertRaisesRegex(
+            TypeError, "psdf_or_psser must be a series or dataframe; however, got:.*int"
+        ):
+            Expanding(1, 2)
+
+
+class ExpandingErrorTests(
+    ExpandingErrorMixin,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_utils import *  # noqa: F401
+    from pyspark.pandas.tests.window.test_expanding_error import *  # noqa: F401
 
     try:
         import xmlrunner
