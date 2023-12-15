@@ -47,11 +47,11 @@ import org.apache.spark.util.ArrayImplicits._
 class PythonTableProvider extends TableProvider {
   private var name: String = _
   def setShortName(str: String): Unit = {
-    assert(shortName == null)
+    assert(name == null)
     name = str
   }
   private def shortName: String = {
-    assert(shortName != null)
+    assert(name != null)
     name
   }
   private var dataSourceInPython: PythonDataSourceCreationResult = _
