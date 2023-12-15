@@ -156,8 +156,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       extraOptions + ("path" -> path.get)
     }
 
-    val ds = DataSource.lookupDataSource(source, sparkSession.sessionState.conf).
-      getConstructor().newInstance()
+    val ds = DataSource.newDataSourceInstance(
+      source,
+      DataSource.lookupDataSource(source, sparkSession.sessionState.conf))
     // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
     // We can't be sure at this point whether we'll actually want to use V2, since we don't know the
     // writer or whether the query is continuous.

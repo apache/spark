@@ -70,7 +70,7 @@ case class ArrowEvalPythonUDTFExec(
       sessionLocalTimeZone,
       largeVarTypes,
       pythonRunnerConf,
-      pythonMetrics,
+      Some(pythonMetrics),
       jobArtifactUUID).compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.map { batch =>
