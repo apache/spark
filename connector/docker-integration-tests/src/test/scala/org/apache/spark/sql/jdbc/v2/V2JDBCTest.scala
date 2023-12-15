@@ -279,7 +279,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
             sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
           },
           errorClass = "INDEX_ALREADY_EXISTS",
-          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+          parameters = Map("indexName" -> "`i1`", "tableName" -> "`new_table`")
         )
 
         sql(s"DROP index i1 ON $catalogName.new_table")
@@ -304,7 +304,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
             sql(s"DROP index i1 ON $catalogName.new_table")
           },
           errorClass = "INDEX_NOT_FOUND",
-          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+          parameters = Map("indexName" -> "`i1`", "tableName" -> "`new_table`")
         )
       }
     }
