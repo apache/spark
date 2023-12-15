@@ -21,7 +21,7 @@ import scala.util.{Either, Left, Right}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.{ParseException, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -155,7 +155,6 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     }
 
   private def parseStatement(
-      parser: ParserInterface,
       queryString: String,
       targetVariables: Seq[Expression]): LogicalPlan = {
     // If targetVariables is defined, statement needs to be a query.
@@ -168,7 +167,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           // Since we do not have a way of telling that parseQuery failed because of
           // actual parsing error or because statement was passed where query was expected,
           // we need to make sure that parsePlan wouldn't throw
-          parser.parsePlan(queryString)
+          catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
 
           // Plan was sucessfully parsed, but query wasn't - throw.
           throw new AnalysisException(
@@ -177,7 +176,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
             cause = Some(e))
       }
     } else {
-      val plan = parser.parsePlan(queryString)
+      val plan = catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
 
       // do not allow nested execute immediate
       if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
