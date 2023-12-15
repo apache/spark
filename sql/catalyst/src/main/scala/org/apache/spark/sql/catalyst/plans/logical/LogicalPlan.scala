@@ -198,7 +198,7 @@ object LogicalPlan {
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
   private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
-  private[spark] val SKIP_FLATTENING = TreeNodeTag[Boolean]("skipFlattening")
+  private[spark] val SKIP_EARLY_PROJECT_COLLAPSE = TreeNodeTag[Boolean]("skipEarlyProjectCollapse")
 }
 
 /**

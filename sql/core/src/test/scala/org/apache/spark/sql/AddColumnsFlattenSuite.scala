@@ -244,10 +244,10 @@ class AddColumnsFlattenSuite extends QueryTest
     // then obtain optimized transformation which adds new project
     val logicalPlan = baseDf.logicalPlan
     val newDfUnopt = try {
-      logicalPlan.setTagValue[Boolean](LogicalPlan.SKIP_FLATTENING, true)
+      logicalPlan.setTagValue[Boolean](LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE, true)
       transformation(baseDf)
     } finally {
-      logicalPlan.unsetTagValue(LogicalPlan.SKIP_FLATTENING)
+      logicalPlan.unsetTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE)
     }
     (newDfOpt, newDfUnopt)
   }
