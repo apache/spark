@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.RuleContextBase
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
@@ -36,6 +37,10 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
   protected def planLater(plan: LogicalPlan): PhysicalPlan
 
   def apply(plan: LogicalPlan): Seq[PhysicalPlan]
+
+  def apply(
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase]): Seq[PhysicalPlan] = apply(plan)
 }
 
 /**
@@ -56,11 +61,13 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   /** A list of execution strategies that can be used by the planner */
   def strategies: Seq[GenericStrategy[PhysicalPlan]]
 
-  def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
+  def plan(
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase] = None): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
 
     // Collect physical plan candidates.
-    val candidates = strategies.iterator.flatMap(_(plan))
+    val candidates = strategies.iterator.flatMap(strategy => strategy(plan, ruleContext))
 
     // The candidates may contain placeholders marked as [[planLater]],
     // so try to replace them by their child plans.
@@ -75,7 +82,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
         placeholders.iterator.foldLeft(Iterator(candidate)) {
           case (candidatesWithPlaceholders, (placeholder, logicalPlan)) =>
             // Plan the logical plan for the placeholder.
-            val childPlans = this.plan(logicalPlan)
+            val childPlans = this.plan(logicalPlan, ruleContext)
 
             candidatesWithPlaceholders.flatMap { candidateWithPlaceholders =>
               childPlans.map { childPlan =>

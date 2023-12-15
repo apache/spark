@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.RuleContextBase
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -54,6 +55,20 @@ abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
   override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
 }
 
+abstract class SparkStrategyWithContext extends GenericStrategy[SparkPlan] {
+
+  override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
+
+  final override def apply(plan: LogicalPlan): Seq[SparkPlan] = apply(plan, None)
+
+  final override def apply(
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase]): Seq[SparkPlan] =
+    applyWithContext(plan, ruleContext)
+
+  def applyWithContext(plan: LogicalPlan, ruleContext: Option[RuleContextBase]): Seq[SparkPlan]
+}
+
 case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
 
   override def output: Seq[Attribute] = plan.output
@@ -66,8 +81,10 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
 
-  override def plan(plan: LogicalPlan): Iterator[SparkPlan] = {
-    super.plan(plan).map { p =>
+  override def plan(
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase] = None): Iterator[SparkPlan] = {
+    super.plan(plan, ruleContext).map { p =>
       val logicalPlan = plan match {
         case ReturnAnswer(rootPlan) => rootPlan
         case _ => plan

@@ -207,22 +207,29 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     this(new CatalogManager(FakeV2SessionCatalog, catalog))
   }
 
-  def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
+  def executeAndCheck(
+      plan: LogicalPlan,
+      tracker: QueryPlanningTracker,
+      ruleContext: Option[RuleContext] = None): LogicalPlan = {
     if (plan.analyzed) return plan
     AnalysisHelper.markInAnalyzer {
-      val analyzed = executeAndTrack(plan, tracker)
+      val analyzed = executeAndTrack(plan, tracker, ruleContext)
       checkAnalysis(analyzed)
       analyzed
     }
   }
 
-  override def execute(plan: LogicalPlan): LogicalPlan = {
+  override def execute(
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase]): LogicalPlan = {
     AnalysisContext.withNewAnalysisContext {
-      executeSameContext(plan)
+      executeSameContext(plan, ruleContext)
     }
   }
 
-  private def executeSameContext(plan: LogicalPlan): LogicalPlan = super.execute(plan)
+  private def executeSameContext(
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase]): LogicalPlan = super.execute(plan, ruleContext)
 
   def resolver: Resolver = conf.resolver
 
@@ -1046,14 +1053,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   /**
    * Replaces unresolved relations (tables and views) with concrete relations from the catalog.
    */
-  object ResolveRelations extends Rule[LogicalPlan] {
+  object ResolveRelations extends RuleWithContext[LogicalPlan] {
     // The current catalog and namespace may be different from when the view was created, we must
     // resolve the view logical plan here, with the catalog and namespace stored in view metadata.
     // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    private def resolveViews(
+        plan: LogicalPlan,
+        ruleContext: Option[RuleContextBase]): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -1067,7 +1076,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               desc.identifier, maxNestedViewDepth, view)
           }
           SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
-            executeSameContext(child)
+            executeSameContext(child, ruleContext)
           }
         }
         // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
@@ -1075,7 +1084,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         checkAnalysis(newChild)
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
-        p.copy(child = resolveViews(view))
+        p.copy(child = resolveViews(view, ruleContext))
       case _ => plan
     }
 
@@ -1086,7 +1095,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
-    def apply(plan: LogicalPlan)
+    def applyWithContext(plan: LogicalPlan, ruleContext: Option[RuleContextBase])
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _, _) =>
         val relation = table match {
@@ -1123,7 +1132,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         }
 
       case u: UnresolvedRelation =>
-        resolveRelation(u).map(resolveViews).getOrElse(u)
+        resolveRelation(u).map(p => resolveViews(p, ruleContext)).getOrElse(u)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
@@ -2520,7 +2529,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    *
    * Note: CTEs are handled in CTESubstitution.
    */
-  object ResolveSubquery extends Rule[LogicalPlan] {
+  object ResolveSubquery extends RuleWithContext[LogicalPlan] {
     /**
      * Resolves the subquery plan that is referenced in a subquery expression, by invoking the
      * entire analyzer recursively. We set outer plan in `AnalysisContext`, so that the analyzer
@@ -2530,10 +2539,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQuery(
         e: SubqueryExpression,
-        outer: LogicalPlan)(
+        outer: LogicalPlan,
+        ruleContext: Option[RuleContextBase])(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
-        executeSameContext(e.plan)
+        executeSameContext(e.plan, ruleContext)
       }
 
       // If the subquery plan is fully resolved, pull the outer references and record
@@ -2555,22 +2565,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * (2) Any aggregate expression(s) that reference outer attributes are pushed down to
      *     outer plan to get evaluated.
      */
-    private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
+    private def resolveSubQueries(
+        plan: LogicalPlan,
+        outer: LogicalPlan,
+        ruleContext: Option[RuleContextBase]): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
         case s @ ScalarSubquery(sub, _, exprId, _, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
+          resolveSubQuery(s, outer, ruleContext)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(e, outer)(Exists(_, _, exprId))
+          resolveSubQuery(e, outer, ruleContext)(Exists(_, _, exprId))
         case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
-          val expr = resolveSubQuery(l, outer)((plan, exprs) => {
+          val expr = resolveSubQuery(l, outer, ruleContext)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output.length)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
+          resolveSubQuery(s, outer, ruleContext)(LateralSubquery(_, _, exprId))
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
-          resolveSubQuery(a, outer)(
+          resolveSubQuery(a, outer, ruleContext)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
       }
     }
@@ -2578,24 +2591,28 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     /**
      * Resolve and rewrite all subqueries in an operator tree..
      */
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(PLAN_EXPRESSION), ruleId) {
-      case j: LateralJoin if j.left.resolved =>
-        // We can't pass `LateralJoin` as the outer plan, as its right child is not resolved yet
-        // and we can't call `LateralJoin.resolveChildren` to resolve outer references. Here we
-        // create a fake Project node as the outer plan.
-        resolveSubQueries(j, Project(Nil, j.left))
-      // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
-      case q: UnaryNode if q.childrenResolved =>
-        resolveSubQueries(q, q)
-      case r: RelationTimeTravel =>
-        resolveSubQueries(r, r)
-      case j: Join if j.childrenResolved && j.duplicateResolved =>
-        resolveSubQueries(j, j)
-      case tvf: UnresolvedTableValuedFunction =>
-        resolveSubQueries(tvf, tvf)
-      case s: SupportsSubquery if s.childrenResolved =>
-        resolveSubQueries(s, s)
+    override def applyWithContext(
+        plan: LogicalPlan,
+        ruleContext: Option[RuleContextBase]): LogicalPlan = {
+      val ruleContextWithSubquery = ruleContext.map(_.withSubquery(true))
+      plan.resolveOperatorsUpWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
+        case j: LateralJoin if j.left.resolved =>
+          // We can't pass `LateralJoin` as the outer plan, as its right child is not resolved yet
+          // and we can't call `LateralJoin.resolveChildren` to resolve outer references. Here we
+          // create a fake Project node as the outer plan.
+          resolveSubQueries(j, Project(Nil, j.left), ruleContextWithSubquery)
+        // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
+        case q: UnaryNode if q.childrenResolved =>
+          resolveSubQueries(q, q, ruleContextWithSubquery)
+        case r: RelationTimeTravel =>
+          resolveSubQueries(r, r, ruleContextWithSubquery)
+        case j: Join if j.childrenResolved && j.duplicateResolved =>
+          resolveSubQueries(j, j, ruleContextWithSubquery)
+        case tvf: UnresolvedTableValuedFunction =>
+          resolveSubQueries(tvf, tvf, ruleContextWithSubquery)
+        case s: SupportsSubquery if s.childrenResolved =>
+          resolveSubQueries(s, s, ruleContextWithSubquery)
+      }
     }
   }
 

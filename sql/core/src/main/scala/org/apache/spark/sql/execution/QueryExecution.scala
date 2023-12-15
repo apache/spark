@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleContext, RuleContextBase}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
@@ -61,6 +61,8 @@ class QueryExecution(
 
   val id: Long = QueryExecution.nextExecutionId
 
+  private val ruleContext = RuleContext(isSubquery = false)
+
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
@@ -85,7 +87,7 @@ class QueryExecution(
   lazy val analyzed: LogicalPlan = {
     val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
       // We can't clone `logical` here, which will reset the `_analyzed` flag.
-      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker, Some(ruleContext))
     }
     tracker.setAnalyzed(plan)
     plan
@@ -133,7 +135,7 @@ class QueryExecution(
     } else {
       val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
       val normalized = normalizationRules.foldLeft(commandExecuted) { (p, rule) =>
-        val result = rule.apply(p)
+        val result = rule.apply(p, Some(ruleContext))
         planChangeLogger.logRule(rule.ruleName, p, result)
         result
       }
@@ -159,8 +161,8 @@ class QueryExecution(
     executePhase(QueryPlanningTracker.OPTIMIZATION) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      val plan =
-        sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+      val plan = sparkSession.sessionState.optimizer.executeAndTrack(
+        withCachedData.clone(), tracker, Some(ruleContext))
       // We do not want optimized plans to be re-analyzed as literals that have been constant
       // folded and such can cause issues during analysis. While `clone` should maintain the
       // `analyzed` state of the LogicalPlan, we set the plan as analyzed here as well out of
@@ -179,7 +181,8 @@ class QueryExecution(
     executePhase(QueryPlanningTracker.PLANNING) {
       // Clone the logical plan here, in case the planner rules change the states of the logical
       // plan.
-      QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
+      QueryExecution.createSparkPlan(
+        sparkSession, planner, optimizedPlan.clone(), Some(ruleContext))
     }
   }
 
@@ -194,7 +197,7 @@ class QueryExecution(
     val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      QueryExecution.prepareForExecution(preparations, sparkPlan.clone(), Some(ruleContext))
     }
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
@@ -482,10 +485,11 @@ object QueryExecution {
    */
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
-      plan: SparkPlan): SparkPlan = {
+      plan: SparkPlan,
+      ruleContext: Option[RuleContextBase] = None): SparkPlan = {
     val planChangeLogger = new PlanChangeLogger[SparkPlan]()
     val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
-      val result = rule.apply(sp)
+      val result = rule.apply(sp, ruleContext)
       planChangeLogger.logRule(rule.ruleName, sp, result)
       result
     }
@@ -501,26 +505,33 @@ object QueryExecution {
   def createSparkPlan(
       sparkSession: SparkSession,
       planner: SparkPlanner,
-      plan: LogicalPlan): SparkPlan = {
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase]): SparkPlan = {
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
-    planner.plan(ReturnAnswer(plan)).next()
+    planner.plan(ReturnAnswer(plan), ruleContext).next()
   }
 
   /**
    * Prepare the [[SparkPlan]] for execution.
    */
-  def prepareExecutedPlan(spark: SparkSession, plan: SparkPlan): SparkPlan = {
-    prepareForExecution(preparations(spark, subquery = true), plan)
+  def prepareExecutedPlan(
+      spark: SparkSession,
+      plan: SparkPlan,
+      ruleContext: Option[RuleContextBase]): SparkPlan = {
+    prepareForExecution(preparations(spark, subquery = true), plan, ruleContext)
   }
 
   /**
    * Transform the subquery's [[LogicalPlan]] into a [[SparkPlan]] and prepare the resulting
    * [[SparkPlan]] for execution.
    */
-  def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
-    val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
-    prepareExecutedPlan(spark, sparkPlan)
+  def prepareExecutedPlan(
+      spark: SparkSession,
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase]): SparkPlan = {
+    val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone(), ruleContext)
+    prepareExecutedPlan(spark, sparkPlan, ruleContext)
   }
 
   /**
@@ -530,10 +541,12 @@ object QueryExecution {
   def prepareExecutedPlan(
       session: SparkSession,
       plan: LogicalPlan,
-      context: AdaptiveExecutionContext): SparkPlan = {
-    val sparkPlan = createSparkPlan(session, session.sessionState.planner, plan.clone())
+      context: AdaptiveExecutionContext,
+      ruleContext: Option[RuleContextBase]): SparkPlan = {
+    val sparkPlan = createSparkPlan(
+      session, session.sessionState.planner, plan.clone(), ruleContext)
     val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
-    prepareForExecution(preparationRules, sparkPlan.clone())
+    prepareForExecution(preparationRules, sparkPlan.clone(), ruleContext)
   }
 
   /**
