@@ -2435,7 +2435,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df1)
     checkPushedInfo(df1,
       """
-        |PushedAggregates: [MODE(SALARY)],
+        |PushedAggregates: [MODE(SALARY, true)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2454,6 +2454,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df2, Seq(Row(1, 10000.00), Row(2, 10000.00), Row(6, 12000.00)))
+
+    val df3 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  MODE() WITHIN GROUP (ORDER BY salary)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df3)
+    checkAggregateRemoved(df3)
+    checkPushedInfo(df3,
+      """
+        |PushedAggregates: [MODE(SALARY, true)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df3, Seq(Row(1, 9000.00), Row(2, 10000.00), Row(6, 12000.00)))
+
+    val df4 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  MODE() WITHIN GROUP (ORDER BY salary DESC)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df4)
+    checkAggregateRemoved(df4)
+    checkPushedInfo(df4,
+      """
+        |PushedAggregates: [MODE(SALARY, false)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df4, Seq(Row(1, 10000.00), Row(2, 12000.00), Row(6, 12000.00)))
   }
 
   test("scan with aggregate push-down: aggregate over alias push down") {

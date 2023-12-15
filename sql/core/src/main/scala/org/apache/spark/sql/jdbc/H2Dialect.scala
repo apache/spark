@@ -259,8 +259,13 @@ private[sql] object H2Dialect extends JdbcDialect {
       } else {
         funcName match {
           case "MODE" =>
-            assert(inputs.length == 1)
-            s"MODE() WITHIN GROUP (ORDER BY ${inputs.head})"
+            // Support Mode only if it is deterministic or reverse is defined.
+            assert(inputs.length == 2)
+            if (inputs.last == "true") {
+              s"MODE() WITHIN GROUP (ORDER BY ${inputs.head})"
+            } else {
+              s"MODE() WITHIN GROUP (ORDER BY ${inputs.head} DESC)"
+            }
           case _ =>
             super.visitAggregateFunction(funcName, isDistinct, inputs)
         }
