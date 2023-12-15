@@ -1193,6 +1193,12 @@ The limit like expression `<expr>` is invalid.
 
 For more details see [INVALID_LIMIT_LIKE_EXPRESSION](sql-error-conditions-invalid-limit-like-expression-error-class.html)
 
+### INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED
+
+SQLSTATE: 07001
+
+Using name parameterized queries requires all parameters to be named. Parameters missing names: `<exprs>`.
+
 ### INVALID_NON_DETERMINISTIC_EXPRESSIONS
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2339,6 +2345,14 @@ Cannot create generated column `<fieldName>` with generation expression `<expres
 A query operator contains one or more unsupported expressions.
 Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.
 Invalid expressions: [`<invalidExprSqls>`]
+
+### UNSUPPORTED_EXPR_FOR_PARAMETER
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A query parameter contains unsupported expression.
+Parameters can either be variables or literals.
+Invalid expression: [`<invalidExprSql>`]
 
 ### UNSUPPORTED_EXPR_FOR_WINDOW
 

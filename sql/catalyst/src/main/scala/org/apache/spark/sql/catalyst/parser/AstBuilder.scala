@@ -59,8 +59,7 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder
-    extends DataTypeAstBuilder with SQLConfHelper with Logging {
+class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -574,33 +573,24 @@ class AstBuilder
     val queryVariable = Option(ctx.queryParam.multipartIdentifier)
       .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
 
-    val targetVars = Option(ctx.targetVariable)
-      .map(v => visitMultipartIdentifierList(v))
-    val exprs = Option(ctx.executeImmediateUsing)
-      .map(ctx => visitExecuteImmediateUsing(ctx)).getOrElse(Seq.empty)
+    val targetVars = Option(ctx.targetVariable).toSeq
+      .flatMap(v => visitMultipartIdentifierList(v))
+    val exprs = Option(ctx.executeImmediateUsing).map {
+      visitExecuteImmediateUsing(_)
+    }.getOrElse{ Seq.empty }
+
 
     ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
   }
 
-  override def visitExecuteImmediateUsing(ctx: ExecuteImmediateUsingContext): Seq[Expression] = {
-    val exprs = visitExecuteImmediateArgumentSeq(ctx.params)
-    validateExecImmediateArguments(exprs, ctx.params)
-    exprs
-  }
+  override def visitExecuteImmediateUsing(
+      ctx: ExecuteImmediateUsingContext): Seq[Expression] = withOrigin(ctx) {
+    val expressions = Option(ctx).toSeq
+      .flatMap(ctx => visitNamedExpressionSeq(ctx.params))
+    val resultExpr = expressions.map(e => e._1)
 
-  override def visitExecuteImmediateArgumentSeq
-    (ctx: ExecuteImmediateArgumentSeqContext) : Seq[Expression] = {
-    Option(ctx).toSeq
-      .flatMap(c => c.executeImmediateArgument.asScala).map { c =>
-        val reference : Option[Expression] = Option(c.multipartIdentifier)
-          .map(r => UnresolvedAttribute(visitMultipartIdentifier(r)))
-        val literal : Option[Expression] = Option(c.constant)
-          .map(typedVisit[Literal])
-        val arg = reference.getOrElse(literal.get)
-        Option(c.name)
-          .map(n => Alias(arg, n.getText)())
-          .getOrElse(arg);
-      }
+    validateExecImmediateArguments(resultExpr, ctx)
+    resultExpr
   }
 
   /**
@@ -608,7 +598,7 @@ class AstBuilder
    */
   private def validateExecImmediateArguments(
     expressions: Seq[Expression],
-    ctx : ExecuteImmediateArgumentSeqContext) : Unit = {
+    ctx : ExecuteImmediateUsingContext) : Unit = {
     val duplicateAliases = expressions
       .filter(_.isInstanceOf[Alias])
       .groupBy {

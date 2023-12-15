@@ -796,7 +796,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     var execImmediatePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Right(UnresolvedAttribute("testVarA")),
-      Some(Seq(UnresolvedAttribute("testVarA"))))
+      Seq(UnresolvedAttribute("testVarA")))
 
     assertAnalysisErrorClass(
       inputPlan = execImmediatePlan,
@@ -806,11 +806,39 @@ class AnalysisErrorSuite extends AnalysisTest {
       ))
   }
 
+  test("EXEC IMMEDIATE - Unsupported expr for parameter") {
+    var execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
+      Seq(UnresolvedAttribute("testVarA"), NaNvl(Literal(1), Literal(1))),
+      scala.util.Left("SELECT ?"),
+      Seq.empty)
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediatePlan,
+      expectedErrorClass = "UNSUPPORTED_EXPR_FOR_PARAMETER",
+      expectedMessageParameters = Map(
+        "invalidExprSql" -> "\"nanvl(1, 1)\""
+      ))
+  }
+
+  test("EXEC IMMEDIATE - Name Parametrize query with non named parameters") {
+    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+      Seq(Literal(2), new Alias(UnresolvedAttribute("testVarA"), "first")(), Literal(3)),
+      scala.util.Left("SELECT :first"),
+      Seq.empty)
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediateSetVariablePlan,
+      expectedErrorClass = "INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED",
+      expectedMessageParameters = Map(
+        "exprs" -> "\"2\", \"3\""
+      ))
+  }
+
   test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
     var execImmediateSetVariablePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Left("SET VAR testVarA = 1"),
-      Some(Seq(UnresolvedAttribute("testVarA"))))
+      Seq(UnresolvedAttribute("testVarA")))
 
     assertAnalysisErrorClass(
       inputPlan = execImmediateSetVariablePlan,

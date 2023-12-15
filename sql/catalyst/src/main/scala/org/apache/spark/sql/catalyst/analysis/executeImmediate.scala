@@ -19,15 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
+import org.apache.spark.sql.errors.QueryCompilationErrors.{invalidNameParameterizedQueryParametersMustBeNamed, unresolvedVariableError, unsupportedParameterExpression}
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -43,7 +42,7 @@ import org.apache.spark.sql.types.StringType
 case class ExecuteImmediateQuery(
     args: Seq[Expression],
     query: Either[String, UnresolvedAttribute],
-    targetVariables: Option[Seq[UnresolvedAttribute]])
+    targetVariables: Seq[UnresolvedAttribute])
   extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
@@ -65,13 +64,11 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
      */
     e match {
       case u: UnresolvedAttribute =>
-        getVariableReference(u.nameParts)
+        getVariableReference(u, u.nameParts)
       case a: Alias =>
         Alias(resolveVariable(a.child), a.name)()
-
       case other =>
-        throw SparkException.internalError(
-          "Unexpected variable expression in ParametrizedQuery: " + other)
+        throw unsupportedParameterExpression(other)
     }
   }
 
@@ -89,7 +86,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
     either match {
       case Left(v) => v
       case Right(u) =>
-        val varReference = getVariableReference(u.nameParts)
+        val varReference = getVariableReference(u, u.nameParts)
 
         if (!varReference.dataType.sameType(StringType)) {
           throw new AnalysisException(
@@ -106,10 +103,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case ExecuteImmediateQuery(expressions, query, targetVariablesOpt) =>
+      case ExecuteImmediateQuery(expressions, query, targetVariables) =>
         val queryString = extractQueryString(query)
         val plan =
-          parseStatement(catalogManager.v1SessionCatalog.parser, queryString, targetVariablesOpt)
+          parseStatement(catalogManager.v1SessionCatalog.parser, queryString, targetVariables)
 
         val posNodes = plan.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })
@@ -133,67 +130,70 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
               // We do not want this as they can resolve some unsupported parameters
               resolveArguments(expressions))
           } else {
-            val namedExpressions = expressions.collect { case (e: NamedExpression) => e }
+            val aliases = expressions.collect {
+              case (e: Alias) => e
+            }
+            val nonAliases = expressions.filter(!_.isInstanceOf[Alias])
+
+            if (nonAliases.nonEmpty) {
+              throw invalidNameParameterizedQueryParametersMustBeNamed(nonAliases)
+            }
 
             NameParameterizedQuery(
               plan,
-              namedExpressions.map(_.name),
+              aliases.map(_.name),
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidently resolve our parameters.
               // We do not want this as they can resolve some unsupported parameters.
-              resolveArguments(namedExpressions))
+              resolveArguments(aliases))
           }
         }
 
-        targetVariablesOpt
-          .map(variables => {
-            SetVariable(variables, queryPlan)
-          })
-          .getOrElse { queryPlan }
+        if (targetVariables.nonEmpty) {
+          SetVariable(targetVariables, queryPlan)
+        } else { queryPlan }
     }
 
   private def parseStatement(
       parser: ParserInterface,
       queryString: String,
-      targetVariables: Option[Seq[Expression]]): LogicalPlan = {
+      targetVariables: Seq[Expression]): LogicalPlan = {
     // If targetVariables is defined, statement needs to be a query.
     // Otherwise, it can be anything.
-    targetVariables
-      .map { expressions =>
-        try {
-          parser.parseQuery(queryString)
-        } catch {
-          case e: ParseException =>
-            // Since we do not have a way of telling that parseQuery failed because of
-            // actual parsing error or because statement was passed where query was expected,
-            // we need to make sure that parsePlan wouldn't throw
-            parser.parsePlan(queryString)
+    if (targetVariables.nonEmpty) {
+      try {
+        parser.parseQuery(queryString)
+      } catch {
+        case e: ParseException =>
+          // Since we do not have a way of telling that parseQuery failed because of
+          // actual parsing error or because statement was passed where query was expected,
+          // we need to make sure that parsePlan wouldn't throw
+          parser.parsePlan(queryString)
 
-            // Plan was sucessfully parsed, but query wasn't - throw.
-            throw new AnalysisException(
-              errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-              messageParameters = Map("sqlString" -> queryString),
-              cause = Some(e))
-        }
-      }
-      .getOrElse {
-        val plan = parser.parsePlan(queryString)
-
-        // do not allow nested execute immediate
-        if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
+          // Plan was sucessfully parsed, but query wasn't - throw.
           throw new AnalysisException(
-            errorClass = "NESTED_EXECUTE_IMMEDIATE",
-            messageParameters = Map("sqlString" -> queryString))
-        }
-
-        plan
+            errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+            messageParameters = Map("sqlString" -> queryString),
+            cause = Some(e))
       }
+    } else {
+      val plan = parser.parsePlan(queryString)
+
+      // do not allow nested execute immediate
+      if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
+        throw new AnalysisException(
+          errorClass = "NESTED_EXECUTE_IMMEDIATE",
+          messageParameters = Map("sqlString" -> queryString))
+      }
+
+      plan
+    }
   }
 
-  private def getVariableReference(nameParts: Seq[String]): VariableReference = {
+  private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
     lookupVariable(nameParts) match {
       case Some(variable) => variable.copy(canFold = false)
-      case _ => throw unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
+      case _ => throw unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"), expr.origin)
     }
   }
 }

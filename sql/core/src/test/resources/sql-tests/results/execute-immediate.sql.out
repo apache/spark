@@ -434,7 +434,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "searchPath" : "`SYSTEM`.`SESSION`",
     "variableName" : "`id`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 64,
+    "fragment" : "id"
+  } ]
 }
 
 
@@ -447,6 +454,21 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT",
   "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :first = name' USING 1, 'name2' as first
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"1\""
+  }
 }
 
 
@@ -532,14 +554,42 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
   "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
+    "invalidExprSql" : "\"CONCAT(a, me1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 70,
+    "stopIndex" : 86,
+    "fragment" : "CONCAT(a , \"me1\")"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING (SELECT 42) as first, 'name2' as second
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSql" : "\"scalarsubquery()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 70,
+    "stopIndex" : 80,
+    "fragment" : "(SELECT 42)"
+  } ]
 }
 
 
@@ -643,9 +693,9 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 63,
     "stopIndex" : 92,
-    "fragment" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first, 20 as first"
+    "fragment" : "USING 10 as first, 20 as first"
   } ]
 }
 
@@ -673,7 +723,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NESTED_EXECUTE_IMMEDIATE",
-  "sqlState" : "07502",
+  "sqlState" : "07501",
   "messageParameters" : {
     "sqlString" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = ? USING 10'"
   }

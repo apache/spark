@@ -1981,6 +1981,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED" : {
+    "message" : [
+      "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
+    ],
+    "sqlState" : "07001"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3548,6 +3554,14 @@
       "A query operator contains one or more unsupported expressions.",
       "Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
       "Invalid expressions: [<invalidExprSqls>]"
+    ],
+    "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_EXPR_FOR_PARAMETER" : {
+    "message" : [
+      "A query parameter contains unsupported expression.",
+      "Parameters can either be variables or literals.",
+      "Invalid expression: [<invalidExprSql>]"
     ],
     "sqlState" : "42K0E"
   },

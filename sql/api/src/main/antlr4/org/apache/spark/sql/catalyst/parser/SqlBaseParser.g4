@@ -236,8 +236,8 @@ executeImmediate
     ;
 
 executeImmediateUsing
-    : USING params=executeImmediateArgumentSeq
-    | USING LEFT_PAREN params=executeImmediateArgumentSeq RIGHT_PAREN
+    : USING LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN
+    | USING params=namedExpressionSeq
     ;
 
 executeImmediateQueryParam
