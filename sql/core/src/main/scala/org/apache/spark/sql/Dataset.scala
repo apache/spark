@@ -1576,7 +1576,8 @@ class Dataset[T] private[sql](
       val newProjList = untypedCols.map(_.named)
       (logicalPlan, newProjList, id) match {
         case EarlyCollapsableProjects(flattendPlan) if !this.isStreaming &&
-          !logicalPlan.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) => flattendPlan
+          !logicalPlan.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) =>
+            flattendPlan
 
         case _ => Project(newProjList, logicalPlan)
       }
@@ -2958,7 +2959,8 @@ class Dataset[T] private[sql](
     withPlan(
       (logicalPlan, projectList, id) match {
         case EarlyCollapsableProjects(flattendPlan) if !this.isStreaming &&
-          !logicalPlan.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) => flattendPlan
+          !logicalPlan.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) =>
+            flattendPlan
 
         case _ => Project(projectList, logicalPlan)
       }
