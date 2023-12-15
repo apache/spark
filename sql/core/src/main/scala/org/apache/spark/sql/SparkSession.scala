@@ -780,7 +780,7 @@ class SparkSession private(
     DataSource.lookupDataSource(runner, sessionState.conf) match {
       case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
         Dataset.ofRows(self, ExternalCommandExecutor(
-          DataSource.newDataSourceInstance(runner, source)
+          source.getDeclaredConstructor().newInstance()
             .asInstanceOf[ExternalCommandRunner], command, options))
 
       case _ =>

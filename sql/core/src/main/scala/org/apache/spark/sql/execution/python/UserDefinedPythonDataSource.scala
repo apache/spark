@@ -44,7 +44,16 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Data Source V2 wrapper for Python Data Source.
  */
-class PythonTableProvider(shortName: String) extends TableProvider {
+class PythonTableProvider extends TableProvider {
+  private var name: String = _
+  def setShortName(str: String): Unit = {
+    assert(name == null)
+    name = str
+  }
+  private def shortName: String = {
+    assert(name != null)
+    name
+  }
   private var dataSourceInPython: PythonDataSourceCreationResult = _
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private lazy val source: UserDefinedPythonDataSource =
