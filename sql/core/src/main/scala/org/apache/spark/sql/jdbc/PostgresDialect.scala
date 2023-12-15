@@ -236,22 +236,27 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
-          case "42P07" if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
-            throw new IndexAlreadyExistsException(
-              indexName = messageParameters("indexName"),
-              tableName = messageParameters("tableName"),
-              cause = Some(e))
-          case "42P07" if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
-            val newTable = messageParameters("newName")
-            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
-          case "42P07" if pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage).nonEmpty =>
-            val tableName = pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage)
-              .get.group(1)
-            throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
-          case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
-            val indexName = messageParameters("indexName")
-            val tableName = messageParameters("tableName")
-            throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
+          case "42P07" =>
+            if (errorClass == "FAILED_JDBC.CREATE_INDEX") {
+              throw new IndexAlreadyExistsException(
+                indexName = messageParameters("indexName"),
+                tableName = messageParameters("tableName"),
+                cause = Some(e))
+            } else if (errorClass == "FAILED_JDBC.DROP_INDEX") {
+              val indexName = messageParameters("indexName")
+              val tableName = messageParameters("tableName")
+              throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
+            } else if (errorClass == "FAILED_JDBC.RENAME_TABLE") {
+              val newTable = messageParameters("newName")
+              throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+            } else {
+              val tblRegexp = pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage)
+              if (tblRegexp.nonEmpty) {
+                throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
+              } else {
+                super.classifyException(e, errorClass, messageParameters)
+              }
+            }
           case "2BP01" =>
             throw NonEmptyNamespaceException(
               namespace = messageParameters.get("namespace").toArray,
