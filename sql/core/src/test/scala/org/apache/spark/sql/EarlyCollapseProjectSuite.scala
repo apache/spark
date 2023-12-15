@@ -252,7 +252,7 @@ class EarlyCollapseProjectSuite extends QueryTest
     (newDfOpt, newDfUnopt)
   }
 
-  private def collectNodes(df: DataFrame): Seq[LogicalPlan] = df.queryExecution.logical.collect {
+  private def collectNodes(df: DataFrame): Seq[LogicalPlan] = df.logicalPlan.collect {
     case l => l
   }
 }

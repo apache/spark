@@ -19,12 +19,9 @@ package org.apache.spark.sql.internal
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-
 
 private[sql] object EarlyCollapseProject {
   object OpType extends Enumeration {
@@ -32,16 +29,13 @@ private[sql] object EarlyCollapseProject {
     val AddNewColumnsOnly, RemapOnly, Unknown = Value
   }
 
-  def unapply(tuple: (LogicalPlan, Seq[NamedExpression], Long)): Option[LogicalPlan] = {
-    val (logicalPlan, newProjList, did) = tuple
+  def unapply(logicalPlan: LogicalPlan): Option[LogicalPlan] = {
+
 
     logicalPlan match {
-      case p@Project(projList, child: LogicalPlan)
-        if newProjList.flatMap(_.collectLeaves()).forall {
-          case ar: AttributeReference if ar.metadata.contains(Dataset.DATASET_ID_KEY) &&
-            ar.metadata.getLong(Dataset.DATASET_ID_KEY) != did => false
-          case _ => true
-        } =>
+      case Project(newProjList, p @ Project(projList, child)) if !p.getTagValue(
+        LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false)
+         =>
         val currentOutputAttribs = AttributeSet(p.output)
 
         // In the new column list identify those Named Expressions which are just attributes and
@@ -80,9 +74,6 @@ private[sql] object EarlyCollapseProject {
               case ex: AggregateExpression => ex
               case ex: WindowExpression => ex
               case ex: UserDefinedExpression => ex
-              case u: UnresolvedAttribute if u.nameParts.size != 1 => u
-              case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
-                u
             }.nonEmpty)) {
               None
             } else {
@@ -90,10 +81,6 @@ private[sql] object EarlyCollapseProject {
                 newProjList.map {
                   case attr: AttributeReference => projList.find(
                     _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
-
-                  case ua: UnresolvedAttribute => projList.find(_.toAttribute.name.equals(ua.name)).
-                      getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
-                        s"  unresolved attribute $ua"))
 
                   case anyOtherExpr =>
                     (anyOtherExpr transformUp {
@@ -103,24 +90,11 @@ private[sql] object EarlyCollapseProject {
                           case al: Alias => al.child
                           case x => x
                         }).getOrElse(attr)
-
-                      case u: UnresolvedAttribute => attribsRemappedInProj.get(u.name).orElse(
-                        projList.find(_.toAttribute.name.equals(u.name)).map {
-                          case al: Alias => al.child
-
-                          case u: UnresolvedAttribute =>
-                            throw new UnsupportedOperationException("Not able to flatten" +
-                              s"  unresolved attribute $u")
-
-                          case x => x
-                        }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
-                        s"  unresolved attribute $u"))
                     }).asInstanceOf[NamedExpression]
                 }
               }
               remappedNewProjListResult match {
-                case Success(remappedNewProjList) =>
-                  Option(Project(remappedNewProjList, child))
+                case Success(remappedNewProjList) => Option(Project(remappedNewProjList, child))
 
                 case Failure(_) => None
               }
@@ -133,10 +107,6 @@ private[sql] object EarlyCollapseProject {
                 case attr: AttributeReference => projList.find(
                   _.toAttribute.canonicalized == attr.canonicalized).get
 
-                case ua: UnresolvedAttribute if ua.nameParts.size == 1 =>
-                  projList.find(_.toAttribute.name.equals(ua.name)).
-                    getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
-                      s"  unresolved attribute $ua"))
 
                 case al@Alias(ar: AttributeReference, name) =>
                   projList.find(_.toAttribute.canonicalized == ar.canonicalized).map {
@@ -146,14 +116,10 @@ private[sql] object EarlyCollapseProject {
 
                     case _: AttributeReference => al
                   }.get
-
-                case x => throw new UnsupportedOperationException("Not able to flatten" +
-                  s"  unresolved attribute $x")
               }
             }
             remappedNewProjListResult match {
-              case Success(remappedNewProjList) =>
-                Option(Project(remappedNewProjList, child))
+              case Success(remappedNewProjList) => Option(Project(remappedNewProjList, child))
 
               case Failure(_) => None
             }
