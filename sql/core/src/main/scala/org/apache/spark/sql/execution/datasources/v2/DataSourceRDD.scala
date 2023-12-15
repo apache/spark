@@ -23,11 +23,10 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.QueueTemp
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
@@ -117,11 +116,7 @@ class DataSourceRDD(
 // TODO: we should have 2 RDDs: an RDD[InternalRow] for row-based scan, an `RDD[ColumnarBatch]` for
 // columnar scan.
 class RecursiveRDD(
-    sc: SparkContext,
-    sessiion: SparkSession,
-    anchor: LogicalPlan,
-    recursion: LogicalPlan,
-    generateRecursion: (RDD[InternalRow], LogicalPlan) => RDD[InternalRow])
+    sc: SparkContext)
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -131,46 +126,11 @@ class RecursiveRDD(
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
 
     val iterator = new Iterator[Object] {
-      private var currentIter: Option[Iterator[Object]] = None
-      private var currentRdd: Option[RDD[InternalRow]] = None
 
-      override def hasNext: Boolean = currentIter.exists(_.hasNext) || advanceToNextIter()
+      override def hasNext: Boolean = QueueTemp.poll()
 
       override def next(): Object = {
-        if (!hasNext) throw new NoSuchElementException("No more elements")
-        currentIter.get.next()
-      }
-
-      private def computeBaseIterFromPlan(): Iterator[Object] = {
-        val ses = SparkSession.builder().getOrCreate()
-        ses.withActive {
-          val baseRdd = Dataset.ofRows(ses, anchor)
-            .queryExecution.executedPlan.execute()
-          val baseIter = baseRdd.compute(split, context)
-          currentRdd = Some(baseRdd)
-          currentIter = Some(baseIter)
-          currentIter.get
-        }
-      }
-
-      private def computeRecursiveIterFromPlan(): Iterator[Object] = {
-        val newRdd = generateRecursion(currentRdd.get, recursion)
-        val newIter = newRdd.compute(split, context)
-        currentRdd = Some(newRdd)
-        currentIter = Some(newIter)
-        currentIter.get
-      }
-
-      private def advanceToNextIter(): Boolean = {
-        val result = currentIter match {
-          case None =>
-            computeBaseIterFromPlan()
-          case Some(_) =>
-            currentRdd.get.checkpoint()
-            computeRecursiveIterFromPlan()
-        }
-
-        currentIter.get.hasNext
+        QueueTemp.get()
       }
     }
 

@@ -50,6 +50,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("milast") {
+    sql(
+      """
+        |WITH RECURSIVE r AS (
+        |  SELECT 0 AS level
+        |  UNION ALL
+        |  SELECT level + 1 FROM r WHERE level < 9
+        |)
+        |SELECT * FROM r LIMIT 3
+        |""".stripMargin).show()
+
+  }
   test("create a permanent view on a permanent view") {
     withView("jtv1", "jtv2") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
@@ -1019,6 +1031,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("milast test") {
     withDatabase("db2") {
+      withView("default.v1") {
+        withTable("t1") {
           val x = sql(
             """
               |WITH RECURSIVE r AS (
@@ -1028,8 +1042,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               |)
               |SELECT * FROM r;
               |""".stripMargin)
-
           println(x.show())
+        }
+      }
     }
   }
 

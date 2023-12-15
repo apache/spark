@@ -26,13 +26,13 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnionLoopRef}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.datasources.v2.RecursiveRDD
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -749,20 +749,26 @@ case class UnionLoopExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val newRecursion =
-      (rdd: RDD[InternalRow], recursion: LogicalPlan) => {
-        val ses = SparkSession.builder().getOrCreate()
-        ses.withActive {
-          val newPlan = recursion.transform {
-            case r: UnionLoopRef =>
-              LogicalRDD (anchor.output, rdd)(ses)
-          }
-
-          Dataset.ofRows(ses, newPlan).queryExecution.toRdd
+    val newRecursion = recursion.transform {
+      case r: UnionLoopRef =>
+        val d = LogicalRDD(
+          anchor.output,
+          new RecursiveRDD(session.sparkContext))(session)
+        val prevPlanToRefMapping = anchor.output.zip(r.output).map {
+          case (fa, ta) => Alias(fa, ta.name)(ta.exprId)
         }
-      }
 
-      new RecursiveRDD(sparkContext, session, anchor, recursion, newRecursion)
+        Project(
+          prevPlanToRefMapping,
+          d)
+    }
+
+    val baseRdd = Dataset.ofRows(session, anchor).queryExecution.toRdd
+    val recRdd = Dataset.ofRows(session, newRecursion).queryExecution.toRdd
+    baseRdd.union(recRdd).map(x => {
+      QueueTemp.add(x)
+      x
+    })
   }
 
   override def doCanonicalize(): SparkPlan =

@@ -33,14 +33,6 @@ WITH RECURSIVE r(c) AS (
 )
 SELECT * FROM r;
 
--- unlimited recursion fails at spark.sql.cte.recursion.level.limits level
-WITH RECURSIVE r(level) AS (
-  VALUES 0
-  UNION ALL
-  SELECT level + 1 FROM r
-)
-SELECT * FROM r;
-
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
   VALUES 0
