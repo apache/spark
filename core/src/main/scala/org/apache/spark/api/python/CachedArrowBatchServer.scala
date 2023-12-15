@@ -30,6 +30,8 @@ import org.apache.spark.storage.{ArrowBatchBlockId, BlockId}
 
 class CachedArrowBatchServer extends Logging {
 
+  val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
+
   val serverSocket = new ServerSocket(
     0, 1, InetAddress.getLoopbackAddress()
   )
@@ -80,10 +82,23 @@ class CachedArrowBatchServer extends Logging {
     }
   }
 
+  def createConnectionThread(sock: Socket, threadName: String): Unit = {
+    new Thread(threadName) {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          authHelper.authClient(sock)
+          handleConnection(sock)
+        } finally {
+          JavaUtils.closeQuietly(sock)
+        }
+      }
+    }.start()
+  }
+
   def start(): (Int, String) = {
     logTrace("Creating listening socket")
-
-    val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
 
     new Thread(s"CachedArrowBatchServer-listener") {
       setDaemon(true)
@@ -96,18 +111,9 @@ class CachedArrowBatchServer extends Logging {
           while (true) {
             sock = serverSocket.accept()
             connectionCount += 1
-            new Thread(s"CachedArrowBatchServer-connection-$connectionCount") {
-              setDaemon(true)
-
-              override def run(): Unit = {
-                try {
-                  authHelper.authClient(sock)
-                  handleConnection(sock)
-                } finally {
-                  JavaUtils.closeQuietly(sock)
-                }
-              }
-            }.start()
+            createConnectionThread(
+              sock, s"CachedArrowBatchServer-connection-$connectionCount"
+            )
           }
         } finally {
           logTrace("Closing server")
