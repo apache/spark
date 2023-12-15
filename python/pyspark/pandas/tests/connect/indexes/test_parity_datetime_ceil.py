@@ -16,13 +16,13 @@
 #
 import unittest
 
-from pyspark.pandas.tests.indexes.test_datetime import DatetimeIndexTestsMixin
+from pyspark.pandas.tests.indexes.test_datetime_ceil import DatetimeIndexCeilMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class DatetimeIndexParityTests(
-    DatetimeIndexTestsMixin,
+class DatetimeIndexCeilParityTests(
+    DatetimeIndexCeilMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
@@ -30,7 +30,7 @@ class DatetimeIndexParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_datetime import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_datetime_ceil import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
