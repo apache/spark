@@ -19,11 +19,13 @@ package org.apache.spark.sql.internal
 
 import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.sql.{Dataset, RuntimeConfig}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, NamedExpression, UserDefinedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.types.MetadataBuilder
+
 
 
 private[sql] object EasilyFlattenable {
@@ -32,10 +34,15 @@ private[sql] object EasilyFlattenable {
     val AddNewColumnsOnly, RemapOnly, Unknown = Value
   }
 
-  def unapply(tuple: (LogicalPlan, Seq[NamedExpression])): Option[LogicalPlan] = {
-    val (logicalPlan, newProjList) = tuple
+  def unapply(tuple: (LogicalPlan, Seq[NamedExpression], RuntimeConfig)): Option[LogicalPlan]
+  = {
+    val (logicalPlan, newProjList, conf) = tuple
+
     logicalPlan match {
       case p @ Project(projList, child: LogicalPlan) =>
+        val currentDatasetIdOpt = p.getTagValue(Dataset.DATASET_ID_TAG).get.toSet.headOption
+        val childDatasetIdOpt = child.getTagValue(Dataset.DATASET_ID_TAG).flatMap(
+          _.toSet.headOption)
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition {
@@ -55,7 +62,7 @@ private[sql] object EasilyFlattenable {
             val attribsRemappedInProj = projList.flatMap(ne => ne match {
               case _: AttributeReference => Seq.empty[(String, Alias)]
 
-              case al@ Alias(_, name) => if (childOutput.contains(name)) {
+              case al @ Alias(_, name) => if (childOutput.contains(name)) {
                 Seq(name -> al)
               } else {
                 Seq.empty[(String, Alias)]
@@ -80,15 +87,17 @@ private[sql] object EasilyFlattenable {
             } else {
               val remappedNewProjListResult = Try {
                 newProjList.map {
-                  case attr: AttributeReference => projList.find(
-                    _.toAttribute.canonicalized == attr.canonicalized).map {
-                    case _: Attribute => attr
-                    case al: Alias =>
-                      val md = new MetadataBuilder().withMetadata(attr.metadata).
-                      withMetadata(al.metadata).build()
-                      al.copy(al.child, al.name)(al.exprId, al.qualifier, Option(md),
-                        al.nonInheritableMetadataKeys)
-                  }.getOrElse(attr)
+
+                  case attr: AttributeReference =>
+                    val ne = projList.find(
+                    _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+                    if (attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
+                      currentDatasetIdOpt.contains(attr.metadata.getLong(
+                        Dataset.DATASET_ID_KEY))) {
+                      addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                    } else {
+                      ne
+                    }
 
                   case ua: UnresolvedAttribute =>
                     projList.find(_.toAttribute.name.equalsIgnoreCase(ua.name)).
@@ -97,23 +106,20 @@ private[sql] object EasilyFlattenable {
 
                   case anyOtherExpr =>
                     (anyOtherExpr transformUp {
-                      case attr: AttributeReference => attribsRemappedInProj.get(attr.name).
-                        map(al => {
-                          val md = new MetadataBuilder().withMetadata(attr.metadata).
-                            withMetadata(al.metadata).build()
-                          al.copy(al.child, al.name)(al.exprId, al.qualifier, Option(md),
-                            al.nonInheritableMetadataKeys)
-                        }).orElse(
+                      case attr: AttributeReference => val ne =
+                        attribsRemappedInProj.get(attr.name).orElse(
                         projList.find(
                         _.toAttribute.canonicalized == attr.canonicalized).map {
-                        case _: Attribute => attr
-                        case al: Alias =>
-                          val md = new MetadataBuilder().withMetadata(attr.metadata).
-                          withMetadata(al.metadata).build()
-                          al.copy(al.child, al.name)(al.exprId, al.qualifier, Option(md),
-                            al.nonInheritableMetadataKeys)
+                        case al: Alias => al
                         case x => x
                       }).getOrElse(attr)
+                      if (attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
+                        currentDatasetIdOpt.contains(attr.metadata.getLong(
+                          Dataset.DATASET_ID_KEY))) {
+                        addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                      } else {
+                          ne
+                      }
 
                       case u: UnresolvedAttribute => attribsRemappedInProj.get(u.name).orElse(
                         projList.find( _.toAttribute.name.equalsIgnoreCase(u.name)).map {
@@ -125,13 +131,12 @@ private[sql] object EasilyFlattenable {
                       }).getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                         s"  unresolved attribute $u"))
                     }).asInstanceOf[NamedExpression]
+
                 }
               }
               remappedNewProjListResult match {
                 case Success(remappedNewProjList) =>
-                  val newProj = p.copy(projectList = remappedNewProjList)
-                  newProj.copyTagsFrom(p)
-                  Option(newProj)
+                  Option(p.copy(projectList = remappedNewProjList))
 
                 case Failure(_) => None
               }
@@ -141,12 +146,15 @@ private[sql] object EasilyFlattenable {
             // case of renaming of columns
             val remappedNewProjListResult = Try {
               newProjList.map {
-                case attr: AttributeReference => projList.find(
+                case attr: AttributeReference => val ne = projList.find(
                   _.toAttribute.canonicalized == attr.canonicalized).get
-
-                case ua: UnresolvedAttribute if ua.nameParts.size != 1 =>
-                  throw new UnsupportedOperationException("Not able to flatten" +
-                    s"  unresolved attribute $ua")
+                  if (attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
+                    currentDatasetIdOpt.contains(attr.metadata.getLong(
+                      Dataset.DATASET_ID_KEY))) {
+                    addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                  } else {
+                    ne
+                  }
 
                 case ua: UnresolvedAttribute => projList.find(
                   _.toAttribute.name.equalsIgnoreCase(ua.name)).
@@ -154,22 +162,29 @@ private[sql] object EasilyFlattenable {
                     s"  unresolved attribute $ua"))
 
                 case al@Alias(ar: AttributeReference, name) =>
-                  projList.find(_.toAttribute.canonicalized == ar.canonicalized).map {
-                    case alx: Alias => alx.copy(name = name)(exprId = al.exprId,
-                      qualifier = al.qualifier, explicitMetadata = al.explicitMetadata,
-                      nonInheritableMetadataKeys = al.nonInheritableMetadataKeys)
+                  val ne = projList.find(_.toAttribute.canonicalized == ar.canonicalized).map {
+
+                    case alx : Alias => Alias(alx.child, name)(al.exprId, al.qualifier,
+                      al.explicitMetadata, al.nonInheritableMetadataKeys)
 
                     case _: AttributeReference => al
                   }.get
-
+                  if (ar.metadata.contains(Dataset.DATASET_ID_KEY) &&
+                    currentDatasetIdOpt.contains(ar.metadata.getLong(
+                      Dataset.DATASET_ID_KEY))) {
+                    addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                  } else {
+                    ne
+                  }
                 case x => throw new UnsupportedOperationException("Not able to flatten" +
                   s"  unresolved attribute $x")
               }
             }
             remappedNewProjListResult match {
               case Success(remappedNewProjList) =>
+
                 val newProj = p.copy(projectList = remappedNewProjList)
-                newProj.copyTagsFrom(p)
+
                 Option(newProj)
 
               case Failure(_) => None
@@ -202,4 +217,25 @@ private[sql] object EasilyFlattenable {
       OpType.Unknown
     }
   }
+
+  private def addDataFrameIdToCol(
+      conf: RuntimeConfig,
+      expr: NamedExpression,
+      logicalPlan: LogicalPlan,
+      childDatasetId: Option[Long]): NamedExpression =
+    if (conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) && childDatasetId.nonEmpty) {
+      val newExpr = expr transform {
+      case a: AttributeReference
+         =>
+        val metadata = new MetadataBuilder()
+          .withMetadata(a.metadata)
+          .putLong(Dataset.DATASET_ID_KEY, childDatasetId.get)
+          .putLong(Dataset.COL_POS_KEY, logicalPlan.output.indexWhere(a.semanticEquals))
+          .build()
+        a.withMetadata(metadata)
+    }
+    newExpr.asInstanceOf[NamedExpression]
+  } else {
+      expr
+    }
 }
