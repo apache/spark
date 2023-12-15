@@ -44,8 +44,7 @@ private[sql] object EasilyFlattenable {
         val ambiguiousAttribs = p.output.groupBy(_.name).filter(_._2.size > 1).keySet
 
         val currentDatasetIdOpt = p.getTagValue(Dataset.DATASET_ID_TAG).get.toSet.headOption
-        val childDatasetIdOpt = child.getTagValue(Dataset.DATASET_ID_TAG).flatMap(
-          _.toSet.headOption)
+
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (passThruAttribs, tinkeredOrNewNamedExprs) = newProjList.partition {
@@ -98,7 +97,7 @@ private[sql] object EasilyFlattenable {
                     if (attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
                       currentDatasetIdOpt.contains(attr.metadata.getLong(
                         Dataset.DATASET_ID_KEY))) {
-                      addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                      addDataFrameIdToCol(conf, ne, child, currentDatasetIdOpt)
                     } else {
                       ne
                     }
@@ -120,7 +119,7 @@ private[sql] object EasilyFlattenable {
                       if (attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
                         currentDatasetIdOpt.contains(attr.metadata.getLong(
                           Dataset.DATASET_ID_KEY))) {
-                        addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                        addDataFrameIdToCol(conf, ne, child, currentDatasetIdOpt)
                       } else {
                           ne
                       }
@@ -140,14 +139,15 @@ private[sql] object EasilyFlattenable {
               }
               remappedNewProjListResult match {
                 case Success(remappedNewProjList) =>
-                  val newProj = p.copy(projectList = remappedNewProjList)
-                  if (conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
-                    val dsIds = p.getTagValue(Dataset.DATASET_ID_TAG).map(_.clone()).getOrElse (
-                      new mutable.HashSet[Long])
-
-                    newProj.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
-                  }
-                  Option(newProj)
+                  currentDatasetIdOpt.foreach(id => {
+                    if (conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+                      val dsIds = child.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(
+                        new mutable.HashSet[Long])
+                      dsIds.add(id)
+                      child.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
+                    }
+                  })
+                  Option(p.copy(projectList = remappedNewProjList))
 
                 case Failure(_) => None
               }
@@ -162,7 +162,7 @@ private[sql] object EasilyFlattenable {
                   if (attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
                     currentDatasetIdOpt.contains(attr.metadata.getLong(
                       Dataset.DATASET_ID_KEY))) {
-                    addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                    addDataFrameIdToCol(conf, ne, child, currentDatasetIdOpt)
                   } else {
                     ne
                   }
@@ -184,7 +184,7 @@ private[sql] object EasilyFlattenable {
                   if (ar.metadata.contains(Dataset.DATASET_ID_KEY) &&
                     currentDatasetIdOpt.contains(ar.metadata.getLong(
                       Dataset.DATASET_ID_KEY))) {
-                    addDataFrameIdToCol(conf, ne, child, childDatasetIdOpt)
+                    addDataFrameIdToCol(conf, ne, child, currentDatasetIdOpt)
                   } else {
                     ne
                   }
@@ -194,13 +194,15 @@ private[sql] object EasilyFlattenable {
             }
             remappedNewProjListResult match {
               case Success(remappedNewProjList) =>
+                currentDatasetIdOpt.foreach(id => {
+                  if (conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+                    val dsIds = child.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(
+                      new mutable.HashSet[Long])
+                    dsIds.add(id)
+                    child.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
+                  }
+                })
                 val newProj = p.copy(projectList = remappedNewProjList)
-                if (conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
-                  val dsIds = p.getTagValue(Dataset.DATASET_ID_TAG).map(_.clone()).getOrElse(
-                    new mutable.HashSet[Long])
-
-                  newProj.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
-                }
 
                 Option(newProj)
 
