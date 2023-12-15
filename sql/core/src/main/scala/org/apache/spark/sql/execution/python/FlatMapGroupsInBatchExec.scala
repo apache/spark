@@ -88,7 +88,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
-        Some(pythonMetrics),
+        pythonMetrics,
         jobArtifactUUID)
 
       executePython(data, output, runner)
