@@ -613,6 +613,11 @@ def write_with_length(obj, stream):
     stream.write(obj)
 
 
+def read_with_length(stream):
+    length = read_int(stream)
+    return stream.read(length)
+
+
 class ChunkedStream:
 
     """

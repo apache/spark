@@ -56,11 +56,28 @@ class CachedArrowBatchServer extends Logging {
 
     val blockManager = SparkEnv.get.blockManager
 
-    val blockData =
-      blockManager.get[Array[Byte]](blockId).get.data.next().asInstanceOf[Array[Byte]]
-    val out = new BufferedOutputStream(sock.getOutputStream())
-    out.write(blockData)
-    out.flush()
+    var errMessage = "ok"
+    var blockDataOpt: Option[Array[Byte]] = None
+
+    try {
+      val blockResult = blockManager.get[Array[Byte]](blockId)
+      if (blockResult.isDefined) {
+        blockDataOpt = Some(blockResult.get.data.next().asInstanceOf[Array[Byte]])
+      } else {
+        errMessage = s"The chunk $blockId data cache does not exist or has been removed."
+      }
+    } catch {
+      case e: Exception =>
+        errMessage = e.getMessage
+    }
+
+    writeUtf8(errMessage, sock)
+
+    if (blockDataOpt.isDefined) {
+      val out = new BufferedOutputStream(sock.getOutputStream())
+      out.write(blockDataOpt.get)
+      out.flush()
+    }
   }
 
   def start(): (Int, String) = {
@@ -81,13 +98,16 @@ class CachedArrowBatchServer extends Logging {
             connectionCount += 1
             new Thread(s"CachedArrowBatchServer-connection-$connectionCount") {
               setDaemon(true)
-              try {
-                authHelper.authClient(sock)
-                handleConnection(sock)
-              } finally {
-                JavaUtils.closeQuietly(sock)
+
+              override def run(): Unit = {
+                try {
+                  authHelper.authClient(sock)
+                  handleConnection(sock)
+                } finally {
+                  JavaUtils.closeQuietly(sock)
+                }
               }
-            }
+            }.start()
           }
         } finally {
           logTrace("Closing server")

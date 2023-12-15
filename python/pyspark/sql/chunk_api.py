@@ -23,7 +23,7 @@ import pyarrow as pa
 from pyspark.rdd import _create_local_socket
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
-from pyspark.serializers import write_with_length
+from pyspark.serializers import read_with_length, write_with_length
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
 
@@ -73,6 +73,10 @@ def read_chunk(chunk_id):
     try:
         write_with_length(chunk_id.encode("utf-8"), sockfile)
         sockfile.flush()
+        err_message = read_with_length(sockfile).decode("utf-8")
+
+        if err_message != "ok":
+            raise RuntimeError(f"Read chunk '{chunk_id}' failed (error: {err_message}).")
 
         arrow_serializer = ArrowStreamSerializer()
 
