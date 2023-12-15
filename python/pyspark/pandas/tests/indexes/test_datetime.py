@@ -24,7 +24,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DatetimeIndexTestsMixin:
+class DatetimeIndexTestingFuncMixin:
     @property
     def fixed_freqs(self):
         return [
@@ -63,6 +63,8 @@ class DatetimeIndexTestsMixin:
         self.assertRaises(ValueError, lambda: f(freq="ns"))
         self.assertRaises(ValueError, lambda: f(freq="N"))
 
+
+class DatetimeIndexTestsMixin(DatetimeIndexTestingFuncMixin):
     def test_datetime_index(self):
         with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"], name=[(1, 2)])
@@ -70,13 +72,6 @@ class DatetimeIndexTestsMixin:
             TypeError, "Cannot perform 'all' with this index type: DatetimeIndex"
         ):
             ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"]).all()
-
-    def test_ceil(self):
-        for psidx, pidx in self.idx_pairs:
-            for freq in self.fixed_freqs:
-                self.assert_eq(psidx.ceil(freq), pidx.ceil(freq))
-
-        self._disallow_nanoseconds(self.psidxs[0].ceil)
 
     def test_floor(self):
         for psidx, pidx in self.idx_pairs:
@@ -109,62 +104,6 @@ class DatetimeIndexTestsMixin:
             self.assert_eq(
                 psidx.strftime(date_format="%B %d, %Y"), pidx.strftime(date_format="%B %d, %Y")
             )
-
-    def test_indexer_between_time(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00").sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00")),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time(
-                    datetime.time(0, 0, 0), datetime.time(0, 1, 0)
-                ).sort_values(),
-                pd.Index(pidx.indexer_between_time(datetime.time(0, 0, 0), datetime.time(0, 1, 0))),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", True, False).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", True, False)),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", False, True).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", False, True)),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", False, False).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", False, False)),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", True, True).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", True, True)),
-            )
-
-    def test_indexer_at_time(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(
-                psidx.indexer_at_time("00:00:00").sort_values(),
-                pd.Index(pidx.indexer_at_time("00:00:00")),
-            )
-
-            self.assert_eq(
-                psidx.indexer_at_time(datetime.time(0, 1, 0)).sort_values(),
-                pd.Index(pidx.indexer_at_time(datetime.time(0, 1, 0))),
-            )
-
-            self.assert_eq(
-                psidx.indexer_at_time("00:00:01").sort_values(),
-                pd.Index(pidx.indexer_at_time("00:00:01")),
-            )
-
-        self.assertRaises(
-            NotImplementedError,
-            lambda: ps.DatetimeIndex([0]).indexer_at_time("00:00:00", asof=True),
-        )
 
     def test_arithmetic_op_exceptions(self):
         for psidx, pidx in self.idx_pairs:

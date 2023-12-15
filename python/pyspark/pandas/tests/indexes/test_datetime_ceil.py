@@ -14,26 +14,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.pandas.tests.indexes.test_datetime import DatetimeIndexTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.indexes.test_datetime import DatetimeIndexTestingFuncMixin
 
 
-class DatetimeIndexParityTests(
-    DatetimeIndexTestsMixin,
-    PandasOnSparkTestUtils,
-    ReusedConnectTestCase,
+class DatetimeIndexCeilMixin(DatetimeIndexTestingFuncMixin):
+    def test_ceil(self):
+        for psidx, pidx in self.idx_pairs:
+            for freq in self.fixed_freqs:
+                self.assert_eq(psidx.ceil(freq), pidx.ceil(freq))
+
+        self._disallow_nanoseconds(self.psidxs[0].ceil)
+
+
+class DatetimeIndexCeilTests(
+    DatetimeIndexCeilMixin,
+    PandasOnSparkTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_datetime import *  # noqa: F401
+    import unittest
+    from pyspark.pandas.tests.indexes.test_datetime_ceil import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
