@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -35,7 +35,10 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class JDBCTableCatalog extends TableCatalog
-  with SupportsNamespaces with FunctionCatalog with Logging {
+  with SupportsNamespaces
+  with FunctionCatalog
+  with DataTypeErrorsBase
+  with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private var catalogName: String = null
@@ -67,7 +70,7 @@ class JDBCTableCatalog extends TableCatalog
       val schemaPattern = if (namespace.length == 1) namespace.head else null
       val rs = JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.GET_TABLES",
-        messageParameters = Map("namespace" -> namespace.mkString(".")),
+        messageParameters = Map("namespace" -> toSQLId(namespace.toSeq)),
         dialect) {
         conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
       }
@@ -84,7 +87,7 @@ class JDBCTableCatalog extends TableCatalog
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
     JdbcUtils.classifyException(
       errorClass = "FAILED_JDBC.TABLE_EXISTS",
-      messageParameters = Map("tableName" -> ident.toString),
+      messageParameters = Map("tableName" -> toSQLId(ident)),
       dialect) {
       JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
     }
@@ -108,8 +111,8 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.RENAME_TABLE",
         messageParameters = Map(
-          "oldName" -> oldIdent.toString,
-          "newName" -> newIdent.toString),
+          "oldName" -> toSQLId(oldIdent),
+          "newName" -> toSQLId(newIdent)),
         dialect) {
         JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
@@ -172,7 +175,7 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.CREATE_TABLE",
-        messageParameters = Map("tableName" -> ident.toString),
+        messageParameters = Map("tableName" -> toSQLId(ident)),
         dialect) {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
@@ -186,7 +189,7 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.ALTER_TABLE",
-        messageParameters = Map("tableName" -> ident.toString),
+        messageParameters = Map("tableName" -> toSQLId(ident)),
         dialect) {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
@@ -199,7 +202,7 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.NAMESPACE_EXISTS",
-          messageParameters = Map("namespace" -> namespace.mkString(".")),
+          messageParameters = Map("namespace" -> toSQLId(namespace.toSeq)),
           dialect) {
           JdbcUtils.schemaExists(conn, options, db)
         }
@@ -262,7 +265,7 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.CREATE_NAMESPACE",
-          messageParameters = Map("namespace" -> db),
+          messageParameters = Map("namespace" -> toSQLId(db)),
           dialect) {
           JdbcUtils.createSchema(conn, options, db, comment)
         }
@@ -284,7 +287,7 @@ class JDBCTableCatalog extends TableCatalog
               JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.classifyException(
                   errorClass = "FAILED_JDBC.CREATE_NAMESPACE_COMMENT",
-                  messageParameters = Map("namespace" -> db),
+                  messageParameters = Map("namespace" -> toSQLId(db)),
                   dialect) {
                   JdbcUtils.alterSchemaComment(conn, options, db, set.value)
                 }
@@ -298,7 +301,7 @@ class JDBCTableCatalog extends TableCatalog
               JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.classifyException(
                   errorClass = "FAILED_JDBC.REMOVE_NAMESPACE_COMMENT",
-                  messageParameters = Map("namespace" -> db),
+                  messageParameters = Map("namespace" -> toSQLId(db)),
                   dialect) {
                   JdbcUtils.removeSchemaComment(conn, options, db)
                 }
@@ -323,7 +326,7 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.DROP_NAMESPACE",
-          messageParameters = Map("namespace" -> db),
+          messageParameters = Map("namespace" -> toSQLId(db)),
           dialect) {
           JdbcUtils.dropSchema(conn, options, db, cascade)
           true
@@ -363,5 +366,9 @@ class JDBCTableCatalog extends TableCatalog
       case _ =>
         throw new NoSuchFunctionException(ident)
     }
+  }
+
+  private def toSQLId(ident: Identifier): String = {
+    toSQLId(ident.namespace.toSeq :+ ident.name)
   }
 }

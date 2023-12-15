@@ -26,13 +26,18 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
-  extends Table with SupportsRead with SupportsWrite with SupportsIndex {
+  extends Table
+  with SupportsRead
+  with SupportsWrite
+  with SupportsIndex
+  with DataTypeErrorsBase {
 
   override def name(): String = ident.toString
 
@@ -61,8 +66,8 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.CREATE_INDEX",
         messageParameters = Map(
-          "indexName" -> indexName,
-          "tableName" -> name()),
+          "indexName" -> toSQLId(indexName),
+          "tableName" -> toSQLId(name)),
         dialect = JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.createIndex(
           conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
@@ -81,8 +86,8 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.DROP_INDEX",
         messageParameters = Map(
-          "indexName" -> indexName,
-          "tableName" -> name()),
+          "indexName" -> toSQLId(indexName),
+          "tableName" -> toSQLId(name)),
         dialect = JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }

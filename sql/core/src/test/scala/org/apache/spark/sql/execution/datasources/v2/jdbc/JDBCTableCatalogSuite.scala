@@ -560,7 +560,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
             " TBLPROPERTIES('ENGINE'='tableEngineName')")
         },
         errorClass = "FAILED_JDBC.CREATE_TABLE",
-        parameters = Map("tableName" -> "test.new_table"))
+        parameters = Map("tableName" -> "`test`.`new_table`"))
     }
   }
 
@@ -577,7 +577,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
       },
       errorClass = "FAILED_JDBC.CREATE_TABLE",
-      parameters = Map("tableName" -> "test.new_table"))
+      parameters = Map("tableName" -> "`test`.`new_table`"))
   }
 
   test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {
