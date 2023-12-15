@@ -1733,11 +1733,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcprov-jdk18on</artifactId>
+            <artifactId>bcprov-jdk15on</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpkix-jdk18on</artifactId>
+            <artifactId>bcpkix-jdk15on</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.fusesource.leveldbjni</groupId>
