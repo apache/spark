@@ -94,6 +94,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       Iterator[UnsafeRowPair] = {
       map.prefixScan(prefixKey)
     }
+
+    override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      Seq(get(key, colFamilyName)).iterator
+    }
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
@@ -201,6 +205,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+
+    override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      throw new UnsupportedOperationException("store does not support multiple values per key")
+    }
+
+    override def merge(key: UnsafeRow, value: UnsafeRow,
+                       colFamilyName: String): Unit = {
+      throw new UnsupportedOperationException("store does not support multiple values per key")
+    }
   }
 
   def getMetricsForProvider(): Map[String, Long] = synchronized {
@@ -246,7 +259,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useStatefulProcessorEncoder: Boolean = false): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema

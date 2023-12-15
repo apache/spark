@@ -63,6 +63,40 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
+    override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      verify(key != null, "Key cannot be null")
+      val valueIterator = encoder.decodeValues(rocksDB.get(encoder.encodeKey(key), colFamilyName))
+
+      if (!isValidated && valueIterator.nonEmpty) {
+        new Iterator[UnsafeRow] {
+          override def hasNext: Boolean = {
+            val hasNext = valueIterator.hasNext
+            if (!hasNext) {
+              isValidated = true
+            }
+            hasNext
+          }
+
+          override def next(): UnsafeRow = {
+            val value = valueIterator.next()
+            StateStoreProvider.validateStateRowFormat(
+              key, keySchema, value, valueSchema, storeConf)
+            value
+          }
+        }
+      } else {
+        valueIterator
+      }
+    }
+
+    override def merge(key: UnsafeRow, value: UnsafeRow,
+                       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(key != null, "Key cannot be null")
+      require(value != null, "Cannot put a null value")
+      rocksDB.merge(encoder.encodeKey(key), encoder.encodeValue(value), colFamilyName)
+    }
+
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
@@ -196,7 +230,8 @@ private[sql] class RocksDBStateStoreProvider
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useStatefulProcessorEncoder: Boolean = false): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -208,7 +243,8 @@ private[sql] class RocksDBStateStoreProvider
       (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
       "greater than the number of columns for prefix key!")
 
-    this.encoder = RocksDBStateEncoder.getEncoder(keySchema, valueSchema, numColsPrefixKey)
+    this.encoder = RocksDBStateEncoder.getEncoder(keySchema, valueSchema,
+      numColsPrefixKey, useStatefulProcessorEncoder)
 
     rocksDB // lazy initialization
   }

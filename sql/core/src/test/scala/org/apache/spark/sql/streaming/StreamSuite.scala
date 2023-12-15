@@ -1420,7 +1420,8 @@ class TestStateStoreProvider extends StateStoreProvider {
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useStatefulProcessorEncoder: Boolean = false): Unit = {
     throw new Exception("Successfully instantiated")
   }
 

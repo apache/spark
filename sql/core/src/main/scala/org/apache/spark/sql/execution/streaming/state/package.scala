@@ -57,7 +57,9 @@ package object state {
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
         useColumnFamilies: Boolean = false,
-        extraOptions: Map[String, String] = Map.empty)(
+        extraOptions: Map[String, String] = Map.empty,
+        // TODO: refactor using the boolean parameter for choosing stateful encoder into a enum
+        useStatefulProcessorEncoder: Boolean = false)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
@@ -82,7 +84,8 @@ package object state {
         sessionState,
         storeCoordinator,
         useColumnFamilies,
-        extraOptions)
+        extraOptions,
+        useStatefulProcessorEncoder)
     }
 
     /** Map each partition of an RDD along with data in a [[ReadStateStore]]. */

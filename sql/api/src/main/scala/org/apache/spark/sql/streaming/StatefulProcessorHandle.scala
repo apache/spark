@@ -40,4 +40,10 @@ trait StatefulProcessorHandle extends Serializable {
 
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo
+
+  /**
+   * Creates new or returns existing list state associated with stateName.
+   * The ListState persists values of type T.
+   */
+  def getListState[T](stateName: String): ListState[T]
 }

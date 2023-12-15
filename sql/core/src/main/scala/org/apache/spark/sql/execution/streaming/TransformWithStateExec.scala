@@ -159,7 +159,8 @@ case class TransformWithStateExec(
       numColsPrefixKey = 0,
       session.sqlContext.sessionState,
       Some(session.sqlContext.streams.stateStoreCoordinator),
-      useColumnFamilies = true
+      useColumnFamilies = true,
+      useStatefulProcessorEncoder = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId)

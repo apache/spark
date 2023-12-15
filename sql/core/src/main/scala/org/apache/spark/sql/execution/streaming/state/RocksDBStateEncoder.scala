@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -29,9 +30,9 @@ sealed trait RocksDBStateEncoder {
 
   def encodeKey(row: UnsafeRow): Array[Byte]
   def encodeValue(row: UnsafeRow): Array[Byte]
-
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
+  def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
   def decode(byteArrayTuple: ByteArrayPair): UnsafeRowPair
 }
 
@@ -39,8 +40,11 @@ object RocksDBStateEncoder {
   def getEncoder(
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int): RocksDBStateEncoder = {
-    if (numColsPrefixKey > 0) {
+      numColsPrefixKey: Int,
+      useStatefulProcessorEncoder: Boolean): RocksDBStateEncoder = {
+    if (useStatefulProcessorEncoder) {
+      new StatefulProcessorStateEncoder(keySchema, valueSchema)
+    } else if (numColsPrefixKey > 0) {
       new PrefixKeyScanStateEncoder(keySchema, valueSchema, numColsPrefixKey)
     } else {
       new NoPrefixKeyStateEncoder(keySchema, valueSchema)
@@ -185,6 +189,10 @@ class PrefixKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("encoder does not support multiple values per key")
+  }
 }
 
 /**
@@ -248,5 +256,107 @@ class NoPrefixKeyStateEncoder(keySchema: StructType, valueSchema: StructType)
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
+  }
+
+  override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("encoder does not support multiple values per key")
+  }
+}
+
+/**
+ * Supports encoding multiple values per key in RocksDB.
+ * A single value is encoded in the format below, where first value is number of bytes
+ * in actual encodedUnsafeRow followed by the encoded value itself.
+ *
+ * |---size(bytes)--|--unsafeRowEncodedBytes--|
+ *
+ * Multiple values are separated by a delimiter character.
+ *
+ * This encoder supports RocksDB StringAppendOperator merge operator. Values encoded can be
+ * merged in RocksDB using merge operation, and all merged values can be read using decodeValues
+ * operation.
+ */
+class StatefulProcessorStateEncoder(keySchema: StructType, valueSchema: StructType)
+  extends RocksDBStateEncoder with Logging {
+
+  import RocksDBStateEncoder._
+
+  // Reusable objects
+  private val keyRow = new UnsafeRow(keySchema.size)
+  private val valueRow = new UnsafeRow(valueSchema.size)
+  private val rowTuple = new UnsafeRowPair()
+
+  override def supportPrefixKeyScan: Boolean = false
+
+  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+    throw new IllegalStateException("This encoder doesn't support prefix key!")
+  }
+
+  override def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
+    throw new IllegalStateException("This encoder doesn't support prefix key!")
+  }
+
+  override def encodeKey(row: UnsafeRow): Array[Byte] = {
+    encodeUnsafeRow(row)
+  }
+
+  override def encodeValue(row: UnsafeRow): Array[Byte] = {
+    val bytes = encodeUnsafeRow(row)
+    val numBytes = bytes.length
+
+    val encodedBytes = new Array[Byte](java.lang.Integer.BYTES + bytes.length)
+    Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, numBytes)
+    Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, java.lang.Integer.BYTES + Platform.BYTE_ARRAY_OFFSET, bytes.length)
+
+    encodedBytes
+  }
+
+  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
+    decodeToUnsafeRow(keyBytes, keyRow)
+  }
+
+  override def decodeValue(valueBytes: Array[Byte]): UnsafeRow = {
+    if (valueBytes == null) {
+      null
+    } else {
+      val numBytes = Platform.getInt(valueBytes, Platform.BYTE_ARRAY_OFFSET)
+      val encodedValue = new Array[Byte](numBytes)
+      Platform.copyMemory(valueBytes, java.lang.Integer.BYTES + Platform.BYTE_ARRAY_OFFSET,
+        encodedValue, Platform.BYTE_ARRAY_OFFSET, numBytes)
+      decodeToUnsafeRow(encodedValue, valueRow)
+    }
+  }
+
+  override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    if (valueBytes == null) {
+      Seq().iterator
+    } else {
+      new Iterator[UnsafeRow] {
+        private var pos: Int = Platform.BYTE_ARRAY_OFFSET
+        private val maxPos = Platform.BYTE_ARRAY_OFFSET + valueBytes.length
+
+        override def hasNext: Boolean = {
+          pos < maxPos
+        }
+
+        override def next(): UnsafeRow = {
+          val numBytes = Platform.getInt(valueBytes, pos)
+
+          pos += java.lang.Integer.BYTES
+          val encodedValue = new Array[Byte](numBytes)
+          Platform.copyMemory(valueBytes, pos,
+            encodedValue, Platform.BYTE_ARRAY_OFFSET, numBytes)
+
+          pos += numBytes
+          pos += 1 // eat the delimiter character
+          decodeToUnsafeRow(encodedValue, valueRow)
+        }
+      }
+    }
+  }
+
+  override def decode(byteArrayTuple: ByteArrayPair): UnsafeRowPair = {
+    rowTuple.withRows(decodeKey(byteArrayTuple.key), decodeValue(byteArrayTuple.value))
   }
 }

@@ -65,7 +65,8 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useStatefulProcessorEncoder: Boolean = false): Unit = {
     id = stateStoreId
   }
 
