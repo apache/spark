@@ -1574,7 +1574,7 @@ class Dataset[T] private[sql](
         case other => other
       }
       val newProjList = untypedCols.map(_.named)
-      (logicalPlan, newProjList, sparkSession.conf) match {
+      (logicalPlan, newProjList, id) match {
         case EasilyFlattenable(flattendPlan) if !this.isStreaming &&
           !logicalPlan.getTagValue(LogicalPlan.SKIP_FLATTENING).getOrElse(false) => flattendPlan
 
@@ -2956,7 +2956,7 @@ class Dataset[T] private[sql](
       projectList.map(_.name),
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
     withPlan(
-      (logicalPlan, projectList, sparkSession.conf) match {
+      (logicalPlan, projectList, id) match {
         case EasilyFlattenable(flattendPlan) if !this.isStreaming &&
           !logicalPlan.getTagValue(LogicalPlan.SKIP_FLATTENING).getOrElse(false) => flattendPlan
 
