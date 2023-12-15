@@ -40,6 +40,9 @@ private[sql] object EasilyFlattenable {
 
     logicalPlan match {
       case p @ Project(projList, child: LogicalPlan) =>
+        val currentOutputAttribs = AttributeSet(p.output)
+        val ambiguiousAttribs = p.output.groupBy(_.name).filter(_._2.size > 1).keySet
+
         val currentDatasetIdOpt = p.getTagValue(Dataset.DATASET_ID_TAG).get.toSet.headOption
         val childDatasetIdOpt = child.getTagValue(Dataset.DATASET_ID_TAG).flatMap(
           _.toSet.headOption)
@@ -49,7 +52,7 @@ private[sql] object EasilyFlattenable {
           case _: Attribute => true
           case _ => false
         }
-        val currentOutputAttribs = AttributeSet(p.output)
+
         val passThruAttribsContainedInCurrentOutput = passThruAttribs.forall( attribute =>
           currentOutputAttribs.contains(attribute) ||
             currentOutputAttribs.exists(_.name == attribute.name))
@@ -79,7 +82,8 @@ private[sql] object EasilyFlattenable {
               case ex: AggregateExpression => ex
               case ex: WindowExpression => ex
               case ex: UserDefinedExpression => ex
-              case u: UnresolvedAttribute if u.nameParts.size != 1 => u
+              case u: UnresolvedAttribute if u.nameParts.size != 1 |
+                ambiguiousAttribs.contains(u.name) => u
               case u: UnresolvedFunction if u.nameParts.size == 1 & u.nameParts.head == "struct" =>
                 u
             }.nonEmpty)) {
@@ -156,7 +160,8 @@ private[sql] object EasilyFlattenable {
                     ne
                   }
 
-                case ua: UnresolvedAttribute => projList.find(
+                case ua: UnresolvedAttribute if ua.nameParts.size == 1 &
+                  !ambiguiousAttribs.contains(ua.name) => projList.find(
                   _.toAttribute.name.equalsIgnoreCase(ua.name)).
                   getOrElse(throw new UnsupportedOperationException("Not able to flatten" +
                     s"  unresolved attribute $ua"))
