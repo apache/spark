@@ -242,10 +242,6 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
                 indexName = messageParameters("indexName"),
                 tableName = messageParameters("tableName"),
                 cause = Some(e))
-            } else if (errorClass == "FAILED_JDBC.DROP_INDEX") {
-              val indexName = messageParameters("indexName")
-              val tableName = messageParameters("tableName")
-              throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
             } else if (errorClass == "FAILED_JDBC.RENAME_TABLE") {
               val newTable = messageParameters("newName")
               throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
@@ -257,6 +253,10 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
                 super.classifyException(e, errorClass, messageParameters)
               }
             }
+          case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+            val indexName = messageParameters("indexName")
+            val tableName = messageParameters("tableName")
+            throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case "2BP01" =>
             throw NonEmptyNamespaceException(
               namespace = messageParameters.get("namespace").toArray,
