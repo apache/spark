@@ -147,7 +147,9 @@ private[sql] object EasilyFlattenable {
                       child.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
                     }
                   })
-                  Option(p.copy(projectList = remappedNewProjList))
+                  val newProj = Project(remappedNewProjList, child)
+
+                  Option(newProj)
 
                 case Failure(_) => None
               }
@@ -202,7 +204,7 @@ private[sql] object EasilyFlattenable {
                     child.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
                   }
                 })
-                val newProj = p.copy(projectList = remappedNewProjList)
+                val newProj = Project(remappedNewProjList, child)
 
                 Option(newProj)
 
