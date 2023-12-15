@@ -81,6 +81,10 @@ public class ParquetVectorUpdaterFactory {
           // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary
           // fallbacks. We read them as long values.
           return new UnsignedIntegerUpdater();
+        } else if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
+          return new IntegerToLongUpdater();
+        } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
+          return new IntegerToBinaryUpdater();
         } else if (sparkType == DataTypes.ByteType) {
           return new ByteUpdater();
         } else if (sparkType == DataTypes.ShortType) {
@@ -91,6 +95,13 @@ public class ParquetVectorUpdaterFactory {
           } else {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new IntegerWithRebaseUpdater(failIfRebase);
+          }
+        } else if (sparkType == DataTypes.TimestampNTZType) {
+          if ("CORRECTED".equals(datetimeRebaseMode)) {
+            return new DateToTimestampNTZUpdater();
+          } else {
+            boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+            return new DateToTimestampNTZWithRebaseUpdater(failIfRebase);
           }
         } else if (sparkType instanceof YearMonthIntervalType) {
           return new IntegerUpdater();
@@ -104,6 +115,8 @@ public class ParquetVectorUpdaterFactory {
           } else {
             return new LongUpdater();
           }
+        } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
+          return new LongToBinaryUpdater();
         } else if (isLongDecimal(sparkType) && isUnsignedIntTypeMatched(64)) {
           // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
           // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary
@@ -134,6 +147,8 @@ public class ParquetVectorUpdaterFactory {
       case FLOAT -> {
         if (sparkType == DataTypes.FloatType) {
           return new FloatUpdater();
+        } else if (sparkType == DataTypes.DoubleType) {
+          return new FloatToDoubleUpdater();
         }
       }
       case DOUBLE -> {
@@ -278,6 +293,121 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       values.putInt(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+  static class IntegerToLongUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putLong(offset + i, valuesReader.readInteger());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putLong(offset, valuesReader.readInteger());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      values.putLong(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+  static class DateToTimestampNTZUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putLong(offset + i, DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC));
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putLong(offset, DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC));
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      int days = dictionary.decodeToInt(dictionaryIds.getDictId(offset));
+      values.putLong(offset, DateTimeUtils.daysToMicros(days, ZoneOffset.UTC));
+    }
+  }
+
+  private static class DateToTimestampNTZWithRebaseUpdater implements ParquetVectorUpdater {
+    private final boolean failIfRebase;
+
+    DateToTimestampNTZWithRebaseUpdater(boolean failIfRebase) {
+      this.failIfRebase = failIfRebase;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        int rebasedDays = rebaseDays(valuesReader.readInteger(), failIfRebase);
+        values.putLong(offset + i, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      int rebasedDays = rebaseDays(valuesReader.readInteger(), failIfRebase);
+      values.putLong(offset, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      int rebasedDays = rebaseDays(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), failIfRebase);
+      values.putLong(offset, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
     }
   }
 
@@ -684,6 +814,41 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
+    static class FloatToDoubleUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putDouble(offset + i, valuesReader.readFloat());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFloats(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putDouble(offset, valuesReader.readFloat());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      values.putDouble(offset, dictionary.decodeToFloat(dictionaryIds.getDictId(offset)));
+    }
+  }
+
   private static class DoubleUpdater implements ParquetVectorUpdater {
     @Override
     public void readValues(
@@ -748,6 +913,82 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
       values.putByteArray(offset, v.getBytes());
+    }
+  }
+
+  private static class IntegerToBinaryUpdater implements ParquetVectorUpdater {
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigInteger value = BigInteger.valueOf(valuesReader.readInteger());
+      values.putByteArray(offset, value.toByteArray());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value = BigInteger.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+      values.putByteArray(offset, value.toByteArray());
+    }
+  }
+
+  private static class LongToBinaryUpdater implements ParquetVectorUpdater {
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigInteger value = BigInteger.valueOf(valuesReader.readLong());
+      values.putByteArray(offset, value.toByteArray());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value = BigInteger.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+      values.putByteArray(offset, value.toByteArray());
     }
   }
 
