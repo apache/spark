@@ -21,11 +21,12 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetOutputFormat}
+
 import org.apache.spark.SparkException
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -139,7 +140,7 @@ class ParquetTypeWideningSuite
   }
 
   for {
-    case (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
+    (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
       (Seq("1", "2", Short.MinValue.toString), ShortType, IntegerType),
       // Int->Short isn't a widening conversion but Parquet stores both as INT32 so it just works.
       (Seq("1", "2", Short.MinValue.toString), IntegerType, ShortType),
@@ -152,7 +153,7 @@ class ParquetTypeWideningSuite
     }
 
   for {
-    case (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
+    (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
       (Seq("1", "2", Int.MinValue.toString), LongType, IntegerType),
       // Test different timestamp types
       (Seq("2020-01-01", "2020-01-02", "1312-02-27"), TimestampNTZType, DateType),

@@ -151,13 +151,15 @@ public class VectorizedColumnReader {
       case INT32 -> {
         boolean needsUpcast = sparkType == LongType || sparkType == TimestampNTZType ||
                 !DecimalType.is32BitDecimalType(sparkType);
-        boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation && !"CORRECTED".equals(datetimeRebaseMode);
+        boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
+          !"CORRECTED".equals(datetimeRebaseMode);
         yield !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);
       }
       case INT64 -> {
         boolean needsUpcast = !DecimalType.is64BitDecimalType(sparkType) ||
                 updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
-        boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) && !"CORRECTED".equals(datetimeRebaseMode);
+        boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
+          !"CORRECTED".equals(datetimeRebaseMode);
         yield !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);
       }
       case FLOAT -> sparkType == FloatType;

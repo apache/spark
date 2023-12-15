@@ -339,7 +339,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; ++i) {
-        values.putLong(offset + i, DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC));
+        long days = DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC);
+        values.putLong(offset + i, days);
       }
     }
 
@@ -353,7 +354,8 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      values.putLong(offset, DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC));
+      long days = DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC);
+      values.putLong(offset, days);
     }
 
     @Override
@@ -406,7 +408,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      int rebasedDays = rebaseDays(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), failIfRebase);
+      int rebasedDays =
+        rebaseDays(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), failIfRebase);
       values.putLong(offset, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
     }
   }
@@ -949,7 +952,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      BigInteger value = BigInteger.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+      BigInteger value =
+        BigInteger.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
       values.putByteArray(offset, value.toByteArray());
     }
   }
@@ -987,7 +991,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      BigInteger value = BigInteger.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+      BigInteger value =
+        BigInteger.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
       values.putByteArray(offset, value.toByteArray());
     }
   }
