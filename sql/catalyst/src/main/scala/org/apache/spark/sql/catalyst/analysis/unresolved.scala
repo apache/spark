@@ -873,9 +873,9 @@ case class TempResolvedColumn(
 }
 
 /**
-<<<<<<< HEAD
  * Represents a `withColumns` operation. This operator both replaces existing columns
- * (based on the name), or appends new columns.
+ * (based on the name), or appends new columns. The names used for the replacements/additions must
+ * be unique.
  */
 case class UnresolvedWithColumns(
     projectList: Seq[NamedExpression],

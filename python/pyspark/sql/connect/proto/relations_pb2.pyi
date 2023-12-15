@@ -2857,10 +2857,13 @@ class WithColumns(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class Columns(google.protobuf.message.Message):
+    class StackedWithColumns(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        COMMON_FIELD_NUMBER: builtins.int
         ALIASES_FIELD_NUMBER: builtins.int
+        @property
+        def common(self) -> global___RelationCommon: ...
         @property
         def aliases(
             self,
@@ -2870,13 +2873,17 @@ class WithColumns(google.protobuf.message.Message):
         def __init__(
             self,
             *,
+            common: global___RelationCommon | None = ...,
             aliases: collections.abc.Iterable[
                 pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
             ]
             | None = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["common", b"common"]
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["aliases", b"aliases"]
+            self, field_name: typing_extensions.Literal["aliases", b"aliases", "common", b"common"]
         ) -> None: ...
 
     INPUT_FIELD_NUMBER: builtins.int
@@ -2905,9 +2912,14 @@ class WithColumns(google.protobuf.message.Message):
     def stack(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___WithColumns.Columns
+        global___WithColumns.StackedWithColumns
     ]:
-        """(Optional when `aliases` is set)"""
+        """(Optional when `aliases` is set)
+
+        Stack of `withColumn` messages. Each StackedWithColumns message contains the same fields as
+        a single WithColumns message. When both aliases and a stack are set, the aliases are
+        interpreted as the last element in the stack.
+        """
     def __init__(
         self,
         *,
@@ -2916,7 +2928,7 @@ class WithColumns(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
         ]
         | None = ...,
-        stack: collections.abc.Iterable[global___WithColumns.Columns] | None = ...,
+        stack: collections.abc.Iterable[global___WithColumns.StackedWithColumns] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
