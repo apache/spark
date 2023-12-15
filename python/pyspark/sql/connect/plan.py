@@ -543,7 +543,7 @@ class WithColumns(LogicalPlan):
         plan.with_columns.input.CopyFrom(input.plan(session))
 
         # Append the current aliases.
-        append_aliases(session, plan.with_columns.aliases)
+        self.append_aliases(session, plan.with_columns.aliases)
 
         # Add the chain to the stack.
         for element in reversed(chain):
