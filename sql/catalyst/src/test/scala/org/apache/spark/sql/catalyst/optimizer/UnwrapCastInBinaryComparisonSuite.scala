@@ -407,14 +407,11 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("SPARK-46069: Support unwrap timestamp type to date type") {
-    def doTest(tsLit: Literal, tsNTZLit: Literal): Unit = {
+    def doTest(tsLit: Literal, tsNTZLit: Literal, isStartOfDay: Boolean): Unit = {
       val floorDate = Cast(tsLit, DateType, Some(conf.sessionLocalTimeZone))
       val floorDateNTZ = Cast(tsNTZLit, DateType, Some(conf.sessionLocalTimeZone))
       val dateAddOne = DateAdd(floorDate, Literal(1, IntegerType))
       val dateAddOneNTZ = DateAdd(floorDateNTZ, Literal(1, IntegerType))
-      val isStartOfDay =
-        EqualTo(tsLit, Cast(floorDate, tsLit.dataType, Some(conf.sessionLocalTimeZone)))
-          .eval(EmptyRow).asInstanceOf[Boolean]
       assertEquivalent(
         castTimestamp(f7) > tsLit || castTimestampNTZ(f7) > tsNTZLit,
         f7 > floorDate || f7 > floorDateNTZ)
@@ -456,13 +453,13 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     val tsLit = Literal.create(instant, TimestampType)
     val tsNTZ = LocalDateTime.of(2023, 12, 13, 0, 0, 0, 0)
     val tsNTZLit = Literal.create(tsNTZ, TimestampNTZType)
-    doTest(tsLit, tsNTZLit)
+    doTest(tsLit, tsNTZLit, isStartOfDay = true)
 
     // Test isStartOfDay is false cases
     val tsLit2 = Literal.create(instant.plusSeconds(30), TimestampType)
     val tsNTZ2 = LocalDateTime.of(2023, 12, 13, 0, 0, 30, 0)
     val tsNTZLit2 = Literal.create(tsNTZ2, TimestampNTZType)
-    doTest(tsLit2, tsNTZLit2)
+    doTest(tsLit2, tsNTZLit2, isStartOfDay = false)
   }
 
   private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
