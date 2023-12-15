@@ -927,7 +927,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       hive.getTable(dbName, tableName, throwException)
     } catch {
       // Hive may have bugs and still throw an exception even if `throwException` is false.
-      case e: HiveException if !throwException && e.getMessage.contains("Unable to fetch table") =>
+      case e: HiveException if !throwException =>
         null
     }
     if (table != null) {
