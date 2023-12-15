@@ -59,7 +59,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{EarlyCollapsableProjects, SQLConf}
+import org.apache.spark.sql.internal.{EarlyCollapseProject, SQLConf}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -1575,7 +1575,7 @@ class Dataset[T] private[sql](
       }
       val newProjList = untypedCols.map(_.named)
       (logicalPlan, newProjList, id) match {
-        case EarlyCollapsableProjects(flattendPlan) if !this.isStreaming &&
+        case EarlyCollapseProject(flattendPlan) if !this.isStreaming &&
           !logicalPlan.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) =>
             flattendPlan
 
@@ -2958,7 +2958,7 @@ class Dataset[T] private[sql](
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
     withPlan(
       (logicalPlan, projectList, id) match {
-        case EarlyCollapsableProjects(flattendPlan) if !this.isStreaming &&
+        case EarlyCollapseProject(flattendPlan) if !this.isStreaming &&
           !logicalPlan.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) =>
             flattendPlan
 

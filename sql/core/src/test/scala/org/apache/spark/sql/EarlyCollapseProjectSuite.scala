@@ -24,7 +24,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
 
 
-class EarlyProjectCollapseSuite extends QueryTest
+class EarlyCollapseProjectSuite extends QueryTest
   with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 

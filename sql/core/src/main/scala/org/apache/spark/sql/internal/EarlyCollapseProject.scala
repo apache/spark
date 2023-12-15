@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 
-private[sql] object EarlyCollapsableProjects {
+private[sql] object EarlyCollapseProject {
   object OpType extends Enumeration {
     type OpType = Value
     val AddNewColumnsOnly, RemapOnly, Unknown = Value
