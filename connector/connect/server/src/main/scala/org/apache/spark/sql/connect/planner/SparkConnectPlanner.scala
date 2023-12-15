@@ -986,12 +986,10 @@ class SparkConnectPlanner(
         (rename.getColName, rename.getNewColName)
       }.unzip
       val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
-      ds.logicalPlan.setTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE, true)
       ds.withColumnsRenamed(colNames, newColNames).logicalPlan
     } else {
       // for backward compatibility
       val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
-      ds.logicalPlan.setTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE, true)
       ds.withColumnsRenamed(rel.getRenameColumnsMapMap).logicalPlan
     }
   }
@@ -1014,7 +1012,6 @@ class SparkConnectPlanner(
       }.unzip3
 
     val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
-    ds.logicalPlan.setTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE, true)
     ds.withColumns(colNames, cols, metadata).logicalPlan
   }
 
