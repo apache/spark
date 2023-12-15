@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTimestamp, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
-import org.apache.spark.sql.catalyst.optimizer.EvalInlineTables
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{LongType, NullType, TimestampType}
 
@@ -84,19 +84,29 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     assert(ResolveInlineTables(table) == table)
   }
 
-  test("convert") {
+  test("cast and execute") {
     val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(2L))))
-    val tempResolvedInlineTable = ResolveInlineTables.findCommonTypesAndCast(table)
+    val converted = ResolveInlineTables.findCommonTypesAndCast(table)
+      .asInstanceOf[LocalRelation]
 
-    assert(tempResolvedInlineTable.output.map(_.dataType) == Seq(LongType))
-    assert(tempResolvedInlineTable.rows.size == 2)
+    assert(converted.output.map(_.dataType) == Seq(LongType))
+    assert(converted.data.size == 2)
+    assert(converted.data(0).getLong(0) == 1L)
+    assert(converted.data(1).getLong(0) == 2L)
+  }
 
-    EvalInlineTables(tempResolvedInlineTable) match {
+  test("cast and execute CURRENT_LIKE expressions") {
+    val table = UnresolvedInlineTable(Seq("c1"), Seq(
+      Seq(CurrentTimestamp()), Seq(CurrentTimestamp())))
+    val casted = ResolveInlineTables.findCommonTypesAndCast(table)
+      .asInstanceOf[TempResolvedInlineTable]
+
+    EvalInlineTables(ComputeCurrentTime(casted)) match {
       case LocalRelation(output, data, _) =>
-        assert(output.map(_.dataType) == Seq(LongType))
+        assert(output.map(_.dataType) == Seq(TimestampType))
         assert(data.size == 2)
-        assert(data(0).getLong(0) == 1L)
-        assert(data(1).getLong(0) == 2L)
+        // Make sure that both CURRENT_TIMESTAMP expressions are evaluated to the same value.
+        assert(data(0).getLong(0) == data(1).getLong(0))
     }
   }
 

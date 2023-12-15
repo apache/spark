@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -90,8 +93,7 @@ object ResolveInlineTables extends Rule[LogicalPlan]
    *
    * This is package visible for unit testing.
    */
-  private[analysis] def findCommonTypesAndCast(table: UnresolvedInlineTable):
-  TempResolvedInlineTable = {
+  private[analysis] def findCommonTypesAndCast(table: UnresolvedInlineTable): LeafNode = {
     // For each column, traverse all the values and find a common data type and nullability.
     val fields = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
@@ -105,7 +107,7 @@ object ResolveInlineTables extends Rule[LogicalPlan]
     val attributes = DataTypeUtils.toAttributes(StructType(fields))
     assert(fields.size == table.names.size)
 
-    val newRows: Seq[Seq[Expression]] = table.rows.map { row =>
+    val castedRows: Seq[Seq[Expression]] = table.rows.map { row =>
       row.zipWithIndex.map {
         case (e, ci) =>
           val targetType = fields(ci).dataType
@@ -118,6 +120,27 @@ object ResolveInlineTables extends Rule[LogicalPlan]
       }
     }
 
-    TempResolvedInlineTable(newRows, attributes)
+    val noCurrentLike: Boolean = castedRows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
+    if (noCurrentLike) {
+      val evalRows: Seq[InternalRow] =
+        castedRows.map { row =>
+          InternalRow.fromSeq(
+            row.map(e =>
+              try {
+                prepareForEval(e).eval()
+              } catch {
+                case NonFatal(ex) =>
+                  table.failAnalysis(
+                    errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                    messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+                    cause = ex)
+              }))
+        }
+      // We can evaluate this expression.
+      LocalRelation(attributes, evalRows)
+    } else {
+      // Delay resolution after we have CURRENT_LIKE handled.
+      TempResolvedInlineTable(castedRows, attributes)
+    }
   }
 }

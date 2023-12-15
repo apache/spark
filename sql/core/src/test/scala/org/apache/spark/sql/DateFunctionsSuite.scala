@@ -80,9 +80,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""), Row(true))
     checkAnswer(sql(
       """SELECT COUNT(DISTINCT ct) FROM VALUES
-        | (CURRENT_TIMESTAMP()),
-        | (CURRENT_TIMESTAMP()),
-        | (CURRENT_TIMESTAMP()) as data(ct)""".stripMargin), Row(1))
+        | CURRENT_TIMESTAMP(),
+        | CURRENT_TIMESTAMP(),
+        | CURRENT_TIMESTAMP() as data(ct)""".stripMargin), Row(1))
 
     // Current timestamp should return the current timestamp ...
     val before = System.currentTimeMillis

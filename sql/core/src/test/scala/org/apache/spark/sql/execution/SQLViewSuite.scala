@@ -1306,4 +1306,14 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("Inline table with current time expression") {
+    val ts1 = sql("select CAST(unix_timestamp(col1) AS LONG) from temp_view")
+      .collect()(0).getLong(0)
+    Thread.sleep(1)
+    val ts2 = sql("select CAST(unix_timestamp(col1) AS LONG) from temp_view")
+      .collect()(0).getLong(0)
+
+    assert(ts1 < ts2)
+  }
 }
