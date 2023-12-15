@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.internal
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.{Dataset, RuntimeConfig}
@@ -25,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.types.MetadataBuilder
-
 
 
 private[sql] object EasilyFlattenable {
@@ -140,7 +140,14 @@ private[sql] object EasilyFlattenable {
               }
               remappedNewProjListResult match {
                 case Success(remappedNewProjList) =>
-                  Option(p.copy(projectList = remappedNewProjList))
+                  val newProj = p.copy(projectList = remappedNewProjList)
+                  if (conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+                    val dsIds = p.getTagValue(Dataset.DATASET_ID_TAG).map(_.clone()).getOrElse (
+                      new mutable.HashSet[Long])
+
+                    newProj.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
+                  }
+                  Option(newProj)
 
                 case Failure(_) => None
               }
@@ -187,8 +194,13 @@ private[sql] object EasilyFlattenable {
             }
             remappedNewProjListResult match {
               case Success(remappedNewProjList) =>
-
                 val newProj = p.copy(projectList = remappedNewProjList)
+                if (conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+                  val dsIds = p.getTagValue(Dataset.DATASET_ID_TAG).map(_.clone()).getOrElse(
+                    new mutable.HashSet[Long])
+
+                  newProj.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
+                }
 
                 Option(newProj)
 
