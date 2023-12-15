@@ -134,6 +134,9 @@ private[hive] object IsolatedClientLoader extends Logging {
         MavenUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
+        Some(MavenUtils.buildIvySettings(
+          Some(remoteRepos),
+          ivyPath, useLocalM2AsCache = false)),
         transitive = true,
         exclusions = version.exclusions)
     }

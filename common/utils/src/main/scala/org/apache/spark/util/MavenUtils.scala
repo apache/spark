@@ -403,7 +403,7 @@ private[spark] object MavenUtils extends Logging {
    * @param ivySettings
    *   An IvySettings containing resolvers to use
    * @param noCacheIvySettings
-   *  An no-cache IvySettings containing resolvers to use
+   *   An no-cache IvySettings containing resolvers to use
    * @param transitive
    *   Whether resolving transitive dependencies, default is true
    * @param exclusions
@@ -473,7 +473,7 @@ private[spark] object MavenUtils extends Logging {
           if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
             val failedArtifacts = failedReports.map(
               fr => fr.getArtifact).mkString("[", ", ", "]")
-            logInfo(s"Download failed: $failedArtifacts, attempt to skip local maven cache.")
+            logInfo(s"Download failed: $failedArtifacts, attempt to skip local-m2-cache.")
             ivy = Ivy.newInstance(noCacheIvySettings.get)
             rr = ivy.resolve(md, resolveOptions)
             if (rr.hasError) {
