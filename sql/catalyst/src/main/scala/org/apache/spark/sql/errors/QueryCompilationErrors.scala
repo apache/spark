@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -1954,13 +1954,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "inputType" -> toSQLType(expression.dataType)))
   }
 
+  def unexpectedNullError(exprName: String, expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      messageParameters = Map(
+        "exprName" -> toSQLId(exprName),
+        "sqlExpr" -> toSQLExpr(expression)
+      ))
+  }
+
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
-    val errorClass = "_LEGACY_ERROR_TEMP_1181"
     new ExtendedAnalysisException(
-      SparkThrowableHelper.getMessage(errorClass, Map.empty[String, String]),
-      errorClass = Some(errorClass),
-      messageParameters = Map.empty,
-      plan = Some(plan))
+      new AnalysisException(errorClass = "_LEGACY_ERROR_TEMP_1181", messageParameters = Map.empty),
+      plan = plan)
   }
 
   def invalidPandasUDFPlacementError(

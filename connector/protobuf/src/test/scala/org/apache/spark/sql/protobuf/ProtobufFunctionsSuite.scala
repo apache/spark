@@ -1600,6 +1600,52 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("test unsigned integer types") {
+    // Test that we correctly handle unsigned integer parsing.
+    // We're using Integer/Long's `MIN_VALUE` as it has a 1 in the sign bit.
+    val sample = spark.range(1).select(
+      lit(
+        SimpleMessage
+          .newBuilder()
+          .setUint32Value(Integer.MIN_VALUE)
+          .setUint64Value(Long.MinValue)
+          .build()
+          .toByteArray
+      ).as("raw_proto"))
+
+    val expectedWithoutFlag = spark.range(1).select(
+      lit(Integer.MIN_VALUE).as("uint32_value"),
+      lit(Long.MinValue).as("uint64_value")
+    )
+
+    val expectedWithFlag = spark.range(1).select(
+      lit(Integer.toUnsignedLong(Integer.MIN_VALUE).longValue).as("uint32_value"),
+      lit(BigDecimal(java.lang.Long.toUnsignedString(Long.MinValue))).as("uint64_value")
+    )
+
+    checkWithFileAndClassName("SimpleMessage") { case (name, descFilePathOpt) =>
+      List(
+        Map.empty[String, String],
+        Map("upcast.unsigned.ints" -> "false")).foreach(opts => {
+        checkAnswer(
+          sample.select(
+              from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opts).as("proto"))
+            .select("proto.uint32_value", "proto.uint64_value"),
+          expectedWithoutFlag)
+      })
+
+      checkAnswer(
+        sample.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("upcast.unsigned.ints" -> "true")).as("proto"))
+          .select("proto.uint32_value", "proto.uint64_value"),
+        expectedWithFlag)
+    }
+  }
+
 
   def testFromProtobufWithOptions(
     df: DataFrame,

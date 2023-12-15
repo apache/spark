@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
@@ -51,6 +52,13 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
@@ -173,6 +181,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
     if (options.inferSchema) {
       lazy val decimalTry = tryParseDecimal(value)
+      lazy val timestampNTZTry = tryParseTimestampNTZ(value)
       value match {
         case null => NullType
         case v if v.isEmpty => NullType
@@ -181,6 +190,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
         case v if isDate(v) => DateType
+        case v if timestampNTZTry.isDefined => timestampNTZTry.get
         case v if isTimestamp(v) => TimestampType
         case _ => StringType
       }
@@ -427,6 +437,23 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  private def tryParseTimestampNTZ(field: String): Option[DataType] = {
+    // We can only parse the value as TimestampNTZType if it does not have zone-offset or
+    // time-zone component and can be parsed with the timestamp formatter.
+    // Otherwise, it is likely to be a timestamp with timezone.
+    val timestampType = SQLConf.get.timestampType
+    try {
+      if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+        timestampType == TimestampNTZType) &&
+        timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+        return Some(timestampType)
+      }
+    } catch {
+      case _: Exception =>
+    }
+    None
+  }
+
   private def isDate(value: String): Boolean = {
     (allCatch opt dateFormatter.parse(value)).isDefined
   }
@@ -489,6 +516,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           } else {
             DecimalType(range + scale, scale)
           }
+        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
 
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2)

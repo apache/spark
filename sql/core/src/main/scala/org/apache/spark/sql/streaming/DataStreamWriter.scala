@@ -382,7 +382,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       }
 
       val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
-        val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+        val provider = DataSource.newDataSourceInstance(source, cls).asInstanceOf[TableProvider]
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = df.sparkSession.sessionState.conf)
         val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++

@@ -421,7 +421,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
           throw new AnalysisException(
-            "Streaming aggregation doesn't support group aggregate pandas UDF")
+            errorClass = "_LEGACY_ERROR_TEMP_3067",
+            messageParameters = Map.empty)
         }
 
         val sessionWindowOption = namedGroupingExpressions.find { p =>
@@ -752,8 +753,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonUDTFExec(
           udtf, requiredChildOutput, resultAttrs, planLater(child), evalType) :: Nil
-      case PythonDataSourcePartitions(output, partitions) =>
-        PythonDataSourcePartitionsExec(output, partitions) :: Nil
       case _ =>
         Nil
     }

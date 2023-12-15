@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -374,6 +374,9 @@ case class AlterTableChangeColumnCommand(
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    // This command may change column default values, so we need to refresh the table relation cache
+    // here so that DML commands can resolve these default values correctly.
+    catalog.refreshTable(tableName)
     val table = catalog.getTableRawMetadata(tableName)
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
@@ -1022,7 +1025,9 @@ object DDLUtils extends Logging {
 
   def checkDataColNames(provider: String, schema: StructType): Unit = {
     val source = try {
-      DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
+      DataSource.newDataSourceInstance(
+        provider,
+        DataSource.lookupDataSource(provider, SQLConf.get))
     } catch {
       case e: Throwable =>
         logError(s"Failed to find data source: $provider when check data column names.", e)

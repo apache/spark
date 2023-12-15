@@ -37,7 +37,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
  */
 private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[_, OUT] =>
 
-  protected def pythonMetrics: Map[String, SQLMetric]
+  protected def pythonMetrics: Option[Map[String, SQLMetric]]
 
   protected def handleMetadataAfterExec(stream: DataInputStream): Unit = { }
 
@@ -91,8 +91,8 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
               val rowCount = root.getRowCount
               batch.setNumRows(root.getRowCount)
               val bytesReadEnd = reader.bytesRead()
-              pythonMetrics("pythonNumRowsReceived") += rowCount
-              pythonMetrics("pythonDataReceived") += bytesReadEnd - bytesReadStart
+              pythonMetrics.foreach(_("pythonNumRowsReceived") += rowCount)
+              pythonMetrics.foreach(_("pythonDataReceived") += bytesReadEnd - bytesReadStart)
               deserializeColumnarBatch(batch, schema)
             } else {
               reader.close(false)

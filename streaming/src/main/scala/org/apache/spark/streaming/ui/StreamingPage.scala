@@ -100,14 +100,19 @@ private[ui] class StreamingPage(parent: StreamingTab)
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
       <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
   }
 
   /** Generate html that will set onClickTimeline declared in streaming-page.js */
   private def generateOnClickTimelineFunction(): Seq[Node] = {
-    val js = "onClickTimeline = getOnClickTimelineFunction();"
-    <script>{Unparsed(js)}</script>
+    val js =
+      s"""
+         |import {getOnClickTimelineFunction} from '/static/streaming-page.js';
+         |
+         |onClickTimeline = getOnClickTimelineFunction();
+         |""".stripMargin
+    <script type="module">{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */

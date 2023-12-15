@@ -89,7 +89,7 @@ public class SSLFactory {
 
   private void initJdkSslContext(final Builder b)
           throws IOException, GeneralSecurityException {
-    this.keyManagers = keyManagers(b.keyStore, b.keyStorePassword);
+    this.keyManagers = keyManagers(b.keyStore, b.keyPassword, b.keyStorePassword);
     this.trustManagers = trustStoreManagers(
       b.trustStore, b.trustStorePassword,
       b.trustStoreReloadingEnabled, b.trustStoreReloadIntervalMs
@@ -391,13 +391,16 @@ public class SSLFactory {
     }
   }
 
-  private static KeyManager[] keyManagers(File keyStore, String keyStorePassword)
+  private static KeyManager[] keyManagers(
+    File keyStore, String keyPassword, String keyStorePassword)
       throws NoSuchAlgorithmException, CertificateException,
           KeyStoreException, IOException, UnrecoverableKeyException {
     KeyManagerFactory factory = KeyManagerFactory.getInstance(
       KeyManagerFactory.getDefaultAlgorithm());
-    char[] passwordCharacters = keyStorePassword != null? keyStorePassword.toCharArray() : null;
-    factory.init(loadKeyStore(keyStore, passwordCharacters), passwordCharacters);
+    char[] keyStorePasswordChars = keyStorePassword != null? keyStorePassword.toCharArray() : null;
+    char[] keyPasswordChars = keyPassword != null?
+      keyPassword.toCharArray() : keyStorePasswordChars;
+    factory.init(loadKeyStore(keyStore, keyStorePasswordChars), keyPasswordChars);
     return factory.getKeyManagers();
   }
 
