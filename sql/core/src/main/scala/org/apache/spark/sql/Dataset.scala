@@ -3554,7 +3554,7 @@ class Dataset[T] private[sql](
   private[sql] def pythonMapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
     Dataset.ofRows(
       sparkSession,
-      PythonMapInArrow(
+      MapInArrow(
         func,
         toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
