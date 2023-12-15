@@ -66,13 +66,7 @@ case class DataSourceV2Relation(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     (catalog, identifier) match {
       case (Some(cat), Some(ident)) => s"${quoteIfNeeded(cat.name())}.${ident.quoted}"
-      case (None, None) => table.name()
-      case _ =>
-        throw SparkException.internalError(
-          "Invalid catalog and identifier pair. Both 'catalog' and 'identifier' must be " +
-            s"specified or leave as None. Current input - " +
-            s"catalog: '${catalog.map(_.name()).getOrElse(None)}', " +
-            s"identifier: ${identifier.map(_.quoted).getOrElse(None)}.")
+      case _ => table.name()
     }
   }
 

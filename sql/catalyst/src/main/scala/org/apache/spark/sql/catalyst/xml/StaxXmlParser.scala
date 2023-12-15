@@ -54,6 +54,13 @@ class StaxXmlParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
     options.locale,
@@ -461,6 +468,7 @@ class StaxXmlParser(
         case dt: DecimalType =>
           Decimal(decimalParser(datum), dt.precision, dt.scale)
         case _: TimestampType => parseXmlTimestamp(datum, options)
+        case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: StringType => UTF8String.fromString(datum)
         case _ => throw new IllegalArgumentException(s"Unsupported type: ${castType.typeName}")
@@ -504,6 +512,7 @@ class StaxXmlParser(
         case StringType => castTo(value, StringType)
         case DateType => castTo(value, DateType)
         case TimestampType => castTo(value, TimestampType)
+        case TimestampNTZType => castTo(value, TimestampNTZType)
         case FloatType => signSafeToFloat(value)
         case ByteType => castTo(value, ByteType)
         case ShortType => castTo(value, ShortType)

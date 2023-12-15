@@ -65,8 +65,10 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(namespace)
     JdbcUtils.withConnection(options) { conn =>
       val schemaPattern = if (namespace.length == 1) namespace.head else null
-      val rs = conn.getMetaData
-        .getTables(null, schemaPattern, "%", Array("TABLE"))
+      val rs = JdbcUtils.classifyException(
+        s"Failed get tables from: ${namespace.mkString(".")}", dialect) {
+        conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
+      }
       new Iterator[Identifier] {
         def hasNext = rs.next()
         def next() = Identifier.of(namespace, rs.getString("TABLE_NAME"))
@@ -179,14 +181,18 @@ class JDBCTableCatalog extends TableCatalog
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
       JdbcUtils.withConnection(options) { conn =>
-        JdbcUtils.schemaExists(conn, options, db)
+        JdbcUtils.classifyException(s"Failed namespace exists: ${namespace.mkString}", dialect) {
+          JdbcUtils.schemaExists(conn, options, db)
+        }
       }
     case _ => false
   }
 
   override def listNamespaces(): Array[Array[String]] = {
     JdbcUtils.withConnection(options) { conn =>
-      JdbcUtils.listSchemas(conn, options)
+      JdbcUtils.classifyException(s"Failed list namespaces", dialect) {
+        JdbcUtils.listSchemas(conn, options)
+      }
     }
   }
 
