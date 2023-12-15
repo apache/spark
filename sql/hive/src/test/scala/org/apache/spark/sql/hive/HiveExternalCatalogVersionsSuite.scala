@@ -219,6 +219,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
+      // scalastyle:off println
+      println("-----------------")
+      println(s"Release versions: $version")
+      println("-----------------")
+      // scalastyle:on println
       if (!skipReleaseVersions.contains(version)) {
         val sparkHome = new File(sparkTestingDir, s"spark-$version")
         if (!sparkHome.exists()) {

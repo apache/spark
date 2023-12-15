@@ -40,7 +40,7 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"SKIP_SPARK_RELEASE_VERSIONS": "spark-3.3.3,spark-3.4.2,spark-3.5.0,master"}'
+        default: '{"SKIP_SPARK_RELEASE_VERSIONS": "3.3.3,3.4.2,3.5.0,master"}'
 jobs:
   # Build: build Spark and run the tests for specified modules using maven
   build:
