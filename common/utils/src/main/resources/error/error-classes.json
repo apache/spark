@@ -1098,7 +1098,7 @@
   },
   "FAILED_JDBC" : {
     "message" : [
-      "Failed the JDBC operation:"
+      "Failed JDBC <url> on the operation:"
     ],
     "subClass" : {
       "ALTER_TABLE" : {
@@ -1167,7 +1167,7 @@
         ]
       }
     },
-    "sqlState" : "40000"
+    "sqlState" : "HV000"
   },
   "FAILED_PARSE_STRUCT_TYPE" : {
     "message" : [
