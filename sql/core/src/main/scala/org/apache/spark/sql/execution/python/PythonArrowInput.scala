@@ -46,7 +46,7 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected val largeVarTypes: Boolean
 
-  protected def pythonMetrics: Option[Map[String, SQLMetric]]
+  protected def pythonMetrics: Map[String, SQLMetric]
 
   protected def writeNextInputToArrowStream(
       root: VectorSchemaRoot,
@@ -132,7 +132,7 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       writer.writeBatch()
       arrowWriter.reset()
       val deltaData = dataOut.size() - startData
-      pythonMetrics.foreach(_("pythonDataSent") += deltaData)
+      pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
       super[PythonArrowInput].close()

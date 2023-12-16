@@ -46,14 +46,12 @@ class CoGroupedArrowPythonRunner(
     rightSchema: StructType,
     timeZoneId: String,
     conf: Map[String, String],
-    pyMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
     funcs, evalType, argOffsets, jobArtifactUUID)
   with BasicPythonArrowOutput {
-
-  override val pythonMetrics: Option[Map[String, SQLMetric]] = Some(pyMetrics)
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -95,7 +93,7 @@ class CoGroupedArrowPythonRunner(
           writeGroup(nextRight, rightSchema, dataOut, "right")
 
           val deltaData = dataOut.size() - startData
-          pythonMetrics.foreach(_("pythonDataSent") += deltaData)
+          pythonMetrics("pythonDataSent") += deltaData
           true
         } else {
           dataOut.writeInt(0)

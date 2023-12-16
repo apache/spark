@@ -61,13 +61,11 @@ class ApplyInPandasWithStatePythonRunner(
     keySchema: StructType,
     outputSchema: StructType,
     stateValueSchema: StructType,
-    pyMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
-
-  override val pythonMetrics: Option[Map[String, SQLMetric]] = Some(pyMetrics)
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -151,7 +149,7 @@ class ApplyInPandasWithStatePythonRunner(
 
       pandasWriter.finalizeGroup()
       val deltaData = dataOut.size() - startData
-      pythonMetrics.foreach(_("pythonDataSent") += deltaData)
+      pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
       pandasWriter.finalizeData()

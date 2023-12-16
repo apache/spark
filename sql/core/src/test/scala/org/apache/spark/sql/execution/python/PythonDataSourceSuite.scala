@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -395,5 +395,62 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
       assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
     }
+  }
+
+  test("SPARK-46424: Support Python metrics") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def partitions(self):
+         |        return []
+         |
+         |    def read(self, partition):
+         |        if partition is None:
+         |            yield ("success", )
+         |        else:
+         |            yield ("failed", )
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "status STRING"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
+
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    df.collect()
+
+    // Wait until the new execution is started and being tracked.
+    while (statusStore.executionsCount() < oldCount) {
+      Thread.sleep(100)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().isEmpty ||
+      statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val executedPlan = df.queryExecution.executedPlan.collectFirst {
+      case p: BatchScanExec => p
+    }
+    assert(executedPlan.isDefined)
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val pythonDataSent = executedPlan.get.metrics("pythonDataSent")
+    val pythonDataReceived = executedPlan.get.metrics("pythonDataReceived")
+    assert(metrics.contains(pythonDataSent.id))
+    assert(metrics(pythonDataSent.id).asInstanceOf[String].endsWith("B"))
+    assert(metrics.contains(pythonDataReceived.id))
+    assert(metrics(pythonDataReceived.id).asInstanceOf[String].endsWith("B"))
   }
 }
