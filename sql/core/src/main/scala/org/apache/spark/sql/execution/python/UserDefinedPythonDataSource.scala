@@ -101,6 +101,8 @@ class PythonTableProvider extends TableProvider {
             new PythonPartitionReaderFactory(
               source, readerFunc, outputSchema, jobArtifactUUID)
           }
+
+          override def description: String = "(Python)"
         }
       }
 
