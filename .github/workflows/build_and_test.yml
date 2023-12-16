@@ -765,7 +765,7 @@ jobs:
         python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
-        gem install bundler
+        gem install bundler -v 2.4.22
         cd docs
         bundle install
     - name: R linter

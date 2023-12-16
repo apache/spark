@@ -27,10 +27,10 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExponentialMoving,
     MissingPandasLikeExponentialMovingGroupby,
 )
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ExpandingRollingTestsMixin:
+class MissingMixin:
     def test_missing(self):
         psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})
 
@@ -448,13 +448,16 @@ class ExpandingRollingTestsMixin:
                 getattr(psdf.a.ewm(com=0.5), name)()  # Series
 
 
-class ExpandingRollingTests(ExpandingRollingTestsMixin, PandasOnSparkTestCase, TestUtils):
+class MissingTests(
+    MissingMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_window import *  # noqa: F401
+    from pyspark.pandas.tests.window.test_missing import *  # noqa: F401
 
     try:
         import xmlrunner

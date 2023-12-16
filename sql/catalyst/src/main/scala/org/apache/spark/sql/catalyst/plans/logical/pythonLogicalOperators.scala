@@ -89,7 +89,7 @@ case class MapInPandas(
  * Map partitions using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
  * This is used by DataFrame.mapInArrow() in PySpark
  */
-case class PythonMapInArrow(
+case class MapInArrow(
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan,
@@ -97,7 +97,7 @@ case class PythonMapInArrow(
 
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapInArrow =
     copy(child = newChild)
 }
 

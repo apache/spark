@@ -760,6 +760,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.reshape.test_get_dummies_object",
         "pyspark.pandas.tests.reshape.test_get_dummies_prefix",
         "pyspark.pandas.tests.reshape.test_merge_asof",
+        "pyspark.pandas.tests.window.test_missing",
         "pyspark.pandas.tests.window.test_rolling",
         "pyspark.pandas.tests.window.test_rolling_adv",
         "pyspark.pandas.tests.window.test_rolling_count",
@@ -776,7 +777,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_sql",
         "pyspark.pandas.tests.test_typedef",
         "pyspark.pandas.tests.test_utils",
-        "pyspark.pandas.tests.test_window",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1035,7 +1035,6 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.test_parity_sql",
         "pyspark.pandas.tests.connect.test_parity_typedef",
         "pyspark.pandas.tests.connect.test_parity_utils",
-        "pyspark.pandas.tests.connect.test_parity_window",
         "pyspark.pandas.tests.connect.indexes.test_parity_base",
         "pyspark.pandas.tests.connect.indexes.test_parity_align",
         "pyspark.pandas.tests.connect.indexes.test_parity_indexing",
@@ -1146,6 +1145,7 @@ pyspark_pandas_connect_part2 = Module(
         "pyspark.pandas.tests.connect.window.test_parity_ewm_error",
         "pyspark.pandas.tests.connect.window.test_parity_ewm_mean",
         "pyspark.pandas.tests.connect.window.test_parity_groupby_ewm_mean",
+        "pyspark.pandas.tests.connect.window.test_parity_missing",
         "pyspark.pandas.tests.connect.window.test_parity_rolling",
         "pyspark.pandas.tests.connect.window.test_parity_rolling_adv",
         "pyspark.pandas.tests.connect.window.test_parity_rolling_count",

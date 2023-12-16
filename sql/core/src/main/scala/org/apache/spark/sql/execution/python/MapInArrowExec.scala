@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.SparkPlan
  * A relation produced by applying a function that takes an iterator of PyArrow's record batches
  * and outputs an iterator of PyArrow's record batches.
  */
-case class PythonMapInArrowExec(
+case class MapInArrowExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan,
@@ -34,6 +34,6 @@ case class PythonMapInArrowExec(
 
   override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 
-  override protected def withNewChildInternal(newChild: SparkPlan): PythonMapInArrowExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): MapInArrowExec =
     copy(child = newChild)
 }
