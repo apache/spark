@@ -2949,9 +2949,7 @@ class Dataset[T] private[sql](
     SchemaUtils.checkColumnNameDuplication(
       projectList.map(_.name),
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
-    withPlan(
-      Project(projectList, logicalPlan)
-    )
+    withPlan(Project(projectList, logicalPlan))
   }
 
   /**
@@ -4497,5 +4495,3 @@ class Dataset[T] private[sql](
     toArrowBatchRdd(queryExecution.executedPlan)
   }
 }
-
-

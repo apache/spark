@@ -244,10 +244,11 @@ class EarlyCollapseProjectSuite extends QueryTest
     // then obtain optimized transformation which adds new project
     val logicalPlan = baseDf.logicalPlan
     val newDfUnopt = try {
-      logicalPlan.setTagValue[Boolean](LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE, true)
+      // add a plan id tag which will cause skipping of EarlyCollapseProject rule
+      logicalPlan.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 100L)
       transformation(baseDf)
     } finally {
-      logicalPlan.unsetTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE)
+      logicalPlan.unsetTagValue(LogicalPlan.PLAN_ID_TAG)
     }
     (newDfOpt, newDfUnopt)
   }

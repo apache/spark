@@ -985,12 +985,16 @@ class SparkConnectPlanner(
       val (colNames, newColNames) = rel.getRenamesList.asScala.toSeq.map { rename =>
         (rename.getColName, rename.getNewColName)
       }.unzip
-      val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
-      ds.withColumnsRenamed(colNames, newColNames).logicalPlan
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .withColumnsRenamed(colNames, newColNames)
+        .logicalPlan
     } else {
       // for backward compatibility
-      val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
-      ds.withColumnsRenamed(rel.getRenameColumnsMapMap).logicalPlan
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .withColumnsRenamed(rel.getRenameColumnsMapMap)
+        .logicalPlan
     }
   }
 
@@ -1011,8 +1015,10 @@ class SparkConnectPlanner(
         (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
       }.unzip3
 
-    val ds = Dataset.ofRows(session, transformRelation(rel.getInput))
-    ds.withColumns(colNames, cols, metadata).logicalPlan
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .withColumns(colNames, cols, metadata)
+      .logicalPlan
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {

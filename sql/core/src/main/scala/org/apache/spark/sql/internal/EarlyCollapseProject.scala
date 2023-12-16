@@ -33,8 +33,6 @@ private[sql] object EarlyCollapseProject {
   def unapply(logicalPlan: LogicalPlan): Option[LogicalPlan] = {
     logicalPlan match {
       case newP @ Project(newProjList, p @ Project(projList, child)) if
-        !p.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) &&
-        !newP.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) &&
         p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
         newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty
         && newProjList.size >= projList.size
