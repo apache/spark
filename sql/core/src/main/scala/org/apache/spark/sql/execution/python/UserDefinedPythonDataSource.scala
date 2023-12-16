@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -129,10 +129,15 @@ class PythonPartitionReaderFactory(
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     new PartitionReader[InternalRow] {
       // Dummy SQLMetrics. The result is manually reported via DSv2 interface
-      // via passing the value to `CustomTaskMetric`.
-      private[this] val metrics: Map[String, SQLMetric] =
-        PythonSQLMetrics.pythonMetricsDesc.keys
-          .map(_ -> new SQLMetric("size", -1)).toMap
+      // via passing the value to `CustomTaskMetric`. Note that `pythonOtherMetricsDesc`
+      // is not used when it is reported. It is to reuse existing Python runner.
+      // See also `UserDefinedPythonDataSource.createPythonMetrics`.
+      private[this] val metrics: Map[String, SQLMetric] = {
+        PythonSQLMetrics.pythonSizeMetricsDesc.keys
+          .map(_ -> new SQLMetric("size", -1)).toMap ++
+        PythonSQLMetrics.pythonOtherMetricsDesc.keys
+          .map(_ -> new SQLMetric("sum", -1)).toMap
+      }
 
       private val outputIter = {
         val evaluatorFactory = source.createMapInBatchEvaluatorFactory(
@@ -174,8 +179,9 @@ class PythonCustomMetric extends CustomMetric {
     assert(initDescription != null)
     initDescription
   }
-  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String =
-    taskMetrics.sum.toString
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    SQLMetrics.stringValue("size", taskMetrics, Array.empty[Long])
+  }
 }
 
 class PythonCustomTaskMetric extends CustomTaskMetric {
@@ -267,19 +273,23 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       jobArtifactUUID)
   }
 
-  def createPythonMetrics(): Array[CustomMetric] = PythonSQLMetrics.pythonMetricsDesc.map {
-    case (k, v) =>
+  def createPythonMetrics(): Array[CustomMetric] = {
+    // Do not add other metrics such as number of rows,
+    // that is already included via DSv2.
+    PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
       val m = new PythonCustomMetric()
       m.initialize(k, v)
       m
-  }.toArray
+    }.toArray
+  }
 
-  def createPythonTaskMetrics(taskMetrics: Map[String, Long]): Array[CustomTaskMetric] =
+  def createPythonTaskMetrics(taskMetrics: Map[String, Long]): Array[CustomTaskMetric] = {
     taskMetrics.map { case (k, v) =>
       val m = new PythonCustomTaskMetric()
       m.initialize(k, v)
       m
     }.toArray
+  }
 
   private def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
     SimplePythonFunction(

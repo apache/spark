@@ -21,20 +21,26 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 trait PythonSQLMetrics { self: SparkPlan =>
-
-  protected val pythonMetrics: Map[String, SQLMetric] = PythonSQLMetrics.pythonMetricsDesc.map {
-    case (k, v) => k -> SQLMetrics.createSizeMetric(sparkContext, v)
+  protected val pythonMetrics: Map[String, SQLMetric] = {
+    PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createSizeMetric(sparkContext, v)
+    } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createMetric(sparkContext, v)
+    }
   }
 
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics
 }
 
 object PythonSQLMetrics {
-  val pythonMetricsDesc: Map[String, String] = {
+  val pythonSizeMetricsDesc: Map[String, String] = {
     Map(
       "pythonDataSent" -> "data sent to Python workers",
-      "pythonDataReceived" -> "data returned from Python workers",
-      "pythonNumRowsReceived" -> "number of output rows"
+      "pythonDataReceived" -> "data returned from Python workers"
     )
+  }
+
+  val pythonOtherMetricsDesc: Map[String, String] = {
+    Map("pythonNumRowsReceived" -> "number of output rows")
   }
 }
