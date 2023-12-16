@@ -51,7 +51,8 @@ class Observation:
     __init__.__doc__ = PySparkObservation.__init__.__doc__
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
-        assert self._result is None, "an Observation can be used with a DataFrame only once"
+        if self._result is not None:
+            raise PySparkAssertionError(error_class="REUSE_OBSERVATION", message_parameters={})
 
         if self._name is None:
             self._name = str(uuid.uuid4())
