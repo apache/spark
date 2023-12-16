@@ -969,7 +969,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      values.putByteArray(offset, valuesReader.readBinary(arrayLen).getBytes());
+      values.putByteArray(offset, valuesReader.readBinary(arrayLen).getBytesUnsafe());
     }
 
     @Override
