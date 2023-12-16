@@ -124,18 +124,17 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query analysis
-Project [dotNET#xL, Java#xL]
-+- Project [__pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS dotNET#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS Java#xL]
-   +- Aggregate [pivotfirst(course#x, CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL, dotNET, Java, 0, 0) AS __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x]
-      +- Aggregate [course#x], [course#x, cast(udf(cast(sum(earnings#x) as string)) as bigint) AS CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL]
-         +- SubqueryAlias __auto_generated_subquery_name
-            +- Project [cast(udf(cast(course#x as string)) as string) AS course#x, earnings#x]
-               +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
-                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
-                        +- Project [course#x, year#x, earnings#x]
-                           +- SubqueryAlias courseSales
-                              +- LocalRelation [course#x, year#x, earnings#x]
+Project [__pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS dotNET#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS Java#xL]
++- Aggregate [pivotfirst(course#x, CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL, dotNET, Java, 0, 0) AS __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x]
+   +- Aggregate [course#x], [course#x, cast(udf(cast(sum(earnings#x) as string)) as bigint) AS CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL]
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- Project [cast(udf(cast(course#x as string)) as string) AS course#x, earnings#x]
+            +- SubqueryAlias coursesales
+               +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                     +- Project [course#x, year#x, earnings#x]
+                        +- SubqueryAlias courseSales
+                           +- LocalRelation [course#x, year#x, earnings#x]
 
 
 -- !query
@@ -147,18 +146,17 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query analysis
-Project [dotNET_udf(sum(udf(earnings)))#xL, dotNET_udf(min(year))#x, Java_udf(sum(udf(earnings)))#xL, Java_udf(min(year))#x]
-+- Project [__pivot_CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT) AS `CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)`#x[0] AS dotNET_udf(sum(udf(earnings)))#xL, __pivot_CAST(udf(cast(min(year) as string)) AS INT) AS `CAST(udf(cast(min(year) as string)) AS INT)`#x[0] AS dotNET_udf(min(year))#x, __pivot_CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT) AS `CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)`#x[1] AS Java_udf(sum(udf(earnings)))#xL, __pivot_CAST(udf(cast(min(year) as string)) AS INT) AS `CAST(udf(cast(min(year) as string)) AS INT)`#x[1] AS Java_udf(min(year))#x]
-   +- Aggregate [pivotfirst(course#x, CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)#xL, dotNET, Java, 0, 0) AS __pivot_CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT) AS `CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)`#x, pivotfirst(course#x, CAST(udf(cast(min(year) as string)) AS INT)#x, dotNET, Java, 0, 0) AS __pivot_CAST(udf(cast(min(year) as string)) AS INT) AS `CAST(udf(cast(min(year) as string)) AS INT)`#x]
-      +- Aggregate [course#x], [course#x, cast(udf(cast(sum(cast(udf(cast(earnings#x as string)) as int)) as string)) as bigint) AS CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)#xL, cast(udf(cast(min(year#x) as string)) as int) AS CAST(udf(cast(min(year) as string)) AS INT)#x]
-         +- SubqueryAlias __auto_generated_subquery_name
-            +- Project [year#x, course#x, earnings#x]
-               +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
-                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
-                        +- Project [course#x, year#x, earnings#x]
-                           +- SubqueryAlias courseSales
-                              +- LocalRelation [course#x, year#x, earnings#x]
+Project [__pivot_CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT) AS `CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)`#x[0] AS dotNET_udf(sum(udf(earnings)))#xL, __pivot_CAST(udf(cast(min(year) as string)) AS INT) AS `CAST(udf(cast(min(year) as string)) AS INT)`#x[0] AS dotNET_udf(min(year))#x, __pivot_CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT) AS `CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)`#x[1] AS Java_udf(sum(udf(earnings)))#xL, __pivot_CAST(udf(cast(min(year) as string)) AS INT) AS `CAST(udf(cast(min(year) as string)) AS INT)`#x[1] AS Java_udf(min(year))#x]
++- Aggregate [pivotfirst(course#x, CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)#xL, dotNET, Java, 0, 0) AS __pivot_CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT) AS `CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)`#x, pivotfirst(course#x, CAST(udf(cast(min(year) as string)) AS INT)#x, dotNET, Java, 0, 0) AS __pivot_CAST(udf(cast(min(year) as string)) AS INT) AS `CAST(udf(cast(min(year) as string)) AS INT)`#x]
+   +- Aggregate [course#x], [course#x, cast(udf(cast(sum(cast(udf(cast(earnings#x as string)) as int)) as string)) as bigint) AS CAST(udf(cast(sum(cast(udf(cast(earnings as string)) as int)) as string)) AS BIGINT)#xL, cast(udf(cast(min(year#x) as string)) as int) AS CAST(udf(cast(min(year) as string)) AS INT)#x]
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- Project [year#x, course#x, earnings#x]
+            +- SubqueryAlias coursesales
+               +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                     +- Project [course#x, year#x, earnings#x]
+                        +- SubqueryAlias courseSales
+                           +- LocalRelation [course#x, year#x, earnings#x]
 
 
 -- !query
