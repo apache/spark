@@ -36,6 +36,7 @@ private[sql] object EarlyCollapseProject {
         !newP.getTagValue(LogicalPlan.SKIP_EARLY_PROJECT_COLLAPSE).getOrElse(false) &&
         p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
         newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty
+        && newProjList.size >= projList.size
          =>
         val currentOutputAttribs = AttributeSet(p.output)
 
