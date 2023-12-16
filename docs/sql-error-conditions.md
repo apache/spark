@@ -667,9 +667,9 @@ Failed preparing of the function `<funcName>` for call. Please, double check fun
 
 ### [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
 
-SQLSTATE: 40000
+SQLSTATE: HV000
 
-Failed the JDBC operation:
+Failed JDBC `<url>` on the operation:
 
 For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
 

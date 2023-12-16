@@ -19,9 +19,9 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: 40000
+SQLSTATE: HV000
 
-Failed the JDBC operation:
+Failed JDBC `<url>` on the operation:
 
 This error class has the following derived error classes:
 
