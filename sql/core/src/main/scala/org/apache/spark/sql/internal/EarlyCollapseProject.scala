@@ -19,9 +19,10 @@ package org.apache.spark.sql.internal
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 
 private[sql] object EarlyCollapseProject {
   object OpType extends Enumeration {
@@ -55,18 +56,20 @@ private[sql] object EarlyCollapseProject {
         opType match {
           case OpType.AddNewColumnsOnly =>
             // case of new columns being added only
-            val childOutput = child.output.map(_.name).toSet
-            val attribsRemappedInProj = projList.flatMap(ne => ne match {
-              case _: AttributeReference => Seq.empty[(String, Expression)]
+            val childOutput = child.outputSet
+            val attribsRemappedInProj = AttributeMap(
+              projList.flatMap(ne => ne match {
+                case _: AttributeReference => Seq.empty[(Attribute, Expression)]
 
-              case Alias(expr, name) => if (childOutput.contains(name)) {
-                Seq(name -> expr)
-              } else {
-                Seq.empty[(String, Expression)]
-              }
+                case al @ Alias(expr, _) =>
+                  if (childOutput.contains(al.toAttribute)) {
+                    Seq(al.toAttribute -> expr)
+                  } else {
+                    Seq.empty[(Attribute, Expression)]
+                  }
 
-              case _ => Seq.empty[(String, Expression)]
-            }).toMap
+              case _ => Seq.empty[(Attribute, Expression)]
+            }))
 
             if (tinkeredOrNewNamedExprs.exists(_.collectFirst {
               // we will not flatten if expressions contain windows or aggregate as if they
@@ -82,12 +85,13 @@ private[sql] object EarlyCollapseProject {
               val remappedNewProjListResult = Try {
                 newProjList.map {
                   case attr: AttributeReference => projList.find(
-                    _.toAttribute.canonicalized == attr.canonicalized).getOrElse(attr)
+                    _.toAttribute.canonicalized == attr.canonicalized).map(
+                    transferMetadata(attr, _)).getOrElse(attr)
 
                   case anyOtherExpr =>
                     (anyOtherExpr transformUp {
                       case attr: AttributeReference =>
-                        attribsRemappedInProj.get(attr.name).orElse(projList.find(
+                        attribsRemappedInProj.get(attr).orElse(projList.find(
                           _.toAttribute.canonicalized == attr.canonicalized).map {
                           case al: Alias => al.child
                           case x => x
@@ -107,14 +111,24 @@ private[sql] object EarlyCollapseProject {
             val remappedNewProjListResult = Try {
               newProjList.map {
                 case attr: AttributeReference => projList.find(
-                  _.toAttribute.canonicalized == attr.canonicalized).get
-
+                  _.toAttribute.canonicalized == attr.canonicalized).map {
+                      // To Handle the case of change of case via toSchema
+                  case al: Alias => if (attr.name == al.name) {
+                    transferMetadata(attr, al)
+                  } else {
+                    transferMetadata(attr, al.copy(name = attr.name)(
+                      exprId = al.exprId, qualifier = al.qualifier,
+                      explicitMetadata = al.explicitMetadata,
+                      nonInheritableMetadataKeys = al.nonInheritableMetadataKeys))
+                  }
+                }.get
 
                 case al@Alias(ar: AttributeReference, name) =>
                   projList.find(_.toAttribute.canonicalized == ar.canonicalized).map {
 
-                    case alx: Alias => Alias(alx.child, name)(al.exprId, al.qualifier,
-                      al.explicitMetadata, al.nonInheritableMetadataKeys)
+                    case alx: Alias => transferMetadata(al.toAttribute,
+                      Alias(alx.child, name)(al.exprId, al.qualifier,
+                      al.explicitMetadata, al.nonInheritableMetadataKeys))
 
                     case _: AttributeReference => al
                   }.get
@@ -130,6 +144,24 @@ private[sql] object EarlyCollapseProject {
         }
 
       case _ => None
+    }
+  }
+
+  private def transferMetadata(from: Attribute, to: NamedExpression): NamedExpression =
+    if (from.metadata == Metadata.empty) {
+      to
+    } else {
+      to match {
+        case al: Alias =>
+          val newMdBuilder = new MetadataBuilder().withMetadata(from.metadata)
+          val newMd = newMdBuilder.build()
+
+          al.copy()(exprId = al.exprId, qualifier = al.qualifier,
+          nonInheritableMetadataKeys = al.nonInheritableMetadataKeys,
+          explicitMetadata = Option(newMd))
+
+      case attr: AttributeReference => attr.copy(metadata = from.metadata)(
+        exprId = attr.exprId, qualifier = from.qualifier)
     }
   }
 
