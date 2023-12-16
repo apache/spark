@@ -57,7 +57,7 @@ def get_sql_configs(jvm):
             default=raw_config._2(),
             description=raw_config._3(),
             version=raw_config._4(),
-            tags=list(raw_config._5()),
+            tags=set(raw_config._5()),
         )
         sql_configs["__all"].append(sql_config)
         if not sql_config.tags:
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     generated_dir.mkdir(exist_ok=True)
 
     sql_configs = get_sql_configs(jvm)
-    for group in sql_configs:
+    for group in sorted(sql_configs):
         html_table_path = generated_dir / f"generated-sql-config-table-{group}.html"
         generate_sql_configs_table_html(sql_configs[group], path=html_table_path, group=group)
         print(f"Generated: {html_table_path}")

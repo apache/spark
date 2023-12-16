@@ -187,7 +187,7 @@ private[spark] case class ConfigBuilder(key: String) {
   private[config] var _prependedKey: Option[String] = None
   private[config] var _prependSeparator: String = ""
   private[config] var _public = true
-  private[config] var _tags = List.empty[String]
+  private[config] var _tags = Set.empty[String]
   private[config] var _doc = ""
   private[config] var _version = ""
   private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
@@ -204,7 +204,7 @@ private[spark] case class ConfigBuilder(key: String) {
    */
   def withTag(tag: String): ConfigBuilder = {
     require(tag.matches("[a-z0-9-]+"))
-    _tags = _tags :+ tag
+    _tags = _tags + tag
     this
   }
 

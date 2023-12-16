@@ -5643,7 +5643,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def getAllConfs: immutable.Map[String, String] =
     settings.synchronized { settings.asScala.toMap }
 
-  def getAllDefinedConfsWithTags: Seq[(String, String, String, String, Seq[String])] = {
+  def getAllDefinedConfsWithTags: Seq[(String, String, String, String, Set[String])] = {
     loadDefinedConfs()
     getConfigEntries().asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)

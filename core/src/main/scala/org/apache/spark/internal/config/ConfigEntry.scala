@@ -80,7 +80,7 @@ private[spark] abstract class ConfigEntry[T] (
     val stringConverter: T => String,
     val doc: String,
     val isPublic: Boolean,
-    val tags: List[String],
+    val tags: Set[String],
     val version: String) {
 
   import ConfigEntry._
@@ -121,7 +121,7 @@ private class ConfigEntryWithDefault[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    tags: List[String],
+    tags: Set[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -155,7 +155,7 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    tags: List[String],
+    tags: Set[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -189,7 +189,7 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    tags: List[String],
+    tags: Set[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -227,7 +227,7 @@ private[spark] class OptionalConfigEntry[T](
     val rawStringConverter: T => String,
     doc: String,
     isPublic: Boolean,
-    tags: List[String],
+    tags: Set[String],
     version: String)
   extends ConfigEntry[Option[T]](
     key,
@@ -259,7 +259,7 @@ private[spark] class FallbackConfigEntry[T] (
     alternatives: List[String],
     doc: String,
     isPublic: Boolean,
-    tags: List[String],
+    tags: Set[String],
     version: String,
     val fallback: ConfigEntry[T])
   extends ConfigEntry[T](
