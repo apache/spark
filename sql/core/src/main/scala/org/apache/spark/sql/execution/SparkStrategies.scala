@@ -753,8 +753,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonUDTFExec(
           udtf, requiredChildOutput, resultAttrs, planLater(child), evalType) :: Nil
-      case PythonDataSourcePartitions(output, partitions) =>
-        PythonDataSourcePartitionsExec(output, partitions) :: Nil
       case _ =>
         Nil
     }
@@ -840,8 +838,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child, isBarrier) =>
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier) :: Nil
-      case logical.PythonMapInArrow(func, output, child, isBarrier) =>
-        execution.python.PythonMapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
+      case logical.MapInArrow(func, output, child, isBarrier) =>
+        execution.python.MapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>

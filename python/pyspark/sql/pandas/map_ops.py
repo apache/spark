@@ -220,7 +220,7 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), barrier)
+        jdf = self._jdf.mapInArrow(udf_column._jc.expr(), barrier)
         return DataFrame(jdf, self.sparkSession)
 
 

@@ -20,58 +20,210 @@ package org.apache.spark.sql.execution.python
 import java.io.{DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonDataSource}
+import org.apache.spark.JobArtifactSet
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
+ * Data Source V2 wrapper for Python Data Source.
+ */
+class PythonTableProvider extends TableProvider {
+  private var name: String = _
+  def setShortName(str: String): Unit = {
+    assert(name == null)
+    name = str
+  }
+  private def shortName: String = {
+    assert(name != null)
+    name
+  }
+  private var dataSourceInPython: PythonDataSourceCreationResult = _
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private lazy val source: UserDefinedPythonDataSource =
+    SparkSession.active.sessionState.dataSourceManager.lookupDataSource(shortName)
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    if (dataSourceInPython == null) {
+      dataSourceInPython = source.createDataSourceInPython(shortName, options, None)
+    }
+    dataSourceInPython.schema
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    val outputSchema = schema
+    new Table with SupportsRead {
+      override def name(): String = shortName
+
+      override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
+        BATCH_READ)
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new ScanBuilder with Batch with Scan {
+
+          private lazy val infoInPython: PythonDataSourceReadInfo = {
+            if (dataSourceInPython == null) {
+              dataSourceInPython = source
+                .createDataSourceInPython(shortName, options, Some(outputSchema))
+            }
+            source.createReadInfoInPython(dataSourceInPython, outputSchema)
+          }
+
+          override def build(): Scan = this
+
+          override def toBatch: Batch = this
+
+          override def readSchema(): StructType = outputSchema
+
+          override def planInputPartitions(): Array[InputPartition] =
+            infoInPython.partitions.zipWithIndex.map(p => PythonInputPartition(p._2, p._1)).toArray
+
+          override def createReaderFactory(): PartitionReaderFactory = {
+            val readerFunc = infoInPython.func
+            new PythonPartitionReaderFactory(
+              source, readerFunc, outputSchema, jobArtifactUUID)
+          }
+
+          override def description: String = "(Python)"
+        }
+      }
+
+      override def schema(): StructType = outputSchema
+    }
+  }
+
+  override def supportsExternalMetadata(): Boolean = true
+}
+
+case class PythonInputPartition(index: Int, pickedPartition: Array[Byte]) extends InputPartition
+
+class PythonPartitionReaderFactory(
+    source: UserDefinedPythonDataSource,
+    pickledReadFunc: Array[Byte],
+    outputSchema: StructType,
+    jobArtifactUUID: Option[String])
+  extends PartitionReaderFactory {
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    new PartitionReader[InternalRow] {
+      private val outputIter = source.createPartitionReadIteratorInPython(
+        partition.asInstanceOf[PythonInputPartition],
+        pickledReadFunc,
+        outputSchema,
+        jobArtifactUUID)
+
+      override def next(): Boolean = outputIter.hasNext
+
+      override def get(): InternalRow = outputIter.next()
+
+      override def close(): Unit = {}
+    }
+  }
+}
+
+/**
  * A user-defined Python data source. This is used by the Python API.
+ * Defines the interation between Python and JVM.
  *
  * @param dataSourceCls The Python data source class.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 
-  def builder(
-      sparkSession: SparkSession,
-      provider: String,
-      userSpecifiedSchema: Option[StructType],
-      options: CaseInsensitiveMap[String]): LogicalPlan = {
+  private val inputSchema: StructType = new StructType().add("partition", BinaryType)
 
-    val runner = new UserDefinedPythonDataSourceRunner(
-      dataSourceCls, provider, userSpecifiedSchema, options)
+  /**
+   * (Driver-side) Run Python process, and get the pickled Python Data Source
+   * instance and its schema.
+   */
+  def createDataSourceInPython(
+      shortName: String,
+      options: CaseInsensitiveStringMap,
+      userSpecifiedSchema: Option[StructType]): PythonDataSourceCreationResult = {
+    new UserDefinedPythonDataSourceRunner(
+      dataSourceCls,
+      shortName,
+      userSpecifiedSchema,
+      CaseInsensitiveMap(options.asCaseSensitiveMap().asScala.toMap)).runInPython()
+  }
 
-    val result = runner.runInPython()
-    val pickledDataSourceInstance = result.dataSource
+  /**
+   * (Driver-side) Run Python process, and get the partition read functions, and
+   * partition information.
+   */
+  def createReadInfoInPython(
+      pythonResult: PythonDataSourceCreationResult,
+      outputSchema: StructType): PythonDataSourceReadInfo = {
+    new UserDefinedPythonDataSourceReadRunner(
+      createPythonFunction(
+        pythonResult.dataSource), inputSchema, outputSchema).runInPython()
+  }
 
-    val dataSource = SimplePythonFunction(
-      command = pickledDataSourceInstance.toImmutableArraySeq,
+  /**
+   * (Executor-side) Create an iterator that reads the input partitions.
+   */
+  def createPartitionReadIteratorInPython(
+      partition: PythonInputPartition,
+      pickledReadFunc: Array[Byte],
+      outputSchema: StructType,
+      jobArtifactUUID: Option[String]): Iterator[InternalRow] = {
+    val readerFunc = createPythonFunction(pickledReadFunc)
+
+    val pythonEvalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+
+    val pythonUDF = PythonUDF(
+      name = "read_from_data_source",
+      func = readerFunc,
+      dataType = outputSchema,
+      children = toAttributes(inputSchema),
+      evalType = pythonEvalType,
+      udfDeterministic = false)
+
+    val conf = SQLConf.get
+
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
+    val evaluatorFactory = new MapInBatchEvaluatorFactory(
+      toAttributes(outputSchema),
+      Seq(ChainedPythonFunctions(Seq(pythonUDF.func))),
+      inputSchema,
+      conf.arrowMaxRecordsPerBatch,
+      pythonEvalType,
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      pythonRunnerConf,
+      None,
+      jobArtifactUUID)
+
+    evaluatorFactory.createEvaluator().eval(
+      partition.index, Iterator.single(InternalRow(partition.pickedPartition)))
+  }
+
+  private def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
+    SimplePythonFunction(
+      command = pickledFunc.toImmutableArraySeq,
       envVars = dataSourceCls.envVars,
       pythonIncludes = dataSourceCls.pythonIncludes,
       pythonExec = dataSourceCls.pythonExec,
       pythonVer = dataSourceCls.pythonVer,
       broadcastVars = dataSourceCls.broadcastVars,
       accumulator = dataSourceCls.accumulator)
-    val schema = result.schema
-
-    PythonDataSource(dataSource, schema, output = toAttributes(schema))
-  }
-
-  def apply(
-      sparkSession: SparkSession,
-      provider: String,
-      userSpecifiedSchema: Option[StructType] = None,
-      options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty)): DataFrame = {
-    val plan = builder(sparkSession, provider, userSpecifiedSchema, options)
-    Dataset.ofRows(sparkSession, plan)
   }
 }
 

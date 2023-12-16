@@ -25,7 +25,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
-import org.apache.spark.ui.UIUtils.prependBaseUri
+import org.apache.spark.ui.UIUtils.{formatImportJavaScript, prependBaseUri}
 import org.apache.spark.ui.flamegraph.FlamegraphNode
 
 private[ui] class ExecutorThreadDumpPage(
@@ -130,13 +130,13 @@ private[ui] class ExecutorThreadDumpPage(
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
     val js =
       s"""
-         |import {drawFlamegraph} from "/static/flamegraph.js";
+         |${formatImportJavaScript(request, "/static/flamegraph.js", "drawFlamegraph")}
          |
          |drawFlamegraph();
          |""".stripMargin
     <div>
       <div>
-        <script type="module">{Unparsed("import {toggleFlamegraph} from '/static/flamegraph.js';")}</script>
+        <script type="module">{Unparsed(formatImportJavaScript(request, "/static/flamegraph.js", "toggleFlamegraph"))}</script>
         <span style="cursor: pointer;" onclick="toggleFlamegraph();">
           <h4>
             <span id="executor-flamegraph-arrow" class="arrow-open"></span>

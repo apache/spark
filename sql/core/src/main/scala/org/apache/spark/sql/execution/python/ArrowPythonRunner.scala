@@ -35,7 +35,7 @@ abstract class BaseArrowPythonRunner(
     _timeZoneId: String,
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Option[Map[String, SQLMetric]],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
     funcs, evalType, argOffsets, jobArtifactUUID)
@@ -74,7 +74,7 @@ class ArrowPythonRunner(
     _timeZoneId: String,
     largeVarTypes: Boolean,
     workerConf: Map[String, String],
-    pythonMetrics: Map[String, SQLMetric],
+    pythonMetrics: Option[Map[String, SQLMetric]],
     jobArtifactUUID: Option[String])
   extends BaseArrowPythonRunner(
     funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
@@ -100,7 +100,7 @@ class ArrowPythonWithNamedArgumentRunner(
     jobArtifactUUID: Option[String])
   extends BaseArrowPythonRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
-    pythonMetrics, jobArtifactUUID) {
+    Some(pythonMetrics), jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit =
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)

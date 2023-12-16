@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Base class for Python-based FlatMapGroupsIn*Exec.
  */
-trait FlatMapGroupsInPythonExec extends SparkPlan with UnaryExecNode with PythonSQLMetrics {
+trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonSQLMetrics {
   val groupingAttributes: Seq[Attribute]
   val func: Expression
   val output: Seq[Attribute]
@@ -88,7 +88,7 @@ trait FlatMapGroupsInPythonExec extends SparkPlan with UnaryExecNode with Python
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
-        pythonMetrics,
+        Some(pythonMetrics),
         jobArtifactUUID)
 
       executePython(data, output, runner)
