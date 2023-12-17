@@ -223,7 +223,7 @@
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.70</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
-    <netty.version>4.1.100.Final</netty.version>
+    <netty.version>4.1.104.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
     <!--
     If you are changing Arrow version specification, please check
