@@ -3551,10 +3551,10 @@ class Dataset[T] private[sql](
    * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
-  private[sql] def pythonMapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
+  private[sql] def mapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
     Dataset.ofRows(
       sparkSession,
-      PythonMapInArrow(
+      MapInArrow(
         func,
         toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,

@@ -611,8 +611,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1023",
-      messageParameters = Map("prettyName" -> prettyName, "syntax" -> syntax))
+      errorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      messageParameters = Map("prettyName" -> toSQLId(prettyName), "syntax" -> toSQLStmt(syntax)))
   }
 
   def nonDeterministicFilterInAggregateError(): Throwable = {
