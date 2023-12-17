@@ -16,19 +16,19 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_expanding import ExpandingTestsMixin
+from pyspark.pandas.tests.diff_frames_ops.test_error import DiffFramesErrorMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class ExpandingParityTests(
-    ExpandingTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+class DiffFramesErrorParityTests(
+    DiffFramesErrorMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_expanding import *  # noqa: F401
+    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_error import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

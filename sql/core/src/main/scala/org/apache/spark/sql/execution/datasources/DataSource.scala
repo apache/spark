@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
+import org.apache.spark.sql.execution.python.PythonTableProvider
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -649,6 +650,9 @@ object DataSource extends Logging {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
+                // TODO(SPARK-45600): should be session-based.
+                val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+                  _.sessionState.dataSourceManager.dataSourceExists(provider))
                 if (provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw QueryCompilationErrors.orcNotUsedWithHiveEnabledError()
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
@@ -657,6 +661,8 @@ object DataSource extends Logging {
                   throw QueryCompilationErrors.failedToFindAvroDataSourceError(provider1)
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
+                } else if (isUserDefinedDataSource) {
+                  classOf[PythonTableProvider]
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
@@ -673,6 +679,14 @@ object DataSource extends Logging {
           }
         case head :: Nil =>
           // there is exactly one registered alias
+          // TODO(SPARK-45600): should be session-based.
+          val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+            _.sessionState.dataSourceManager.dataSourceExists(provider))
+          // The source can be successfully loaded as either a V1 or a V2 data source.
+          // Check if it is also a user-defined data source.
+          if (isUserDefinedDataSource) {
+            throw QueryCompilationErrors.foundMultipleDataSources(provider)
+          }
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
@@ -719,6 +733,10 @@ object DataSource extends Logging {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        t match {
+          case p: PythonTableProvider => p.setShortName(provider)
+          case _ =>
+        }
         Some(t)
       case _ => None
     }

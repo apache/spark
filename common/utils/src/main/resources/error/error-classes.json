@@ -2229,6 +2229,11 @@
           "Partition key <partKey> must set value."
         ]
       },
+      "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
+        "message" : [
+          "The function <prettyName> does not support <syntax>."
+        ]
+      },
       "INVALID_COLUMN_REFERENCE" : {
         "message" : [
           "Expected a column reference for transform <transform>: <expr>."
@@ -4318,11 +4323,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1023" : {
-    "message" : [
-      "Function <prettyName> does not support <syntax>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1024" : {

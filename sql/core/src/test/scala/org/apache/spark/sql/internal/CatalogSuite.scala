@@ -167,6 +167,47 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Set("default", "my_db2"))
   }
 
+  test("list databases with special character") {
+    Seq(true, false).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> legacy.toString) {
+        spark.catalog.setCurrentCatalog(CatalogManager.SESSION_CATALOG_NAME)
+        assert(spark.catalog.listDatabases().collect().map(_.name).toSet == Set("default"))
+        // use externalCatalog to bypass the database name validation in SessionCatalog
+        spark.sharedState.externalCatalog.createDatabase(utils.newDb("my-db1"), false)
+        spark.sharedState.externalCatalog.createDatabase(utils.newDb("my`db2"), false)
+        assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
+          Set("default", "`my-db1`", "`my``db2`"))
+        // TODO: ideally there should be no difference between legacy and non-legacy mode. However,
+        //  in non-legacy mode, the ShowNamespacesExec does the quoting before pattern matching,
+        //  requiring the pattern to be quoted. This is not ideal, we should fix it in the future.
+        if (legacy) {
+          assert(
+            spark.catalog.listDatabases("my*").collect().map(_.name).toSet ==
+              Set("`my-db1`", "`my``db2`")
+          )
+          assert(spark.catalog.listDatabases("`my*`").collect().map(_.name).toSet == Set.empty)
+        } else {
+          assert(spark.catalog.listDatabases("my*").collect().map(_.name).toSet == Set.empty)
+          assert(
+            spark.catalog.listDatabases("`my*`").collect().map(_.name).toSet ==
+              Set("`my-db1`", "`my``db2`")
+          )
+        }
+        assert(spark.catalog.listDatabases("you*").collect().map(_.name).toSet ==
+          Set.empty[String])
+        dropDatabase("my-db1")
+        assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
+          Set("default", "`my``db2`"))
+        dropDatabase("my`db2") // cleanup
+
+        spark.catalog.setCurrentCatalog("testcat")
+        sql(s"CREATE NAMESPACE testcat.`my-db`")
+        assert(spark.catalog.listDatabases().collect().map(_.name).toSet == Set("`my-db`"))
+        sql(s"DROP NAMESPACE testcat.`my-db`") // cleanup
+      }
+    }
+  }
+
   test("list databases with current catalog") {
     spark.catalog.setCurrentCatalog("testcat")
     sql(s"CREATE NAMESPACE testcat.my_db")

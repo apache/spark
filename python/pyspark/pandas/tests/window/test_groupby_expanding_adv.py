@@ -14,24 +14,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.pandas.tests.test_window import ExpandingRollingTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.pandas.tests.window.test_groupby_expanding import GroupByExpandingTestingFuncMixin
 
 
-class ExpandingRollingParityTests(
-    ExpandingRollingTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+class GroupByExpandingAdvMixin(GroupByExpandingTestingFuncMixin):
+    def test_groupby_expanding_quantile(self):
+        self._test_groupby_expanding_func(
+            lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")
+        )
+
+    def test_groupby_expanding_std(self):
+        self._test_groupby_expanding_func("std")
+
+    def test_groupby_expanding_var(self):
+        self._test_groupby_expanding_func("var")
+
+    def test_groupby_expanding_skew(self):
+        self._test_groupby_expanding_func("skew")
+
+    def test_groupby_expanding_kurt(self):
+        self._test_groupby_expanding_func("kurt")
+
+
+class GroupByExpandingAdvTests(
+    GroupByExpandingAdvMixin,
+    PandasOnSparkTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_window import *  # noqa: F401
+    import unittest
+    from pyspark.pandas.tests.window.test_groupby_expanding_adv import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
