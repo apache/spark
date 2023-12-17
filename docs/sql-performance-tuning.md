@@ -88,48 +88,33 @@ Note that there is no guarantee that Spark will choose the join strategy specifi
 a specific strategy may not support all join types.
 
 <div class="codetabs">
-
 <div data-lang="python"  markdown="1">
-
 {% highlight python %}
 spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
-
 </div>
-
 <div data-lang="scala"  markdown="1">
-
 {% highlight scala %}
 spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
-
 </div>
-
 <div data-lang="java"  markdown="1">
-
 {% highlight java %}
 spark.table("src").join(spark.table("records").hint("broadcast"), "key").show();
 {% endhighlight %}
-
 </div>
-
 <div data-lang="r"  markdown="1">
-
 {% highlight r %}
 src <- sql("SELECT * FROM src")
 records <- sql("SELECT * FROM records")
 head(join(src, hint(records, "broadcast"), src$key == records$key))
 {% endhighlight %}
-
 </div>
-
 <div data-lang="SQL"  markdown="1">
-
 {% highlight sql %}
 -- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
 SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 {% endhighlight %}
-
 </div>
 </div>
 
