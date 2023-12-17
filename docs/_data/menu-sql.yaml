@@ -59,8 +59,6 @@
       url: sql-performance-tuning.html#tuning-partitions
     - text: Optimizing the Join Strategy
       url: sql-performance-tuning.html#optimizing-the-join-strategy
-    - text: Cost-Based Optimization
-      url: sql-performance-tuning.html#cost-based-optimization
     - text: Adaptive Query Execution
       url: sql-performance-tuning.html#adaptive-query-execution
 - text: Distributed SQL Engine
