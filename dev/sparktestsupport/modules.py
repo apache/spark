@@ -863,6 +863,9 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.diff_frames_ops.test_series",
         "pyspark.pandas.tests.diff_frames_ops.test_setitem_frame",
         "pyspark.pandas.tests.diff_frames_ops.test_setitem_series",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_aggregate",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_apply",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_cumulative",
         "pyspark.pandas.tests.series.test_all_any",
         "pyspark.pandas.tests.series.test_arg_ops",
         "pyspark.pandas.tests.series.test_as_of",
@@ -1194,6 +1197,9 @@ pyspark_pandas_connect_part3 = Module(
         "pyspark.pandas.tests.connect.indexes.test_parity_datetime_property",
         "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames",
         "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_aggregate",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_apply",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_cumulative",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
