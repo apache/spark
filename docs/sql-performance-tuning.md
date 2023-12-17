@@ -120,13 +120,6 @@ SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 
 For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html#join-hints).
 
-## Cost-Based Optimization
-Apache Spark 2.2 introduced a [cost-based optimization framework][cbo] that leverages statistics to select an optimal execution plan. This framework can be enabled via the `spark.sql.cbo.enabled` umbrella configuration.
-
-[cbo]: https://www.databricks.com/blog/2017/08/31/cost-based-optimizer-in-apache-spark-2-2.html
-
-{% include_relative _generated/generated-sql-config-table-cbo.html %}
-
 ## Adaptive Query Execution
 Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
 
