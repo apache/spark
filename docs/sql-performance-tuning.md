@@ -33,11 +33,11 @@ memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableNam
 Configuration of in-memory caching can be done via `spark.conf.set` or by running
 `SET key=value` commands using SQL.
 
-{% include_relative _generated/generated-sql-config-table-caching-data.html %}
+{% include_relative _generated_config_tables/sql-tuning-caching-data.html %}
 
 ## Tuning Partitions
 
-{% include_relative _generated/generated-sql-config-table-tuning-partitions.html %}
+{% include_relative _generated_config_tables/sql-tuning-partitions.html %}
 
 ### Coalesce Hints
 
@@ -68,7 +68,7 @@ For more details please refer to the documentation of [Partitioning Hints](sql-r
 
 ### Automatically Broadcasting Joins
 
-{% include_relative _generated/generated-sql-config-table-tuning-broadcast.html %}
+{% include_relative _generated_config_tables/sql-tuning-broadcast.html %}
 
 ### Join Strategy Hints
 
@@ -123,32 +123,34 @@ For more details please refer to the documentation of [Join Hints](sql-ref-synta
 ## Adaptive Query Execution
 Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
 
+{% include_relative _generated_config_tables/sql-tuning-aqe.html %}
+
 ### Coalescing Post Shuffle Partitions
 This feature coalesces the post shuffle partitions based on the map output statistics when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.coalescePartitions.enabled` configurations are true. This feature simplifies the tuning of shuffle partition number when running queries. You do not need to set a proper shuffle partition number to fit your dataset. Spark can pick the proper shuffle partition number at runtime once you set a large enough initial number of shuffle partitions via `spark.sql.adaptive.coalescePartitions.initialPartitionNum` configuration.
 
-{% include_relative _generated/generated-sql-config-table-aqe-coalesce-partitions.html %}
+{% include_relative _generated_config_tables/sql-tuning-aqe-coalesce-partitions.html %}
 
 ### Splitting skewed shuffle partitions
 
-{% include_relative _generated/generated-sql-config-table-aqe-skewed-shuffle-partitions.html %}
+{% include_relative _generated_config_tables/sql-tuning-aqe-skewed-shuffle-partitions.html %}
 
 ### Converting sort-merge join to broadcast join
 AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the adaptive broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
 
-{% include_relative _generated/generated-sql-config-table-aqe-broadcast-join.html %}
+{% include_relative _generated_config_tables/sql-tuning-aqe-broadcast-join.html %}
 
 ### Converting sort-merge join to shuffled hash join
 AQE converts sort-merge join to shuffled hash join when all post shuffle partitions are smaller than the threshold configured in `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
 
-{% include_relative _generated/generated-sql-config-table-aqe-shuffled-hash-join.html %}
+{% include_relative _generated_config_tables/sql-tuning-aqe-shuffled-hash-join.html %}
 
 ### Optimizing Skew Join
 Data skew can severely downgrade the performance of join queries. This feature dynamically handles skew in sort-merge join by splitting (and replicating if needed) skewed tasks into roughly evenly sized tasks. It takes effect when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewJoin.enabled` configurations are enabled.
 
-{% include_relative _generated/generated-sql-config-table-aqe-skew-join.html %}
+{% include_relative _generated_config_tables/sql-tuning-aqe-skew-join.html %}
 
 ### Advanced Customization
 
 You can control the details of how AQE works by providing your own cost evaluator class or by excluding AQE optimizer rules.
 
-{% include_relative _generated/generated-sql-config-table-aqe-advanced.html %}
+{% include_relative _generated_config_tables/sql-tuning-aqe-advanced.html %}

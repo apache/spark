@@ -470,7 +470,7 @@ object SQLConf {
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
     .version("1.0.1")
-    .withTag("caching-data")
+    .withTag("sql-tuning-caching-data")
     .booleanConf
     .createWithDefault(true)
 
@@ -478,7 +478,7 @@ object SQLConf {
     .doc("Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
       "memory utilization and compression, but risk OOMs when caching data.")
     .version("1.1.1")
-    .withTag("caching-data")
+    .withTag("sql-tuning-caching-data")
     .intConf
     .createWithDefault(10000)
 
@@ -598,7 +598,7 @@ object SQLConf {
       "run, and file-based data source tables where the statistics are computed directly on " +
       "the files of data.")
     .version("1.1.0")
-    .withTag("tuning-broadcast")
+    .withTag("sql-tuning-broadcast")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
@@ -651,7 +651,7 @@ object SQLConf {
       "Note: For structured streaming, this configuration cannot be changed between query " +
       "restarts from the same checkpoint location.")
     .version("1.1.0")
-    .withTag("tuning-partitions")
+    .withTag("sql-tuning-partitions")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
@@ -669,6 +669,7 @@ object SQLConf {
     .doc("When true, enable adaptive query execution, which re-optimizes the query plan in the " +
       "middle of query execution, based on accurate runtime statistics.")
     .version("1.6.0")
+    .withTag("sql-tuning-aqe")
     .booleanConf
     .createWithDefault(true)
 
@@ -707,7 +708,7 @@ object SQLConf {
         s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} is true). It takes effect when Spark " +
         "coalesces small shuffle partitions or splits skewed shuffle partition.")
       .version("3.0.0")
-      .withTag("aqe-coalesce-partitions")
+      .withTag("sql-tuning-aqe-coalesce-partitions")
       .fallbackConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   val COALESCE_PARTITIONS_ENABLED =
@@ -716,7 +717,7 @@ object SQLConf {
         "contiguous shuffle partitions according to the target size (specified by " +
         s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), to avoid too many small tasks.")
       .version("3.0.0")
-      .withTag("aqe-coalesce-partitions")
+      .withTag("sql-tuning-aqe-coalesce-partitions")
       .booleanConf
       .createWithDefault(true)
 
@@ -730,7 +731,7 @@ object SQLConf {
         "regression when enabling adaptive query execution. It's recommended to set this config " +
         "to false and respect the configured target size.")
       .version("3.2.0")
-      .withTag("aqe-coalesce-partitions")
+      .withTag("sql-tuning-aqe-coalesce-partitions")
       .booleanConf
       .createWithDefault(true)
 
@@ -739,7 +740,7 @@ object SQLConf {
       .doc("The minimum size of shuffle partitions after coalescing. This is useful when the " +
         "adaptively calculated target size is too small during partition coalescing.")
       .version("3.2.0")
-      .withTag("aqe-coalesce-partitions")
+      .withTag("sql-tuning-aqe-coalesce-partitions")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "minPartitionSize must be positive")
       .createWithDefaultString("1MB")
@@ -764,7 +765,7 @@ object SQLConf {
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and '${COALESCE_PARTITIONS_ENABLED.key}' " +
         "are both true.")
       .version("3.0.0")
-      .withTag("aqe-coalesce-partitions")
+      .withTag("sql-tuning-aqe-coalesce-partitions")
       .intConf
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
@@ -789,7 +790,7 @@ object SQLConf {
         "shuffle reader to read the shuffle data when the shuffle partitioning is not needed, " +
         "for example, after converting sort-merge join to broadcast-hash join.")
       .version("3.0.0")
-      .withTag("aqe-broadcast-join")
+      .withTag("sql-tuning-aqe-broadcast-join")
       .booleanConf
       .createWithDefault(true)
 
@@ -799,7 +800,7 @@ object SQLConf {
         "handles skew in shuffled join (sort-merge and shuffled hash) by splitting (and " +
         "replicating if needed) skewed partitions.")
       .version("3.0.0")
-      .withTag("aqe-skew-join")
+      .withTag("sql-tuning-aqe-skew-join")
       .booleanConf
       .createWithDefault(true)
 
@@ -809,7 +810,7 @@ object SQLConf {
         "multiplying the median partition size and also larger than " +
         "`spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes`.")
       .version("3.0.0")
-      .withTag("aqe-skew-join")
+      .withTag("sql-tuning-aqe-skew-join")
       .doubleConf
       .checkValue(_ >= 0, "The skew factor cannot be negative.")
       .createWithDefault(5.0)
@@ -821,7 +822,7 @@ object SQLConf {
         "multiplying the median partition size. Ideally this config should be set larger " +
         s"than `${ADVISORY_PARTITION_SIZE_IN_BYTES.key}`.")
       .version("3.0.0")
-      .withTag("aqe-skew-join")
+      .withTag("sql-tuning-aqe-skew-join")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("256MB")
 
@@ -843,7 +844,7 @@ object SQLConf {
         "rules are specified by their rule names and separated by comma. The optimizer will log " +
         "the rules that have indeed been excluded.")
       .version("3.1.0")
-      .withTag("aqe-advanced")
+      .withTag("sql-tuning-aqe-advanced")
       .stringConf
       .createOptional
 
@@ -854,7 +855,7 @@ object SQLConf {
         s"disabled. The default value is same with ${AUTO_BROADCASTJOIN_THRESHOLD.key}. " +
         "Note that, this config is used only in adaptive framework.")
       .version("3.2.0")
-      .withTag("aqe-broadcast-join")
+      .withTag("sql-tuning-aqe-broadcast-join")
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
@@ -866,7 +867,7 @@ object SQLConf {
         "than this config, join selection prefer to use shuffled hash join instead of " +
         s"sort merge join regardless of the value of `${PREFER_SORTMERGEJOIN.key}`.")
       .version("3.2.0")
-      .withTag("aqe-shuffled-hash-join")
+      .withTag("sql-tuning-aqe-shuffled-hash-join")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(0L)
 
@@ -877,7 +878,7 @@ object SQLConf {
         s"according to the target size (specified by '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), " +
         "to avoid data skew.")
       .version("3.2.0")
-      .withTag("aqe-skewed-shuffle-partitions")
+      .withTag("sql-tuning-aqe-skewed-shuffle-partitions")
       .booleanConf
       .createWithDefault(true)
 
@@ -886,7 +887,7 @@ object SQLConf {
       .doc(s"A partition will be merged during splitting if its size is small than this factor " +
         s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
       .version("3.3.0")
-      .withTag("aqe-skewed-shuffle-partitions")
+      .withTag("sql-tuning-aqe-skewed-shuffle-partitions")
       .doubleConf
       .checkValue(v => v > 0 && v < 1, "the factor must be in (0, 1)")
       .createWithDefault(0.2)
@@ -895,7 +896,7 @@ object SQLConf {
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
       .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
       .version("3.3.0")
-      .withTag("aqe-skew-join")
+      .withTag("sql-tuning-aqe-skew-join")
       .booleanConf
       .createWithDefault(false)
 
@@ -904,7 +905,7 @@ object SQLConf {
       .doc("The custom cost evaluator class to be used for adaptive execution. " +
         "If not set, Spark will use its own SimpleCostEvaluator by default.")
       .version("3.2.0")
-      .withTag("aqe-advanced")
+      .withTag("sql-tuning-aqe-advanced")
       .stringConf
       .createOptional
 
@@ -1413,7 +1414,7 @@ object SQLConf {
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
     .version("1.3.0")
-    .withTag("tuning-broadcast")
+    .withTag("sql-tuning-broadcast")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString(s"${5 * 60}")
 
@@ -1656,7 +1657,7 @@ object SQLConf {
         "files with another Spark distributed job. This configuration is effective only when " +
         "using file-based sources such as Parquet, JSON and ORC.")
       .version("1.5.0")
-      .withTag("tuning-partitions")
+      .withTag("sql-tuning-partitions")
       .intConf
       .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
         "files at driver side must not be negative")
@@ -1826,7 +1827,7 @@ object SQLConf {
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
       "and ORC.")
     .version("2.0.0")
-    .withTag("tuning-partitions")
+    .withTag("sql-tuning-partitions")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("128MB") // parquet.block.size
 
@@ -1847,7 +1848,7 @@ object SQLConf {
       "This configuration is effective only when using file-based sources " +
       "such as Parquet, JSON and ORC.")
     .version("3.1.0")
-    .withTag("tuning-partitions")
+    .withTag("sql-tuning-partitions")
     .intConf
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
@@ -1858,7 +1859,7 @@ object SQLConf {
       "value if the initial number of partitions exceeds this value. This configuration is " +
       "effective only when using file-based sources such as Parquet, JSON and ORC.")
     .version("3.5.0")
-    .withTag("tuning-partitions")
+    .withTag("sql-tuning-partitions")
     .intConf
     .checkValue(v => v > 0, "The maximum number of partitions must be a positive integer.")
     .createOptional

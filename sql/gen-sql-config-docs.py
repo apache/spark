@@ -16,6 +16,7 @@
 #
 
 import re
+import shutil
 
 from collections import namedtuple, defaultdict
 from pathlib import Path
@@ -161,11 +162,12 @@ def generate_sql_configs_table_html(sql_configs, path, group):
 
 if __name__ == "__main__":
     jvm = launch_gateway().jvm
-    generated_dir = SPARK_PROJECT_ROOT / "docs" / "_generated"
-    generated_dir.mkdir(exist_ok=True)
+    generated_dir = SPARK_PROJECT_ROOT / "docs" / "_generated_config_tables"
+    shutil.rmtree(generated_dir, ignore_errors=True)
+    generated_dir.mkdir()
 
     sql_configs = get_sql_configs(jvm)
     for group in sorted(sql_configs):
-        html_table_path = generated_dir / f"generated-sql-config-table-{group}.html"
+        html_table_path = generated_dir / f"{group}.html"
         generate_sql_configs_table_html(sql_configs[group], path=html_table_path, group=group)
         print(f"Generated: {html_table_path}")
