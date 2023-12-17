@@ -2974,7 +2974,7 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
-              <arg>-target:17</arg>
+              <arg>-release:17</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
               <arg>-Wunused:imports</arg>
               <arg>-Wconf:cat=scaladoc:wv</arg>
@@ -3016,7 +3016,7 @@
             <javacArgs>
               <javacArg>-source</javacArg>
               <javacArg>${java.version}</javacArg>
-              <javacArg>-target</javacArg>
+              <javacArg>-release</javacArg>
               <javacArg>${java.version}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
             </javacArgs>
