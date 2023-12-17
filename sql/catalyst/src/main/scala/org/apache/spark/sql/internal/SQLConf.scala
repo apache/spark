@@ -2720,7 +2720,6 @@ object SQLConf {
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
       .version("2.2.0")
-      .withTag("cbo")
       .booleanConf
       .createWithDefault(false)
 
@@ -2728,7 +2727,6 @@ object SQLConf {
     buildConf("spark.sql.cbo.planStats.enabled")
       .doc("When true, the logical plan will fetch row counts and column statistics from catalog.")
       .version("3.0.0")
-      .withTag("cbo")
       .booleanConf
       .createWithDefault(false)
 
@@ -2736,7 +2734,6 @@ object SQLConf {
     buildConf("spark.sql.cbo.joinReorder.enabled")
       .doc("Enables join reorder in CBO.")
       .version("2.2.0")
-      .withTag("cbo")
       .booleanConf
       .createWithDefault(false)
 
@@ -2744,7 +2741,6 @@ object SQLConf {
     buildConf("spark.sql.cbo.joinReorder.dp.threshold")
       .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
       .version("2.2.0")
-      .withTag("cbo")
       .intConf
       .checkValue(number => number > 0, "The maximum number must be a positive integer.")
       .createWithDefault(12)
@@ -2757,7 +2753,6 @@ object SQLConf {
         "1 - this value. The weighted geometric mean of these ratios is used to decide " +
         "which of the candidate plans will be chosen by the CBO.")
       .version("2.2.0")
-      .withTag("cbo")
       .doubleConf
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
@@ -2766,14 +2761,12 @@ object SQLConf {
     buildConf("spark.sql.cbo.joinReorder.dp.star.filter")
       .doc("Applies star-join filter heuristics to cost based join enumeration.")
       .version("2.2.0")
-      .withTag("cbo")
       .booleanConf
       .createWithDefault(false)
 
   val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
     .doc("When true, it enables join reordering based on star schema detection. ")
     .version("2.2.0")
-    .withTag("cbo")
     .booleanConf
     .createWithDefault(false)
 
@@ -2782,7 +2775,6 @@ object SQLConf {
     .doc("Specifies the upper limit of the ratio between the largest fact tables" +
       " for a star join to be considered. ")
     .version("2.2.0")
-    .withTag("cbo")
     .doubleConf
     .createWithDefault(0.9)
 
