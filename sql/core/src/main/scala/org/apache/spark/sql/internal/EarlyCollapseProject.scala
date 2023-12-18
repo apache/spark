@@ -18,9 +18,9 @@
 package org.apache.spark.sql.internal
 
 import scala.util.{Failure, Success, Try}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, UserDefinedExpression, WindowExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, Window}
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 import org.apache.spark.util.Utils
 
@@ -29,7 +29,8 @@ private[sql] object EarlyCollapseProject {
     logicalPlan match {
       case newP @ Project(newProjList, p @ Project(projList, child)) if
         p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
-        newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty =>
+        newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
+        !child.isInstanceOf[Window] && !child.isInstanceOf[Aggregate] =>
 
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
@@ -58,8 +59,6 @@ private[sql] object EarlyCollapseProject {
           // are collapsed it can cause recalculation of functions and inefficiency with
           // separate group by clauses
           case ex if !ex.deterministic => ex
-          case ex: AggregateExpression => ex
-          case ex: WindowExpression => ex
           case ex: UserDefinedExpression => ex
         }.nonEmpty)) {
           None
