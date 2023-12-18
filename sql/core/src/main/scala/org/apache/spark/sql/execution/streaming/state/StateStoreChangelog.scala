@@ -131,7 +131,7 @@ class StateStoreChangelogWriterV1(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec)
-    extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
@@ -166,7 +166,7 @@ class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec)
-    extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
     assert(compressedStream != null)
@@ -205,8 +205,7 @@ class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
-    extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte], String)]
-    with Logging {
+  extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte], String)] with Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
@@ -239,8 +238,8 @@ class StateStoreChangelogReader(
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec) extends StateStoreChangelogReader(fm, fileToRead,
-      compressionCodec) {
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String) = {
     val keySize = input.readInt()
@@ -279,8 +278,8 @@ class StateStoreChangelogReaderV1(
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec) extends StateStoreChangelogReader(fm, fileToRead,
-      compressionCodec) {
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
 
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
