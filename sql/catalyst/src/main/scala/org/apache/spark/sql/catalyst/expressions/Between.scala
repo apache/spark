@@ -27,7 +27,13 @@ import org.apache.spark.sql.types.{BooleanType, DataType}
       > SELECT _FUNC_(0.5, 0, 1);
         TRUE
   """,
-  since = "2.0.0",
+  arguments = """
+    Arguments:
+      * projection - An expression that is being compared with lower and upper bound.
+      * lower - Lower bound of the between check.
+      * upper - Upper bound of the between check.
+  """,
+  since = "4.0.0",
   group = "conditional_funcs")
 case class Between(proj: Expression, lower: Expression, upper: Expression)
   extends RuntimeReplaceable with ComplexTypeMergingExpression {
