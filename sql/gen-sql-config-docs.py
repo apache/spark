@@ -45,12 +45,7 @@ def get_sql_configs(jvm):
     Get all public SQL configurations, grouped by their documentation tag.
     Note that these tags are created in `SQLConf.scala` via `ConfigBuilder.withTag()`.
     """
-    sql_configs = defaultdict(
-        list, {
-            "__all": [],
-            "__no_group": [],
-        }
-    )
+    sql_configs = defaultdict(list)
     config_set = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listAllSQLConfigsWithTags()
     for raw_config in config_set:
         sql_config = SQLConfEntry(
@@ -61,11 +56,8 @@ def get_sql_configs(jvm):
             tags=set(raw_config._5()),
         )
         sql_configs["__all"].append(sql_config)
-        if not sql_config.tags:
-            sql_configs["__no_group"].append(sql_config)
-        else:
-            for tag in sql_config.tags:
-                sql_configs[tag].append(sql_config)
+        for tag in sql_config.tags:
+            sql_configs[tag].append(sql_config)
     return sql_configs
 
 

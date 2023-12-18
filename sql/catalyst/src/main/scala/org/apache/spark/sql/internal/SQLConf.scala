@@ -5636,11 +5636,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def getAllConfs: immutable.Map[String, String] =
     settings.synchronized { settings.asScala.toMap }
 
+  /**
+   * Return all the configuration definitions that have been defined in [[SQLConf]], including
+   * their tags.
+   */
   def getAllDefinedConfsWithTags: Seq[(String, String, String, String, Set[String])] = {
     loadDefinedConfs()
     getConfigEntries().asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
-      (entry.key, displayValue, entry.doc, entry.version, entry.tags)
+      val staticOrRuntime =
+        if (SQLConf.isStaticConfigKey(entry.key)) "__sql_static" else "__sql_runtime"
+      (entry.key, displayValue, entry.doc, entry.version, entry.tags + staticOrRuntime)
     }.toSeq
   }
 
