@@ -41,6 +41,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.{ByteBufferOutputStream, SizeEstimator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -80,7 +81,7 @@ private[sql] object ArrowConverters extends Logging {
       maxRecordsPerBatch: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      context: TaskContext) extends Iterator[Array[Byte]] {
+      context: TaskContext) extends Iterator[Array[Byte]] with AutoCloseable {
 
     protected val arrowSchema =
       ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
@@ -93,13 +94,11 @@ private[sql] object ArrowConverters extends Logging {
     protected val arrowWriter = ArrowWriter.create(root)
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
-      root.close()
-      allocator.close()
+      close()
     }}
 
     override def hasNext: Boolean = rowIter.hasNext || {
-      root.close()
-      allocator.close()
+      close()
       false
     }
 
@@ -123,6 +122,11 @@ private[sql] object ArrowConverters extends Logging {
       }
 
       out.toByteArray
+    }
+
+    override def close(): Unit = {
+        root.close()
+        allocator.close()
     }
   }
 
@@ -226,11 +230,19 @@ private[sql] object ArrowConverters extends Logging {
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean): Array[Byte] = {
-    new ArrowBatchWithSchemaIterator(
+    val batches = new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
         timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
-    }.next()
+    }
+    Utils.tryWithSafeFinally {
+      batches.next()
+    } {
+      // If taskContext is null, `batches.close()` should be called to avoid memory leak.
+      if (TaskContext.get() == null) {
+        batches.close()
+      }
+    }
   }
 
   /**
@@ -315,7 +327,7 @@ private[sql] object ArrowConverters extends Logging {
       val reader =
         new ArrowStreamReader(new ByteArrayInputStream(arrowBatchIter.next()), allocator)
       val root = if (reader.loadNextBatch()) reader.getVectorSchemaRoot else null
-      resources.append(reader, root)
+      resources.appendAll(Seq(reader, root))
       if (root == null) {
         (Iterator.empty, null)
       } else {
@@ -387,7 +399,8 @@ private[sql] object ArrowConverters extends Logging {
     if (shouldUseRDD) {
       logDebug("Using RDD-based createDataFrame with Arrow optimization.")
       val timezone = session.sessionState.conf.sessionLocalTimeZone
-      val rdd = session.sparkContext.parallelize(batchesInDriver, batchesInDriver.length)
+      val rdd = session.sparkContext
+        .parallelize(batchesInDriver.toImmutableArraySeq, batchesInDriver.length)
         .mapPartitions { batchesInExecutors =>
           ArrowConverters.fromBatchIterator(
             batchesInExecutors,
@@ -408,7 +421,8 @@ private[sql] object ArrowConverters extends Logging {
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
       val proj = UnsafeProjection.create(attrs, attrs)
-      Dataset.ofRows(session, LocalRelation(attrs, data.map(r => proj(r).copy()).toArray))
+      Dataset.ofRows(session,
+        LocalRelation(attrs, data.map(r => proj(r).copy()).toArray.toImmutableArraySeq))
     }
   }
 

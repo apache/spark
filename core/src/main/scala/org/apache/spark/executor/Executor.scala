@@ -324,18 +324,26 @@ private[spark] class Executor(
   private val Seq(initialUserJars, initialUserFiles, initialUserArchives) =
     Seq("jar", "file", "archive").map { key =>
       conf.getOption(s"spark.app.initial.$key.urls").map { urls =>
-        immutable.Map(urls.split(",").map(url => (url, appStartTime)): _*)
+        import org.apache.spark.util.ArrayImplicits._
+        immutable.Map(urls.split(",").map(url => (url, appStartTime)).toImmutableArraySeq: _*)
       }.getOrElse(immutable.Map.empty)
     }
   updateDependencies(initialUserFiles, initialUserJars, initialUserArchives, defaultSessionState)
 
-  // Plugins need to load using a class loader that includes the executor's user classpath.
-  // Plugins also needs to be initialized after the heartbeater started
-  // to avoid blocking to send heartbeat (see SPARK-32175).
+  // Plugins and shuffle managers need to load using a class loader that includes the executor's
+  // user classpath. Plugins also needs to be initialized after the heartbeater started
+  // to avoid blocking to send heartbeat (see SPARK-32175 and SPARK-45762).
   private val plugins: Option[PluginContainer] =
     Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
       PluginContainer(env, resources.asJava)
     }
+
+  // Skip local mode because the ShuffleManager is already initialized
+  if (!isLocal) {
+    Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
+      env.initializeShuffleManager()
+    }
+  }
 
   metricsPoller.start()
 

@@ -421,7 +421,7 @@ case class MapGroupsExec(
         val result = func(
           getKey(key),
           rowIter.map(getValue))
-        result.map(outputObject)
+        result.iterator.map(outputObject)
       }
     }
   }
@@ -653,7 +653,7 @@ case class CoGroupExec(
             getKey(key),
             leftResult.map(getLeft),
             rightResult.map(getRight))
-          result.map(outputObject)
+          result.iterator.map(outputObject)
       }
     }
   }

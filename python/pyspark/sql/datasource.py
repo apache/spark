@@ -15,16 +15,18 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterator, Tuple, Union, TYPE_CHECKING
+from typing import final, Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
+from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
+    from pyspark.sql.session import SparkSession
 
 
-__all__ = ["DataSource", "DataSourceReader"]
+__all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
 
 
 class DataSource(ABC):
@@ -39,9 +41,12 @@ class DataSource(ABC):
 
     After implementing this interface, you can start to load your data source using
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
+
+    .. versionadded: 4.0.0
     """
 
-    def __init__(self, options: Dict[str, "OptionalPrimitiveType"]):
+    @final
+    def __init__(self, options: Dict[str, "OptionalPrimitiveType"]) -> None:
         """
         Initializes the data source with user-provided options.
 
@@ -52,12 +57,12 @@ class DataSource(ABC):
 
         Notes
         -----
-        This method should not contain any non-serializable objects.
+        This method should not be overridden.
         """
         self.options = options
 
-    @property
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         """
         Returns a string represents the format name of this data source.
 
@@ -66,20 +71,21 @@ class DataSource(ABC):
 
         Examples
         --------
-        >>> def name(self):
+        >>> def name(cls):
         ...     return "my_data_source"
         """
-        return self.__class__.__name__
+        return cls.__name__
 
     def schema(self) -> Union[StructType, str]:
         """
         Returns the schema of the data source.
 
-        It can reference the ``options`` field to infer the data source's schema when
-        users do not explicitly specify it. This method is invoked once when calling
-        ``spark.read.format(...).load()`` to get the schema for a data source read
-        operation. If this method is not implemented, and a user does not provide a
-        schema when reading the data source, an exception will be thrown.
+        It can refer any field initialized in the ``__init__`` method to infer the
+        data source's schema when users do not explicitly specify it. This method is
+        invoked once when calling ``spark.read.format(...).load()`` to get the schema
+        for a data source read operation. If this method is not implemented, and a
+        user does not provide a schema when reading the data source, an exception will
+        be thrown.
 
         Returns
         -------
@@ -98,7 +104,10 @@ class DataSource(ABC):
         >>> def schema(self):
         ...   return StructType().add("a", "int").add("b", "string")
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "schema"},
+        )
 
     def reader(self, schema: StructType) -> "DataSourceReader":
         """
@@ -116,16 +125,82 @@ class DataSource(ABC):
         reader : DataSourceReader
             A reader instance for this data source.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "reader"},
+        )
+
+    def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
+        """
+        Returns a ``DataSourceWriter`` instance for writing data.
+
+        The implementation is required for writable data sources.
+
+        Parameters
+        ----------
+        schema : StructType
+            The schema of the data to be written.
+        overwrite : bool
+            A flag indicating whether to overwrite existing data when writing to the data source.
+
+        Returns
+        -------
+        writer : DataSourceWriter
+            A writer instance for this data source.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "writer"},
+        )
+
+
+class InputPartition:
+    """
+    A base class representing an input partition returned by the `partitions()`
+    method of `DataSourceReader`.
+
+    .. versionadded: 4.0.0
+
+    Notes
+    -----
+    This class must be picklable.
+
+    Examples
+    --------
+    Use the default input partition implementation:
+
+    >>> def partitions(self):
+    ...     return [InputPartition(1)]
+
+    Subclass the input partition class:
+
+    >>> from dataclasses import dataclass
+    >>> @dataclass
+    ... class RangeInputPartition(InputPartition):
+    ...     start: int
+    ...     end: int
+
+    >>> def partitions(self):
+    ...     return [RangeInputPartition(1, 3), RangeInputPartition(4, 6)]
+    """
+
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def __repr__(self) -> str:
+        attributes = ", ".join([f"{k}={v!r}" for k, v in self.__dict__.items()])
+        return f"{self.__class__.__name__}({attributes})"
 
 
 class DataSourceReader(ABC):
     """
     A base class for data source readers. Data source readers are responsible for
     outputting data from a data source.
+
+    .. versionadded: 4.0.0
     """
 
-    def partitions(self) -> Iterator[Any]:
+    def partitions(self) -> Sequence[InputPartition]:
         """
         Returns an iterator of partitions for this data source.
 
@@ -143,40 +218,43 @@ class DataSourceReader(ABC):
 
         Returns
         -------
-        Iterator[Any]
-            An iterator of partitions for this data source. The partition value can be
-            any serializable objects.
+        Sequence[InputPartition]
+            A sequence of partitions for this data source. Each partition value
+            must be an instance of `InputPartition` or a subclass of it.
 
         Notes
         -----
-        This method should not return any un-picklable objects.
+        All partition values must be picklable objects.
 
         Examples
         --------
         Returns a list of integers:
 
         >>> def partitions(self):
-        ...     return [1, 2, 3]
+        ...     return [InputPartition(1), InputPartition(2), InputPartition(3)]
 
         Returns a list of string:
 
         >>> def partitions(self):
-        ...     return ["a", "b", "c"]
+        ...     return [InputPartition("a"), InputPartition("b"), InputPartition("c")]
 
-        Returns a list of tuples:
+        Returns a list of ranges:
+
+        >>> class RangeInputPartition(InputPartition):
+        ...    def __init__(self, start, end):
+        ...        self.start = start
+        ...        self.end = end
 
         >>> def partitions(self):
-        ...     return [("a", 1), ("b", 2), ("c", 3)]
-
-        Returns a list of dictionaries:
-
-        >>> def partitions(self):
-        ...     return [{"a": 1}, {"b": 2}, {"c": 3}]
+        ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
-        yield None
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "partitions"},
+        )
 
     @abstractmethod
-    def read(self, partition: Any) -> Iterator[Union[Tuple, Row]]:
+    def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -201,14 +279,127 @@ class DataSourceReader(ABC):
         --------
         Yields a list of tuples:
 
-        >>> def read(self, partition):
-        ...     yield (partition, 0)
-        ...     yield (partition, 1)
+        >>> def read(self, partition: InputPartition):
+        ...     yield (partition.value, 0)
+        ...     yield (partition.value, 1)
 
         Yields a list of rows:
 
-        >>> def read(self, partition):
-        ...     yield Row(partition=partition, value=0)
-        ...     yield Row(partition=partition, value=1)
+        >>> def read(self, partition: InputPartition):
+        ...     yield Row(partition=partition.value, value=0)
+        ...     yield Row(partition=partition.value, value=1)
         """
         ...
+
+
+class DataSourceWriter(ABC):
+    """
+    A base class for data source writers. Data source writers are responsible for saving
+    the data to the data source.
+
+    .. versionadded: 4.0.0
+    """
+
+    @abstractmethod
+    def write(self, iterator: Iterator[Row]) -> "WriterCommitMessage":
+        """
+        Writes data into the data source.
+
+        This method is called once on each executor to write data to the data source.
+        It accepts an iterator of input data and returns a single row representing a
+        commit message, or None if there is no commit message.
+
+        The driver collects commit messages, if any, from all executors and passes them
+        to the ``commit`` method if all tasks run successfully. If any task fails, the
+        ``abort`` method will be called with the collected commit messages.
+
+        Parameters
+        ----------
+        iterator : Iterator[Row]
+            An iterator of input data.
+
+        Returns
+        -------
+        WriterCommitMessage : a serializable commit message
+        """
+        ...
+
+    def commit(self, messages: List["WriterCommitMessage"]) -> None:
+        """
+        Commits this writing job with a list of commit messages.
+
+        This method is invoked on the driver when all tasks run successfully. The
+        commit messages are collected from the ``write`` method call from each task,
+        and are passed to this method. The implementation should use the commit messages
+        to commit the writing job to the data source.
+
+        Parameters
+        ----------
+        messages : List[WriterCommitMessage]
+            A list of commit messages.
+        """
+        ...
+
+    def abort(self, messages: List["WriterCommitMessage"]) -> None:
+        """
+        Aborts this writing job due to task failures.
+
+        This method is invoked on the driver when one or more tasks failed. The commit
+        messages are collected from the ``write`` method call from each task, and are
+        passed to this method. The implementation should use the commit messages to
+        abort the writing job to the data source.
+
+        Parameters
+        ----------
+        messages : List[WriterCommitMessage]
+            A list of commit messages.
+        """
+        ...
+
+
+class WriterCommitMessage:
+    """
+    A commit message returned by the ``write`` method of ``DataSourceWriter`` and will be
+    sent back to the driver side as input parameter of ``commit`` or ``abort`` method.
+
+    .. versionadded: 4.0.0
+
+    Notes
+    -----
+    This class must be picklable.
+    """
+
+    ...
+
+
+class DataSourceRegistration:
+    """
+    Wrapper for data source registration. This instance can be accessed by
+    :attr:`spark.dataSource`.
+
+    .. versionadded: 4.0.0
+    """
+
+    def __init__(self, sparkSession: "SparkSession"):
+        self.sparkSession = sparkSession
+
+    def register(
+        self,
+        dataSource: Type["DataSource"],
+    ) -> None:
+        """Register a Python user-defined data source.
+
+        Parameters
+        ----------
+        dataSource : type
+            The data source class to be registered. It should be a subclass of DataSource.
+        """
+        from pyspark.sql.udf import _wrap_function
+
+        name = dataSource.name()
+        sc = self.sparkSession.sparkContext
+        # Serialize the data source class.
+        wrapped = _wrap_function(sc, dataSource)
+        assert sc._jvm is not None
+        ds = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonDataSource(wrapped)
+        self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)

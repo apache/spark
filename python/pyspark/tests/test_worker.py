@@ -230,6 +230,7 @@ class WorkerSegfaultTest(ReusedPySparkTestCase):
         _conf.set("spark.python.worker.faulthandler.enabled", "true")
         return _conf
 
+    @unittest.skipIf(sys.version_info > (3, 12), "SPARK-46130: Flaky with Python 3.12")
     def test_python_segfault(self):
         try:
 

@@ -15,9 +15,16 @@
  * limitations under the License.
  */
 
-/* global $, ConvertDurationString, Mustache, createRESTEndPointForExecutorsPage */
-/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot */
+/* global $, Mustache, uiRoot */
+
+import {
+  ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
+  formatBytes, formatDate, formatDuration, formatLogsCells,
+  getBaseURI, getStandAloneAppId,
+  setDataTableDefaults
+} from './utils.js';
+
+export {setTaskThreadDumpEnabled};
 
 var shouldBlockUI = true;
 var taskThreadDumpEnabled = false;
@@ -1067,11 +1074,7 @@ $(document).ready(function () {
                 if (typeof msg === 'undefined') {
                   return "";
                 } else {
-                  var indexOfLineSeparator = msg.indexOf("\n");
-                  var formHead = indexOfLineSeparator > 0 ? msg.substring(0, indexOfLineSeparator) : (msg.length > 100 ? msg.substring(0, 100) : msg);
-                  var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
-                  var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                  return formHead + form + formMsg;
+                  return errorMessageCell(msg)
                 }
               },
               name: "Errors"

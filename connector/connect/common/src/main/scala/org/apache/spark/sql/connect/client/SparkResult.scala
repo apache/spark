@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.lang.ref.Cleaner
 import java.util.Objects
 
 import scala.collection.mutable
@@ -28,7 +29,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
-import org.apache.spark.sql.connect.client.util.Cleanable
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -38,8 +38,7 @@ private[sql] class SparkResult[T](
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String)
-    extends AutoCloseable
-    with Cleanable { self =>
+    extends AutoCloseable { self =>
 
   private[this] var opId: String = _
   private[this] var numRecords: Int = 0
@@ -47,6 +46,8 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
+  private val cleanable =
+    SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
 
   /**
    * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
@@ -257,9 +258,7 @@ private[sql] class SparkResult[T](
   /**
    * Close this result, freeing any underlying resources.
    */
-  override def close(): Unit = cleaner.close()
-
-  override val cleaner: AutoCloseable = new SparkResultCloseable(resultMap, responses)
+  override def close(): Unit = cleanable.clean()
 
   private class ResultMessageIterator(destructive: Boolean) extends AbstractMessageIterator {
     private[this] var totalBytesRead = 0L
@@ -309,12 +308,21 @@ private[sql] class SparkResult[T](
   }
 }
 
+private object SparkResult {
+  private val cleaner: Cleaner = Cleaner.create()
+}
+
 private[client] class SparkResultCloseable(
     resultMap: mutable.Map[Int, (Long, Seq[ArrowMessage])],
     responses: CloseableIterator[proto.ExecutePlanResponse])
-    extends AutoCloseable {
+    extends AutoCloseable
+    with Runnable {
   override def close(): Unit = {
     resultMap.values.foreach(_._2.foreach(_.close()))
     responses.close()
+  }
+
+  override def run(): Unit = {
+    close()
   }
 }

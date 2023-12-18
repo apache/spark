@@ -80,7 +80,7 @@ private[spark] object TaskDescription {
     map.foreach { case (key, value) =>
       dataOut.writeUTF(key)
       dataOut.writeUTF(value.name)
-      dataOut.writeInt(value.addresses.size)
+      dataOut.writeInt(value.addresses.length)
       value.addresses.foreach(dataOut.writeUTF(_))
     }
   }

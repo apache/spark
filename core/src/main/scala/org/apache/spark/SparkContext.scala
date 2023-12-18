@@ -71,6 +71,7 @@ import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.{TriggerHeapHistogram, TriggerThreadDump}
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.logging.DriverLogger
 
 /**
@@ -576,6 +577,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this, _resources.asJava)
+    _env.initializeShuffleManager()
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
@@ -2607,6 +2609,17 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Cancel active jobs for the specified group, as well as the future jobs in this job group.
+   * Note: the maximum number of job groups that can be tracked is set by
+   * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
+   * is to be added, the oldest job group tracked will be discarded.
+   */
+  def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true)
+  }
+
+  /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
@@ -2699,7 +2712,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return the cleaned closure
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    ClosureCleaner.clean(f, checkSerializable)
+    SparkClosureCleaner.clean(f, checkSerializable)
     f
   }
 
@@ -2817,7 +2830,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
     // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
     driverUpdates.put(EventLoggingListener.DRIVER_STAGE_KEY, new ExecutorMetrics(currentMetrics))
-    val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
+    val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0).toImmutableArraySeq
     listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
       driverUpdates))
   }

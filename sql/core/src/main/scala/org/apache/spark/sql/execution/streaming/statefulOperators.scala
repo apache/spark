@@ -156,7 +156,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       .map(entry => entry._1 -> longMetric(entry._1).value)
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(customMetrics.mapValues(long2Long).toMap.asJava)
+      new java.util.HashMap(customMetrics.transform((_, v) => long2Long(v)).asJava)
 
     // We now don't report number of shuffle partitions inside the state operator. Instead,
     // it will be filled when the stream query progress is reported
@@ -392,9 +392,9 @@ object WatermarkSupport {
       // with allowing them.
       val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
       if (eventTimeColsSet.size > 1) {
-        throw new AnalysisException("More than one event time columns are available. Please " +
-          "ensure there is at most one event time column per stream. event time columns: " +
-          eventTimeCols.mkString("(", ",", ")"))
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
       // With above check, even there are multiple columns in eventTimeCols, all columns must be

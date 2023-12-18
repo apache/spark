@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.graphx
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 import org.apache.spark._
 import org.apache.spark.graphx._
@@ -51,7 +51,7 @@ object Analytics {
         case _ => throw new IllegalArgumentException(s"Invalid argument: $arg")
       }
     }
-    val options = mutable.Map(optionsList: _*)
+    val options = mutable.Map(immutable.ArraySeq.unsafeWrapArray(optionsList): _*)
 
     val conf = new SparkConf()
     GraphXUtils.registerKryoClasses(conf)
@@ -101,7 +101,7 @@ object Analytics {
 
         if (!outFname.isEmpty) {
           println(s"Saving pageranks of pages to $outFname")
-          pr.map { case (id, r) => id + "\t" + r }.saveAsTextFile(outFname)
+          pr.map { case (id, r) => s"$id\t$r" }.saveAsTextFile(outFname)
         }
 
         sc.stop()

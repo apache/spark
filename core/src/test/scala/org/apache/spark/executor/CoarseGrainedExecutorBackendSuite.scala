@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
-import org.json4s.{DefaultFormats, Extraction}
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
 import org.mockito.ArgumentMatchers.any
@@ -50,7 +50,7 @@ import org.apache.spark.util.{SerializableBuffer, ThreadUtils, Utils}
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
 
-  implicit val formats = DefaultFormats
+  implicit val formats: Formats = DefaultFormats
 
   def createSparkConf(): SparkConf = {
     new SparkConf()
@@ -326,11 +326,11 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
-            logInfo(s"task ${taskDescription.taskId} runs.")
+            logInfo(s"task ${this.taskDescription.taskId} runs.")
           }
 
           override def kill(interruptThread: Boolean, reason: String): Unit = {
-            logInfo(s"task ${taskDescription.taskId} killed.")
+            logInfo(s"task ${this.taskDescription.taskId} killed.")
           }
         }
       }
@@ -343,6 +343,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
       eventually(timeout(10.seconds)) {
         assert(backend.taskResources.size == 1)
+        assert(runningTasks.size == 1)
         val resources = backend.taskResources.get(taskId)
         assert(resources(GPU).addresses sameElements Array("0", "1"))
       }
@@ -434,13 +435,13 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
-            tasksExecuted.put(taskDescription.taskId, true)
-            logInfo(s"task ${taskDescription.taskId} runs.")
+            tasksExecuted.put(this.taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} runs.")
           }
 
           override def kill(interruptThread: Boolean, reason: String): Unit = {
-            logInfo(s"task ${taskDescription.taskId} killed.")
-            tasksKilled.put(taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} killed.")
+            tasksKilled.put(this.taskDescription.taskId, true)
           }
         }
       }
@@ -523,13 +524,13 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
-            tasksExecuted.put(taskDescription.taskId, true)
-            logInfo(s"task ${taskDescription.taskId} runs.")
+            tasksExecuted.put(this.taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} runs.")
           }
 
           override def kill(interruptThread: Boolean, reason: String): Unit = {
-            logInfo(s"task ${taskDescription.taskId} killed.")
-            tasksKilled.put(taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} killed.")
+            tasksKilled.put(this.taskDescription.taskId, true)
           }
         }
       }

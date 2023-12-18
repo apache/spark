@@ -72,6 +72,6 @@ private[kinesis] class KPLDataGenerator(regionName: String) extends KinesisDataG
       Futures.addCallback(future, kinesisCallBack, ThreadUtils.sameThreadExecutorService())
     }
     producer.flushSync()
-    shardIdToSeqNumbers.mapValues(_.toSeq).toMap
+    shardIdToSeqNumbers.toMap.transform((_, v) => v.toSeq)
   }
 }

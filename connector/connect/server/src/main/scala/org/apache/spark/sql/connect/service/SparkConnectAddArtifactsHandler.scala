@@ -24,14 +24,14 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.io.CountingOutputStream
-import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
+import org.apache.spark.sql.artifact.ArtifactManager
+import org.apache.spark.sql.artifact.util.ArtifactUtils
+import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -51,7 +51,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   private var chunkedArtifact: StagedChunkedArtifact = _
   private var holder: SessionHolder = _
 
-  override def onNext(req: AddArtifactsRequest): Unit = {
+  override def onNext(req: AddArtifactsRequest): Unit = try {
     if (this.holder == null) {
       this.holder = SparkConnectService.getOrCreateIsolatedSession(
         req.getUserContext.getUserId,
@@ -78,6 +78,17 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     } else {
       throw new UnsupportedOperationException(s"Unsupported data transfer request: $req")
     }
+  } catch {
+    ErrorUtils.handleError(
+      "addArtifacts.onNext",
+      responseObserver,
+      holder.userId,
+      holder.sessionId,
+      None,
+      false,
+      Some(() => {
+        cleanUpStagedArtifacts()
+      }))
   }
 
   override def onError(throwable: Throwable): Unit = {
@@ -101,8 +112,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       // We do not store artifacts that fail the CRC. The failure is reported in the artifact
       // summary and it is up to the client to decide whether to retry sending the artifact.
       if (artifact.getCrcStatus.contains(true)) {
-        if (artifact.path.startsWith(
-            SparkConnectArtifactManager.forwardToFSPrefix + File.separator)) {
+        if (artifact.path.startsWith(ArtifactManager.forwardToFSPrefix + File.separator)) {
           holder.artifactManager.uploadArtifactToFs(artifact.path, artifact.stagedPath)
         } else {
           addStagedArtifactToArtifactManager(artifact)
@@ -119,6 +129,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       val artifactSummaries = flushStagedArtifacts()
       // Add the artifacts to the session and return the summaries to the client.
       val builder = proto.AddArtifactsResponse.newBuilder()
+      builder.setSessionId(holder.sessionId)
+      builder.setServerSideSessionId(holder.serverSessionId)
       artifactSummaries.foreach(summary => builder.addArtifacts(summary))
       // Delete temp dir
       cleanUpStagedArtifacts()
@@ -127,7 +139,16 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       responseObserver.onNext(builder.build())
       responseObserver.onCompleted()
     } catch {
-      case e: StatusRuntimeException => onError(e)
+      ErrorUtils.handleError(
+        "addArtifacts.onComplete",
+        responseObserver,
+        holder.userId,
+        holder.sessionId,
+        None,
+        false,
+        Some(() => {
+          cleanUpStagedArtifacts()
+        }))
     }
   }
 

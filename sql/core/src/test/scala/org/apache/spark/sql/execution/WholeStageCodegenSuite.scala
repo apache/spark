@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
@@ -776,14 +777,14 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val b = Seq((1, "a")).toDF("key", "value")
     val c = Seq(1).toDF("key")
 
-    val ab = a.join(b, Stream("key"), "left")
+    val ab = a.join(b, LazyList("key"), "left")
     val abc = ab.join(c, Seq("key"), "left")
 
     checkAnswer(abc, Row(1, "a"))
   }
 
   test("SPARK-26680: Stream in groupBy does not cause StackOverflowError") {
-    val groupByCols = Stream(col("key"))
+    val groupByCols = LazyList(col("key"))
     val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
       .groupBy(groupByCols: _*)
       .max("value")
@@ -856,16 +857,19 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
         "spark.sql.CodeGenerator.validParamLength" -> "0") {
       withTable("t") {
-        val expectedErrMsg = "Failed to split aggregate code into small functions"
+        val expectedErrMsg = "Failed to split aggregate code into small functions.*"
         Seq(
           // Test case without keys
           "SELECT AVG(v) FROM VALUES(1) t(v)",
           // Tet case with keys
           "SELECT k, AVG(v) FROM VALUES((1, 1)) t(k, v) GROUP BY k").foreach { query =>
-          val e = intercept[IllegalStateException] {
-            sql(query).collect()
-          }
-          assert(e.getMessage.contains(expectedErrMsg))
+          checkError(
+            exception = intercept[SparkException] {
+              sql(query).collect()
+            },
+            errorClass = "INTERNAL_ERROR",
+            parameters = Map("message" -> expectedErrMsg),
+            matchPVals = true)
         }
       }
     }
@@ -877,17 +881,20 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
         "spark.sql.CodeGenerator.validParamLength" -> "0") {
       withTable("t") {
-        val expectedErrMsg = "Failed to split subexpression code into small functions"
+        val expectedErrMsg = "Failed to split subexpression code into small functions.*"
         Seq(
           // Test case without keys
           "SELECT AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1)) t(a, b, c)",
           // Tet case with keys
           "SELECT k, AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1, 1)) t(k, a, b, c) " +
             "GROUP BY k").foreach { query =>
-          val e = intercept[IllegalStateException] {
-            sql(query).collect()
-          }
-          assert(e.getMessage.contains(expectedErrMsg))
+          checkError(
+            exception = intercept[SparkException] {
+              sql(query).collect()
+            },
+            errorClass = "INTERNAL_ERROR",
+            parameters = Map("message" -> expectedErrMsg),
+            matchPVals = true)
         }
       }
     }

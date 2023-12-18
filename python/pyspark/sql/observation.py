@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 
 from py4j.java_gateway import JavaObject, JVMView
 
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
@@ -85,9 +86,15 @@ class Observation:
         """
         if name is not None:
             if not isinstance(name, str):
-                raise TypeError("name should be a string")
+                raise PySparkTypeError(
+                    error_class="NOT_STR",
+                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+                )
             if name == "":
-                raise ValueError("name should not be empty")
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_NON_EMPTY_STR",
+                    message_parameters={"arg_name": "name", "arg_value": name},
+                )
         self._name = name
         self._jvm: Optional[JVMView] = None
         self._jo: Optional[JavaObject] = None
@@ -107,7 +114,8 @@ class Observation:
         :class:`DataFrame`
             the observed :class:`DataFrame`.
         """
-        assert self._jo is None, "an Observation can be used with a DataFrame only once"
+        if self._jo is not None:
+            raise PySparkAssertionError(error_class="REUSE_OBSERVATION", message_parameters={})
 
         self._jvm = df._sc._jvm
         assert self._jvm is not None
@@ -130,7 +138,9 @@ class Observation:
         dict
             the observed metrics
         """
-        assert self._jo is not None, "call DataFrame.observe"
+        if self._jo is None:
+            raise PySparkAssertionError(error_class="NO_OBSERVE_BEFORE_GET", message_parameters={})
+
         jmap = self._jo.getAsJava()
         # return a pure Python dict, not jmap which is a py4j JavaMap
         return {k: v for k, v in jmap.items()}

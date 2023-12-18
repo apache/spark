@@ -197,8 +197,12 @@ message AnalyzePlanRequest {
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
+// Next ID: 16
 message AnalyzePlanResponse {
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 15;
 
   oneof result {
     Schema schema = 2;
@@ -317,8 +321,12 @@ message ExecutePlanRequest {
 
 // The response of a query, can be one or more for each request. Responses belonging to the
 // same input query, carry the same `session_id`.
+// Next ID: 16
 message ExecutePlanResponse {
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 15;
 
   // Identifies the ExecutePlan execution.
   // If set by the client in ExecutePlanRequest.operationId, that value is returned.
@@ -492,8 +500,12 @@ message ConfigRequest {
 }
 
 // Response to the config request.
+// Next ID: 5
 message ConfigResponse {
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 4;
 
   // (Optional) The result key-value pairs.
   //
@@ -584,7 +596,17 @@ message AddArtifactsRequest {
 
 // Response to adding an artifact. Contains relevant metadata to verify successful transfer of
 // artifact(s).
+// Next ID: 4
 message AddArtifactsResponse {
+  // Session id in which the AddArtifact was running.
+  string session_id = 2;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
+
+  // The list of artifact(s) seen by the server.
+  repeated ArtifactSummary artifacts = 1;
+
   // Metadata of an artifact.
   message ArtifactSummary {
     string name = 1;
@@ -593,9 +615,6 @@ message AddArtifactsResponse {
     // If false, the client may choose to resend the artifact specified by `name`.
     bool is_crc_successful = 2;
   }
-
-  // The list of artifact(s) seen by the server.
-  repeated ArtifactSummary artifacts = 1;
 }
 
 // Request to get current statuses of artifacts at the server side.
@@ -626,14 +645,20 @@ message ArtifactStatusesRequest {
 }
 
 // Response to checking artifact statuses.
+// Next ID: 4
 message ArtifactStatusesResponse {
+  // Session id in which the ArtifactStatus was running.
+  string session_id = 2;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
+  // A map of artifact names to their statuses.
+  map<string, ArtifactStatus> statuses = 1;
+
   message ArtifactStatus {
     // Exists or not particular artifact at the server.
     bool exists = 1;
   }
-
-  // A map of artifact names to their statuses.
-  map<string, ArtifactStatus> statuses = 1;
 }
 
 message InterruptRequest {
@@ -678,12 +703,17 @@ message InterruptRequest {
   }
 }
 
+// Next ID: 4
 message InterruptResponse {
   // Session id in which the interrupt was running.
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
 
   // Operation ids of the executions which were interrupted.
   repeated string interrupted_ids = 2;
+
 }
 
 message ReattachOptions {
@@ -774,14 +804,46 @@ message ReleaseExecuteRequest {
   }
 }
 
+// Next ID: 4
 message ReleaseExecuteResponse {
   // Session id in which the release was running.
   string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
 
   // Operation id of the operation on which the release executed.
   // If the operation couldn't be found (because e.g. it was concurrently released), will be unset.
   // Otherwise, it will be equal to the operation_id from request.
   optional string operation_id = 2;
+}
+
+message ReleaseSessionRequest {
+  // (Required)
+  //
+  // The session_id of the request to reattach to.
+  // This must be an id of existing session.
+  string session_id = 1;
+
+  // (Required) User context
+  //
+  // user_context.user_id and session+id both identify a unique remote spark session on the
+  // server side.
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+}
+
+// Next ID: 3
+message ReleaseSessionResponse {
+  // Session id of the session on which the release executed.
+  string session_id = 1;
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 2;
 }
 
 message FetchErrorDetailsRequest {
@@ -804,7 +866,20 @@ message FetchErrorDetailsRequest {
   optional string client_type = 4;
 }
 
+// Next ID: 5
 message FetchErrorDetailsResponse {
+
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session has not changed.
+  string server_side_session_id = 3;
+
+  string session_id = 4;
+
+  // The index of the root error in errors. The field will not be set if the error is not found.
+  optional int32 root_error_idx = 1;
+
+  // A list of errors.
+  repeated Error errors = 2;
 
   message StackTraceElement {
     // The fully qualified name of the class containing the execution point.
@@ -823,6 +898,13 @@ message FetchErrorDetailsResponse {
   // QueryContext defines the schema for the query context of a SparkThrowable.
   // It helps users understand where the error occurs while executing queries.
   message QueryContext {
+    // The type of this query context.
+    enum ContextType {
+      SQL = 0;
+      DATAFRAME = 1;
+    }
+    ContextType context_type = 10;
+
     // The object type of the query which throws the exception.
     // If the exception is directly from the main query, it should be an empty string.
     // Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
@@ -841,6 +923,12 @@ message FetchErrorDetailsResponse {
 
     // The corresponding fragment of the query which throws the exception.
     string fragment = 5;
+
+    // The user code (call site of the API) that caused throwing the exception.
+    string call_site = 6;
+
+    // Summary of the exception cause.
+    string summary = 7;
   }
 
   // SparkThrowable defines the schema for SparkThrowable exceptions.
@@ -877,12 +965,6 @@ message FetchErrorDetailsResponse {
     // The structured data of a SparkThrowable exception.
     optional SparkThrowable spark_throwable = 5;
   }
-
-  // The index of the root error in errors. The field will not be set if the error is not found.
-  optional int32 root_error_idx = 1;
-
-  // A list of errors.
-  repeated Error errors = 2;
 }
 
 // Main interface for the SparkConnect service.
@@ -920,6 +1002,12 @@ service SparkConnectService {
   // Non reattachable executions are released automatically and immediately after the ExecutePlan
   // RPC and ReleaseExecute may not be used.
   rpc ReleaseExecute(ReleaseExecuteRequest) returns (ReleaseExecuteResponse) {}
+
+  // Release a session.
+  // All the executions in the session will be released. Any further requests for the session with
+  // that session_id for the given user_id will fail. If the session didn't exist or was already
+  // released, this is a noop.
+  rpc ReleaseSession(ReleaseSessionRequest) returns (ReleaseSessionResponse) {}
 
   // FetchErrorDetails retrieves the matched exception with details based on a provided error id.
   rpc FetchErrorDetails(FetchErrorDetailsRequest) returns (FetchErrorDetailsResponse) {}

@@ -43,7 +43,6 @@ Properties
    Index.hasnans
    Index.dtype
    Index.inferred_type
-   Index.is_all_dates
    Index.shape
    Index.name
    Index.names
@@ -106,7 +105,9 @@ Missing Values
    Index.fillna
    Index.dropna
    Index.isna
+   Index.isnull
    Index.notna
+   Index.notnull
 
 Conversion
 ~~~~~~~~~~
@@ -128,8 +129,14 @@ in Spark. These can be accessed by ``Index.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    Index.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    Index.spark.transform
 
 Sorting
@@ -191,6 +198,10 @@ Categorical components
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
    CategoricalIndex.map
+   CategoricalIndex.equals
+   CategoricalIndex.max
+   CategoricalIndex.min
+   CategoricalIndex.tolist
 
 .. _api.multiindex:
 
@@ -219,7 +230,6 @@ MultiIndex Properties
    MultiIndex.has_duplicates
    MultiIndex.hasnans
    MultiIndex.inferred_type
-   MultiIndex.is_all_dates
    MultiIndex.shape
    MultiIndex.names
    MultiIndex.ndim
@@ -304,9 +314,15 @@ in Spark. These can be accessed by ``MultiIndex.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    MultiIndex.spark.data_type
    MultiIndex.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    MultiIndex.spark.transform
 
 MultiIndex Sorting

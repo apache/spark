@@ -38,6 +38,7 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
     validate_index_loc,
+    xor,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -809,11 +810,10 @@ class MultiIndex(Index):
 
         sdf_self = self._psdf._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._psdf._internal.spark_frame.select(other._internal.index_spark_columns)
-
-        sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
+        sdf_symdiff = xor(sdf_self, sdf_other)
 
         if sort:
-            sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_columns)
+            sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_column_names)
 
         internal = InternalFrame(
             spark_frame=sdf_symdiff,
@@ -974,28 +974,6 @@ class MultiIndex(Index):
         raise NotImplementedError(
             "only the default get_loc method is currently supported for MultiIndex"
         )
-
-    @property
-    def is_all_dates(self) -> bool:
-        """
-        is_all_dates always returns False for MultiIndex
-
-        Examples
-        --------
-        >>> from datetime import datetime
-
-        >>> idx = ps.MultiIndex.from_tuples(
-        ...     [(datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0)),
-        ...      (datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0))])
-        >>> idx  # doctest: +SKIP
-        MultiIndex([('2019-01-01', '2019-01-01'),
-                    ('2019-01-01', '2019-01-01')],
-                   )
-
-        >>> idx.is_all_dates
-        False
-        """
-        return False
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeMultiIndex, item):

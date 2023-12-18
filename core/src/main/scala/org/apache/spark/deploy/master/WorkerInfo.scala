@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
@@ -162,7 +163,7 @@ private[spark] class WorkerInfo(
    */
   def recoverResources(expected: Map[String, ResourceInformation]): Unit = {
     expected.foreach { case (rName, rInfo) =>
-      resources(rName).acquire(rInfo.addresses)
+      resources(rName).acquire(rInfo.addresses.toImmutableArraySeq)
     }
   }
 
@@ -172,7 +173,7 @@ private[spark] class WorkerInfo(
    */
   private def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
     allocated.foreach { case (rName, rInfo) =>
-      resources(rName).release(rInfo.addresses)
+      resources(rName).release(rInfo.addresses.toImmutableArraySeq)
     }
   }
 }

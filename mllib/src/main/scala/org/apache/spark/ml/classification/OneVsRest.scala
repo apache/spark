@@ -213,9 +213,10 @@ final class OneVsRestModel private[ml] (
         tmpModel.asInstanceOf[ProbabilisticClassificationModel[_, _]].setProbabilityCol("")
       }
 
+      import org.apache.spark.util.ArrayImplicits._
       tmpModel.transform(df)
         .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
-        .select(columns: _*)
+        .select(columns.toImmutableArraySeq: _*)
     }
 
     if (handlePersistence) {

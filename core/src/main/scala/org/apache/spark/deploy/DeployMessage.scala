@@ -233,10 +233,18 @@ private[deploy] object DeployMessages {
       master: RpcEndpointRef, driverId: String, success: Boolean, message: String)
     extends DeployMessage
 
+  case object RequestKillAllDrivers extends DeployMessage
+
+  case class KillAllDriversResponse(
+      master: RpcEndpointRef, success: Boolean, message: String)
+    extends DeployMessage
+
   case class RequestDriverStatus(driverId: String) extends DeployMessage
 
   case class DriverStatusResponse(found: Boolean, state: Option[DriverState],
     workerId: Option[String], workerHostPort: Option[String], exception: Option[Exception])
+
+  case object RequestClearCompletedDriversAndApps extends DeployMessage
 
   // Internal message in AppClient
 

@@ -239,7 +239,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
-    <script src={prependBaseUri(request, "/static/log-view.js")}></script>
+    <script type="module" src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
     <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
@@ -401,7 +401,7 @@ private[spark] object UIUtils extends Logging {
       }
     }
     val colWidth = 100.toDouble / headers.size
-    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    val colWidthAttr = if (fixedWidth) s"$colWidth%" else ""
 
     def getClass(index: Int): String = {
       if (index < headerClasses.size) {
@@ -431,7 +431,7 @@ private[spark] object UIUtils extends Logging {
     }
 
     val headerRow: Seq[Node] = {
-      headers.view.zipWithIndex.map { x =>
+      headers.to(LazyList).zipWithIndex.map { x =>
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
@@ -441,7 +441,7 @@ private[spark] object UIUtils extends Logging {
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
-      }.toSeq
+      }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
@@ -708,6 +708,9 @@ private[spark] object UIUtils extends Logging {
 
   private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
 
+  /**
+   * This function works exactly the same as utils.errorSummary(javascript), it shall be
+   * remained the same whichever changed */
   def errorSummary(errorMessage: String): (String, Boolean) = {
     var isMultiline = true
     val maybeErrorClass =
@@ -730,5 +733,14 @@ private[spark] object UIUtils extends Logging {
     val (summary, isMultiline) = errorSummary(errorMessage)
     val details = detailsUINode(isMultiline, errorMessage)
     <td>{summary}{details}</td>
+  }
+
+  def formatImportJavaScript(
+      request: HttpServletRequest,
+      sourceFile: String,
+      methods: String*): String = {
+    val methodsStr = methods.mkString("{", ", ", "}")
+    val sourceFileStr = prependBaseUri(request, sourceFile)
+    s"""import $methodsStr from "$sourceFileStr";"""
   }
 }

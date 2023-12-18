@@ -1288,7 +1288,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             |) t
             |SELECT c
           """.stripMargin),
-        (0 until 5).map(i => Row(i + "#")))
+        (0 until 5).map(i => Row(s"$i#")))
     }
   }
 
@@ -1311,7 +1311,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           |WITH SERDEPROPERTIES('field.delim' = '|')
         """.stripMargin)
 
-      checkAnswer(df, (0 until 5).map(i => Row(i + "#", i + "#")))
+      checkAnswer(df, (0 until 5).map(i => Row(s"$i#", s"$i#")))
     }
   }
 
@@ -2667,6 +2667,32 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |""".stripMargin)
       val df = sql("SELECT * FROM t")
       checkAnswer(df, Seq.empty[Row])
+    }
+  }
+
+  test("SPARK-46388: HiveAnalysis convert InsertIntoStatement to InsertIntoHiveTable " +
+    "iff child resolved") {
+    withTable("t") {
+      sql("CREATE TABLE t (a STRING)")
+      checkError(
+        exception = intercept[AnalysisException](sql("INSERT INTO t SELECT a*2 FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 38,
+          stop = 38) )
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("INSERT INTO t SELECT cast(a as short) FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 51,
+          stop = 51))
     }
   }
 }

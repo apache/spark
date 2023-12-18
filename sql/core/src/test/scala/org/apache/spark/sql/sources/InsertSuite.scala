@@ -1918,7 +1918,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Seq("xyz").toDF().select("value", "default").write.insertInto("t")
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"))
+        parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"),
+        context =
+          ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 
@@ -2603,6 +2605,30 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t2 (x Decimal(9, 0)) using parquet")
       sql("insert into t2 select 0 - (case when x = 1 then 1 else x end) from t1 where x = 1")
       checkAnswer(spark.table("t2"), Row(-1))
+    }
+  }
+
+  test("SPARK-46370: Querying a table should not invalidate the column defaults") {
+    withTable("t") {
+      // Create a table and insert some rows into it, changing the default value of a column
+      // throughout.
+      spark.sql("CREATE TABLE t(i INT, s STRING DEFAULT 'def') USING CSV")
+      spark.sql("INSERT INTO t SELECT 1, DEFAULT")
+      spark.sql("ALTER TABLE t ALTER COLUMN s DROP DEFAULT")
+      spark.sql("INSERT INTO t SELECT 2, DEFAULT")
+      // Run a query to trigger the table relation cache.
+      val results = spark.table("t").collect()
+      assert(results.length == 2)
+      // Change the column default value and insert another row. Then query the table's contents
+      // and the results should be correct.
+      spark.sql("ALTER TABLE t ALTER COLUMN s SET DEFAULT 'mno'")
+      spark.sql("INSERT INTO t SELECT 3, DEFAULT").collect()
+      checkAnswer(
+        spark.table("t"),
+        Seq(
+          Row(1, "def"),
+          Row(2, null),
+          Row(3, "mno")))
     }
   }
 

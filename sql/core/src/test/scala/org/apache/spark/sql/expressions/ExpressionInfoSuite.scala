@@ -122,7 +122,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       withClue(s"Expression class '$className'") {
         val exprExamples = info.getOriginalExamples
         if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
-          assert(exampleRe.findAllIn(exprExamples).toIterable
+          assert(exampleRe.findAllIn(exprExamples).iterator.to(Iterable)
             .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
             .forall(_.contains("_FUNC_")))
         }
@@ -193,7 +193,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.TryReflect",
       "org.apache.spark.sql.catalyst.expressions.SparkVersion",
       // Throws an error
-      "org.apache.spark.sql.catalyst.expressions.RaiseError",
+      "org.apache.spark.sql.catalyst.expressions.RaiseErrorExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.AssertTrue",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result

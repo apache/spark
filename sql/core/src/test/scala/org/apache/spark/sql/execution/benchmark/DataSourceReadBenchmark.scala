@@ -28,7 +28,9 @@ import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.parquet.VectorizedParquetRecordReader
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
+import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
@@ -90,30 +92,38 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   private def saveAsCsvTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "gzip").option("header", true).csv(dir)
+    df.mode("overwrite")
+      .option("compression", GZIP.lowerCaseName())
+      .option("header", true)
+      .csv(dir)
     spark.read.option("header", true).csv(dir).createOrReplaceTempView("csvTable")
   }
 
   private def saveAsJsonTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "gzip").json(dir)
+    df.mode("overwrite").option("compression", GZIP.lowerCaseName()).json(dir)
     spark.read.json(dir).createOrReplaceTempView("jsonTable")
   }
 
   private def saveAsParquetV1Table(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "snappy").parquet(dir)
+    df.mode("overwrite")
+      .option("compression", ParquetCompressionCodec.SNAPPY.lowerCaseName())
+      .parquet(dir)
     spark.read.parquet(dir).createOrReplaceTempView("parquetV1Table")
   }
 
   private def saveAsParquetV2Table(df: DataFrameWriter[Row], dir: String): Unit = {
     withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
       ParquetProperties.WriterVersion.PARQUET_2_0.toString) {
-      df.mode("overwrite").option("compression", "snappy").parquet(dir)
+      df.mode("overwrite")
+        .option("compression", ParquetCompressionCodec.SNAPPY.lowerCaseName())
+        .parquet(dir)
       spark.read.parquet(dir).createOrReplaceTempView("parquetV2Table")
     }
   }
 
   private def saveAsOrcTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "snappy").orc(dir)
+    df.mode("overwrite").option("compression",
+      OrcCompressionCodec.SNAPPY.lowerCaseName()).orc(dir)
     spark.read.orc(dir).createOrReplaceTempView("orcTable")
   }
 

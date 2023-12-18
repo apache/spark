@@ -381,6 +381,15 @@ object LogicalPlanIntegrity {
     }.flatten
   }
 
+  def validateSchemaOutput(previousPlan: LogicalPlan, currentPlan: LogicalPlan): Option[String] = {
+    if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+      Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
+        currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+        "plan:\n" + currentPlan.treeString)
+    } else {
+      None
+    }
+  }
 
   /**
    * Validate the structural integrity of an optimized plan.
@@ -400,17 +409,11 @@ object LogicalPlanIntegrity {
     } else if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
       Some("Special expressions are placed in the wrong plan: " + currentPlan.treeString)
     } else {
-      LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan).orElse {
-        if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
-          Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
-            currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
-            "plan:\n" + currentPlan.treeString)
-        } else {
-          None
-        }
-      }
+      None
     }
     validation = validation
+      .orElse(LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateSchemaOutput(previousPlan, currentPlan))
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
       .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))

@@ -279,7 +279,7 @@ StreamingQuery query = output
 Currently Spark supports reading [protobuf scalar types](https://developers.google.com/protocol-buffers/docs/proto3#scalar), [enum types](https://developers.google.com/protocol-buffers/docs/proto3#enum), [nested type](https://developers.google.com/protocol-buffers/docs/proto3#nested), and [maps type](https://developers.google.com/protocol-buffers/docs/proto3#maps) under messages of Protobuf.
 In addition to the these types, `spark-protobuf` also introduces support for Protobuf `OneOf` fields. which allows you to handle messages that can have multiple possible sets of fields, but only one set can be present at a time. This is useful for situations where the data you are working with is not always in the same format, and you need to be able to handle messages with different sets of fields without encountering errors.
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Protobuf type</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
     <td>boolean</td>
@@ -333,7 +333,7 @@ In addition to the these types, `spark-protobuf` also introduces support for Pro
 
 It also supports reading the following Protobuf types [Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#timestamp) and [Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#duration)
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Protobuf logical type</b></th><th><b>Protobuf schema</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
     <td>duration</td>
@@ -351,7 +351,7 @@ It also supports reading the following Protobuf types [Timestamp](https://develo
 
 Spark supports the writing of all Spark SQL types into Protobuf. For most types, the mapping from Spark types to Protobuf types is straightforward (e.g. IntegerType gets converted to int);
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Spark SQL type</b></th><th><b>Protobuf type</b></th></tr></thead>
   <tr>
     <td>BooleanType</td>

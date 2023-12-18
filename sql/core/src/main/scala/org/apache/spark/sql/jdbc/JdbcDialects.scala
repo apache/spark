@@ -630,12 +630,16 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
-   * @param message The error message to be placed to the returned exception.
    * @param e The dialect specific exception.
+   * @param errorClass The error class assigned in the case of an unclassified `e`
+   * @param messageParameters The message parameters of `errorClass`
    * @return `AnalysisException` or its sub-class.
    */
-  def classifyException(message: String, e: Throwable): AnalysisException = {
-    new AnalysisException(message, cause = Some(e))
+  def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String]): AnalysisException = {
+    new AnalysisException(errorClass, messageParameters, cause = Some(e))
   }
 
   /**

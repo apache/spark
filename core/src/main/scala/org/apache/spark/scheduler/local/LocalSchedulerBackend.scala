@@ -110,7 +110,7 @@ private[spark] class LocalSchedulerBackend(
     val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend with Logging {
 
-  private val appId = "local-" + System.currentTimeMillis
+  private val appId = conf.get("spark.test.appId", "local-" + System.currentTimeMillis)
   private var localEndpoint: RpcEndpointRef = null
   private val userClassPath = getUserClasspath(conf)
   private val listenerBus = scheduler.sc.listenerBus

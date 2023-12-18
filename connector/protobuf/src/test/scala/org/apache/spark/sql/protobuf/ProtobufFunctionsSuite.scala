@@ -503,9 +503,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
     }
     assert(
-      toProtoDfToFromProtoDf.select("toProtoToFromProto.value").take(1).toSeq(0).get(0) == null)
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.value").first().isNullAt(0))
     assert(
-      toProtoDfToFromProtoDf.select("toProtoToFromProto.actual.*").take(1).toSeq(0).get(0) == null)
+      toProtoDfToFromProtoDf.select("toProtoToFromProto.actual.*").first().isNullAt(0))
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
@@ -558,27 +558,27 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       functions.to_protobuf($"requiredMsg", "requiredMsg", testFileDesc)
         .as("to_proto"))
 
-    val binary = toProtobuf.take(1).toSeq(0).get(0).asInstanceOf[Array[Byte]]
+    val binary = toProtobuf.first().get(0).asInstanceOf[Array[Byte]]
 
     val messageDescriptor = ProtobufUtils.buildDescriptor(testFileDesc, "requiredMsg")
     val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
 
     assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
+      == inputDf.select("requiredMsg.key").first().get(0))
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_2"))
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
+      == inputDf.select("requiredMsg.col_2").first().get(0))
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_1")) == 0)
     assert(actualMessage.getField(messageDescriptor.findFieldByName("col_3")) == 0)
 
     val fromProtoDf = toProtobuf.select(
       functions.from_protobuf($"to_proto", "requiredMsg", testFileDesc) as Symbol("from_proto"))
 
-    assert(fromProtoDf.select("from_proto.key").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.key").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_2").take(1).toSeq(0).get(0)
-      == inputDf.select("requiredMsg.col_2").take(1).toSeq(0).get(0))
-    assert(fromProtoDf.select("from_proto.col_1").take(1).toSeq(0).get(0) == null)
-    assert(fromProtoDf.select("from_proto.col_3").take(1).toSeq(0).get(0) == null)
+    assert(fromProtoDf.select("from_proto.key").first().get(0)
+      == inputDf.select("requiredMsg.key").first().get(0))
+    assert(fromProtoDf.select("from_proto.col_2").first().get(0)
+      == inputDf.select("requiredMsg.col_2").first().get(0))
+    assert(fromProtoDf.select("from_proto.col_1").first().isNullAt(0))
+    assert(fromProtoDf.select("from_proto.col_3").first().isNullAt(0))
   }
 
   test("from_protobuf filter to_protobuf") {
@@ -648,10 +648,10 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
         assert(actualFields.size === expectedFields.size)
         assert(actualFields === expectedFields)
-        assert(fromProtoDf.select("timeStampMsg.key").take(1).toSeq(0).get(0)
-          === inputDf.select("timeStampMsg.key").take(1).toSeq(0).get(0))
-        assert(fromProtoDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0)
-          === inputDf.select("timeStampMsg.stmp").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("timeStampMsg.key").first().get(0)
+          === inputDf.select("timeStampMsg.key").first().get(0))
+        assert(fromProtoDf.select("timeStampMsg.stmp").first().get(0)
+          === inputDf.select("timeStampMsg.stmp").first().get(0))
     }
   }
 
@@ -691,10 +691,10 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
         assert(actualFields.size === expectedFields.size)
         assert(actualFields === expectedFields)
-        assert(fromProtoDf.select("durationMsg.key").take(1).toSeq(0).get(0)
-          === inputDf.select("durationMsg.key").take(1).toSeq(0).get(0))
-        assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
-          === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
+        assert(fromProtoDf.select("durationMsg.key").first().get(0)
+          === inputDf.select("durationMsg.key").first().get(0))
+        assert(fromProtoDf.select("durationMsg.duration").first().get(0)
+          === inputDf.select("durationMsg.duration").first().get(0))
     }
   }
 
@@ -965,7 +965,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       "OneOfEventWithRecursion", testFileDesc) as Symbol("toProto"))
 
     val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
-      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+      dataDfToProto.select("toProto").first().getAs[Array[Byte]](0))
     recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveOneOffInA
     assert(recursiveField.getKey.equals("keyNested0"))
     assert(recursiveField.getValue.equals("valueNested0"))
@@ -1031,7 +1031,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         |         bff: STRUCT<name: STRING> -- 2nd level. Inner 3rd level Person is dropped.
         |     >
         | >
-        |""".stripMargin).asInstanceOf[StructType]
+        |""".stripMargin)
     val expectedWrapperDfTwo = spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(Row(Row(Row("person0", Row("person1", null)))))),
       wrapperSchemaOne)
@@ -1597,6 +1597,52 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           "protobufColumn" -> "field 'basic_enum'",
           "data" -> "9999",
           "enumString" -> "0, 1, 2"))
+    }
+  }
+
+  test("test unsigned integer types") {
+    // Test that we correctly handle unsigned integer parsing.
+    // We're using Integer/Long's `MIN_VALUE` as it has a 1 in the sign bit.
+    val sample = spark.range(1).select(
+      lit(
+        SimpleMessage
+          .newBuilder()
+          .setUint32Value(Integer.MIN_VALUE)
+          .setUint64Value(Long.MinValue)
+          .build()
+          .toByteArray
+      ).as("raw_proto"))
+
+    val expectedWithoutFlag = spark.range(1).select(
+      lit(Integer.MIN_VALUE).as("uint32_value"),
+      lit(Long.MinValue).as("uint64_value")
+    )
+
+    val expectedWithFlag = spark.range(1).select(
+      lit(Integer.toUnsignedLong(Integer.MIN_VALUE).longValue).as("uint32_value"),
+      lit(BigDecimal(java.lang.Long.toUnsignedString(Long.MinValue))).as("uint64_value")
+    )
+
+    checkWithFileAndClassName("SimpleMessage") { case (name, descFilePathOpt) =>
+      List(
+        Map.empty[String, String],
+        Map("upcast.unsigned.ints" -> "false")).foreach(opts => {
+        checkAnswer(
+          sample.select(
+              from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opts).as("proto"))
+            .select("proto.uint32_value", "proto.uint64_value"),
+          expectedWithoutFlag)
+      })
+
+      checkAnswer(
+        sample.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("upcast.unsigned.ints" -> "true")).as("proto"))
+          .select("proto.uint32_value", "proto.uint64_value"),
+        expectedWithFlag)
     }
   }
 

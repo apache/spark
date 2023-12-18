@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -150,7 +151,7 @@ object NestedColumnAliasing {
 
     // A reference attribute can have multiple aliases for nested fields.
     val attrToAliases =
-      AttributeMap(attributeToExtractValuesAndAliases.mapValues(_.map(_._2)))
+      AttributeMap(attributeToExtractValuesAndAliases.transform((_, v) => v.map(_._2)))
 
     plan match {
       case Project(projectList, child) =>
@@ -454,7 +455,7 @@ object GeneratorNestedColumnAliasing {
 
           case other =>
             // We should not reach here.
-            throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
+            throw SparkException.internalError(s"Unreasonable plan after optimization: $other")
         }
       }
 

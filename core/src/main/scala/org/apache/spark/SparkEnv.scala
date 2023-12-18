@@ -18,13 +18,13 @@
 package org.apache.spark
 
 import java.io.File
-import java.util.Locale
 
 import scala.collection.concurrent
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
+import com.google.common.base.Preconditions
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 
@@ -46,6 +46,7 @@ import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManage
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * :: DeveloperApi ::
@@ -62,7 +63,6 @@ class SparkEnv (
     val closureSerializer: Serializer,
     val serializerManager: SerializerManager,
     val mapOutputTracker: MapOutputTracker,
-    val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val securityManager: SecurityManager,
@@ -70,6 +70,12 @@ class SparkEnv (
     val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
+
+  // We initialize the ShuffleManager later in SparkContext and Executor to allow
+  // user jars to define custom ShuffleManagers.
+  private var _shuffleManager: ShuffleManager = _
+
+  def shuffleManager: ShuffleManager = _shuffleManager
 
   @volatile private[spark] var isStopped = false
 
@@ -99,7 +105,9 @@ class SparkEnv (
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
       mapOutputTracker.stop()
-      shuffleManager.stop()
+      if (shuffleManager != null) {
+        shuffleManager.stop()
+      }
       broadcastManager.stop()
       blockManager.stop()
       blockManager.master.stop()
@@ -184,6 +192,12 @@ class SparkEnv (
       worker: PythonWorker): Unit = {
     releasePythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
+  }
+
+  private[spark] def initializeShuffleManager(): Unit = {
+    Preconditions.checkState(null == _shuffleManager,
+      "Shuffle manager already initialized to %s", _shuffleManager)
+    _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
   }
 }
 
@@ -355,16 +369,6 @@ object SparkEnv extends Logging {
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
-    // Let the user specify short names for shuffle managers
-    val shortShuffleMgrNames = Map(
-      "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
-      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
-    val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
-    val shuffleMgrClass =
-      shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
-    val shuffleManager = Utils.instantiateSerializerOrShuffleManager[ShuffleManager](
-      shuffleMgrClass, conf, isDriver)
-
     val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
 
     val blockManagerPort = if (isDriver) {
@@ -402,7 +406,7 @@ object SparkEnv extends Logging {
             None
           }, blockManagerInfo,
           mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
-          shuffleManager,
+          _shuffleManager = null,
           isDriver)),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
@@ -415,6 +419,10 @@ object SparkEnv extends Logging {
         advertiseAddress, blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
 
     // NB: blockManager is not valid until initialize() is called later.
+    //     SPARK-45762 introduces a change where the ShuffleManager is initialized later
+    //     in the SparkContext and Executor, to allow for custom ShuffleManagers defined
+    //     in user jars. The BlockManager uses a lazy val to obtain the
+    //     shuffleManager from the SparkEnv.
     val blockManager = new BlockManager(
       executorId,
       rpcEnv,
@@ -423,7 +431,7 @@ object SparkEnv extends Logging {
       conf,
       memoryManager,
       mapOutputTracker,
-      shuffleManager,
+      _shuffleManager = null,
       blockTransferService,
       securityManager,
       externalShuffleClient)
@@ -462,7 +470,6 @@ object SparkEnv extends Logging {
       closureSerializer,
       serializerManager,
       mapOutputTracker,
-      shuffleManager,
       broadcastManager,
       blockManager,
       securityManager,
@@ -533,7 +540,7 @@ object SparkEnv extends Logging {
       .map(entry => (entry.getKey, entry.getValue)).toSeq.sorted
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
-      "Spark Properties" -> sparkProperties,
+      "Spark Properties" -> sparkProperties.toImmutableArraySeq,
       "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> otherProperties,
       "Classpath Entries" -> classPaths,

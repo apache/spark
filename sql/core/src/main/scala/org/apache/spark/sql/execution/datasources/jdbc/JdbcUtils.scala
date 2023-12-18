@@ -47,6 +47,7 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDiale
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
 /**
@@ -338,7 +339,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
-      private[this] val mutableRow = new SpecificInternalRow(schema.fields.map(x => x.dataType))
+      private[this] val mutableRow =
+        new SpecificInternalRow(schema.fields.map(x => x.dataType).toImmutableArraySeq)
 
       override protected def close(): Unit = {
         try {
@@ -1178,12 +1180,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def classifyException[T](message: String, dialect: JdbcDialect)(f: => T): T = {
+  def classifyException[T](
+      errorClass: String,
+      messageParameters: Map[String, String],
+      dialect: JdbcDialect)(f: => T): T = {
     try {
       f
     } catch {
       case e: SparkThrowable with Throwable => throw e
-      case e: Throwable => throw dialect.classifyException(message, e)
+      case e: Throwable => throw dialect.classifyException(e, errorClass, messageParameters)
     }
   }
 

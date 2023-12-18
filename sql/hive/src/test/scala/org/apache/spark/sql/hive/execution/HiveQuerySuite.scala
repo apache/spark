@@ -784,21 +784,19 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-5383 alias for udfs with multi output columns") {
     assert(
       sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
-        .collect()
-        .size == 5)
+        .collect().length == 5)
 
     assert(
       sql("select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
-        .collect()
-        .size == 5)
+        .collect().length == 5)
   }
 
   test("SPARK-5367: resolve star expression in udf") {
-    assert(sql("select concat(*) from src limit 5").collect().size == 5)
-    assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select concat(*) from src limit 5").collect().length == 5)
+    assert(sql("select concat(key, *) from src limit 5").collect().length == 5)
     if (!conf.ansiEnabled) {
-      assert(sql("select array(*) from src limit 5").collect().size == 5)
-      assert(sql("select array(key, *) from src limit 5").collect().size == 5)
+      assert(sql("select array(*) from src limit 5").collect().length == 5)
+      assert(sql("select array(key, *) from src limit 5").collect().length == 5)
     }
   }
 
@@ -835,8 +833,10 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
             |WITH serdeproperties('s1'='9')""".stripMargin)
       },
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3065",
+      parameters = Map(
+        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+        "msg" -> "at least one column must be specified for the table"))
     sql("DROP TABLE alter1")
   }
 
@@ -1272,7 +1272,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
             |SELECT key, value, key % 5 FROM src""".stripMargin)
       },
-      errorClass = null,
+      errorClass = "_LEGACY_ERROR_TEMP_3079",
       parameters = Map.empty)
   }
 

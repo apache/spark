@@ -152,9 +152,6 @@ package object dsl {
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
-    // TODO: Remove at Spark 4.0.0
-    @deprecated("Use as(alias: String)", "3.4.0")
-    def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
 
   trait ExpressionConversions {
@@ -398,6 +395,8 @@ package object dsl {
 
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
+      def localLimit(limitExpr: Expression): LogicalPlan = LocalLimit(limitExpr, logicalPlan)
+
       def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
 
       def join(
@@ -468,9 +467,6 @@ package object dsl {
           limit: Int): LogicalPlan =
         WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, logicalPlan)
 
-      // TODO: Remove at Spark 4.0.0
-      @deprecated("Use subquery(alias: String)", "3.4.0")
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
       def subquery(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 

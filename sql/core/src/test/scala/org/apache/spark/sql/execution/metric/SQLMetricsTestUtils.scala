@@ -216,13 +216,13 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])],
       enableWholeStage: Boolean = false): Unit = {
-    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
-      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
+    val expectedMetricsPredicates = expectedMetrics.transform { case (_, (nodeName, nodeMetrics)) =>
+      (nodeName, nodeMetrics.transform((_, expectedMetricValue) =>
         (actualMetricValue: Any) => {
           actualMetricValue.toString.matches(expectedMetricValue.toString)
-        }).toMap)
+        }))
     }
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates.toMap,
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates,
       enableWholeStage)
   }
 

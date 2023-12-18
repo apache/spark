@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-/* global d3, flamegraph */
+export {drawFlamegraph, toggleFlamegraph};
 
-/* eslint-disable no-unused-vars */
+/* global $, d3, flamegraph */
+
 function drawFlamegraph() {
   const width = (window.innerWidth * 95) / 100;
   const chart = flamegraph()
@@ -33,4 +34,15 @@ function drawFlamegraph() {
     .call(chart);
   window.onresize = () => chart.width(width);
 }
-/* eslint-enable no-unused-vars */
+
+function toggleFlamegraph() {
+  const arrow = d3.select("#executor-flamegraph-arrow");
+  arrow.each(function () {
+    $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
+  });
+  if (arrow.classed("arrow-open")) {
+    d3.select("#executor-flamegraph-chart").style("display", "block");
+  } else {
+    d3.select("#executor-flamegraph-chart").style("display", "none");
+  }
+}

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -147,7 +148,7 @@ object JavaTypeInference {
           Option(readMethod.getName),
           Option(property.getWriteMethod).map(_.getName))
       }
-      JavaBeanEncoder(ClassTag(c), fields)
+      JavaBeanEncoder(ClassTag(c), fields.toImmutableArraySeq)
 
     case _ =>
       throw ExecutionErrors.cannotFindEncoderForTypeError(t.toString)

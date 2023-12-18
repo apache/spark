@@ -24,12 +24,14 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import kafka.log.{CleanerConfig, LogCleaner, LogConfig, ProducerStateManagerConfig, UnifiedLog}
-import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
+import kafka.log.{LogCleaner, UnifiedLog}
+import kafka.server.BrokerTopicStats
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.kafka.storage.internals.log.{CleanerConfig, LogConfig, LogDirFailureChannel, ProducerStateManagerConfig}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
@@ -90,13 +92,13 @@ class KafkaRDDSuite extends SparkFunSuite {
     val dir = new File(logDir, topic + "-" + partition)
     dir.mkdirs()
     val logProps = new ju.Properties()
-    logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
-    logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
+    logProps.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT)
+    logProps.put(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, java.lang.Float.valueOf(0.1f))
     val logDirFailureChannel = new LogDirFailureChannel(1)
     val topicPartition = new TopicPartition(topic, partition)
     val producerIdExpirationMs = Int.MaxValue
-    val producerStateManagerConfig = new ProducerStateManagerConfig(producerIdExpirationMs)
-    val logConfig = LogConfig(logProps)
+    val producerStateManagerConfig = new ProducerStateManagerConfig(producerIdExpirationMs, false)
+    val logConfig = new LogConfig(logProps)
     val log = UnifiedLog(
       dir,
       logConfig,
@@ -120,7 +122,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     log.roll()
     logs.put(topicPartition, log)
 
-    val cleaner = new LogCleaner(CleanerConfig(), Array(dir), logs, logDirFailureChannel)
+    val cleaner = new LogCleaner(new CleanerConfig(false), Array(dir), logs, logDirFailureChannel)
     cleaner.startup()
     cleaner.awaitCleaned(new TopicPartition(topic, partition), log.activeSegment.baseOffset, 1000)
 
@@ -137,7 +139,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
     val kafkaParams = getKafkaParams()
 
-    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.length))
 
     val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
       .map(_.value)
@@ -146,12 +148,12 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(received === messages.toSet)
 
     // size-related method optimizations return sane results
-    assert(rdd.count() === messages.size)
-    assert(rdd.countApprox(0).getFinalValue().mean === messages.size)
+    assert(rdd.count() === messages.length)
+    assert(rdd.countApprox(0).getFinalValue().mean === messages.length)
     assert(!rdd.isEmpty())
-    assert(rdd.take(1).size === 1)
+    assert(rdd.take(1).length === 1)
     assert(rdd.take(1).head === messages.head)
-    assert(rdd.take(messages.size + 10).size === messages.size)
+    assert(rdd.take(messages.size + 10).length === messages.length)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
@@ -159,7 +161,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(emptyRdd.isEmpty())
 
     // invalid offset ranges throw exceptions
-    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.length + 1))
     intercept[SparkException] {
       val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
         .map(_.value)
@@ -201,7 +203,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
     val kafkaParams = getKafkaParams()
 
-    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.length))
 
     val rdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, offsetRanges, preferredHosts
@@ -216,12 +218,12 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(received === compactedMessages.toSet)
 
     // size-related method optimizations return sane results
-    assert(rdd.count() === compactedMessages.size)
-    assert(rdd.countApprox(0).getFinalValue().mean === compactedMessages.size)
+    assert(rdd.count() === compactedMessages.length)
+    assert(rdd.countApprox(0).getFinalValue().mean === compactedMessages.length)
     assert(!rdd.isEmpty())
-    assert(rdd.take(1).size === 1)
+    assert(rdd.take(1).length === 1)
     assert(rdd.take(1).head === compactedMessages.head)
-    assert(rdd.take(messages.size + 10).size === compactedMessages.size)
+    assert(rdd.take(messages.size + 10).length === compactedMessages.length)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
@@ -229,7 +231,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     assert(emptyRdd.isEmpty())
 
     // invalid offset ranges throw exceptions
-    val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
+    val badRanges = Array(OffsetRange(topic, 0, 0, messages.length + 1))
     intercept[SparkException] {
       val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
         .map(_.value)
@@ -268,7 +270,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
     kafkaTestUtils.sendMessages(topic, sentOnlyOne)
 
-    assert(rdd2.map(_.value).collect().size === 0, "got messages when there shouldn't be any")
+    assert(rdd2.map(_.value).collect().length === 0, "got messages when there shouldn't be any")
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
     val rdd3 = KafkaUtils.createRDD[String, String](sc, kafkaParams,

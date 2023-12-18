@@ -36,6 +36,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -89,7 +90,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq))
+    this(new SparkContext(master, appName, sparkHome, jars.toImmutableArraySeq))
 
   /**
    * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
@@ -101,7 +102,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment.asScala))
+    this(
+      new SparkContext(master, appName, sparkHome, jars.toImmutableArraySeq, environment.asScala))
 
   private[spark] val env = sc.env
 
@@ -782,7 +784,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
-    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s)).toMap
+    sc.getPersistentRDDs.toMap.transform((_, s) => JavaRDD.fromRDD(s))
       .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
   }
 

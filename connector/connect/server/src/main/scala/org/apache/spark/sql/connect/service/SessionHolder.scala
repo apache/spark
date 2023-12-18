@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -27,24 +28,40 @@ import scala.jdk.CollectionConverters._
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{JobArtifactSet, SparkException}
+import org.apache.spark.{SparkException, SparkSQLException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.util.SystemClock
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SystemClock, Utils}
+
+// Unique key identifying session by combination of user, and session id
+case class SessionKey(userId: String, sessionId: String)
 
 /**
  * Object used to hold the Spark Connect session state.
  */
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
+
+  // Time when the session was started.
+  private val startTimeMs: Long = System.currentTimeMillis()
+
+  // Time when the session was last accessed (retrieved from SparkConnectSessionManager)
+  @volatile private var lastAccessTimeMs: Long = System.currentTimeMillis()
+
+  // Time when the session was closed.
+  // Set only by close(), and only once.
+  @volatile private var closedTimeMs: Option[Long] = None
+
+  // Custom timeout after a session expires due to inactivity.
+  // Used by SparkConnectSessionManager instead of default timeout if set.
+  // Setting it to -1 indicated forever.
+  @volatile private var customInactiveTimeoutMs: Option[Long] = None
 
   private val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
@@ -73,8 +90,35 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
 
-  /** Add ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  def key: SessionKey = SessionKey(userId, sessionId)
+
+  // Returns the server side session ID and asserts that it must be different from the client-side
+  // session ID.
+  def serverSessionId: String = {
+    if (Utils.isTesting && session == null) {
+      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
+      // and don't have an underlying SparkSession.
+      ""
+    } else {
+      assert(session.sessionUUID != sessionId)
+      session.sessionUUID
+    }
+  }
+
+  /**
+   * Add ExecuteHolder to this session.
+   *
+   * Called only by SparkConnectExecutionManager under executionsLock.
+   */
+  @GuardedBy("SparkConnectService.executionManager.executionsLock")
   private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
+    if (closedTimeMs.isDefined) {
+      // Do not accept new executions if the session is closing.
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.SESSION_CLOSED",
+        messageParameters = Map("handle" -> sessionId))
+    }
+
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
       // the existence of this should alrady be checked by SparkConnectExecutionManager
@@ -83,7 +127,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     }
   }
 
-  /** Remove ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  /**
+   * Remove ExecuteHolder from this session.
+   *
+   * Called only by SparkConnectExecutionManager under executionsLock.
+   */
+  @GuardedBy("SparkConnectService.executionManager.executionsLock")
   private[service] def removeExecuteHolder(operationId: String): Unit = {
     executions.remove(operationId)
   }
@@ -139,7 +188,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     interruptedIds.toSeq
   }
 
-  private[connect] lazy val artifactManager = new SparkConnectArtifactManager(this)
+  private[connect] def artifactManager = session.artifactManager
 
   /**
    * Add an artifact to this SparkConnect session.
@@ -160,35 +209,71 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   def classloader: ClassLoader = artifactManager.classloader
 
+  private[connect] def updateAccessTime(): Unit = {
+    lastAccessTimeMs = System.currentTimeMillis()
+    logInfo(s"Session $key accessed, time $lastAccessTimeMs.")
+  }
+
+  private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
+    customInactiveTimeoutMs = newInactiveTimeoutMs
+    logInfo(s"Session $key inactive timout set to $customInactiveTimeoutMs ms.")
+  }
+
+  /**
+   * Initialize the session.
+   *
+   * Called only by SparkConnectSessionManager.
+   */
   private[connect] def initializeSession(): Unit = {
     eventManager.postStarted()
   }
 
   /**
    * Expire this session and trigger state cleanup mechanisms.
+   *
+   * Called only by SparkConnectSessionManager.shutdownSessionHolder.
    */
-  private[connect] def expireSession(): Unit = {
-    logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
+  private[connect] def close(): Unit = {
+    // Called only by SparkConnectSessionManager.shutdownSessionHolder.
+    // It is not called under SparkConnectSessionManager.sessionsLock, but it's guaranteed to be
+    // called only once, since removing the session from SparkConnectSessionManager.sessionStore is
+    // synchronized and guaranteed to happen only once.
+    if (closedTimeMs.isDefined) {
+      throw new IllegalStateException(s"Session $key is already closed.")
+    }
+    logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
+    closedTimeMs = Some(System.currentTimeMillis())
+
+    if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {
+      // Testing-only: Some sessions created by SessionHolder.forTesting are not fully initialized
+      // and can't be closed.
+      return
+    }
+
+    // Note on the below notes about concurrency:
+    // While closing the session can potentially race with operations started on the session, the
+    // intended use is that the client session will get closed when it's really not used anymore,
+    // or that it expires due to inactivity, in which case there should be no races.
+
+    // Clean up all artifacts.
+    // Note: there can be concurrent AddArtifact calls still adding something.
     artifactManager.cleanUpResources()
-    eventManager.postClosed()
-    // Clean up running queries
+
+    // Clean up running streaming queries.
+    // Note: there can be concurrent streaming queries being started.
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
-  }
 
-  /**
-   * Execute a block of code using this session's classloader.
-   * @param f
-   * @tparam T
-   */
-  def withContextClassLoader[T](f: => T): T = {
-    // Needed for deserializing and evaluating the UDF on the driver
-    Utils.withContextClassLoader(classloader) {
-      JobArtifactSet.withActiveJobArtifactState(artifactManager.state) {
-        f
-      }
-    }
+    // Clean up all executions.
+    // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
+    // to be added for this session anymore. Because both SessionHolder.addExecuteHolder() and
+    // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
+    // executionsLock, this guarantees that removeAllExecutionsForSession triggered here will
+    // remove all executions and no new executions will be added in the meanwhile.
+    SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
+
+    eventManager.postClosed()
   }
 
   /**
@@ -197,12 +282,24 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @tparam T
    */
   def withSession[T](f: SparkSession => T): T = {
-    withContextClassLoader {
+    artifactManager.withResources {
       session.withActive {
         f(session)
       }
     }
   }
+
+  /** Get SessionInfo with information about this SessionHolder. */
+  def getSessionHolderInfo: SessionHolderInfo =
+    SessionHolderInfo(
+      userId = userId,
+      sessionId = sessionId,
+      serverSessionId = serverSessionId,
+      status = eventManager.status,
+      startTimeMs = startTimeMs,
+      lastAccessTimeMs = lastAccessTimeMs,
+      customInactiveTimeoutMs = customInactiveTimeoutMs,
+      closedTimeMs = closedTimeMs)
 
   /**
    * Caches given DataFrame with the ID. The cache does not expire. The entry needs to be
@@ -291,7 +388,20 @@ object SessionHolder {
         userId = "testUser",
         sessionId = UUID.randomUUID().toString,
         session = session)
-    SparkConnectService.putSessionForTesting(ret)
+    SparkConnectService.sessionManager.putSessionForTesting(ret)
     ret
   }
+}
+
+/** Basic information about SessionHolder. */
+case class SessionHolderInfo(
+    userId: String,
+    sessionId: String,
+    serverSessionId: String,
+    status: SessionStatus,
+    customInactiveTimeoutMs: Option[Long],
+    startTimeMs: Long,
+    lastAccessTimeMs: Long,
+    closedTimeMs: Option[Long]) {
+  def key: SessionKey = SessionKey(userId, sessionId)
 }

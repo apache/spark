@@ -20,7 +20,7 @@ import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
+import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
@@ -160,7 +160,7 @@ class QueryExecutionSuite extends SharedSparkSession {
 
     // Throw an AnalysisException - this should be captured.
     spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new AnalysisException("exception"))
+      (_: LogicalPlan) => throw new AnalysisException("_LEGACY_ERROR_TEMP_3078", Map.empty))
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.
@@ -250,7 +250,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     def qe(logicalPlan: LogicalPlan, callback: QueryPlanningTrackerCallback): QueryExecution =
       new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(Some(callback)))
 
-    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTables = ShowTables(CurrentNamespace, None)
     val showTablesQe = qe(showTables, mockCallback1)
     showTablesQe.assertAnalyzed()
     mockCallback1.assertAnalyzed()
@@ -278,7 +278,7 @@ class QueryExecutionSuite extends SharedSparkSession {
   test("SPARK-44145: non eagerly executed command setReadyForExecution") {
     val mockCallback = MockCallback()
 
-    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTables = ShowTables(CurrentNamespace, None)
     val showTablesQe = new QueryExecution(
       spark,
       showTables,

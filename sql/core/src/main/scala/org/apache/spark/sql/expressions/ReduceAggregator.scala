@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
@@ -72,7 +73,7 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
 
   override def finish(reduction: (Boolean, T)): T = {
     if (!reduction._1) {
-      throw new IllegalStateException("ReduceAggregator requires at least one input row")
+      throw SparkException.internalError("ReduceAggregator requires at least one input row")
     }
     reduction._2
   }

@@ -21,6 +21,7 @@ import java.util.Objects
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LAMBDA_VARIABLE, PLAN_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -73,7 +74,7 @@ class EquivalentExpressions(
             false
           } else {
             // Should not happen
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Cannot update expression: $expr in map: $map with use count: $useCount")
           }
         case _ =>
@@ -81,7 +82,7 @@ class EquivalentExpressions(
             map.put(wrapper, ExpressionStats(expr)(useCount))
           } else {
             // Should not happen
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Cannot update expression: $expr in map: $map with use count: $useCount")
           }
           false
@@ -191,7 +192,7 @@ class EquivalentExpressions(
     val skip = useCount == 0 || expr.isInstanceOf[LeafExpression]
 
     if (!skip && !updateExprInMap(expr, map, useCount)) {
-      val uc = useCount.signum
+      val uc = useCount.sign
       childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
       commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
     }
