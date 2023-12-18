@@ -75,7 +75,7 @@ private[crossdbms] case class PostgresConnection(connection_url: Option[String] 
   private final val DEFAULT_DB = "postgres"
   private final val DEFAULT_PASSWORD = "postgres"
   private final val DEFAULT_CONNECTION_URL = s"jdbc:postgresql://$DEFAULT_HOST:$DEFAULT_PORT/" +
-    s"$DEFAULT_DB?user=$DEFAULT_USER?password=$DEFAULT_PASSWORD"
+    s"$DEFAULT_DB?user=$DEFAULT_USER&password=$DEFAULT_PASSWORD"
   private val url = connection_url.getOrElse(DEFAULT_CONNECTION_URL)
 
   private val conn = DriverManager.getConnection(url)
@@ -89,7 +89,10 @@ private[crossdbms] case class PostgresConnection(connection_url: Option[String] 
         val rs = stmt.getResultSet
         val metadata = rs.getMetaData
         while (rs.next()) {
-          val row = Row.fromSeq((1 to metadata.getColumnCount).map(i => rs.getObject(i)))
+          val row = Row.fromSeq((1 to metadata.getColumnCount).map(i => {
+            val value = rs.getObject(i)
+            if (value == null) { "NULL" } else { value }
+          }))
           rows.append(row)
         }
       }

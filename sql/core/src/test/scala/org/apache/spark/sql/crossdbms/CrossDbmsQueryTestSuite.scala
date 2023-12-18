@@ -32,15 +32,16 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  * See SQLQueryTestSuite.scala for more information. This class builds off of that to allow us
  * to generate golden files with other DBMS to perform cross-checking for correctness. Note that
  * this is not currently run on all SQL input files by default because there is incompatibility
- * between Spark SQL and the DBMS SQL. More work will be done to increase coverage, focusing on
- * postgres.
+ * between Spark SQL and the DBMS SQL.
  *
- * You need to have a database server up before running this test.
- * For example, for postgres:
- * 1. Install PostgreSQL.
- *   a. On a mac: `brew install postgresql@13`
- * 2. After installing PostgreSQL, start the database server, then create a role named pg with
- *    superuser permissions: `createuser -s pg`` OR `psql> CREATE role pg superuser``
+ * You need to have a database server up before running this test. Two options:
+ * - Install Docker and use the bash script in ./bin/generate_golden_files.sh to run a DBMS
+ *   container and generate golden files.
+ * - Otherwise, do manual installation. For example, for postgres:
+ *   1. Install PostgreSQL.
+ *     a. On a mac: `brew install postgresql@13`
+ *   2. After installing PostgreSQL, start the database server, then create a role named pg with
+ *      superuser permissions: `createuser -s pg`` OR `psql> CREATE role pg superuser``
  *
  * To indicate that the SQL file is eligible for testing with this suite, add the following comment
  * into the input file:
