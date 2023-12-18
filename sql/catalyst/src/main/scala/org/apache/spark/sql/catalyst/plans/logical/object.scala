@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode}
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -571,17 +571,19 @@ case class FlatMapGroupsWithState(
 
 object TransformWithState {
   def apply[K: Encoder, V: Encoder, U: Encoder](
-    groupingAttributes: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
-    statefulProcessor: StatefulProcessor[K, V, U],
-    outputMode: OutputMode,
-    child: LogicalPlan): LogicalPlan = {
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode,
+      child: LogicalPlan): LogicalPlan = {
     val mapped = new TransformWithState(
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
       groupingAttributes,
       dataAttributes,
       statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
+      timeoutMode,
       outputMode,
       CatalystSerde.generateObjAttr[U],
       child
@@ -596,6 +598,7 @@ case class TransformWithState(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     statefulProcessor: StatefulProcessor[Any, Any, Any],
+    timeoutMode: TimeoutMode,
     outputMode: OutputMode,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {

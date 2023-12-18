@@ -17,20 +17,33 @@
 package org.apache.spark.sql.streaming
 
 import java.io.Serializable
+import java.util.UUID
 
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
- * Represents the operation handle provided to the stateful processor used in the
- * arbitrary state API v2.
+ * Represents the query info provided to the stateful processor used in the
+ * arbitrary state API v2 to easily identify task retries on the same partition.
  */
 @Experimental
 @Evolving
-trait StatefulProcessorHandle extends Serializable {
+trait QueryInfo extends Serializable {
 
-  /** Function to create new or return existing single value state variable of given type */
-  def getValueState[T](stateName: String): ValueState[T]
+  /** Returns the streaming query id associated with stateful operator */
+  def getQueryId: UUID
 
-  /** Function to return queryInfo for currently running task */
-  def getQueryInfo(): QueryInfo
+  /** Returns the streaming query runId associated with stateful operator */
+  def getRunId: UUID
+
+  /** Returns the batch id associated with stateful operator */
+  def getBatchId: Long
+
+  /** Returns the operator id associated with stateful operator */
+  def getOperatorId: Long
+
+  /** Returns the partition id associated with stateful operator */
+  def getPartitionId: Int
+
+  /** Returns the string representation of QueryInfo object */
+  def toString: String
 }

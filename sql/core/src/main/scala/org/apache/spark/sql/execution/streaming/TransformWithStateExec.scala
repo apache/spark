@@ -24,18 +24,20 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expressi
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor}
+import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeoutMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
 /**
  * Physical operator for executing `TransformWithState`
  *
- * @param statefulProcessor processor methods called on underlying data
  * @param keyDeserializer used to extract the key object for each group.
  * @param valueDeserializer used to extract the items in the iterator from an input row.
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
+ * @param statefulProcessor processor methods called on underlying data
+ * @param timeoutMode defines the timeout mode
+ * @param outputMode defines the output mode for the statefulProcessor
  * @param outputObjAttr Defines the output object
  * @param batchTimestampMs processing timestamp of the current batch.
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
@@ -48,6 +50,7 @@ case class TransformWithStateExec(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     statefulProcessor: StatefulProcessor[Any, Any, Any],
+    timeoutMode: TimeoutMode,
     outputMode: OutputMode,
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
@@ -160,7 +163,7 @@ case class TransformWithStateExec(
       useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        val processorHandle = new StatefulProcessorHandleImpl(store)
+        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId)
         assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
         statefulProcessor.init(processorHandle, outputMode)
         processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)

@@ -16,9 +16,13 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
+
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.util.Utils
 
 /**
  * Object used to assign/retrieve/remove grouping key passed implicitly for various state
@@ -42,15 +46,61 @@ object StatefulProcessorHandleState extends Enumeration {
   val CREATED, INITIALIZED, DATA_PROCESSED, CLOSED = Value
 }
 
+class QueryInfoImpl(
+    val queryId: UUID,
+    val runId: UUID,
+    val batchId: Long,
+    val operatorId: Long,
+    val partitionId: Int) extends QueryInfo {
+
+  override def getQueryId: UUID = queryId
+
+  override def getRunId: UUID = runId
+
+  override def getBatchId: Long = batchId
+
+  override def getOperatorId: Long = operatorId
+
+  override def getPartitionId: Int = partitionId
+
+  override def toString: String = {
+    s"QueryInfo(queryId=$queryId, runId=$runId, batchId=$batchId, operatorId=$operatorId, " +
+      s"partitionId=$partitionId)"
+  }
+}
+
 /**
  * Class that provides a concrete implementation of a StatefulProcessorHandle. Note that we keep
  * track of valid transitions as various functions are invoked to track object lifecycle.
  * @param store - instance of state store
  */
-class StatefulProcessorHandleImpl(store: StateStore)
+class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
   extends StatefulProcessorHandle
   with Logging {
   import StatefulProcessorHandleState._
+
+  private def buildQueryInfo(): QueryInfo = {
+    val taskCtxOpt = Option(TaskContext.get())
+    // Task context is not available in tests, so we generate a random query id and batch id here
+    val queryId = if (taskCtxOpt.isDefined) {
+      taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+    } else {
+      assert(Utils.isTesting)
+      UUID.randomUUID().toString
+    }
+
+    val batchId = if (taskCtxOpt.isDefined) {
+      taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong
+    } else {
+      assert(Utils.isTesting)
+      0
+    }
+
+    new QueryInfoImpl(UUID.fromString(queryId), runId, batchId,
+      store.id.operatorId, store.id.partitionId)
+  }
+
+  private lazy val currQueryInfo: QueryInfo = buildQueryInfo()
 
   private var currState: StatefulProcessorHandleState = CREATED
 
@@ -73,4 +123,6 @@ class StatefulProcessorHandleImpl(store: StateStore)
     val resultState = new ValueStateImpl[T](store, stateName)
     resultState
   }
+
+  override def getQueryInfo(): QueryInfo = currQueryInfo
 }
