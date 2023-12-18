@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream}
-import java.net.{InetAddress, ServerSocket, Socket}
+import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.SparkEnv
@@ -115,6 +115,13 @@ class CachedArrowBatchServer extends Logging {
               sock, s"CachedArrowBatchServer-connection-$connectionCount"
             )
           }
+        } catch {
+          case e: SocketException =>
+            // if serverSocket is closed, it means the server is shut down.
+            // swallow the exception.
+            if (!serverSocket.isClosed) {
+              throw e
+            }
         } finally {
           logTrace("Closing server")
           JavaUtils.closeQuietly(serverSocket)
