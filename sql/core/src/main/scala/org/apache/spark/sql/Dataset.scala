@@ -4157,7 +4157,7 @@ class Dataset[T] private[sql](
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
 
-    val writer = new DataFrameWriterV2[T](table, this)
+    val writer = new MergeIntoWriter[T](table, this)
     writer.on(condition)
   }
 
