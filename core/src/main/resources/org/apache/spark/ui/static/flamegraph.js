@@ -17,7 +17,7 @@
 
 export {drawFlamegraph, toggleFlamegraph};
 
-/* global $, d3, flamegraph */
+/* global d3, flamegraph */
 
 function drawFlamegraph() {
   const width = (window.innerWidth * 95) / 100;
@@ -36,13 +36,16 @@ function drawFlamegraph() {
 }
 
 function toggleFlamegraph() {
-  const arrow = d3.select("#executor-flamegraph-arrow");
-  arrow.each(function () {
-    $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
+  d3.select("#executor-flamegraph-header").on("click", () => {
+    const arrow = d3.select("#executor-flamegraph-arrow");
+    arrow
+      .classed("arrow-open", !arrow.classed("arrow-open"))
+      .classed("arrow-closed", !arrow.classed("arrow-closed"));
+    if (arrow.classed("arrow-open")) {
+      d3.select("#executor-flamegraph-chart").style("display", "block");
+    } else {
+      d3.select("#executor-flamegraph-chart").style("display", "none");
+    }
   });
-  if (arrow.classed("arrow-open")) {
-    d3.select("#executor-flamegraph-chart").style("display", "block");
-  } else {
-    d3.select("#executor-flamegraph-chart").style("display", "none");
-  }
 }
+
