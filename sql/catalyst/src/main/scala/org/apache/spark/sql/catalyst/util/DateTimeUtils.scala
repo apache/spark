@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
@@ -678,11 +678,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
       }
     } catch {
       case _: scala.MatchError =>
-        throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+        throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
       case _: ArithmeticException | _: DateTimeException =>
         throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
       case e: Throwable =>
-        throw new IllegalStateException(s"Failure of 'timestampAdd': ${e.getMessage}")
+        throw SparkException.internalError(s"Failure of 'timestampAdd': ${e.getMessage}")
     }
   }
 
@@ -716,7 +716,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val endLocalTs = getLocalDateTime(endTs, zoneId)
       timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
     } else {
-      throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+      throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
     }
   }
 }

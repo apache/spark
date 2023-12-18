@@ -336,6 +336,37 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM UDTFPartitionByOrderByComplexExpr(TABLE(t2))
+-- !query schema
+struct<partition_col:int,count:int,total:int,last:int>
+-- !query output
+0	1	1	1
+1	2	5	3
+
+
+-- !query
+SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "aliasName" : "ASC"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 53,
+    "fragment" : "UDTFInvalidOrderByAscKeyword(TABLE(t2))"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2))
 -- !query schema
 struct<>
@@ -891,6 +922,29 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 15,
     "stopIndex" : 77,
     "fragment" : "UDTFWithSinglePartition(initial_count => 1, initial_count => 2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unparsable`",
+    "proposal" : "`input`, `partition_col`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 10,
+    "fragment" : "unparsable"
   } ]
 }
 

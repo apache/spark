@@ -54,6 +54,13 @@ class StaxXmlParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
     options.locale,
@@ -133,7 +140,9 @@ class StaxXmlParser(
       val isRootAttributesOnly = schema.fields.forall { f =>
         f.name == options.valueTag || f.name.startsWith(options.attributePrefix)
       }
-      Some(convertObject(parser, schema, rootAttributes, isRootAttributesOnly))
+      val result = Some(convertObject(parser, schema, rootAttributes, isRootAttributesOnly))
+      parser.close()
+      result
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
@@ -459,6 +468,7 @@ class StaxXmlParser(
         case dt: DecimalType =>
           Decimal(decimalParser(datum), dt.precision, dt.scale)
         case _: TimestampType => parseXmlTimestamp(datum, options)
+        case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: StringType => UTF8String.fromString(datum)
         case _ => throw new IllegalArgumentException(s"Unsupported type: ${castType.typeName}")
@@ -502,6 +512,7 @@ class StaxXmlParser(
         case StringType => castTo(value, StringType)
         case DateType => castTo(value, DateType)
         case TimestampType => castTo(value, TimestampType)
+        case TimestampNTZType => castTo(value, TimestampNTZType)
         case FloatType => signSafeToFloat(value)
         case ByteType => castTo(value, ByteType)
         case ShortType => castTo(value, ShortType)
@@ -576,7 +587,7 @@ class StaxXmlParser(
 class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) {
-  private val reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+  private var reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
   private var currentStartTag: String = _
   private var buffer = new StringBuilder()
   private val startTag = s"<${options.rowTag}>"
@@ -591,17 +602,24 @@ class XmlTokenizer(
    * @return whether it reads successfully
    */
   def next(): Option[String] = {
-    if (readUntilStartElement()) {
-      try {
+    try {
+      if (readUntilStartElement()) {
         buffer.append(currentStartTag)
         // Don't check whether the end element was found. Even if not, return everything
         // that was read, which will invariably cause a parse error later
         readUntilEndElement(currentStartTag.endsWith(">"))
-        return Some(buffer.toString())
-      } finally {
+        val str = buffer.toString()
         buffer = new StringBuilder()
+        return Some(str)
       }
+    } catch {
+      case e: Throwable =>
+        reader.close()
+        reader = null
+        throw e
     }
+    reader.close()
+    reader = null
     None
   }
 

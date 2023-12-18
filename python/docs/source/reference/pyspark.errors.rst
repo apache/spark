@@ -38,6 +38,7 @@ Classes
     PySparkAssertionError
     PySparkAttributeError
     PySparkException
+    PySparkKeyError
     PySparkNotImplementedError
     PySparkPicklingError
     PySparkRuntimeError
@@ -46,7 +47,10 @@ Classes
     PySparkImportError
     PySparkIndexError
     PythonException
+    QueryContext
+    QueryContextType
     QueryExecutionException
+    RetriesExceeded
     SessionNotSameException
     SparkRuntimeException
     SparkUpgradeException
@@ -66,5 +70,7 @@ Methods
     :toctree: api/
 
     PySparkException.getErrorClass
+    PySparkException.getMessage
     PySparkException.getMessageParameters
+    PySparkException.getQueryContext
     PySparkException.getSqlState

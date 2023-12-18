@@ -51,7 +51,7 @@ import pyarrow as pa
 import google.protobuf.message
 from grpc_status import rpc_status
 import grpc
-from google.protobuf import text_format
+from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
 from pyspark.loose_version import LooseVersion
@@ -1152,6 +1152,7 @@ class SparkConnectClient(object):
                 PlanMetrics,
                 PlanObservedMetrics,
                 Dict[str, Any],
+                any_pb2.Any,
             ]
         ]:
             nonlocal num_records
@@ -1198,6 +1199,8 @@ class SparkConnectClient(object):
                     addresses = [address for address in resource.addresses]
                     resources[key] = ResourceInformation(name, addresses)
                 yield {"get_resources_command_result": resources}
+            if b.HasField("extension"):
+                yield b.extension
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1520,20 +1523,6 @@ class SparkConnectClient(object):
         except grpc.RpcError:
             return None
 
-    def _display_server_stack_trace(self) -> bool:
-        from pyspark.sql.connect.conf import RuntimeConf
-
-        conf = RuntimeConf(self)
-        try:
-            if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
-                return True
-            return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
-        except Exception as e:  # noqa: F841
-            # Falls back to true if an exception occurs during reading the config.
-            # Otherwise, it will recursively try to get the conf when it consistently
-            # fails, ending up with `RecursionError`.
-            return True
-
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
@@ -1567,7 +1556,7 @@ class SparkConnectClient(object):
                         info,
                         status.message,
                         self._fetch_enriched_error(info),
-                        self._display_server_stack_trace(),
+                        True,
                     ) from None
 
             raise SparkConnectGrpcException(status.message) from None

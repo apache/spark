@@ -1180,12 +1180,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def classifyException[T](message: String, dialect: JdbcDialect)(f: => T): T = {
+  def classifyException[T](
+      errorClass: String,
+      messageParameters: Map[String, String],
+      dialect: JdbcDialect)(f: => T): T = {
     try {
       f
     } catch {
       case e: SparkThrowable with Throwable => throw e
-      case e: Throwable => throw dialect.classifyException(message, e)
+      case e: Throwable => throw dialect.classifyException(e, errorClass, messageParameters)
     }
   }
 

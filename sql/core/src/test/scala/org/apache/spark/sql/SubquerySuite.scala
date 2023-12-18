@@ -2735,4 +2735,50 @@ class SubquerySuite extends QueryTest
         Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
     }
   }
+
+  test("SPARK-45580: Handle case where a nested subquery becomes an existence join") {
+    withTempView("t1", "t2", "t3") {
+      Seq((1), (2), (3), (7)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq((1), (2), (3)).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq((3), (9)).toDF("col1").persist().createOrReplaceTempView("t3")
+
+      val query1 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df1 = sql(query1)
+      checkAnswer(df1, Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      val query2 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a IN (
+          |  SELECT c1
+          |  FROM t2
+          |  where a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df2 = sql(query2)
+      checkAnswer(df2, Row(3))
+
+      val query3 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE NOT EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR a IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df3 = sql(query3)
+      checkAnswer(df3, Row(7))
+    }
+  }
 }

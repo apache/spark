@@ -809,7 +809,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 msg.shuffleMergeId, partition.reduceId);
             // This can throw IOException which will marks this shuffle partition as not merged.
             partition.finalizePartition();
-            if (partition.mapTracker.getCardinality() > 0) {
+            if (!partition.mapTracker.isEmpty()) {
               bitmaps.add(partition.mapTracker);
               reduceIds.add(partition.reduceId);
               sizes.add(partition.getLastChunkOffset());

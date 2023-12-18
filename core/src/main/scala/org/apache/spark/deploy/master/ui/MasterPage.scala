@@ -144,7 +144,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                   </li>
                 }.getOrElse { Seq.empty }
               }
-              <li><strong>Alive Workers:</strong> {aliveWorkers.length}</li>
+              <li><strong>Workers:</strong> {aliveWorkers.length} Alive,
+                {workers.count(_.state == WorkerState.DEAD)} Dead,
+                {workers.count(_.state == WorkerState.DECOMMISSIONED)} Decommissioned,
+                {workers.count(_.state == WorkerState.UNKNOWN)} Unknown
+              </li>
               <li><strong>Cores in use:</strong> {aliveWorkers.map(_.cores).sum} Total,
                 {aliveWorkers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory in use:</strong>
@@ -339,8 +343,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def driverRow(driver: DriverInfo, showDuration: Boolean): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
-        driver.state == DriverState.SUBMITTED ||
-        driver.state == DriverState.RELAUNCHING)) {
+        driver.state == DriverState.SUBMITTED)) {
       val confirm =
         s"if (window.confirm('Are you sure you want to kill driver ${driver.id} ?')) " +
           "{ this.parentNode.submit(); return true; } else { return false; }"

@@ -14,16 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
-
-if sys.version_info >= (3, 8):
-    from typing import Protocol, Tuple
-else:
-    from typing_extensions import Protocol
-
-from typing import Tuple
 from types import FunctionType
-from typing import Any, Callable, Iterable, Union, Optional, NewType
+from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple
 import datetime
 import decimal
 

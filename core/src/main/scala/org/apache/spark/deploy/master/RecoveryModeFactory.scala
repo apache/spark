@@ -67,6 +67,24 @@ private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer:
   }
 }
 
+/**
+ * LeaderAgent in this case is a no-op. Since leader is forever leader as the actual
+ * recovery is made by restoring from RocksDB.
+ */
+private[master] class RocksDBRecoveryModeFactory(conf: SparkConf, serializer: Serializer)
+  extends StandaloneRecoveryModeFactory(conf, serializer) with Logging {
+
+  def createPersistenceEngine(): PersistenceEngine = {
+    val recoveryDir = conf.get(RECOVERY_DIRECTORY)
+    logInfo("Persisting recovery state to directory: " + recoveryDir)
+    new RocksDBPersistenceEngine(recoveryDir, serializer)
+  }
+
+  def createLeaderElectionAgent(master: LeaderElectable): LeaderElectionAgent = {
+    new MonarchyLeaderAgent(master)
+  }
+}
+
 private[master] class ZooKeeperRecoveryModeFactory(conf: SparkConf, serializer: Serializer)
   extends StandaloneRecoveryModeFactory(conf, serializer) {
 

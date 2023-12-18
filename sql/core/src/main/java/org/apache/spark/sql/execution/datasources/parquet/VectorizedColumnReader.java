@@ -141,26 +141,20 @@ public class VectorizedColumnReader {
   }
 
   private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
-    boolean isSupported = false;
-    switch (typeName) {
-      case INT32:
-        isSupported = !(logicalTypeAnnotation instanceof DateLogicalTypeAnnotation) ||
+    return switch (typeName) {
+      case INT32 ->
+        !(logicalTypeAnnotation instanceof DateLogicalTypeAnnotation) ||
           "CORRECTED".equals(datetimeRebaseMode);
-        break;
-      case INT64:
+      case INT64 -> {
         if (updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS)) {
-          isSupported = "CORRECTED".equals(datetimeRebaseMode);
+          yield "CORRECTED".equals(datetimeRebaseMode);
         } else {
-          isSupported = !updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
+          yield !updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
         }
-        break;
-      case FLOAT:
-      case DOUBLE:
-      case BINARY:
-        isSupported = true;
-        break;
-    }
-    return isSupported;
+      }
+      case FLOAT, DOUBLE, BINARY -> true;
+      default -> false;
+    };
   }
 
   /**
@@ -222,9 +216,10 @@ public class VectorizedColumnReader {
           // WritableColumnVector will throw an exception when trying to decode to an Int when the
           // dictionary is in fact initialized as Long
           LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
-          boolean castLongToInt = typeAnnotation instanceof DecimalLogicalTypeAnnotation &&
-            ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <=
-            Decimal.MAX_INT_DIGITS() && primitiveType.getPrimitiveTypeName() == INT64;
+          boolean castLongToInt =
+            typeAnnotation instanceof DecimalLogicalTypeAnnotation annotation &&
+            annotation.getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+            primitiveType.getPrimitiveTypeName() == INT64;
 
           // We require a long value, but we need to use dictionary to decode the original
           // signed int first
@@ -324,28 +319,24 @@ public class VectorizedColumnReader {
   }
 
   private ValuesReader getValuesReader(Encoding encoding) {
-    switch (encoding) {
-      case PLAIN:
-        return new VectorizedPlainValuesReader();
-      case DELTA_BYTE_ARRAY:
-        return new VectorizedDeltaByteArrayReader();
-      case DELTA_LENGTH_BYTE_ARRAY:
-        return new VectorizedDeltaLengthByteArrayReader();
-      case DELTA_BINARY_PACKED:
-        return new VectorizedDeltaBinaryPackedReader();
-      case RLE:
+    return switch (encoding) {
+      case PLAIN -> new VectorizedPlainValuesReader();
+      case DELTA_BYTE_ARRAY -> new VectorizedDeltaByteArrayReader();
+      case DELTA_LENGTH_BYTE_ARRAY -> new VectorizedDeltaLengthByteArrayReader();
+      case DELTA_BINARY_PACKED -> new VectorizedDeltaBinaryPackedReader();
+      case RLE -> {
         PrimitiveType.PrimitiveTypeName typeName =
           this.descriptor.getPrimitiveType().getPrimitiveTypeName();
         // RLE encoding only supports boolean type `Values`, and  `bitwidth` is always 1.
         if (typeName == BOOLEAN) {
-          return new VectorizedRleValuesReader(1);
+          yield new VectorizedRleValuesReader(1);
         } else {
           throw new UnsupportedOperationException(
             "RLE encoding is not supported for values of type: " + typeName);
         }
-      default:
-        throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
-    }
+      }
+      default -> throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
+    };
   }
 
 
