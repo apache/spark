@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -47,7 +47,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, VersionUtils}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -4675,7 +4675,12 @@ object SQLConf {
    *                     users that they set non-default value to an already removed config.
    * @param comment Additional info regarding to the removed config.
    */
-  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String) {
+    if (VersionUtils.majorMinorPatchVersion(version).isEmpty) {
+      throw SparkException.internalError(
+        s"The removed SQL config $key has the wrong Spark version: $version")
+    }
+  }
 
   /**
    * The map contains info about removed SQL configs. Keys are SQL config names,
@@ -4713,7 +4718,7 @@ object SQLConf {
           "for more details."),
       RemovedConfig("spark.sql.hive.verifyPartitionPath", "4.0.0", "false",
         s"This config was replaced by '${IGNORE_MISSING_FILES.key}'."),
-      RemovedConfig("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled", "false", "4.0",
+      RemovedConfig("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled", "4.0.0", "false",
         "This optimizer config is useless as runtime filter cannot be an IN subquery now.")
     )
 
