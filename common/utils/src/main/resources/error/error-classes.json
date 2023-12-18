@@ -499,15 +499,15 @@
       "Cannot process input data types for expression: <expression>."
     ],
     "subClass" : {
+      "MISMATCHED_TYPES" : {
+        "message" : [
+          "All input types must be the same except nullable, containsNull, valueContainsNull flags.",
+          "The input types found are <inputTypes>."
+        ]
+      },
       "NO_INPUTS" : {
         "message" : [
           "The collection of input data types must not be empty."
-        ]
-      },
-      "MISMATCHED_TYPES" : {
-        "message": [
-          "All input types must be the same except nullable, containsNull, valueContainsNull flags.",
-          "The input types found are <inputTypes>."
         ]
       }
     },
