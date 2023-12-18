@@ -147,6 +147,19 @@
       <artifactId>log4j-slf4j2-impl</artifactId>
       <scope>test</scope>
     </dependency>
+<<<<<<< HEAD
+=======
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+>>>>>>> 9a75a1d69aa ([SPARK-46411][BUILD] Change to use `bcprov/bcpkix-jdk18on` for UT)
 
     <dependency>
       <groupId>org.apache.spark</groupId>
