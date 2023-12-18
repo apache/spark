@@ -66,7 +66,7 @@ class CachedArrowBatchServer extends Logging {
       if (blockResult.isDefined) {
         blockDataOpt = Some(blockResult.get.data.next().asInstanceOf[Array[Byte]])
       } else {
-        errMessage = s"The chunk $blockId data cache does not exist or has been removed."
+        errMessage = s"The chunk $blockId data cache does not exist or has been removed"
       }
     } catch {
       case e: Exception =>
