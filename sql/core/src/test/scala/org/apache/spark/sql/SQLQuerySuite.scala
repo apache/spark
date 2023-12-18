@@ -4713,6 +4713,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val df6 = df3.join(df2, col("df3.zaak_id") === col("df2.customer_id"), "outer")
     df5.crossJoin(df6)
   }
+
+  test("SPARK-46448: InlineTable column should be nullable when converted to Decimal might cause null") {
+    val plan = sql("SELECT * FROM values(-0.172787979),(533704665545018957788294905796.5)")
+    assert(plan.schema.fields.length == 1)
+    assert(plan.schema.fields.head.nullable)
+  }
 }
 
 case class Foo(bar: Option[String])

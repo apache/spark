@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Cast, EvalHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{DecimalType, StructField, StructType}
 
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
@@ -100,7 +100,13 @@ object ResolveInlineTables extends Rule[LogicalPlan]
           errorClass = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
           messageParameters = Map("colName" -> toSQLId(name)))
       }
-      StructField(name, tpe, nullable = column.exists(_.nullable))
+      tpe match {
+        case d: DecimalType =>
+          StructField(name, tpe,
+            nullable = column.exists(_.nullable) ||
+              inputTypes.exists(t => Cast.canNullSafeCastToDecimal(t, d)))
+        case _ => StructField(name, tpe, nullable = column.exists(_.nullable))
+      }
     }
     val attributes = DataTypeUtils.toAttributes(StructType(fields))
     assert(fields.size == table.names.size)
