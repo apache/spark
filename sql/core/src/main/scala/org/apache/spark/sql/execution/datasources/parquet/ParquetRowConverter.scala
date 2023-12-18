@@ -318,6 +318,11 @@ private[parquet] class ParquetRowConverter(
           override def addInt(value: Int): Unit =
             this.updater.setLong(value)
         }
+      case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            this.updater.setDouble(value)
+        }
       case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == FLOAT =>
         new ParquetPrimitiveConverter(updater) {
           override def addFloat(value: Float): Unit =

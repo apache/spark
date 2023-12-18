@@ -89,6 +89,8 @@ public class ParquetVectorUpdaterFactory {
           return new ByteUpdater();
         } else if (sparkType == DataTypes.ShortType) {
           return new ShortUpdater();
+        } else if (sparkType == DataTypes.DoubleType) {
+          return new IntegerToDoubleUpdater();
         } else if (sparkType == DataTypes.DateType) {
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new IntegerUpdater();
@@ -328,6 +330,41 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       values.putLong(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+  static class IntegerToDoubleUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putDouble(offset + i, valuesReader.readInteger());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putDouble(offset, valuesReader.readInteger());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      values.putDouble(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
     }
   }
 

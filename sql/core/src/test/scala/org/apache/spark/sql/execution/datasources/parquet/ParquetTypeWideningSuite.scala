@@ -145,8 +145,11 @@ class ParquetTypeWideningSuite
       // Int->Short isn't a widening conversion but Parquet stores both as INT32 so it just works.
       (Seq("1", "2", Short.MinValue.toString), IntegerType, ShortType),
       (Seq("1", "2", Int.MinValue.toString), IntegerType, LongType),
-      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampNTZType),
-      (Seq("1.23", "10.34"), FloatType, DoubleType))
+      (Seq("1", "2", Short.MinValue.toString), ShortType, DoubleType),
+      (Seq("1", "2", Int.MinValue.toString), IntegerType, DoubleType),
+      (Seq("1.23", "10.34"), FloatType, DoubleType),
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampNTZType)
+    )
   }
     test(s"parquet widening conversion $fromType -> $toType") {
       checkAllParquetReaders(values, fromType, toType, expectError = false)
@@ -155,9 +158,10 @@ class ParquetTypeWideningSuite
   for {
     (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
       (Seq("1", "2", Int.MinValue.toString), LongType, IntegerType),
-      // Test different timestamp types
-      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), TimestampNTZType, DateType),
-      (Seq("1.23", "10.34"), DoubleType, FloatType))
+      (Seq("1.23", "10.34"), DoubleType, FloatType),
+      (Seq("1.23", "10.34"), FloatType, LongType),
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), TimestampNTZType, DateType)
+    )
   }
     test(s"unsupported parquet conversion $fromType -> $toType") {
       checkAllParquetReaders(values, fromType, toType, expectError = true)
