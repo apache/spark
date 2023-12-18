@@ -336,14 +336,23 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     var matchIndexInCdPlanProj =
                     canonicalizedCdProj.projectList.indexWhere(_ == inComingNE)
                     if (matchIndexInCdPlanProj == -1) {
-                      // check if it is case of rename:
-                      inComingNE match {
-                        case Alias(attrx: AttributeReference, _) =>
-                          matchIndexInCdPlanProj =
-                            canonicalizedCdProj.projectList.indexWhere(_ == attrx)
-                        case Alias(childExpr, _) => matchIndexInCdPlanProj =
-                          canonicalizedCdProj.projectList.indexWhere(
-                            _.children.headOption.exists(_ == childExpr))
+                      // if match index is -1, that means it could be two possibilities:
+                      // 1) it is a case of rename which means the incoming expr is an alias and
+                      // its child is an attrib ref, which may have a direct attribref in the
+                      // cdPlanProj, or it may actually have an alias whose ref matches the ref
+                      // of incoming attribRef
+                      // 2) the positions in the incoming project alias and the cdPlanProject are
+                      // different. as a result the canonicalized alias of each would have
+                      // relatively different exprIDs ( as their relative positions differ), but
+                      // even in such cases as their child logical plans are same, so the child
+                      // expression of each alias will have same canonicalized data
+                      val incomingExprToCheck = inComingNE match {
+                        case x: AttributeReference => x
+                        case Alias(expr, _) => expr
+                      }
+                      matchIndexInCdPlanProj = canonicalizedCdProj.projectList.indexWhere {
+                        case Alias(expr, _) => expr == incomingExprToCheck
+                        case x => x == incomingExprToCheck
                       }
                     }
                     index -> matchIndexInCdPlanProj
@@ -372,8 +381,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     cdPlanProject.projectList(cdAttribIndex).toAttribute ->
                       incomingProject.projectList(inAttribIndex).toAttribute
                 }.toMap
-                if (cdAttribToInAttrib.size == cachedPlan.output.size &&
-                    transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
+
+                if (transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
                   val projectionToForceOnCdPlan = cachedPlan.output.map(cdAttribToInAttrib)
                   val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
                     case (ne, indx) => if (incomingToCachedPlanIndxMapping.exists(_._1 == indx)) {
