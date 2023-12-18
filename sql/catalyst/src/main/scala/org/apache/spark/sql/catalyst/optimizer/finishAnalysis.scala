@@ -22,7 +22,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, TempResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -82,7 +82,7 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
 object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithSubqueriesAndPruning(
     AlwaysProcess.fn, ruleId) {
-    case table: TempResolvedInlineTable =>
+    case table: ResolvedInlineTable =>
       val newRows: Seq[InternalRow] =
         table.rows.map { row => InternalRow.fromSeq(
             row.map(e =>

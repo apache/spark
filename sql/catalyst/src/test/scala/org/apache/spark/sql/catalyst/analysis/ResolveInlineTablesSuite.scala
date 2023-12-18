@@ -99,7 +99,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     val table = UnresolvedInlineTable(Seq("c1"), Seq(
       Seq(CurrentTimestamp()), Seq(CurrentTimestamp())))
     val casted = ResolveInlineTables.findCommonTypesAndCast(table)
-      .asInstanceOf[TempResolvedInlineTable]
+      .asInstanceOf[ResolvedInlineTable]
 
     EvalInlineTables(ComputeCurrentTime(casted)) match {
       case LocalRelation(output, data, _) =>

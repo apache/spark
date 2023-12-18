@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[TempResolvedInlineTable]].
+ * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[ResolvedInlineTable]].
  */
 object ResolveInlineTables extends Rule[LogicalPlan]
   with CastSupport with AliasHelper with EvalHelper {
@@ -140,7 +140,7 @@ object ResolveInlineTables extends Rule[LogicalPlan]
       LocalRelation(attributes, evalRows)
     } else {
       // Delay resolution after we have CURRENT_LIKE handled.
-      TempResolvedInlineTable(castedRows, attributes)
+      ResolvedInlineTable(castedRows, attributes)
     }
   }
 }
