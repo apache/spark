@@ -18,18 +18,20 @@
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
 
-CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
-  (null, null),
-  (null, 1.0),
+--DBMS_TO_GENERATE_GOLDEN_FILE postgres
+
+CREATE TEMPORARY VIEW m AS SELECT * FROM (VALUES
+  (NULL, NULL),
+  (NULL, 1.0),
   (2, 3.0),
-  (4, 5.0)
+  (4, 5.0))
   AS m(a, b);
 
-CREATE TEMPORARY VIEW s AS SELECT * FROM VALUES
-  (null, null),
+CREATE TEMPORARY VIEW s AS SELECT * FROM (VALUES
+  (NULL, NULL),
   (0, 1.0),
   (2, 3.0),
-  (4, null)
+  (4, NULL))
   AS s(c, d);
 
   -- Case 1

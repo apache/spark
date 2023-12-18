@@ -7,12 +7,14 @@
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
 
-CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
-  (null, null),
-  (null, 1.0),
-  (2, 3.0),
-  (4, 5.0)
-  AS m(a, b);
+--DBMS_TO_GENERATE_GOLDEN_FILE postgres
+
+CREATE TEMPORARY VIEW m AS SELECT * FROM (VALUES
+    (NULL, NULL),
+    (NULL, 1.0),
+    (2, 3.0),
+    (4, 5.0))
+    AS m(a, b);
 
 -- Case 1 (not possible to write a literal with no rows, so we ignore it.)
 -- (subquery is empty -> row is returned)
