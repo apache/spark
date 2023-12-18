@@ -16,15 +16,18 @@
 #
 
 import itertools
-import os
 import re
+import shutil
 from collections import namedtuple
+from pathlib import Path
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
 
 from pyspark.java_gateway import launch_gateway
 
+
+SPARK_PROJECT_ROOT = Path(__file__).parents[1]
 
 ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 
@@ -210,7 +213,7 @@ def generate_functions_table_html(jvm, html_output_dir):
     for key, infos in _list_grouped_function_infos(jvm):
         function_table = _make_pretty_usage(infos)
         key = key.replace("_", "-")
-        with open("%s/generated-%s-table.html" % (html_output_dir, key), 'w') as table_html:
+        with open(html_output_dir / f"{key}-table.html", 'w') as table_html:
             table_html.write(function_table)
 
 
@@ -233,8 +236,7 @@ def generate_functions_examples_html(jvm, jspark, html_output_dir):
         examples = _make_pretty_examples(jspark, infos)
         key = key.replace("_", "-")
         if examples is not None:
-            with open("%s/generated-%s-examples.html" % (
-                    html_output_dir, key), 'w') as examples_html:
+            with open(html_output_dir / f"{key}-examples.html", 'w') as examples_html:
                 examples_html.write(examples)
 
 
@@ -242,7 +244,8 @@ if __name__ == "__main__":
     jvm = launch_gateway().jvm
     jspark = jvm.org.apache.spark.sql.SparkSession.builder().getOrCreate()
     jspark.sparkContext().setLogLevel("ERROR")  # Make it less noisy.
-    spark_root_dir = os.path.dirname(os.path.dirname(__file__))
-    html_output_dir = os.path.join(spark_root_dir, "docs")
+    html_output_dir = SPARK_PROJECT_ROOT / "docs" / "_generated_function_html"
+    shutil.rmtree(html_output_dir, ignore_errors=True)
+    html_output_dir.mkdir()
     generate_functions_table_html(jvm, html_output_dir)
     generate_functions_examples_html(jvm, jspark, html_output_dir)
