@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.{PruneFileSourcePartitions, PythonDataSourceWrites, SchemaPruning, V1Writes}
+import org.apache.spark.sql.execution.datasources.{PruneFileSourcePartitions, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
@@ -42,8 +42,7 @@ class SparkOptimizer(
       V2ScanRelationPushDown :+
       V2ScanPartitioningAndOrdering :+
       V2Writes :+
-      PruneFileSourcePartitions :+
-      PythonDataSourceWrites
+      PruneFileSourcePartitions
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     OptimizeMetadataOnlyDeleteFromTable :: Nil
@@ -102,8 +101,7 @@ class SparkOptimizer(
     V2ScanRelationPushDown.ruleName :+
     V2ScanPartitioningAndOrdering.ruleName :+
     V2Writes.ruleName :+
-    ReplaceCTERefWithRepartition.ruleName :+
-    PythonDataSourceWrites.ruleName
+    ReplaceCTERefWithRepartition.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

@@ -114,7 +114,7 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Receive the output schema
+        # Receive the input schema
         schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if not isinstance(schema, StructType):
             raise PySparkAssertionError(
@@ -124,6 +124,22 @@ def main(infile: IO, outfile: IO) -> None:
                     "actual": f"'{type(data_source_cls).__name__}'",
                 },
             )
+
+        # Receive the return type
+        return_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+        if not isinstance(return_type, StructType):
+            raise PySparkAssertionError(
+                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                message_parameters={
+                    "expected": "a return type of type 'StructType'",
+                    "actual": f"'{type(return_type).__name__}'",
+                },
+            )
+        assert len(return_type) == 1 and isinstance(return_type[0].dataType, BinaryType), (
+            "The output schema of Python data source write should contain only one column of type "
+            f"'BinaryType', but got '{return_type}'"
+        )
+        return_col_name = return_type[0].name
 
         # Receive the options.
         options = dict()
@@ -137,13 +153,8 @@ def main(infile: IO, outfile: IO) -> None:
         save_mode = utf8_deserializer.loads(infile)
 
         # Instantiate a data source.
-        # TODO(SPARK-45927) Update the data source class constructor.
         try:
-            data_source = data_source_cls(
-                paths=[],
-                userSpecifiedSchema=schema,
-                options=options,
-            )
+            data_source = data_source_cls(options=options)
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
@@ -166,8 +177,6 @@ def main(infile: IO, outfile: IO) -> None:
             ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
         ]
         fields = schema.fieldNames()
-
-        return_type = StructType([StructField("message", BinaryType(), True)])
 
         def data_source_write_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
             def batch_to_rows() -> Iterator[Row]:
@@ -196,7 +205,7 @@ def main(infile: IO, outfile: IO) -> None:
 
             # Return the commit message.
             messages = pa.array([pickled])
-            yield pa.record_batch([messages], names=["message"])
+            yield pa.record_batch([messages], names=[return_col_name])
 
         # Return the pickled write UDF.
         command = (data_source_write_func, return_type)
