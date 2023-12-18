@@ -29,7 +29,7 @@ docker-compose --project-directory "${GIT_ROOT}/sql/core/src/test/scala/org/apac
 echo "Waiting for DB container to be ready.."
 timeout 10s bash -c "until docker exec $DOCKER_CONTAINER_NAME pg_isready ; do sleep 1 ; done"
 
-echo "Generating golden files.."
+echo "Generating all golden files.."
 SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
 
 echo "Bringing down DB container.."
