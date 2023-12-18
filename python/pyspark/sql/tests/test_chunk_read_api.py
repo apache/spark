@@ -25,13 +25,15 @@ from pyspark.sql import SparkSession
 from pyspark.sql.chunk_api import persist_dataframe_as_chunks, read_chunk, unpersist_chunks
 
 
-class PySparkTests(unittest.TestCase):
+class ChunkReadApiTests(unittest.TestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         self.spark = SparkSession.builder \
             .master("local-cluster[2, 1, 1024]") \
             .appName(class_name) \
+            .config("spark.python.dataFrameChunkRead.enabled", "true") \
+            .config("spark.task.maxFailures", "1") \
             .getOrCreate()
         self.sc = self.spark.sparkContext
 
@@ -52,9 +54,9 @@ class PySparkTests(unittest.TestCase):
 import sys
 from pyspark.sql.chunk_api import read_chunk
 chunk_ids = sys.argv[1].split(",")
-for i, chunk_id in enumerate(chunk_ids):
+for chunk_id in chunk_ids:
     chunk_pd = read_chunk(chunk_id).to_pandas()
-    chunk_pd.to_pickle(f"{i}.pkl")
+    chunk_pd.to_pickle(f"{chunk_id}.pkl")
 """
 
     def tearDown(self):
@@ -74,8 +76,8 @@ for i, chunk_id in enumerate(chunk_ids):
         self.assertEqual(chunk_data_list, self.expected_chunk_data_list)
 
     def _assert_saved_chunk_data_correct(self, dir_path):
-        for i, expected_chunk_data in self.expected_chunk_data_list:
-            with open(os.path.join(dir_path, f"{i}.pkl"), "r") as f:
+        for chunk_id, expected_chunk_data in zip(self.chunk_ids, self.expected_chunk_data_list):
+            with open(os.path.join(dir_path, f"{chunk_id}.pkl"), "rb") as f:
                 pdf = pickle.load(f)
                 chunk_data = list(pdf.id)
                 self.assertEqual(chunk_data, expected_chunk_data)
@@ -87,27 +89,27 @@ for i, chunk_id in enumerate(chunk_ids):
                 f.write(self.child_proc_test_code)
 
             subprocess.check_call(
-                ["python ./read_chunk_and_save.py", ",".join(self.chunk_ids)],
+                ["python", "./read_chunk_and_save.py", ",".join(self.chunk_ids)],
                 cwd=tmp_dir,
             )
 
             self._assert_saved_chunk_data_correct(tmp_dir)
 
-    def test_read_chunk_in_UDF_worker_child_proc(self):
+    def test_read_chunk_in_udf_worker_child_proc(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
 
             with open(os.path.join(tmp_dir, "read_chunk_and_save.py"), "w") as f:
                 f.write(self.child_proc_test_code)
 
-        def mapper(chunk_id):
-            subprocess.check_call(
-                ["python ./read_chunk_and_save.py", chunk_id],
-                cwd=tmp_dir,
-            )
-            return True
+            def mapper(chunk_id):
+                subprocess.check_call(
+                    ["python", "./read_chunk_and_save.py", chunk_id],
+                    cwd=tmp_dir,
+                )
+                return True
 
-        self.sc.parallelize(self.chunk_ids, 4).map(mapper).collect()
-        self._assert_saved_chunk_data_correct(tmp_dir)
+            self.sc.parallelize(self.chunk_ids, 4).map(mapper).collect()
+            self._assert_saved_chunk_data_correct(tmp_dir)
 
     def test_unpersist_chunk(self):
         df = self.spark.range(16)
