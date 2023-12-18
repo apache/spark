@@ -77,7 +77,7 @@ class TaskInfo(
    */
   def accumulables: Seq[AccumulableInfo] = {
     if (throwOnAccumulablesCall) {
-      throw new IllegalStateException("Accumulables for the TaskInfo have been cleared")
+      throw SparkException.internalError("Accumulables for the TaskInfo have been cleared")
     } else {
       _accumulables
     }
