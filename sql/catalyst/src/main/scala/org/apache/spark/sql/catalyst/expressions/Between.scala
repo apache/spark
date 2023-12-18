@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{BooleanType, DataType}
   """,
   since = "2.0.0",
   group = "conditional_funcs")
-case class BetweenExpr(proj: Expression, lower: Expression, upper: Expression)
+case class Between(proj: Expression, lower: Expression, upper: Expression)
   extends RuntimeReplaceable with ComplexTypeMergingExpression {
   override lazy val replacement: Expression = {
     val commonExpr = CommonExpressionDef(proj)

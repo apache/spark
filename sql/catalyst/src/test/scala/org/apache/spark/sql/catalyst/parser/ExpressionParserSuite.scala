@@ -157,8 +157,8 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("between expressions") {
-    assertEqual("a between b and c", BetweenExpr($"a", $"b", $"c"))
-    assertEqual("a not between b and c", !BetweenExpr($"a", $"b", $"c"))
+    assertEqual("a between b and c", Between($"a", $"b", $"c"))
+    assertEqual("a not between b and c", !Between($"a", $"b", $"c"))
   }
 
   test("in expressions") {

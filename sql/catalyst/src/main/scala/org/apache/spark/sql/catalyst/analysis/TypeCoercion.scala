@@ -482,10 +482,10 @@ abstract class TypeCoercionBase {
           case None =>
             c
         }
-      case b @ BetweenExpr(proj, lower, upper)
+      case b @ Between(proj, lower, upper)
         if !haveSameType(b.inputTypesForMerging) =>
         findWiderCommonType(Seq(proj.dataType, lower.dataType, upper.dataType)) match {
-          case Some(finalDataType) => BetweenExpr(
+          case Some(finalDataType) => Between(
             castIfNotSameType(proj, finalDataType),
             castIfNotSameType(lower, finalDataType),
             castIfNotSameType(upper, finalDataType),
