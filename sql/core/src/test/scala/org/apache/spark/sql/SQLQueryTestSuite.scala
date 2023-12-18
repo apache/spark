@@ -349,20 +349,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
-  /** Run a test case. */
-  protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
-    def splitWithSemicolon(seq: Seq[String]) = {
-      seq.mkString("\n").split("(?<=[^\\\\]);")
-    }
-
-    def splitCommentsAndCodes(input: String) = input.split("\n").partition { line =>
+  protected def splitCommentsAndCodes(input: String) =
+    input.split("\n").partition { line =>
       val newLine = line.trim
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
 
-    val input = fileToString(new File(testCase.inputFile))
-
-    val (comments, code) = splitCommentsAndCodes(input)
+  protected def getQueries(code: Array[String], comments: Array[String]) = {
+    def splitWithSemicolon(seq: Seq[String]) = {
+      seq.mkString("\n").split("(?<=[^\\\\]);")
+    }
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
@@ -406,49 +402,71 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
 
     // List of SQL queries to run
-    val queries = tempQueries.map(_.trim).filter(_ != "").toSeq
+    tempQueries.map(_.trim).filter(_ != "")
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
+  }
 
+  protected def getSparkSettings(comments: Array[String]): Array[(String, String)] = {
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
-    val settings = settingLines.flatMap(_.split(",").map { kv =>
+    settingLines.flatMap(_.split(",").map { kv =>
       val (conf, value) = kv.span(_ != '=')
       conf.trim -> value.substring(1).trim
     })
+  }
+
+  protected def getSparkConfigDimensions(comments: Array[String]): Seq[Seq[(String, String)]] = {
+    // A config dimension has multiple config sets, and a config set has multiple configs.
+    // - config dim:     Seq[Seq[(String, String)]]
+    //   - config set:   Seq[(String, String)]
+    //     - config:     (String, String))
+    // We need to do cartesian product for all the config dimensions, to get a list of
+    // config sets, and run the query once for each config set.
+    val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
+    val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).view.mapValues { lines =>
+      lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
+        val (conf, value) = kv.span(_ != '=')
+        conf.trim -> value.substring(1).trim
+      }.toSeq).toSeq
+    }
+
+    configDims.values.foldLeft(Seq(Seq[(String, String)]())) { (res, dim) =>
+      dim.flatMap { configSet => res.map(_ ++ configSet) }
+    }
+  }
+
+  protected def runQueriesWithSparkConfigDimensions(
+      queries: Seq[String],
+      testCase: TestCase,
+      sparkConfigSet: Array[(String, String)],
+      sparkConfigDims: Seq[Seq[(String, String)]]): Unit = {
+    sparkConfigDims.foreach { configDim =>
+      try {
+        runQueries(queries, testCase, (sparkConfigSet ++ configDim).toImmutableArraySeq)
+      } catch {
+        case e: Throwable =>
+          val configs = configDim.map {
+            case (k, v) => s"$k=$v"
+          }
+          logError(s"Error using configs: ${configs.mkString(",")}")
+          throw e
+      }
+    }
+  }
+
+  /** Run a test case. */
+  protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
+    val input = fileToString(new File(testCase.inputFile))
+    val (comments, code) = splitCommentsAndCodes(input)
+    val queries = getQueries(code, comments)
+    val settings = getSparkSettings(comments)
 
     if (regenerateGoldenFiles) {
       runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
-      // A config dimension has multiple config sets, and a config set has multiple configs.
-      // - config dim:     Seq[Seq[(String, String)]]
-      //   - config set:   Seq[(String, String)]
-      //     - config:     (String, String))
-      // We need to do cartesian product for all the config dimensions, to get a list of
-      // config sets, and run the query once for each config set.
-      val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
-      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).transform { (_, lines) =>
-        lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
-          val (conf, value) = kv.span(_ != '=')
-          conf.trim -> value.substring(1).trim
-        }.toSeq).toSeq
-      }
-
-      val configSets = configDims.values.foldLeft(Seq(Seq[(String, String)]())) { (res, dim) =>
-        dim.flatMap { configSet => res.map(_ ++ configSet) }
-      }
-
-      configSets.foreach { configSet =>
-        try {
-          runQueries(queries, testCase, (settings ++ configSet).toImmutableArraySeq)
-        } catch {
-          case e: Throwable =>
-            val configs = configSet.map {
-              case (k, v) => s"$k=$v"
-            }
-            logError(s"Error using configs: ${configs.mkString(",")}")
-            throw e
-        }
-      }
+      val configSets = getSparkConfigDimensions(comments)
+      runQueriesWithSparkConfigDimensions(
+        queries, testCase, settings, configSets)
     }
   }
 
@@ -498,7 +516,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def runQueries(
       queries: Seq[String],
       testCase: TestCase,
-      configSet: Seq[(String, String)]): Unit = {
+      sparkConfigSet: Seq[(String, String)]): Unit = {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
@@ -529,9 +547,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
     }
 
-    if (configSet.nonEmpty) {
+    if (sparkConfigSet.nonEmpty) {
       // Execute the list of set operation in order to add the desired configs
-      val setOperations = configSet.map { case (key, value) => s"set $key=$value" }
+      val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
       logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
       setOperations.foreach(localSparkSession.sql)
     }
@@ -612,9 +630,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
+  /**
+   * Returns the desired file path for results, given the input file. This is implemented as a
+   * function because differente Suites extending this class may want their results files with
+   * different names or in different locations.
+   */
+  protected def resultFileForInputFile(file: File): String = {
+    file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+  }
+
   protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var resultFile = resultFileForInputFile(file)
       var analyzerResultFile =
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
       // JDK-4511638 changes 'toString' result of Float/Double
@@ -625,7 +652,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
 
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
