@@ -407,59 +407,43 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("SPARK-46069: Support unwrap timestamp type to date type") {
-    def doTest(tsLit: Literal, tsNTZLit: Literal, isStartOfDay: Boolean): Unit = {
+    def doTest(
+        tsLit: Literal,
+        isStartOfDay: Boolean,
+        castTimestampFunc: Expression => Expression): Unit = {
       val floorDate = Cast(tsLit, DateType, Some(conf.sessionLocalTimeZone))
-      val floorDateNTZ = Cast(tsNTZLit, DateType, Some(conf.sessionLocalTimeZone))
       val dateAddOne = DateAdd(floorDate, Literal(1, IntegerType))
-      val dateAddOneNTZ = DateAdd(floorDateNTZ, Literal(1, IntegerType))
-      assertEquivalent(
-        castTimestamp(f7) > tsLit || castTimestampNTZ(f7) > tsNTZLit,
-        f7 > floorDate || f7 > floorDateNTZ)
+      assertEquivalent(castTimestampFunc(f7) > tsLit, f7 > floorDate)
       if (isStartOfDay) {
-        assertEquivalent(
-          castTimestamp(f7) >= tsLit || castTimestampNTZ(f7) >= tsNTZLit,
-          f7 >= floorDate || f7 >= floorDateNTZ)
-        assertEquivalent(
-          castTimestamp(f7) === tsLit || castTimestampNTZ(f7) === tsNTZLit,
-          f7 === floorDate || f7 === floorDateNTZ)
-        assertEquivalent(
-          castTimestamp(f7) <=> tsLit || castTimestampNTZ(f7) <=> tsNTZLit,
-          f7 <=> floorDate || f7 <=> floorDateNTZ)
-        assertEquivalent(
-          castTimestamp(f7) < tsLit || castTimestampNTZ(f7) < tsNTZLit,
-          f7 < floorDate || f7 < floorDateNTZ)
+        assertEquivalent(castTimestampFunc(f7) >= tsLit, f7 >= floorDate)
+        assertEquivalent(castTimestampFunc(f7) === tsLit, f7 === floorDate)
+        assertEquivalent(castTimestampFunc(f7) <=> tsLit, f7 <=> floorDate)
+        assertEquivalent(castTimestampFunc(f7) < tsLit, f7 < floorDate)
       } else {
-        assertEquivalent(
-          castTimestamp(f7) >= tsLit || castTimestampNTZ(f7) >= tsNTZLit,
-          f7 >= dateAddOne || f7 >= dateAddOneNTZ)
-        assertEquivalent(
-          castTimestamp(f7) === tsLit || castTimestampNTZ(f7) === tsNTZLit,
-          f7.isNull && Literal(null, BooleanType) || f7.isNull && Literal(null, BooleanType))
-        assertEquivalent(
-          castTimestamp(f7) <=> tsLit || castTimestampNTZ(f7) <=> tsNTZLit,
-          FalseLiteral || FalseLiteral)
-        assertEquivalent(
-          castTimestamp(f7) < tsLit || castTimestampNTZ(f7) < tsNTZLit,
-          f7 < dateAddOne || f7 < dateAddOneNTZ)
+        assertEquivalent(castTimestampFunc(f7) >= tsLit, f7 >= dateAddOne)
+        assertEquivalent(castTimestampFunc(f7) === tsLit, f7.isNull && Literal(null, BooleanType))
+        assertEquivalent(castTimestampFunc(f7) <=> tsLit, FalseLiteral)
+        assertEquivalent(castTimestampFunc(f7) < tsLit, f7 < dateAddOne)
       }
-      assertEquivalent(
-        castTimestamp(f7) <= tsLit || castTimestampNTZ(f7) <= tsNTZLit,
-        f7 <= floorDate || f7 <= floorDateNTZ)
+      assertEquivalent(castTimestampFunc(f7) <= tsLit, f7 <= floorDate)
     }
 
     // Test isStartOfDay is true cases
     val micros = SparkDateTimeUtils.daysToMicros(19704, ZoneId.of(conf.sessionLocalTimeZone))
     val instant = java.time.Instant.ofEpochSecond(micros / 1000000)
     val tsLit = Literal.create(instant, TimestampType)
+    doTest(tsLit, isStartOfDay = true, castTimestamp)
+
     val tsNTZ = LocalDateTime.of(2023, 12, 13, 0, 0, 0, 0)
     val tsNTZLit = Literal.create(tsNTZ, TimestampNTZType)
-    doTest(tsLit, tsNTZLit, isStartOfDay = true)
+    doTest(tsNTZLit, isStartOfDay = true, castTimestampNTZ)
 
     // Test isStartOfDay is false cases
     val tsLit2 = Literal.create(instant.plusSeconds(30), TimestampType)
     val tsNTZ2 = LocalDateTime.of(2023, 12, 13, 0, 0, 30, 0)
+    doTest(tsLit2, isStartOfDay = false, castTimestamp)
     val tsNTZLit2 = Literal.create(tsNTZ2, TimestampNTZType)
-    doTest(tsLit2, tsNTZLit2, isStartOfDay = false)
+    doTest(tsNTZLit2, isStartOfDay = false, castTimestampNTZ)
   }
 
   private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
