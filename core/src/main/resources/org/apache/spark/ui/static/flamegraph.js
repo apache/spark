@@ -38,9 +38,9 @@ function drawFlamegraph() {
 function toggleFlamegraph() {
   d3.select("#executor-flamegraph-header").on("click", () => {
     const arrow = d3.select("#executor-flamegraph-arrow");
-    arrow.each(function () {
-      $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
-    });
+    arrow
+      .classed("arrow-open", !arrow.classed("arrow-open"))
+      .classed("arrow-closed", !arrow.classed("arrow-closed"));
     if (arrow.classed("arrow-open")) {
       d3.select("#executor-flamegraph-chart").style("display", "block");
     } else {
