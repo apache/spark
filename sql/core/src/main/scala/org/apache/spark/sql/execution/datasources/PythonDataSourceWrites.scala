@@ -64,7 +64,7 @@ object PythonDataSourceWrites extends Rule[LogicalPlan] with PredicateHelper {
         dataType = dataType,
         children = query.output,
         evalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
-        udfDeterministic = true)  // TODO(SPARK-45930): support non-deterministic udf
+        udfDeterministic = false)
 
       // Construct the plan.
       val plan = PythonMapInArrow(
