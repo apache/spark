@@ -468,12 +468,16 @@ class DataFrameSparkIOTestsMixin:
             )
 
 
-class DataFrameSparkIOTests(DataFrameSparkIOTestsMixin, PandasOnSparkTestCase, TestUtils):
+class DataFrameSparkIOTests(
+    DataFrameSparkIOTestsMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_dataframe_spark_io import *  # noqa: F401
+    from pyspark.pandas.tests.io.test_dataframe_spark_io import *  # noqa: F401
 
     try:
         import xmlrunner

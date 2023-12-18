@@ -16,25 +16,25 @@
 #
 import unittest
 
-from pyspark import pandas as ps
-from pyspark.pandas.tests.test_dataframe_conversion import DataFrameConversionTestsMixin
+from pyspark.pandas.tests.io.test_dataframe_spark_io import DataFrameSparkIOTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class DataFrameConversionParityTests(
-    DataFrameConversionTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase, TestUtils
+class DataFrameSparkIOParityTests(
+    DataFrameSparkIOTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+    TestUtils,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_dataframe_conversion import *  # noqa: F401
+    from pyspark.pandas.tests.connect.io.test_parity_dataframe_spark_io import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
