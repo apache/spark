@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Expression, Hours, Literal, Months, Years}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Assignment, CreateTableAsSelect, DeleteAction, InsertAction, InsertStarAction, LogicalPlan, MergeAction, MergeIntoTable, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.types.IntegerType
@@ -206,13 +206,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * Executes the merge operation.
    */
   def merge(): Unit = {
-    if (on.isEmpty) {
-      throw new IllegalStateException("The 'on' condition cannot be None")
-    }
-
     if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
-      throw new IllegalStateException("At least one of matchedActions, notMatchedActions," +
-        " or notMatchedBySourceActions must not be empty")
+      throw QueryExecutionErrors.mergeIntoAPIError()
     }
 
     val merge = MergeIntoTable(
@@ -450,13 +445,9 @@ trait MergeIntoWriter[T] {
    * Initialize a `WhenNotMatched` action without any condition.
    *
    * This `WhenNotMatched` can be followed by one of the following merge actions:
-   *   - `updateAll`: Update all the target table fields with source dataset fields.
-   *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
    *   - `insertAll`: Insert all the target table with source dataset records.
    *   - `insert(Map)`: Insert all the target table records while changing only
    *     a subset of fields based on the provided assignment.
-   *   - `delete`: Delete all the target table records.
    *
    * @return a new `WhenNotMatched` object.
    */
@@ -469,13 +460,9 @@ trait MergeIntoWriter[T] {
    * is satisfied.
    *
    * This `WhenNotMatched` can be followed by one of the following merge actions:
-   *   - `updateAll`: Update all the target table fields with source dataset fields.
-   *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
    *   - `insertAll`: Insert all the target table with source dataset records.
    *   - `insert(Map)`: Insert all the target table records while changing only
    *     a subset of fields based on the provided assignment.
-   *   - `delete`: Delete all the target table records.
    *
    * @param condition a `Column` representing the condition to be evaluated for the action.
    * @return a new `WhenNotMatched` object configured with the specified condition.
@@ -488,9 +475,6 @@ trait MergeIntoWriter[T] {
    * This `WhenNotMatchedBySource` can be followed by one of the following merge actions:
    *   - `updateAll`: Update all the target table fields with source dataset fields.
    *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
-   *   - `insertAll`: Insert all the target table with source dataset records.
-   *   - `insert(Map)`: Insert all the target table records while changing only
    *     a subset of fields based on the provided assignment.
    *   - `delete`: Delete all the target table records.
    *
@@ -507,9 +491,6 @@ trait MergeIntoWriter[T] {
    * This `WhenNotMatchedBySource` can be followed by one of the following merge actions:
    *   - `updateAll`: Update all the target table fields with source dataset fields.
    *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
-   *   - `insertAll`: Insert all the target table with source dataset records.
-   *   - `insert(Map)`: Insert all the target table records while changing only
    *     a subset of fields based on the provided assignment.
    *   - `delete`: Delete all the target table records.
    *
@@ -580,28 +561,6 @@ case class WhenMatched[T] (dfWriter: DataFrameWriterV2[T], condition: Option[Exp
  * @tparam T         The type of data in the DataFrame.
  */
 case class WhenNotMatched[T] (dfWriter: DataFrameWriterV2[T], condition: Option[Expression]) {
-  /**
-   * Specifies an action to update all non-matched rows in the DataFrame.
-   *
-   * @return The DataFrameWriterV2 instance with the update all action configured.
-   */
-  def updateAll(): DataFrameWriterV2[T] = {
-    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ UpdateStarAction(condition)
-    this.dfWriter
-  }
-
-  /**
-   * Specifies an action to update non-matched rows in the DataFrame with the provided
-   * column assignments.
-   *
-   * @param set A Map of column names to Column expressions representing the updates to be applied.
-   * @return The DataFrameWriterV2 instance with the update action configured.
-   */
-  def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
-    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+
-      UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this.dfWriter
-  }
 
   /**
    * Specifies an action to insert all non-matched rows into the DataFrame.
@@ -623,16 +582,6 @@ case class WhenNotMatched[T] (dfWriter: DataFrameWriterV2[T], condition: Option[
   def insert(set: Map[String, Column]): DataFrameWriterV2[T] = {
     dfWriter.notMatchedActions = dfWriter.notMatchedActions :+
       InsertAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this.dfWriter
-  }
-
-  /**
-   * Specifies an action to delete non-matched rows from the DataFrame.
-   *
-   * @return The DataFrameWriterV2 instance with the delete action configured.
-   */
-  def delete(): DataFrameWriterV2[T] = {
-    dfWriter.notMatchedActions = dfWriter.notMatchedActions :+ DeleteAction(condition)
     this.dfWriter
   }
 }
@@ -671,31 +620,6 @@ case class WhenNotMatchedBySource[T] (
   def update(set: Map[String, Column]): DataFrameWriterV2[T] = {
     dfWriter.notMatchedBySourceActions = dfWriter.notMatchedBySourceActions :+
       UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this.dfWriter
-  }
-
-  /**
-   * Specifies an action to insert all non-matched rows into the target DataFrame when not
-   * matched by the source.
-   *
-   * @return The DataFrameWriterV2 instance with the insert all action configured.
-   */
-  def insertAll(): DataFrameWriterV2[T] = {
-    dfWriter.notMatchedBySourceActions =
-      dfWriter.notMatchedBySourceActions :+ InsertStarAction(condition)
-    this.dfWriter
-  }
-
-  /**
-   * Specifies an action to insert non-matched rows into the target DataFrame with the provided
-   * column assignments when not matched by the source.
-   *
-   * @param set A Map of column names to Column expressions representing the values to be inserted.
-   * @return The DataFrameWriterV2 instance with the insert action configured.
-   */
-  def insert(set: Map[String, Column]): DataFrameWriterV2[T] = {
-    dfWriter.notMatchedBySourceActions = dfWriter.notMatchedBySourceActions :+
-      InsertAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
     this.dfWriter
   }
 

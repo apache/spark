@@ -46,8 +46,7 @@ abstract class DeltaBasedMergeIntoDFWriterV2SuiteBase extends MergeIntoDFWriterV
 
       val executedPlan = executeAndKeepPlan {
         spark.table("source")
-          .mergeInto(tableNameAsString)
-          .on($"source.pk"  === col(tableNameAsString + ".pk"))
+          .mergeInto(tableNameAsString, $"source.pk"  === col(tableNameAsString + ".pk"))
           .whenMatched(col(tableNameAsString + ".salary") === 200)
           .updateAll()
           .merge()
@@ -74,8 +73,7 @@ abstract class DeltaBasedMergeIntoDFWriterV2SuiteBase extends MergeIntoDFWriterV
       val expectedScanSchema = "pk INT, salary INT, _partition STRING"
       val executedPlan = executeAndKeepPlan {
         spark.table("source")
-          .mergeInto(tableNameAsString)
-          .on($"source.pk" === col(tableNameAsString + ".pk"))
+          .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
           .whenMatched(col(tableNameAsString + ".salary") === 200)
           .delete()
           .merge()
@@ -104,8 +102,7 @@ abstract class DeltaBasedMergeIntoDFWriterV2SuiteBase extends MergeIntoDFWriterV
       val expectedScanSchema = "pk INT"
       val executedPlan = executeAndKeepPlan {
         spark.table("source")
-          .mergeInto(tableNameAsString)
-          .on($"source.pk" === col(tableNameAsString + ".pk"))
+          .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
           .whenNotMatched()
           .insertAll()
           .merge()
@@ -136,8 +133,7 @@ abstract class DeltaBasedMergeIntoDFWriterV2SuiteBase extends MergeIntoDFWriterV
       val expectedScanSchema = "pk INT, salary INT, _partition STRING"
       val executedPlan = executeAndKeepPlan {
         spark.table("source")
-          .mergeInto(tableNameAsString)
-          .on($"source.pk" === col(tableNameAsString + ".pk"))
+          .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
           .whenNotMatchedBySource($"salary" === 100)
           .update(Map(
             "country" -> lit("invalid"),
@@ -170,8 +166,7 @@ abstract class DeltaBasedMergeIntoDFWriterV2SuiteBase extends MergeIntoDFWriterV
       val expectedScanSchema = "pk INT, salary INT, _partition STRING"
       val executedPlan = executeAndKeepPlan {
         spark.table("source")
-          .mergeInto(tableNameAsString)
-          .on($"source.pk" === col(tableNameAsString + ".pk"))
+          .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
           .whenNotMatchedBySource($"salary" === 100)
           .delete()
           .merge()
@@ -199,8 +194,7 @@ abstract class DeltaBasedMergeIntoDFWriterV2SuiteBase extends MergeIntoDFWriterV
       val expectedScanSchema = "pk INT, salary INT, _partition STRING"
       val executedPlan = executeAndKeepPlan {
         spark.table("source")
-          .mergeInto(tableNameAsString)
-          .on($"source.pk" === col(tableNameAsString + ".pk"))
+          .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
           .whenMatched()
           .updateAll()
           .whenNotMatched()

@@ -35,8 +35,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatched()
         .insertAll()
         .merge()
@@ -61,8 +60,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatched($"source.pk" >= 2)
         .insertAll()
         .merge()
@@ -89,8 +87,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched($"source.pk" === 2)
         .updateAll()
         .merge()
@@ -113,8 +110,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched(col(tableNameAsString + ".salary") === 200)
         .delete()
         .merge()
@@ -138,8 +134,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
            tableNameAsString + ".salary" -> lit(-1)
@@ -171,8 +166,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
           tableNameAsString + ".pk" -> lit(-1)
@@ -205,8 +199,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceDF.createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
           tableNameAsString + ".salary" -> col("cat.ns1.test_table.salary").plus(lit(1))
@@ -247,8 +240,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched(col(tableNameAsString + ".pk") === 1)
         .updateAll()
         .whenNotMatched($"source.pk" === 4)
@@ -281,8 +273,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceDF.createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched(col(tableNameAsString + ".pk") === 4)
         .update(Map(
           tableNameAsString + ".salary" -> col(tableNameAsString + ".salary").plus(lit(1))
@@ -320,8 +311,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceDF.createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatchedBySource()
         .delete()
         .merge()
@@ -346,8 +336,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceDF.createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatchedBySource($"salary" === 100)
         .update(Map(
           "salary" -> lit(-1)
@@ -375,8 +364,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceDF.createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .delete()
         .whenNotMatchedBySource($"salary" === 100)
@@ -405,8 +393,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceDF.createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatched()
         .insert(Map(
           "pk" -> col("pk"),
@@ -438,8 +425,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceDF.createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatchedBySource($"salary" === 100)
         .update(Map(
           "salary" -> col("salary").plus(lit(1))
@@ -471,9 +457,8 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on(($"source.id" === col(tableNameAsString + ".id"))
-          && (col(tableNameAsString + ".id") < 3))
+        .mergeInto(tableNameAsString,
+          $"source.id" === col(tableNameAsString + ".id") && (col(tableNameAsString + ".id") < 3))
         .whenMatched()
         .updateAll()
         .merge()
@@ -501,8 +486,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .delete()
         .merge()
@@ -527,8 +511,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatched()
         .insertAll()
         .merge()
@@ -557,8 +540,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "extra", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
           "salary" -> col("source.salary").plus(lit(1))
@@ -595,8 +577,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .updateAll()
         .whenNotMatched()
@@ -626,8 +607,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.id" <=> col(tableNameAsString + ".id"))
+        .mergeInto(tableNameAsString, $"source.id" <=> col(tableNameAsString + ".id"))
         .whenMatched()
         .updateAll()
         .whenNotMatched()
@@ -656,8 +636,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "id", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk") && lit(null))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk") && lit(null))
         .whenMatched()
         .update(Map(
           "salary" -> col("source.salary")
@@ -689,8 +668,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched(lit(null))
         .update(Map(
           "salary" -> col("source.salary")
@@ -722,8 +700,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched(col(tableNameAsString + ".pk") === 1)
         .update(Map(
           "salary" -> col(tableNameAsString + ".salary").plus(lit(5))
@@ -761,8 +738,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       sourceRows.toDF("dep", "pk", "salary").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .updateAll()
         .whenNotMatched()
@@ -806,8 +782,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
         // merge changes into the table
         spark.table("source")
-          .mergeInto(tableNameAsString)
-          .on($"source.pk" === col(tableNameAsString + ".pk"))
+          .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
           .whenMatched()
           .updateAll()
           .whenNotMatched()
@@ -840,8 +815,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       // update primitive, array, map columns inside a struct
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
           "s.c1" -> lit(-1),
@@ -855,8 +829,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       // set primitive, array, map columns to NULL (proper casts should be in inserted)
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
           "s.c1" -> lit(null),
@@ -869,8 +842,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       // assign an entire struct
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
           "s" -> struct(
@@ -896,8 +868,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       // update primitive, array, map columns inside a struct
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatchedBySource()
         .update(Map(
           "s.c1" -> lit(-1),
@@ -911,8 +882,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       // set primitive, array, map columns to NULL (proper casts should be in inserted)
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatchedBySource()
         .update(Map(
           "s.c1" -> lit(null),
@@ -925,8 +895,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
 
       // assign an entire struct
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenNotMatchedBySource()
         .update(Map(
           "s" -> struct(
@@ -953,8 +922,7 @@ abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
       Seq(1, 2, 4).toDF("pk").createOrReplaceTempView("source")
 
       spark.table("source")
-        .mergeInto(tableNameAsString)
-        .on($"source.pk" === col(tableNameAsString + ".pk"))
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
         .whenMatched()
         .update(Map(
           "s.n_c" -> lit("x1"),

@@ -2495,6 +2495,11 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_INTO_API_ERROR" : {
+    "message" : [
+      "MergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource."
+    ]
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",

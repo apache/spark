@@ -4150,13 +4150,15 @@ class Dataset[T] private[sql](
    *
    * @since 4.0.0
    */
-  def mergeInto(table: String): MergeIntoWriter[T] = {
+  def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
-    new DataFrameWriterV2[T](table, this)
+
+    val writer = new DataFrameWriterV2[T](table, this)
+    writer.on(condition)
   }
 
   /**
