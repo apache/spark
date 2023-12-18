@@ -2146,3 +2146,24 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
       empty(ll)
   }
 }
+
+object EliminateCast extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
+      case bc @ BinaryComparison(left @ Cast(child, _, tz, ae), right @ Literal(_, _)) =>
+        val value = Cast(right, child.dataType, tz, ae).eval(EmptyRow)
+        val clazz = bc.getClass
+        val mainCons = clazz.getConstructor(classOf[Expression], classOf[Expression])
+        mainCons.setAccessible(true)
+        mainCons.newInstance(child, Literal.create(value, child.dataType))
+          .asInstanceOf[bc.type]
+      case bc @ BinaryComparison(left @ Literal(_, _), right @ Cast(child, _, tz, ae)) =>
+        val value = Cast(left, child.dataType, tz, ae).eval(EmptyRow)
+        val clazz = bc.getClass
+        val mainCons = clazz.getConstructor(classOf[Expression], classOf[Expression])
+        mainCons.setAccessible(true)
+        mainCons.newInstance(Literal.create(value, child.dataType), child)
+        mainCons.newInstance(child, Literal.create(value, child.dataType))
+          .asInstanceOf[bc.type]
+    }
+}
