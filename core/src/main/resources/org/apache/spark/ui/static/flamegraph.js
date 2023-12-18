@@ -36,13 +36,16 @@ function drawFlamegraph() {
 }
 
 function toggleFlamegraph() {
-  const arrow = d3.select("#executor-flamegraph-arrow");
-  arrow.each(function () {
-    $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
+  d3.select("#executor-flamegraph-header").on("click", () => {
+    const arrow = d3.select("#executor-flamegraph-arrow");
+    arrow.each(function () {
+      $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
+    });
+    if (arrow.classed("arrow-open")) {
+      d3.select("#executor-flamegraph-chart").style("display", "block");
+    } else {
+      d3.select("#executor-flamegraph-chart").style("display", "none");
+    }
   });
-  if (arrow.classed("arrow-open")) {
-    d3.select("#executor-flamegraph-chart").style("display", "block");
-  } else {
-    d3.select("#executor-flamegraph-chart").style("display", "none");
-  }
 }
+
