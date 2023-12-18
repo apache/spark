@@ -22,6 +22,8 @@ import '../../core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.m
 import '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
 import {drawFlamegraph, toggleFlamegraph} from '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';
 
+/* global $, d3 */
+
 /**
  * @jest-environment jsdom
  *

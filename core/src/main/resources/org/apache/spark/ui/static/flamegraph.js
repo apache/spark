@@ -17,7 +17,7 @@
 
 export {drawFlamegraph, toggleFlamegraph};
 
-/* global $, d3, flamegraph */
+/* global d3, flamegraph */
 
 function drawFlamegraph() {
   const width = (window.innerWidth * 95) / 100;
