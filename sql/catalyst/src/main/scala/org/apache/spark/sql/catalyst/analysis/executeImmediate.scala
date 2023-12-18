@@ -31,12 +31,9 @@ import org.apache.spark.sql.types.StringType
 /**
  * Logical plan representing execute immediate query.
  *
- * @param args
- *   parameters of query
- * @param query
- *   query string or variable
- * @param targetVariables
- *   variables to store the result of the query
+ * @param args parameters of query
+ * @param query query string or variable
+ * @param targetVariables variables to store the result of the query
  */
 case class ExecuteImmediateQuery(
     args: Seq[Expression],
