@@ -101,7 +101,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case LessThanOrEqual(l, r) => Seq(getStateWatermarkSafely(l, r).map(_ - 1))
         case GreaterThan(l, r) => Seq(getStateWatermarkSafely(r, l))
         case GreaterThanOrEqual(l, r) => Seq(getStateWatermarkSafely(r, l).map(_ - 1))
-        case BetweenExpr(p, lower, upper, _) =>
+        case BetweenExpr(p, lower, upper) =>
           Seq(getStateWatermarkSafely(lower, p).map(_ - 1),
               getStateWatermarkSafely(p, upper).map(_ - 1))
         case _ => Seq.empty

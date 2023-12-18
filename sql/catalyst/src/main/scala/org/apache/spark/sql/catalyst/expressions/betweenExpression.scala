@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.types.{BooleanType, DataType}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "BETWEEN(projection, lower, upper) - Returns true if `projection` > `lower` and `projection` <  `upper`.",
@@ -27,23 +29,23 @@ package org.apache.spark.sql.catalyst.expressions
   """,
   since = "2.0.0",
   group = "conditional_funcs")
-case class BetweenExpr(proj: Expression, lower: Expression,
-                       upper: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(proj: Expression, lower: Expression, upper: Expression) = {
-    this(proj, lower, upper, {
-      val commonExpr = CommonExpressionDef(proj)
-      val ref = new CommonExpressionRef(commonExpr)
-      With(And(
-        GreaterThanOrEqual(ref, lower),
-        LessThanOrEqual(ref, upper)),
-        Seq(commonExpr))
-    })
+case class BetweenExpr(proj: Expression, lower: Expression, upper: Expression)
+  extends RuntimeReplaceable with ComplexTypeMergingExpression {
+  override lazy val replacement: Expression = {
+    val commonExpr = CommonExpressionDef(proj)
+    val ref = new CommonExpressionRef(commonExpr)
+    With(And(
+      GreaterThanOrEqual(ref, lower),
+      LessThanOrEqual(ref, upper)),
+      Seq(commonExpr))
   }
 
-  override def parameters: Seq[Expression] = Seq(proj, lower, upper)
-  override protected def withNewChildInternal(newChild: Expression): BetweenExpr = {
-    copy(replacement = newChild)
-  }
+  override def dataType: DataType = BooleanType
+
+  override def prettyName: String = "between"
+
+  override def children: Seq[Expression] = Seq(proj, lower, upper)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(proj = newChildren(0), lower = newChildren(1), upper = newChildren(2))
 }
-

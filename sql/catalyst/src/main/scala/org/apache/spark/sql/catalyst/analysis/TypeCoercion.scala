@@ -482,7 +482,16 @@ abstract class TypeCoercionBase {
           case None =>
             c
         }
-
+      case b @ BetweenExpr(proj, lower, upper)
+        if !haveSameType(b.inputTypesForMerging) =>
+        findWiderCommonType(Seq(proj.dataType, lower.dataType, upper.dataType)) match {
+          case Some(finalDataType) => BetweenExpr(
+            castIfNotSameType(proj, finalDataType),
+            castIfNotSameType(lower, finalDataType),
+            castIfNotSameType(upper, finalDataType),
+          )
+          case None => b
+        }
       // When finding wider type for `Greatest` and `Least`, we should handle decimal types even if
       // we need to truncate, but we should not promote one side to string if the other side is
       // string.g

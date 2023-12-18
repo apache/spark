@@ -870,26 +870,6 @@ case class TempResolvedColumn(
 }
 
 /**
- * An intermediate expression to hold a between expression. Between expression
- * needs to be replaced with CTE expression during analysis. In order to use CTE expression
- * all child types need to be resolved. Hence, UnresolvedBetweenExpression is kept until
- * children are resolved and then it gets replaced with BetweenExpr.
- */
-case class UnresolvedBetweenExpression(first: Expression, second: Expression, third: Expression)
-  extends TernaryExpression with Unevaluable {
-  override lazy val resolved: Boolean = first.resolved
-  override def dataType: DataType = first.dataType
-  override def nullable: Boolean = first.resolved
-
-  override protected def withNewChildrenInternal(
-    newProjection: Expression, newLower: Expression, newUpper: Expression): Expression = {
-    copy(first = newProjection, second = newLower, third = newUpper)
-  }
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_BETWEEN)
-}
-
-/**
  * A place holder expression used in inverse distribution functions,
  * will be replaced after analyze.
  */
