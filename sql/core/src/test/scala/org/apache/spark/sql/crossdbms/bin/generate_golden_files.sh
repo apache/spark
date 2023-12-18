@@ -20,13 +20,13 @@
 GIT_ROOT="$(git rev-parse --show-toplevel)"
 echo "Root of repo is at $GIT_ROOT"
 
-# Change if using different container or name
-DOCKER_CONTAINER_NAME="postgres-db"
-
 echo "Starting DB container.."
 docker-compose --project-directory "${GIT_ROOT}/sql/core/src/test/scala/org/apache/spark/sql/crossdbms/bin" up --build --detach
 
 echo "Waiting for DB container to be ready.."
+# TODO: Make this dynamically detect which DBMS is being used.
+# Change if using different container or name.
+DOCKER_CONTAINER_NAME="postgres-db"
 timeout 10s bash -c "until docker exec $DOCKER_CONTAINER_NAME pg_isready ; do sleep 1 ; done"
 
 echo "Generating all golden files.."
