@@ -16,17 +16,22 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_csv import CsvTestsMixin
+from pyspark.pandas.tests.io.test_csv import CsvTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class CsvParityTests(CsvTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase):
+class CsvParityTests(
+    CsvTestsMixin,
+    PandasOnSparkTestUtils,
+    TestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_csv import *  # noqa: F401
+    from pyspark.pandas.tests.connect.io.test_parity_csv import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

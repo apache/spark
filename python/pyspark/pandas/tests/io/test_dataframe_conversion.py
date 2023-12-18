@@ -16,9 +16,7 @@
 #
 
 import os
-import shutil
 import string
-import tempfile
 import unittest
 import sys
 
@@ -26,22 +24,20 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class DataFrameConversionTestsMixin:
+class DataFrameConversionMixin:
     """Test cases for "small data" conversion and I/O."""
-
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp(prefix=DataFrameConversionTests.__name__)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     @property
     def pdf(self):
         return pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     @staticmethod
     def strip_all_whitespace(str):
@@ -158,34 +154,36 @@ class DataFrameConversionTestsMixin:
         pdf = pd.DataFrame({"a": [1], "b": ["a"]})
         psdf = ps.DataFrame(pdf)
 
-        psdf.to_json(self.tmp_dir, num_files=1)
-        expected = pdf.to_json(orient="records")
+        with self.temp_dir() as dirpath:
+            psdf.to_json(dirpath, num_files=1)
+            expected = pdf.to_json(orient="records")
 
-        output_paths = [path for path in os.listdir(self.tmp_dir) if path.startswith("part-")]
-        assert len(output_paths) > 0
-        output_path = "%s/%s" % (self.tmp_dir, output_paths[0])
-        self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
+            output_paths = [path for path in os.listdir(dirpath) if path.startswith("part-")]
+            assert len(output_paths) > 0
+            output_path = "%s/%s" % (dirpath, output_paths[0])
+            self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
 
     def test_to_json_with_partition_cols(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         psdf = ps.DataFrame(pdf)
 
-        psdf.to_json(self.tmp_dir, partition_cols="b", num_files=1)
+        with self.temp_dir() as dirpath:
+            psdf.to_json(dirpath, partition_cols="b", num_files=1)
 
-        partition_paths = [path for path in os.listdir(self.tmp_dir) if path.startswith("b=")]
-        assert len(partition_paths) > 0
-        for partition_path in partition_paths:
-            column, value = partition_path.split("=")
-            expected = pdf[pdf[column] == value].drop("b", axis=1).to_json(orient="records")
+            partition_paths = [path for path in os.listdir(dirpath) if path.startswith("b=")]
+            assert len(partition_paths) > 0
+            for partition_path in partition_paths:
+                column, value = partition_path.split("=")
+                expected = pdf[pdf[column] == value].drop("b", axis=1).to_json(orient="records")
 
-            output_paths = [
-                path
-                for path in os.listdir("%s/%s" % (self.tmp_dir, partition_path))
-                if path.startswith("part-")
-            ]
-            assert len(output_paths) > 0
-            output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
-            self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
+                output_paths = [
+                    path
+                    for path in os.listdir("%s/%s" % (dirpath, partition_path))
+                    if path.startswith("part-")
+                ]
+                assert len(output_paths) > 0
+                output_path = "%s/%s/%s" % (dirpath, partition_path, output_paths[0])
+                self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
 
     @unittest.skipIf(
         sys.platform == "linux" or sys.platform == "linux2",
@@ -258,13 +256,16 @@ class DataFrameConversionTestsMixin:
 
 
 class DataFrameConversionTests(
-    DataFrameConversionTestsMixin, ComparisonTestBase, SQLTestUtils, TestUtils
+    DataFrameConversionMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+    TestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_dataframe_conversion import *  # noqa: F401
+    from pyspark.pandas.tests.io.test_dataframe_conversion import *  # noqa: F401
 
     try:
         import xmlrunner

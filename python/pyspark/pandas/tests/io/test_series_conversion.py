@@ -63,12 +63,16 @@ class SeriesConversionTestsMixin:
         self.assert_eq(psser.to_latex(decimal=","), pser.to_latex(decimal=","))
 
 
-class SeriesConversionTests(SeriesConversionTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SeriesConversionTests(
+    SeriesConversionTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_series_conversion import *  # noqa: F401
+    from pyspark.pandas.tests.io.test_series_conversion import *  # noqa: F401
 
     try:
         import xmlrunner
