@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
@@ -105,6 +105,7 @@ class PythonTableProvider extends TableProvider {
             new PythonPartitionReaderFactory(
               source, readerFunc, outputSchema, jobArtifactUUID)
           }
+
           override def description: String = "(Python)"
 
           override def supportedCustomMetrics(): Array[CustomMetric] =
@@ -117,7 +118,9 @@ class PythonTableProvider extends TableProvider {
       override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
         new WriteBuilder {
           override def build(): Write = new Write {
+
             override def toBatch: BatchWrite = new BatchWrite {
+
               override def createBatchWriterFactory(
                 physicalInfo: PhysicalWriteInfo): DataWriterFactory = {
 
@@ -135,6 +138,11 @@ class PythonTableProvider extends TableProvider {
               // TODO(SPARK-45914): Support commit protocol
               override def abort(messages: Array[WriterCommitMessage]): Unit = {}
             }
+
+            override def description: String = "(Python)"
+
+            override def supportedCustomMetrics(): Array[CustomMetric] =
+              source.createPythonMetrics()
           }
         }
       }
@@ -256,11 +264,11 @@ private case class PythonBatchWriterFactory(
           if (commitMessage == null) {
             commitMessage = PythonWriterCommitMessage(row.getBinary(0))
           } else {
-            throw new Exception("should only have one row")
+            throw QueryExecutionErrors.invalidWriterCommitMessageError(details = "more than one")
           }
         }
         if (commitMessage == null) {
-          throw new Exception("should have one row")
+          throw QueryExecutionErrors.invalidWriterCommitMessageError(details = "zero")
         }
         commitMessage.asInstanceOf[WriterCommitMessage]
       }
@@ -344,7 +352,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
   }
 
   /**
-   * (Executor-side) Create an iterator that reads an input partition or writes data.
+   * (Executor-side) Create an iterator that execute the Python function.
    */
   def createMapInBatchEvaluatorFactory(
       pickledFunc: Array[Byte],
@@ -405,7 +413,14 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
 }
 
 object UserDefinedPythonDataSource {
+  /**
+   * The schema of the input to the Python data source read function.
+   */
   val readInputSchema: StructType = new StructType().add("partition", BinaryType)
+
+  /**
+   * The schema of the output to the Python data source write function.
+   */
   val writeOutputSchema: StructType = new StructType().add("message", BinaryType)
 }
 
