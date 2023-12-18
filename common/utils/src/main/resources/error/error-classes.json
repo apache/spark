@@ -1981,7 +1981,7 @@
     },
     "sqlState" : "42K0E"
   },
-  "INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED" : {
+  "ALL_PARAMETERS_MUST_BE_NAMED" : {
     "message" : [
       "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
     ],
@@ -2169,7 +2169,7 @@
     ],
     "sqlState" : "42602"
   },
-  "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT" : {
+  "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
     "message" : [
       "Parameterized query must either use positional, or named parameters, but not both."
     ],

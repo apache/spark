@@ -786,10 +786,18 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER expression contains window function" :: Nil)
 
   errorClassTest(
+    "EXEC IMMEDIATE - nested execute immediate not allowed",
+    CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \\\'SELECT 42\\\''"),
+    "NESTED_EXECUTE_IMMEDIATE",
+    Map(
+      "sqlString" -> "EXECUTE IMMEDIATE 'SELECT 42'",
+    ))
+
+  errorClassTest(
     "EXEC IMMEDIATE - both positional and named used",
     CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'SELECT 42 where ? = :first'" +
       " USING 1, 2 as first"),
-    "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT",
+    "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
     Map.empty);
 
   test("EXEC IMMEDIATE - non string variable as sqlString parameter") {
@@ -802,7 +810,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       inputPlan = execImmediatePlan,
       expectedErrorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
       expectedMessageParameters = Map(
-        "varType" -> "int"
+        "varType" -> "\"INT\""
       ))
   }
 
@@ -828,7 +836,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     assertAnalysisErrorClass(
       inputPlan = execImmediateSetVariablePlan,
-      expectedErrorClass = "INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED",
+      expectedErrorClass = "ALL_PARAMETERS_MUST_BE_NAMED",
       expectedMessageParameters = Map(
         "exprs" -> "\"2\", \"3\""
       ))
@@ -844,7 +852,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       inputPlan = execImmediateSetVariablePlan,
       expectedErrorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
       expectedMessageParameters = Map(
-        "sqlString" -> "SET VAR testVarA = 1"
+        "sqlString" -> "SET VAR TESTVARA = 1"
       ))
   }
 

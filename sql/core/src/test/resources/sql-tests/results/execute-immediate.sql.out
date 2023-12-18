@@ -417,7 +417,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
   "sqlState" : "07501",
   "messageParameters" : {
-    "sqlString" : "INSERT INTO x VALUES (?)"
+    "sqlString" : "INSERT INTO X VALUES (?)"
   }
 }
 
@@ -452,7 +452,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT",
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
   "sqlState" : "42613"
 }
 
@@ -464,7 +464,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED",
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
   "sqlState" : "07001",
   "messageParameters" : {
     "exprs" : "\"1\""
@@ -528,7 +528,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "varType" : "int"
+    "varType" : "\"INT\""
   }
 }
 
@@ -725,7 +725,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "NESTED_EXECUTE_IMMEDIATE",
   "sqlState" : "07501",
   "messageParameters" : {
-    "sqlString" : "EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = ? USING 10'"
+    "sqlString" : "EXECUTE IMMEDIATE 'SELECT ID FROM TBL_VIEW WHERE ID = ? USING 10'"
   }
 }
 

@@ -3889,9 +3889,33 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = expr.origin)
   }
 
-  def invalidNameParameterizedQueryParametersMustBeNamed(expr: Seq[Expression]): Throwable = {
+  def invalidQueryAllParametersMustBeNamed(expr: Seq[Expression]): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED",
+      errorClass = "ALL_PARAMETERS_MUST_BE_NAMED",
       messageParameters = Map("exprs" -> expr.map(e => toSQLExpr(e)).mkString(", ")))
+  }
+
+  def invalidQueryMixedQueryParameters(): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+      messageParameters = Map.empty)
+  }
+
+  def invalidExecuteImmediateVariableType(dataType: DataType): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      messageParameters = Map("varType" -> toSQLType(dataType)))
+  }
+
+  def invalidStatementForExecuteInto(queryString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
+  }
+
+  def nestedExecuteImmediate(queryString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "NESTED_EXECUTE_IMMEDIATE",
+      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 }

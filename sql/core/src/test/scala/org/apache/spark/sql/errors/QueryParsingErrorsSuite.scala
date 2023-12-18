@@ -40,8 +40,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       errorClass = "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
       parameters = Map("aliases" -> "`second`, `first`"),
       context = ExpectedContext(
-        query,
-        start = 0,
+        "USING 1 as first, 2 as first, 3 as second, 4 as second, 5 as third",
+        start = 44,
         stop = 109)
     )
   }
@@ -55,7 +55,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       context = ExpectedContext(
         start = 0,
         stop = 56,
-        fragment = "EXECUTE IMMEDIATE 'SELCT 1707 WHERE ? = 1' INTO a USING 1")
+        fragment = query)
     )
   }
 
