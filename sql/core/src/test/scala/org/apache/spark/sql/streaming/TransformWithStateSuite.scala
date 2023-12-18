@@ -18,18 +18,23 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
-class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)] {
+class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
+  with Logging {
   @transient private var _countState: ValueState[Long] = _
   @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(handle: StatefulProcessorHandle,
     outputMode: OutputMode) : Unit = {
     _processorHandle = handle
+    assert(handle.getQueryInfo().getBatchId >= 0)
+    assert(handle.getQueryInfo().getOperatorId == 0)
+    assert(handle.getQueryInfo().getPartitionId >= 0 && handle.getQueryInfo().getPartitionId < 5)
     _countState = _processorHandle.getValueState[Long]("countState")
   }
 
@@ -76,7 +81,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val inputData = MemoryStream[String]
       val result = inputData.toDS()
         .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessorWithError(), OutputMode.Update())
+        .transformWithState(new RunningCountStatefulProcessorWithError(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, "a"),
@@ -94,7 +101,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val inputData = MemoryStream[String]
       val result = inputData.toDS()
         .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessor(), OutputMode.Update())
+        .transformWithState(new RunningCountStatefulProcessor(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, "a"),
@@ -121,7 +130,9 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val ex = intercept[Exception] {
       val df = Seq("a", "a", "b").toDS()
         .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessor, OutputMode.Append())
+        .transformWithState(new RunningCountStatefulProcessor,
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Append())
         .write
         .format("noop")
         .mode(SaveMode.Append)
@@ -135,7 +146,9 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val inputData = MemoryStream[String]
     val result = inputData.toDS()
       .groupByKey(x => x)
-      .transformWithState(new RunningCountStatefulProcessor(), OutputMode.Update())
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Update())
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, "a"),

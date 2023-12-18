@@ -14,23 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.catalyst.plans.logical
 
-import java.io.Serializable
+import org.apache.spark.sql.streaming.TimeoutMode
 
-import org.apache.spark.annotation.{Evolving, Experimental}
-
-/**
- * Represents the operation handle provided to the stateful processor used in the
- * arbitrary state API v2.
- */
-@Experimental
-@Evolving
-trait StatefulProcessorHandle extends Serializable {
-
-  /** Function to create new or return existing single value state variable of given type */
-  def getValueState[T](stateName: String): ValueState[T]
-
-  /** Function to return queryInfo for currently running task */
-  def getQueryInfo(): QueryInfo
-}
+/** Types of timeouts used in tranformWithState operator */
+case object NoTimeouts extends TimeoutMode
+case object ProcessingTime extends TimeoutMode
+case object EventTime extends TimeoutMode

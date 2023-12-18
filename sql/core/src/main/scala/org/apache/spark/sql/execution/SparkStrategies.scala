@@ -727,7 +727,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState
       (keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, statefulProcessor, outputMode,
+        dataAttributes, statefulProcessor, timeoutMode, outputMode,
         outputAttr, child) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
@@ -735,6 +735,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           groupingAttributes,
           dataAttributes,
           statefulProcessor,
+          timeoutMode,
           outputMode,
           outputAttr,
           stateInfo = None,

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.UUID
+
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
@@ -84,7 +86,9 @@ class ValueStateSuite extends SharedSparkSession
   test("Implicit key operations") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      assert(handle.getQueryInfo().getPartitionId === 0)
+
       val testState: ValueState[Long] = handle.getValueState[Long]("testState")
       assert(ImplicitKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
@@ -112,7 +116,9 @@ class ValueStateSuite extends SharedSparkSession
   test("Value state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      assert(handle.getQueryInfo().getPartitionId === 0)
+
       val testState: ValueState[Long] = handle.getValueState[Long]("testState")
       ImplicitKeyTracker.setImplicitKey("test_key")
       testState.update(123)
@@ -136,7 +142,9 @@ class ValueStateSuite extends SharedSparkSession
   test("Value state operations for multiple instances") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      assert(handle.getQueryInfo().getPartitionId === 0)
+
       val testState1: ValueState[Long] = handle.getValueState[Long]("testState1")
       val testState2: ValueState[Long] = handle.getValueState[Long]("testState2")
       ImplicitKeyTracker.setImplicitKey("test_key")
