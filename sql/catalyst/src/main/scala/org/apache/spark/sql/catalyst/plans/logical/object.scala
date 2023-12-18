@@ -571,12 +571,12 @@ case class FlatMapGroupsWithState(
 
 object TransformWithState {
   def apply[K: Encoder, V: Encoder, U: Encoder](
-    groupingAttributes: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
-    statefulProcessor: StatefulProcessor[K, V, U],
-    timeoutMode: TimeoutMode,
-    outputMode: OutputMode,
-    child: LogicalPlan): LogicalPlan = {
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode,
+      child: LogicalPlan): LogicalPlan = {
     val mapped = new TransformWithState(
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
