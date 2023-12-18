@@ -149,8 +149,9 @@ class RocksDBFileManager(
 
   @volatile private var rootDirChecked: Boolean = false
 
-  def getChangeLogWriter(version: Long,
-    useColumnFamilies: Boolean = false): StateStoreChangelogWriter = {
+  def getChangeLogWriter(
+      version: Long,
+      useColumnFamilies: Boolean = false): StateStoreChangelogWriter = {
     val changelogFile = dfsChangelogFile(version)
     if (!rootDirChecked) {
       val rootDir = new Path(dfsRootDir)
@@ -166,8 +167,9 @@ class RocksDBFileManager(
   }
 
   // Get the changelog file at version
-  def getChangelogReader(version: Long,
-    useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
+  def getChangelogReader(
+      version: Long,
+      useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version)
     if (useColumnFamilies) {
       new StateStoreChangelogReaderV2(fm, changelogFile, codec)

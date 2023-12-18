@@ -122,7 +122,8 @@ class RocksDB(
   }
 
   // Maintain mapping of column family name to handle
-  @volatile private var colFamilyNameToHandleMap =
+  @GuardedBy("acquireLock")
+  private val colFamilyNameToHandleMap =
     scala.collection.mutable.Map[String, ColumnFamilyHandle]()
 
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
@@ -257,8 +258,9 @@ class RocksDB(
    * Get the value for the given key if present, or null.
    * @note This will return the last written value even if it was uncommitted.
    */
-  def get(key: Array[Byte],
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
+  def get(
+      key: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     if (useColumnFamilies) {
       // if col family is not created, throw an exception
       if (!checkColFamilyExists(colFamilyName)) {
@@ -274,8 +276,10 @@ class RocksDB(
    * Put the given value for the given key.
    * @note This update is not committed to disk until commit() is called.
    */
-  def put(key: Array[Byte], value: Array[Byte],
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+  def put(
+      key: Array[Byte],
+      value: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (useColumnFamilies) {
       // if col family is not created, throw an exception
       if (!checkColFamilyExists(colFamilyName)) {
@@ -306,7 +310,9 @@ class RocksDB(
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+  def remove(
+      key: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (useColumnFamilies) {
       // if col family is not created, throw an exception
       if (!checkColFamilyExists(colFamilyName)) {
@@ -747,10 +753,10 @@ class RocksDB(
 
       var colFamilyDescriptors: Seq[ColumnFamilyDescriptor] = Seq.empty[ColumnFamilyDescriptor]
       // populate the list of available col family descriptors
-      colFamilies.asScala.toList.foreach(family => {
+      colFamilies.asScala.toList.foreach { family =>
         val descriptor = new ColumnFamilyDescriptor(family, columnFamilyOptions)
         colFamilyDescriptors = colFamilyDescriptors :+ descriptor
-      })
+      }
 
       if (colFamilyDescriptors.isEmpty) {
         colFamilyDescriptors = colFamilyDescriptors :+
@@ -762,10 +768,9 @@ class RocksDB(
         colFamilyDescriptors.asJava, colFamilyHandles)
 
       // Store the mapping of names to handles in the internal map
-      colFamilyHandles.asScala.toList.map(
-        handle => {
-          colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
-        })
+      colFamilyHandles.asScala.toList.foreach { handle =>
+        colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
+      }
     } else {
       db = NativeRocksDB.open(dbOptions, workingDir.toString)
       logInfo(s"Opened DB with conf ${conf}")

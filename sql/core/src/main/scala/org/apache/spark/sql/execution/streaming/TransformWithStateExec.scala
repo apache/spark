@@ -58,10 +58,7 @@ case class TransformWithStateExec(
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
     child: SparkPlan)
-  extends UnaryExecNode
-    with StateStoreWriter
-    with WatermarkSupport
-    with ObjectProducerExec {
+  extends UnaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
 
@@ -152,7 +149,8 @@ case class TransformWithStateExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    metrics
+    metrics // force lazy init at driver
+
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateInfo,
       schemaForKeyRow,

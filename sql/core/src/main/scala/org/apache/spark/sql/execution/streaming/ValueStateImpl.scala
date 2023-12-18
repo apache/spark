@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
  */
 class ValueStateImpl[S](
     store: StateStore,
-    stateName: String) extends ValueState[S] with Logging{
+    stateName: String) extends ValueState[S] with Logging {
 
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitKeyTracker.getImplicitKeyOption
@@ -63,11 +63,7 @@ class ValueStateImpl[S](
   /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
     val retRow = store.get(encodeKey(), stateName)
-    if (retRow == null) {
-      false
-    } else {
-      true
-    }
+    retRow != null
   }
 
   /** Function to return Option of value if exists and None otherwise */

@@ -29,16 +29,8 @@ class TimerValuesImpl(
     currentWatermarkOpt: Option[Long]) extends TimerValues {
 
   // Return available processing time or -1 otherwise
-  override def getCurrentProcessingTimeInMs(): Long = if (currentProcessingTimeOpt.isDefined) {
-    currentProcessingTimeOpt.get
-  } else {
-    -1L
-  }
+  override def getCurrentProcessingTimeInMs(): Long = currentProcessingTimeOpt.getOrElse(-1L)
 
   // Return available watermark or -1 otherwise
-  override def getCurrentWatermarkInMs(): Long = if (currentWatermarkOpt.isDefined) {
-    currentWatermarkOpt.get
-  } else {
-    -1L
-  }
+  override def getCurrentWatermarkInMs(): Long = currentWatermarkOpt.getOrElse(-1L)
 }
