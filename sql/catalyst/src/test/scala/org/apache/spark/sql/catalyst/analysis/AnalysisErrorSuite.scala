@@ -790,15 +790,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \\\'SELECT 42\\\''"),
     "NESTED_EXECUTE_IMMEDIATE",
     Map(
-      "sqlString" -> "EXECUTE IMMEDIATE 'SELECT 42'",
-    ))
+      "sqlString" -> "EXECUTE IMMEDIATE 'SELECT 42'"))
 
   errorClassTest(
     "EXEC IMMEDIATE - both positional and named used",
     CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'SELECT 42 where ? = :first'" +
       " USING 1, 2 as first"),
     "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
-    Map.empty);
+    Map.empty)
 
   test("EXEC IMMEDIATE - non string variable as sqlString parameter") {
     var execImmediatePlan = ExecuteImmediateQuery(
