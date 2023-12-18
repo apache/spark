@@ -29,6 +29,12 @@ Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
 
 Non-deterministic expression `<sqlExpr>` should not appear in the arguments of an aggregate function.
 
+### ALL_PARAMETERS_MUST_BE_NAMED
+
+SQLSTATE: 07001
+
+Using name parameterized queries requires all parameters to be named. Parameters missing names: `<exprs>`.
+
 ### ALL_PARTITION_COLUMNS_NOT_ALLOWED
 
 SQLSTATE: KD005
@@ -1193,12 +1199,6 @@ The limit like expression `<expr>` is invalid.
 
 For more details see [INVALID_LIMIT_LIKE_EXPRESSION](sql-error-conditions-invalid-limit-like-expression-error-class.html)
 
-### INVALID_NAME_PARAMETERIZED_QUERY_ALL_PARAMETERS_MUST_BE_NAMED
-
-SQLSTATE: 07001
-
-Using name parameterized queries requires all parameters to be named. Parameters missing names: `<exprs>`.
-
 ### INVALID_NON_DETERMINISTIC_EXPRESSIONS
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1261,7 +1261,7 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 `<value>` is an invalid property value, please use quotes, e.g. SET `<key>`=`<value>`
 
-### INVALID_QUERY_BOTH_POSITIONAL_AND_NAMED_PARAMETERS_PRESENT
+### INVALID_QUERY_MIXED_QUERY_PARAMETERS
 
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 

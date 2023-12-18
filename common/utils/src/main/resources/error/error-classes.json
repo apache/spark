@@ -5,6 +5,12 @@
     ],
     "sqlState" : "42845"
   },
+  "ALL_PARAMETERS_MUST_BE_NAMED" : {
+    "message" : [
+      "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
+    ],
+    "sqlState" : "07001"
+  },
   "ALL_PARTITION_COLUMNS_NOT_ALLOWED" : {
     "message" : [
       "Cannot use all columns for partition columns."
@@ -1980,12 +1986,6 @@
       }
     },
     "sqlState" : "42K0E"
-  },
-  "ALL_PARAMETERS_MUST_BE_NAMED" : {
-    "message" : [
-      "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
-    ],
-    "sqlState" : "07001"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
