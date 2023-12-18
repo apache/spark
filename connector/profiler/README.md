@@ -68,6 +68,16 @@ Then enable the profiling in the configuration.
   <td>4.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.executor.profiling.options</code></td>
+  <td>event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s</td>
+  <td>
+      Options to pass to the profiler. Detailed options are documented in the comments here:
+      <a href="https://github.com/async-profiler/async-profiler/blob/32601bccd9e49adda9510a2ed79d142ac6ef0ff9/src/arguments.cpp#L52">Profiler arguments</a>.  
+       Note that the options to start, stop, specify output format, and output file do not have to be specified.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.executor.profiling.fraction</code></td>
   <td>0.10</td>
   <td>
@@ -100,7 +110,7 @@ On Kubernetes, spark will try to shut down the executor pods while the profiler 
   -c spark.executor.extraJavaOptions="-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:+PreserveFramePointer" \
   -c spark.plugins=org.apache.spark.executor.profiler.ExecutorProfilerPlugin \
   -c spark.executor.profiling.enabled=true \
-  -c spark.executor.profiling.outputDir=s3a://my-bucket/spark/profiles/  \
+  -c spark.executor.profiling.dfsDir=s3a://my-bucket/spark/profiles/  \
   -c spark.executor.profiling.options=event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s \
   -c spark.executor.profiling.fraction=0.10  \
   -c spark.kubernetes.executor.deleteOnTermination=false \

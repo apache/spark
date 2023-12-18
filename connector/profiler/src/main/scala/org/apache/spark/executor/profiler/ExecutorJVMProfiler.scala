@@ -16,7 +16,7 @@
  */
 package org.apache.spark.executor.profiler
 
-import java.io.{BufferedInputStream, FileInputStream, InputStream}
+import java.io.{BufferedInputStream, FileInputStream, InputStream, IOException}
 import java.net.URI
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
@@ -30,16 +30,16 @@ import org.apache.spark.util.ThreadUtils
 
 
 /**
- * A class that enables the async code profiler
+ * A class that enables the async JVM code profiler
  */
 private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) extends Logging {
 
   private var running = false
-  private val enableProfiler = conf.get(EXECUTOR_CODE_PROFILING_ENABLED)
-  private val profilerOptions = conf.get(EXECUTOR_CODE_PROFILING_OPTIONS)
-  private val profilerOutputDir = conf.get(EXECUTOR_CODE_PROFILING_OUTPUT_DIR)
-  private val profilerLocalDir = conf.get(EXECUTOR_CODE_PROFILING_LOCAL_DIR)
-  private val writeInterval = conf.get(EXECUTOR_CODE_PROFILING_WRITE_INTERVAL)
+  private val enableProfiler = conf.get(EXECUTOR_PROFILING_ENABLED)
+  private val profilerOptions = conf.get(EXECUTOR_PROFILING_OPTIONS)
+  private val profilerDfsDir = conf.get(EXECUTOR_PROFILING_DFS_DIR)
+  private val profilerLocalDir = conf.get(EXECUTOR_PROFILING_LOCAL_DIR)
+  private val writeInterval = conf.get(EXECUTOR_PROFILING_WRITE_INTERVAL)
 
   private val startcmd = s"start,$profilerOptions,file=$profilerLocalDir/profile.jfr"
   private val stopcmd = s"stop,$profilerOptions,file=$profilerLocalDir/profile.jfr"
@@ -53,49 +53,53 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
   private var threadpool: ScheduledExecutorService = _
   private var writing: Boolean = false
 
-  val profiler: AsyncProfiler = if (enableProfiler) {
-    if (AsyncProfilerLoader.isSupported) {
-      AsyncProfilerLoader.load()
-    } else {
-      logWarning("Executor code profiling is enabled but is not supported for this platform")
-      null
-    }
-  } else {
-    null
+  val profiler: Option[AsyncProfiler] = {
+    Option(
+      if (enableProfiler && AsyncProfilerLoader.isSupported) AsyncProfilerLoader.load() else null
+    )
   }
 
   def start(): Unit = {
-    if (profiler != null && !running) {
-      logInfo("Executor code profiling starting.")
+    if (!running) {
       try {
-        profiler.execute(startcmd)
+        profiler.foreach(p => {
+          p.execute(startcmd)
+          logInfo("Executor JVM profiling started.")
+          running = true
+          startWriting()
+        }
+        )
       } catch {
-        case e: Exception =>
-          logWarning("Executor code profiling aborted due to exception: ", e)
-          return
+        case e@(_: IllegalArgumentException | _: IllegalStateException | _: IOException) =>
+          logError("JVM profiling aborted. Exception occurred in profiler native code: ", e)
+        case e: Exception => logWarning("Executor JVM profiling aborted due to exception: ", e)
       }
-      logInfo("Executor code profiling started.")
-      running = true
     }
-    startWriting()
   }
 
-  /** Stops the profiling and saves output to hdfs location. */
+  /** Stops the profiling and saves output to dfs location. */
   def stop(): Unit = {
-    if (profiler != null && running) {
-      profiler.execute(stopcmd)
-      logInfo("Code profiler stopped")
-      running = false
-      finishWriting()
+    if (running) {
+      profiler.foreach(p => {
+        p.execute(stopcmd)
+        logInfo("JVM profiler stopped")
+        running = false
+        finishWriting()
+      })
     }
   }
 
   private def startWriting(): Unit = {
-    if (profilerOutputDir.isDefined) {
-      val applicationId = conf.getAppId
+    if (profilerDfsDir.isDefined) {
+      val applicationId = try {
+        conf.getAppId
+      } catch {
+        case _: NoSuchElementException => "local-" + System.currentTimeMillis
+      }
       val config = SparkHadoopUtil.get.newConfiguration(conf)
-      val appName = conf.get("spark.app.name");
-      val profilerOutputDirname = profilerOutputDir.get
+      val appName = conf.get("spark.app.name").replace(" ", "-")
+      val profilerOutputDirname = profilerDfsDir.get
+
       val profileOutputFile =
         s"$profilerOutputDirname/$applicationId/profile-$appName-exec-$executorId.jfr"
       val fs = FileSystem.get(new URI(profileOutputFile), config);
@@ -109,13 +113,13 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
         inputStream = new BufferedInputStream(new FileInputStream(s"$profilerLocalDir/profile.jfr"))
         threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("profilerOutputThread")
         threadpool.scheduleWithFixedDelay(new Runnable() {
-          override def run(): Unit = writeChunk()
+          override def run(): Unit = writeChunk(false)
         }, writeInterval, writeInterval,
           TimeUnit.SECONDS)
         writing = true
       } catch {
         case e: Exception =>
-          logError("Failed to start code profiler", e)
+          logError("Failed to start JVM profiler", e)
           if (threadpool != null) {
             threadpool.shutdownNow()
           }
@@ -129,7 +133,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
     }
   }
 
-  private def writeChunk(): Unit = {
+  private def writeChunk(lastChunk: Boolean): Unit = {
     if (!writing) {
       return
     }
@@ -137,33 +141,41 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
       // stop (pause) the profiler, dump the results and then resume. This is not ideal as we miss
       // the events while the file is being dumped, but that is the only way to make sure that
       // the chunk of data we are copying to dfs is in a consistent state.
-      profiler.execute(stopcmd)
-      profiler.execute(dumpcmd)
+      profiler.get.execute(stopcmd)
+      profiler.get.execute(dumpcmd)
       var remaining = inputStream.available()
-      profiler.execute(resumecmd)
+      if (!lastChunk) {
+        profiler.get.execute(resumecmd)
+      }
       while (remaining > 0) {
         val read = inputStream.read(dataBuffer, 0, math.min(remaining, UPLOAD_SIZE))
         outputStream.write(dataBuffer, 0, read)
         remaining -= read
       }
     } catch {
-      case e: Exception => logError("Exception occurred while writing profiler output", e)
+      case e: IOException => logError("Exception occurred while writing some profiler output: ", e)
+      case e@(_: IllegalArgumentException | _: IllegalStateException) =>
+        logError("Some profiler output not written." +
+          " Exception occurred in profiler native code: ", e)
+      case e: Exception => logError("Some profiler output not written. Unexpected exception: ", e)
     }
   }
 
   private def finishWriting(): Unit = {
-    if (profilerOutputDir.isDefined && writing) {
+    if (profilerDfsDir.isDefined && writing) {
       try {
         // shutdown background writer
         threadpool.shutdown()
         threadpool.awaitTermination(30, TimeUnit.SECONDS)
         // flush remaining data
-        writeChunk()
+        writeChunk(true)
         inputStream.close()
         outputStream.close()
       } catch {
-        case e: Exception =>
-          logError("Exception in completing profiler output", e)
+        case _: InterruptedException => Thread.currentThread().interrupt()
+        case e: IOException =>
+          logWarning("Some profiling output not written." +
+            "Exception occurred while completing profiler output", e)
       }
       writing = false
     }

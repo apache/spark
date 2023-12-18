@@ -16,25 +16,27 @@
  */
 package org.apache.spark.executor
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.internal.config.ConfigBuilder
 
 package object profiler {
 
-  private[profiler] val EXECUTOR_CODE_PROFILING_ENABLED =
+  private[profiler] val EXECUTOR_PROFILING_ENABLED =
     ConfigBuilder("spark.executor.profiling.enabled")
       .doc("Turn on code profiling via async_profiler in executors.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
-  private[profiler] val EXECUTOR_CODE_PROFILING_OUTPUT_DIR =
+  private[profiler] val EXECUTOR_PROFILING_DFS_DIR =
     ConfigBuilder("spark.executor.profiling.dfsDir")
-      .doc("HDFS compatible file-system  path to where the profiler will write output jfr files.")
+      .doc("HDFS compatible file-system path to where the profiler will write output jfr files.")
       .version("4.0.0")
       .stringConf
       .createOptional
 
-  private[profiler] val EXECUTOR_CODE_PROFILING_LOCAL_DIR =
+  private[profiler] val EXECUTOR_PROFILING_LOCAL_DIR =
     ConfigBuilder("spark.executor.profiling.localDir")
       .doc("Local file system path on executor where profiler output is saved. Defaults to the " +
         "working directory of the executor process.")
@@ -42,27 +44,28 @@ package object profiler {
       .stringConf
       .createWithDefault(".")
 
-  private[profiler] val EXECUTOR_CODE_PROFILING_OPTIONS =
+  private[profiler] val EXECUTOR_PROFILING_OPTIONS =
     ConfigBuilder("spark.executor.profiling.options")
       .doc("Options to pass on to the async profiler.")
       .version("4.0.0")
       .stringConf
       .createWithDefault("event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s")
 
-  private[profiler] val EXECUTOR_CODE_PROFILING_FRACTION =
+  private[profiler] val EXECUTOR_PROFILING_FRACTION =
     ConfigBuilder("spark.executor.profiling.fraction")
       .doc("Fraction of executors to profile")
       .version("4.0.0")
       .doubleConf
-      .checkValue(v => v >= 0.0 && v < 1.0,
-        "Fraction of executors to profile must be in [0,1)")
+      .checkValue(v => v >= 0.0 && v <= 1.0,
+        "Fraction of executors to profile must be in [0,1]")
       .createWithDefault(0.1)
 
-  private[profiler] val EXECUTOR_CODE_PROFILING_WRITE_INTERVAL =
+  private[profiler] val EXECUTOR_PROFILING_WRITE_INTERVAL =
     ConfigBuilder("spark.executor.profiling.writeInterval")
       .doc("Time interval in seconds after which the profiler output will be synced to dfs")
       .version("4.0.0")
-      .intConf
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0, "Write interval should be non-negative")
       .createWithDefault(30)
 
 }
