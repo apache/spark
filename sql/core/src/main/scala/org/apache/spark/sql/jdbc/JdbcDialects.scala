@@ -336,7 +336,22 @@ abstract class JdbcDialect extends Serializable with Logging {
         super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
       } else {
         throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
+          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName")
+      }
+    }
+
+    override def visitInverseDistributionFunction(
+        funcName: String,
+        isDistinct: Boolean,
+        inputs: Array[String],
+        orderingWithinGroups: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        super.visitInverseDistributionFunction(
+          dialectFunctionName(funcName), isDistinct, inputs, orderingWithinGroups)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support " +
+            s"inverse distribution function: $funcName")
       }
     }
 
