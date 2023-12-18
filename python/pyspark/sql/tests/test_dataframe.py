@@ -47,6 +47,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
+    PySparkAssertionError,
     PySparkTypeError,
     PySparkValueError,
 )
@@ -977,6 +978,16 @@ class DataFrameTestsMixin:
 
         unnamed_observation = Observation()
         named_observation = Observation("metric")
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            unnamed_observation.get()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NO_OBSERVE_BEFORE_GET",
+            message_parameters={},
+        )
+
         observed = (
             df.orderBy("id")
             .observe(
@@ -1002,6 +1013,15 @@ class DataFrameTestsMixin:
         # test that we retrieve the metrics
         self.assertEqual(named_observation.get, dict(cnt=3, sum=6, mean=2.0))
         self.assertEqual(unnamed_observation.get, dict(rows=3))
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            df.observe(named_observation, count(lit(1)).alias("count"))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="REUSE_OBSERVATION",
+            message_parameters={},
+        )
 
         # observation requires name (if given) to be non empty string
         with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):

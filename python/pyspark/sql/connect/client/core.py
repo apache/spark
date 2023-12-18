@@ -51,7 +51,7 @@ import pyarrow as pa
 import google.protobuf.message
 from grpc_status import rpc_status
 import grpc
-from google.protobuf import text_format
+from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
 from pyspark.loose_version import LooseVersion
@@ -1152,6 +1152,7 @@ class SparkConnectClient(object):
                 PlanMetrics,
                 PlanObservedMetrics,
                 Dict[str, Any],
+                any_pb2.Any,
             ]
         ]:
             nonlocal num_records
@@ -1198,6 +1199,8 @@ class SparkConnectClient(object):
                     addresses = [address for address in resource.addresses]
                     resources[key] = ResourceInformation(name, addresses)
                 yield {"get_resources_command_result": resources}
+            if b.HasField("extension"):
+                yield b.extension
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "

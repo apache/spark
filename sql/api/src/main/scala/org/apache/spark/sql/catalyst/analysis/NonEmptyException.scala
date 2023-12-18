@@ -36,7 +36,4 @@ case class NonEmptyNamespaceException(
       "details" -> details)) {
 
   def this(namespace: Array[String]) = this(namespace, "", None)
-
-  def this(details: String, cause: Option[Throwable]) =
-    this(Array.empty, details, cause)
 }
