@@ -69,4 +69,12 @@ private[spark] object Python {
     .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
+
+  val PYTHON_DATAFRAME_CHUNK_READ_ENABLED =
+    ConfigBuilder("spark.python.dataFrameChunkRead.enabled")
+    .doc("When true, driver and executes launch local cached arrow batch servers for serving " +
+      "pyspark DataFrame chunk read requests.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
 }

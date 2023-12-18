@@ -111,14 +111,16 @@ private[spark] class PythonWorkerFactory(
     workerEnv: java.util.Map[String, String]
   ): Unit = {
     val env = SparkEnv.get
-    workerEnv.put(
-      "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT",
-      env.cachedArrowBatchServerPort.get.toString
-    )
-    workerEnv.put(
-      "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET",
-      env.cachedArrowBatchServerSecret.get
-    )
+    if (env.conf.get(PYTHON_DATAFRAME_CHUNK_READ_ENABLED)) {
+      workerEnv.put(
+        "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT",
+        env.cachedArrowBatchServerPort.get.toString
+      )
+      workerEnv.put(
+        "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET",
+        env.cachedArrowBatchServerSecret.get
+      )
+    }
   }
 
   /**

@@ -295,13 +295,17 @@ class SparkContext:
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
 
-        os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"] = \
-            str(self._jsc.sc().cachedArrowBatchServerPort())
-        os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"] = \
-            self._jsc.sc().cachedArrowBatchServerSecret()
-
         # Reset the SparkConf to the one actually used by the SparkContext in JVM.
         self._conf = SparkConf(_jconf=self._jsc.sc().conf())
+
+        if (
+            self.getConf().get("spark.python.dataFrameChunkRead.enabled", "false").lower()
+            == "true"
+        ):
+            os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"] = \
+                str(self._jsc.sc().cachedArrowBatchServerPort())
+            os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"] = \
+                self._jsc.sc().cachedArrowBatchServerSecret()
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server

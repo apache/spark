@@ -52,7 +52,7 @@ class CachedArrowBatchServer extends Logging {
     dout.flush()
   }
 
-  def handleConnection(sock: Socket): Unit = {
+  private def handleConnection(sock: Socket): Unit = {
     val blockId = BlockId(readUtf8(sock))
     assert(blockId.isInstanceOf[ArrowBatchBlockId])
 

@@ -381,10 +381,10 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   private var _cachedArrowBatchServerPort: Option[Int] = None
-  private[spark] def cachedArrowBatchServerPort = _cachedArrowBatchServerPort.get
+  private[spark] def cachedArrowBatchServerPort: Int = _cachedArrowBatchServerPort.get
 
   private var _cachedArrowBatchServerSecret: Option[String] = None
-  private[spark] def cachedArrowBatchServerSecret = _cachedArrowBatchServerSecret.get
+  private[spark] def cachedArrowBatchServerSecret: String = _cachedArrowBatchServerSecret.get
 
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |
@@ -407,6 +407,8 @@ class SparkContext(config: SparkConf) extends Logging {
       _schedulerBackend.updateExecutorsLogLevel(upperCased)
     }
   }
+
+  private var _cachedArrowBatchServer: Option[CachedArrowBatchServer] = None
 
   try {
     _conf = config.clone()
@@ -493,11 +495,13 @@ class SparkContext(config: SparkConf) extends Logging {
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
 
-    val cachedArrowBatchServer = new CachedArrowBatchServer()
-    val cachedArrowBatchServerInfo = cachedArrowBatchServer.start()
-
-    _cachedArrowBatchServerPort = Some(cachedArrowBatchServerInfo._1)
-    _cachedArrowBatchServerSecret = Some(cachedArrowBatchServerInfo._2)
+    if (SparkEnv.get.conf.get(Python.PYTHON_DATAFRAME_CHUNK_READ_ENABLED)) {
+      val server = new CachedArrowBatchServer()
+      val cachedArrowBatchServerInfo = server.start()
+      _cachedArrowBatchServerPort = Some(cachedArrowBatchServerInfo._1)
+      _cachedArrowBatchServerSecret = Some(cachedArrowBatchServerInfo._2)
+      _cachedArrowBatchServer = Some(server)
+    }
 
     // If running the REPL, register the repl's output dir with the file server.
     _conf.getOption("spark.repl.class.outputDir").foreach { path =>
@@ -2345,6 +2349,9 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     Utils.tryLogNonFatalError {
       _progressBar.foreach(_.stop())
+    }
+    Utils.tryLogNonFatalError {
+      _cachedArrowBatchServer.foreach(_.stop())
     }
     _taskScheduler = null
     // TODO: Cache.stop()?

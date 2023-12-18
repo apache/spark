@@ -348,13 +348,21 @@ private[spark] class Executor(
 
   metricsPoller.start()
 
-  val cachedArrowBatchServer = new CachedArrowBatchServer()
+  val cachedArrowBatchServer: Option[CachedArrowBatchServer] = if (
+    SparkEnv.get.conf.get(Python.PYTHON_DATAFRAME_CHUNK_READ_ENABLED)
+  ) {
+    val server = new CachedArrowBatchServer()
 
-  val (cachedArrowBatchServerPort: Int, cachedArrowBatchServerSecret: String) =
-    cachedArrowBatchServer.start()
+    val (cachedArrowBatchServerPort: Int, cachedArrowBatchServerSecret: String) =
+      server.start()
 
-  env.cachedArrowBatchServerPort = Some(cachedArrowBatchServerPort)
-  env.cachedArrowBatchServerSecret = Some(cachedArrowBatchServerSecret)
+    env.cachedArrowBatchServerPort = Some(cachedArrowBatchServerPort)
+    env.cachedArrowBatchServerSecret = Some(cachedArrowBatchServerSecret)
+
+    Some(server)
+  } else {
+    None
+  }
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
@@ -428,9 +436,7 @@ private[spark] class Executor(
       ShutdownHookManager.removeShutdownHook(stopHookReference)
       env.metricsSystem.report()
       try {
-        if (cachedArrowBatchServer != null) {
-          cachedArrowBatchServer.stop()
-        }
+        cachedArrowBatchServer.foreach(_.stop())
       } catch {
         case NonFatal(e) =>
           logWarning("Unable to stop arrow batch server", e)

@@ -38,7 +38,19 @@ def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int
     Return the list of tuple (chunk_id, chunk_row_count, chunk_byte_count).
     This function is only available when it is called from spark driver process.
     """
-    sc = SparkSession.getActiveSession().sparkContext
+    spark = SparkSession.getActiveSession()
+    if spark is None:
+        raise RuntimeError("Active spark session is required.")
+
+    sc = spark.sparkContext
+    if (
+        sc.getConf().get("spark.python.dataFrameChunkRead.enabled", "false").lower()
+        != "true"
+    ):
+        raise RuntimeError(
+            "In order to use 'persist_dataframe_as_chunks' API, you must set spark "
+            "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true'."
+        )
     chunk_meta_list = list(
         sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils
         .persistDataFrameAsArrowBatchChunks(dataframe._jdf, max_records_per_batch)
@@ -64,6 +76,15 @@ def read_chunk(chunk_id):
     You can call this function from spark driver, spark python UDF python,
     descendant process of spark driver, or descendant process of spark python UDF worker.
     """
+
+    if "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT" not in os.environ:
+        raise ValueError(
+            "In order to use dataframe chunk read API, you must set spark "
+            "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true',"
+            "and you must call 'read_chunk' API in pyspark driver, pyspark UDF,"
+            "descendant process of pyspark driver, or descendant process of pyspark "
+            "UDF worker."
+        )
 
     port = int(os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"])
     auth_secret = os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"]
