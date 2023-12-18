@@ -90,8 +90,9 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     val queries = getQueries(code, comments)
     val settings = getSparkSettings(comments)
 
-    val dbmsConfig = comments.filter(_.startsWith(s"--${
-      CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE} ")).map(_.substring(31))
+    val dbmsConfig = comments.filter(_.startsWith(
+      CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE)).map(_.substring(
+      CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE.length))
     // If `--DBMS_TO_GENERATE_GOLDEN_FILE` is not found, skip the test.
     if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
       log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
@@ -125,8 +126,8 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
             // Either of the below two lines can error. If we go into the catch statement, then it
             // is likely one of the following scenarios:
             // 1. Error thrown in Spark analysis:
-            //    a. The query is either incompatible between Spark and the other DBMS
-            //    b. There is issue with the schema in Spark.
+            //    a. The query is incompatible with either Spark and the other DBMS.
+            //    b. There is an issue with the schema in Spark.
             //    c. The error is expected - it errors on both systems, but only the Spark error
             //       will be printed to the golden file, because it errors first.
             // 2. Error thrown in other DBMS execution:
@@ -224,7 +225,7 @@ object CrossDbmsQueryTestSuite {
   // System argument to indicate a custom connection URL to the reference DBMS.
   private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
   // Argument in input files to indicate that golden file should be generated with a reference DBMS
-  private final val DBMS_TO_GENERATE_GOLDEN_FILE = "DBMS_TO_GENERATE_GOLDEN_FILE"
+  private final val DBMS_TO_GENERATE_GOLDEN_FILE = "--DBMS_TO_GENERATE_GOLDEN_FILE "
 
   private final val POSTGRES = "postgres"
   private final val SUPPORTED_DBMS = Seq(POSTGRES)

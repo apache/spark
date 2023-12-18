@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry
 /**
  * Represents a connection (session) to a database using JDBC.
  */
-private[sql] trait JdbcConnection {
+private[crossdbms] trait JdbcConnection {
 
   /**
    * Executes the given SQL query and returns the result as a sequence of strings.
@@ -63,15 +63,21 @@ private[sql] trait JdbcConnection {
 /**
  * Represents a connection (session) to a PostgreSQL database.
  */
-private[sql] case class PostgresConnection(connection_url: Option[String] = None)
+private[crossdbms] case class PostgresConnection(connection_url: Option[String] = None)
   extends JdbcConnection {
 
   private final val POSTGRES_DRIVER_CLASS_NAME = "org.postgresql.Driver"
   DriverRegistry.register(POSTGRES_DRIVER_CLASS_NAME)
-  private final val DEFAULT_USER = "pg"
-  private final val DEFAULT_CONNECTION_URL =
-    s"jdbc:postgresql://localhost:5432/postgres?user=$DEFAULT_USER"
+
+  private final val DEFAULT_HOST = "localhost"
+  private final val DEFAULT_PORT = "5432"
+  private final val DEFAULT_USER = "postgres"
+  private final val DEFAULT_DB = "postgres"
+  private final val DEFAULT_PASSWORD = "postgres"
+  private final val DEFAULT_CONNECTION_URL = s"jdbc:postgresql://$DEFAULT_HOST:$DEFAULT_PORT/" +
+    s"$DEFAULT_DB?user=$DEFAULT_USER?password=$DEFAULT_PASSWORD"
   private val url = connection_url.getOrElse(DEFAULT_CONNECTION_URL)
+
   private val conn = DriverManager.getConnection(url)
   private val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
 
