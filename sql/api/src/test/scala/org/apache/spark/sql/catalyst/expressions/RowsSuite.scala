@@ -14,18 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.errors
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 
-class DataTypeErrorsSuite extends SparkFunSuite {
-  test("valueIsNullError throws correct exception") {
+class RowsSuite extends SparkFunSuite {
+  test("Row handles null value") {
+    val input: Array[Any] = Array(null)
+    val genericRow = new GenericRow(input)
+
     checkError(
       exception = intercept[SparkException] {
-        throw DataTypeErrors.valueIsNullError(3)
+        genericRow.getLong(0)
       },
       errorClass = "NULL_ROW_VALUE",
-      parameters = Map("index" -> "3")
+      parameters = Map("index" -> "0")
     )
   }
 
