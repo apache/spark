@@ -2914,15 +2914,15 @@
     ],
     "sqlState" : "42000"
   },
-  "NULL_ROW_VALUE" : {
-    "message" : [
-      "Row value at the position <index> is NULL."
-    ],
-    "sqlState" : "2200E"
-  },
   "NULL_MAP_KEY" : {
     "message" : [
       "Cannot use null as map key."
+    ],
+    "sqlState" : "2200E"
+  },
+  "NULL_ROW_VALUE" : {
+    "message" : [
+      "Row value at the position <index> is NULL."
     ],
     "sqlState" : "2200E"
   },
