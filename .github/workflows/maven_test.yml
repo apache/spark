@@ -40,7 +40,7 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"SKIP_SPARK_RELEASE_VERSIONS": "3.3.3,3.4.2,3.5.0,master"}'
+        default: '{}'
 jobs:
   # Build: build Spark and run the tests for specified modules using maven
   build:
@@ -115,7 +115,6 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       SPARK_LOCAL_IP: localhost
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      SKIP_SPARK_RELEASE_VERSIONS: ${{ fromJSON(inputs.envs).SKIP_SPARK_RELEASE_VERSIONS }}
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
