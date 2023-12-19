@@ -75,6 +75,17 @@ public interface DataWriter<T> extends Closeable {
    */
   void write(T record) throws IOException;
 
+  /**
+   * Writes all records provided by the given iterator. By default, it calls the {@link #write}
+   * method for each record in the iterator.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   *
+   * @since 4.0.0
+   */
   default void writeAll(Iterator<T> records) throws IOException {
     while (records.hasNext()) {
       write(records.next());
