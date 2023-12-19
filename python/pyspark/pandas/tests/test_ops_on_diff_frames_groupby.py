@@ -36,50 +36,6 @@ class OpsOnDiffFramesGroupByTestsMixin:
         reset_option("compute.ops_on_diff_frames")
         super().tearDownClass()
 
-    def test_groupby_different_lengths(self):
-        pdfs1 = [
-            pd.DataFrame({"c": [4, 2, 7, 3, None, 1, 1, 1, 2], "d": list("abcdefght")}),
-            pd.DataFrame({"c": [4, 2, 7, None, 1, 1, 2], "d": list("abcdefg")}),
-            pd.DataFrame({"c": [4, 2, 7, 3, None, 1, 1, 1, 2, 2], "d": list("abcdefghti")}),
-        ]
-        pdfs2 = [
-            pd.DataFrame({"a": [1, 2, 6, 4, 4, 6, 4, 3, 7], "b": [4, 2, 7, 3, 3, 1, 1, 1, 2]}),
-            pd.DataFrame({"a": [1, 2, 6, 4, 4, 6, 4, 7], "b": [4, 2, 7, 3, 3, 1, 1, 2]}),
-            pd.DataFrame({"a": [1, 2, 6, 4, 4, 6, 4, 3, 7], "b": [4, 2, 7, 3, 3, 1, 1, 1, 2]}),
-        ]
-
-        for pdf1, pdf2 in zip(pdfs1, pdfs2):
-            psdf1 = ps.from_pandas(pdf1)
-            psdf2 = ps.from_pandas(pdf2)
-
-            for as_index in [True, False]:
-                if as_index:
-
-                    def sort(df):
-                        return df.sort_index()
-
-                else:
-
-                    def sort(df):
-                        return df.sort_values("c").reset_index(drop=True)
-
-                self.assert_eq(
-                    sort(psdf1.groupby(psdf2.a, as_index=as_index).sum()),
-                    sort(pdf1.groupby(pdf2.a, as_index=as_index).sum()),
-                    almost=as_index,
-                )
-
-                self.assert_eq(
-                    sort(psdf1.groupby(psdf2.a, as_index=as_index).c.sum()),
-                    sort(pdf1.groupby(pdf2.a, as_index=as_index).c.sum()),
-                    almost=as_index,
-                )
-                self.assert_eq(
-                    sort(psdf1.groupby(psdf2.a, as_index=as_index)["c"].sum()),
-                    sort(pdf1.groupby(pdf2.a, as_index=as_index)["c"].sum()),
-                    almost=as_index,
-                )
-
     def test_groupby_multiindex_columns(self):
         pdf1 = pd.DataFrame(
             {("y", "c"): [4, 2, 7, 3, None, 1, 1, 1, 2], ("z", "d"): list("abcdefght")}
@@ -207,32 +163,6 @@ class OpsOnDiffFramesGroupByTestsMixin:
             pdf.groupby(["a", pkey]).transform(lambda x: x + x.min()).sort_index(),
         )
 
-    def test_filter(self):
-        pdf = pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
-            columns=["a", "b", "c"],
-        )
-        pkey = pd.Series([1, 1, 2, 3, 5, 8])
-        psdf = ps.from_pandas(pdf)
-        kkey = ps.from_pandas(pkey)
-
-        self.assert_eq(
-            psdf.groupby(kkey).filter(lambda x: any(x.a == 2)).sort_index(),
-            pdf.groupby(pkey).filter(lambda x: any(x.a == 2)).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)["a"].filter(lambda x: any(x == 2)).sort_index(),
-            pdf.groupby(pkey)["a"].filter(lambda x: any(x == 2)).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)[["a"]].filter(lambda x: any(x.a == 2)).sort_index(),
-            pdf.groupby(pkey)[["a"]].filter(lambda x: any(x.a == 2)).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(["a", kkey]).filter(lambda x: any(x.a == 2)).sort_index(),
-            pdf.groupby(["a", pkey]).filter(lambda x: any(x.a == 2)).sort_index(),
-        )
-
     def test_head(self):
         pdf = pd.DataFrame(
             {
@@ -259,58 +189,6 @@ class OpsOnDiffFramesGroupByTestsMixin:
             pdf.groupby([pkey, "b"]).head(2).sort_index(),
             psdf.groupby([kkey, "b"]).head(2).sort_index(),
         )
-
-    def test_diff(self):
-        pdf = pd.DataFrame(
-            {
-                "a": [1, 2, 3, 4, 5, 6] * 3,
-                "b": [1, 1, 2, 3, 5, 8] * 3,
-                "c": [1, 4, 9, 16, 25, 36] * 3,
-            }
-        )
-        pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        psdf = ps.from_pandas(pdf)
-        kkey = ps.from_pandas(pkey)
-
-        self.assert_eq(
-            psdf.groupby(kkey).diff().sort_index(), pdf.groupby(pkey).diff().sort_index()
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)["a"].diff().sort_index(), pdf.groupby(pkey)["a"].diff().sort_index()
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)[["a"]].diff().sort_index(),
-            pdf.groupby(pkey)[["a"]].diff().sort_index(),
-        )
-
-        self.assert_eq(psdf.groupby(kkey).diff().sum(), pdf.groupby(pkey).diff().sum().astype(int))
-        self.assert_eq(psdf.groupby(kkey)["a"].diff().sum(), pdf.groupby(pkey)["a"].diff().sum())
-
-    def test_fillna(self):
-        pdf = pd.DataFrame(
-            {
-                "a": [1, 2, 3, 4, 5, 6] * 3,
-                "b": [1, 1, 2, 3, 5, 8] * 3,
-                "c": [1, 4, 9, 16, 25, 36] * 3,
-            },
-        )
-        pkey = pd.Series([1, 1, 2, 3, 5, 8] * 3)
-        psdf = ps.from_pandas(pdf)
-        kkey = ps.from_pandas(pkey)
-
-        self.assert_eq(
-            psdf.groupby(kkey).rank().sort_index(), pdf.groupby(pkey).rank().sort_index()
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)["a"].rank().sort_index(), pdf.groupby(pkey)["a"].rank().sort_index()
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)[["a"]].rank().sort_index(),
-            pdf.groupby(pkey)[["a"]].rank().sort_index(),
-        )
-
-        self.assert_eq(psdf.groupby(kkey).rank().sum(), pdf.groupby(pkey).rank().sum())
-        self.assert_eq(psdf.groupby(kkey)["a"].rank().sum(), pdf.groupby(pkey)["a"].rank().sum())
 
     def test_shift(self):
         pdf = pd.DataFrame(

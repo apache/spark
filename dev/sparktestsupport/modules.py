@@ -870,6 +870,10 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.diff_frames_ops.test_groupby_aggregate",
         "pyspark.pandas.tests.diff_frames_ops.test_groupby_apply",
         "pyspark.pandas.tests.diff_frames_ops.test_groupby_cumulative",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_diff",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_diff_len",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_fillna",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_filter",
         "pyspark.pandas.tests.series.test_all_any",
         "pyspark.pandas.tests.series.test_arg_ops",
         "pyspark.pandas.tests.series.test_as_of",
@@ -1207,6 +1211,10 @@ pyspark_pandas_connect_part3 = Module(
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_aggregate",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_apply",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_cumulative",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_diff",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_diff_len",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_fillna",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_filter",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
