@@ -486,10 +486,11 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
 
     assert(fastFormatter.parseOptional("2023-12-31 23:59:59.9990").contains(1704067199999000L))
     assert(fastFormatter.parseOptional("abc").isEmpty)
+    assert(fastFormatter.parseOptional("23012150952").isEmpty)
 
     assert(simpleFormatter.parseOptional("2023-12-31 23:59:59.9990").contains(1704067208990000L))
     assert(simpleFormatter.parseOptional("abc").isEmpty)
-
+    assert(simpleFormatter.parseOptional("23012150952").isEmpty)
   }
 
   test("SPARK-45424: do not return optional parse results when only prefix match") {

@@ -741,7 +741,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       false)
     val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
-    val mapInArrow = PythonMapInArrow(
+    val mapInArrow = MapInArrow(
       pythonUdf,
       output,
       project,
