@@ -22,7 +22,7 @@ package org.apache.spark.sql.catalyst.expressions
   usage = "BETWEEN(projection, lower, upper) - Returns true if `projection` > `lower` and `projection` <  `upper`.",
   examples = """
     Examples:
-      > SELECT _FUNC_(0.5, 0, 1);
+      > SELECT _FUNC_(0.5, 0.1, 1.0);
         TRUE
   """,
   arguments = """
