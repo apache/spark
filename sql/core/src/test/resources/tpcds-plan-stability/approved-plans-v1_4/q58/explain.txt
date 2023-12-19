@@ -199,7 +199,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 Left keys [1]: [item_id#11]
 Right keys [1]: [item_id#22]
 Join type: Inner
-Join condition: ((((cast(ss_item_rev#12 as decimal(19,3)) >= (0.9 * cs_item_rev#23)) AND (cast(ss_item_rev#12 as decimal(20,3)) <= (1.1 * cs_item_rev#23))) AND (cast(cs_item_rev#23 as decimal(19,3)) >= (0.9 * ss_item_rev#12))) AND (cast(cs_item_rev#23 as decimal(20,3)) <= (1.1 * ss_item_rev#12)))
+Join condition: ((((cast(ss_item_rev#12 as decimal(20,3)) >= cast((0.9 * cs_item_rev#23) as decimal(20,3))) AND (cast(ss_item_rev#12 as decimal(20,3)) <= (1.1 * cs_item_rev#23))) AND (cast(cs_item_rev#23 as decimal(20,3)) >= cast((0.9 * ss_item_rev#12) as decimal(20,3)))) AND (cast(cs_item_rev#23 as decimal(20,3)) <= (1.1 * ss_item_rev#12)))
 
 (32) Project [codegen id : 15]
 Output [3]: [item_id#11, ss_item_rev#12, cs_item_rev#23]
@@ -276,7 +276,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 Left keys [1]: [item_id#11]
 Right keys [1]: [item_id#33]
 Join type: Inner
-Join condition: ((((((((cast(ss_item_rev#12 as decimal(19,3)) >= (0.9 * ws_item_rev#34)) AND (cast(ss_item_rev#12 as decimal(20,3)) <= (1.1 * ws_item_rev#34))) AND (cast(cs_item_rev#23 as decimal(19,3)) >= (0.9 * ws_item_rev#34))) AND (cast(cs_item_rev#23 as decimal(20,3)) <= (1.1 * ws_item_rev#34))) AND (cast(ws_item_rev#34 as decimal(19,3)) >= (0.9 * ss_item_rev#12))) AND (cast(ws_item_rev#34 as decimal(20,3)) <= (1.1 * ss_item_rev#12))) AND (cast(ws_item_rev#34 as decimal(19,3)) >= (0.9 * cs_item_rev#23))) AND (cast(ws_item_rev#34 as decimal(20,3)) <= (1.1 * cs_item_rev#23)))
+Join condition: ((((((((cast(ss_item_rev#12 as decimal(20,3)) >= cast((0.9 * ws_item_rev#34) as decimal(20,3))) AND (cast(ss_item_rev#12 as decimal(20,3)) <= (1.1 * ws_item_rev#34))) AND (cast(cs_item_rev#23 as decimal(20,3)) >= cast((0.9 * ws_item_rev#34) as decimal(20,3)))) AND (cast(cs_item_rev#23 as decimal(20,3)) <= (1.1 * ws_item_rev#34))) AND (cast(ws_item_rev#34 as decimal(20,3)) >= cast((0.9 * ss_item_rev#12) as decimal(20,3)))) AND (cast(ws_item_rev#34 as decimal(20,3)) <= (1.1 * ss_item_rev#12))) AND (cast(ws_item_rev#34 as decimal(20,3)) >= cast((0.9 * cs_item_rev#23) as decimal(20,3)))) AND (cast(ws_item_rev#34 as decimal(20,3)) <= (1.1 * cs_item_rev#23)))
 
 (48) Project [codegen id : 15]
 Output [8]: [item_id#11, ss_item_rev#12, (((ss_item_rev#12 / ((ss_item_rev#12 + cs_item_rev#23) + ws_item_rev#34)) / 3) * 100) AS ss_dev#35, cs_item_rev#23, (((cs_item_rev#23 / ((ss_item_rev#12 + cs_item_rev#23) + ws_item_rev#34)) / 3) * 100) AS cs_dev#36, ws_item_rev#34, (((ws_item_rev#34 / ((ss_item_rev#12 + cs_item_rev#23) + ws_item_rev#34)) / 3) * 100) AS ws_dev#37, (((ss_item_rev#12 + cs_item_rev#23) + ws_item_rev#34) / 3) AS average#38]
