@@ -917,7 +917,8 @@ private[spark] class TaskSetManager(
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause copiesRunning wrong result.
     if (info.finished) {
-      // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable lifetime.
+      // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
+      // lifetime.
       info.resetAccumulables()
       return
     }
