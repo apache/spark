@@ -29,10 +29,14 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 // scalastyle:off line.size.limit
 /**
- * See SQLQueryTestSuite.scala for more information. This class builds off of that to allow us
- * to generate golden files with other DBMS to perform cross-checking for correctness. Note that
- * this is not currently run on all SQL input files by default because there is incompatibility
- * between Spark SQL and the DBMS SQL.
+ * IF YOU ADDED A NEW SQL TEST AND THIS SUITE IS FAILING, READ THIS:
+ * Your new SQL test is automatically opted into this suite. It is likely failing because it is not
+ * compatible with the default DBMS (currently postgres). You have two options:
+ * 1. (Recommended) Modify your queries to be compatible with both systems, and generate golden
+ *    files with the instructions below. This is recommended because it will run your queries
+ *    against postgres, providing higher correctness testing confidence, and you won't have to
+ *    manually verify the golden files generated with your test.
+ * 2. Add this line to your .sql file: --SPARK_ONLY
  *
  * You need to have a database server up before running this test. Two options:
  * - Install Docker and use the bash script in ./bin/generate_golden_files.sh to run a DBMS
@@ -43,45 +47,61 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  *   2. After installing PostgreSQL, start the database server, then create a role named pg with
  *      superuser permissions: `createuser -s pg`` OR `psql> CREATE role pg superuser``
  *
- * To indicate that the SQL file is eligible for testing with this suite, add the following comment
- * into the input file:
+ * To indicate that the SQL file is not eligible for testing with this suite, add the following
+ * comment into the input file:
  * {{{
- *   --DBMS_TO_GENERATE_GOLDEN_FILE postgres
+ *   --SPARK_ONLY
  * }}}
  *
- * And then, to run the entire test suite:
+ * And then, to run the entire test suite, with the default cross DBMS:
  * {{{
- *   build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
+ *   build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite"
  * }}}
  *
- * To re-generate golden files for entire suite, run:
+ * To re-generate golden files for entire suite, either run:
+ * 1. (Recommended) You need Docker on your machine.
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
+ *   bash ./bin/generate_golden_files.sh
+ * }}}
+ * 2.
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite"
  * }}}
  *
  * To re-generate golden file for a single test, e.g. `describe.sql`, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * To specify a DBMS to use (the default is postgres):
  * {{{
- *   REF_DBMS=postgres SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.CrossDbmsQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite"
  * }}}
  */
-// scalastyle:on line.size.limit
-class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
-  // Note: the below two functions have to be functions instead of variables because the superclass
-  // runs the test first before the subclass variables can be instantiated.
-  private def crossDbmsToGenerateGoldenFiles: String = {
-    val userInputDbms = System.getenv(CrossDbmsQueryTestSuite.REF_DBMS_ARGUMENT)
-    val selectedDbms = Option(userInputDbms).filter(_.nonEmpty).getOrElse(
-      CrossDbmsQueryTestSuite.DEFAULT_DBMS)
-    assert(CrossDbmsQueryTestSuite.SUPPORTED_DBMS.contains(selectedDbms),
-      s"$selectedDbms is not currently supported.")
-    selectedDbms
-  }
+class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
+
+  def crossDbmsToGenerateGoldenFiles: String = CrossDbmsQueryTestSuite.POSTGRES
+
+  // Reduce scope to subquery tests for now. That is where most correctness issues are.
+  override def customInputFilePath: String = new File(inputFilePath, "subquery").getAbsolutePath
+
+  override def getConnection: Option[String] => JdbcSQLQueryTestRunner =
+    (connection_url: Option[String]) => JdbcSQLQueryTestRunner(PostgresConnection(connection_url))
+}
+
+/**
+ * See SQLQueryTestSuite.scala for more information. This suite builds off of that to allow us
+ * to generate golden files with other DBMS to perform cross-checking for correctness. It generates
+ * another set of golden files. Note that this is not currently run on all SQL input files by
+ * default because there is incompatibility between SQL dialects for Spark and the other DBMS.
+ */
+abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
+
+  protected def crossDbmsToGenerateGoldenFiles: String
+  protected def customInputFilePath: String = inputFilePath
+  protected def getConnection: Option[String] => JdbcSQLQueryTestRunner
+
   private def customConnectionUrl: String = System.getenv(
     CrossDbmsQueryTestSuite.REF_DBMS_CONNECTION_URL)
 
@@ -91,13 +111,12 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     val queries = getQueries(code, comments)
     val settings = getSparkSettings(comments)
 
-    val dbmsConfig = comments.filter(_.startsWith(
-      CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE)).map(_.substring(
-      CrossDbmsQueryTestSuite.DBMS_TO_GENERATE_GOLDEN_FILE.length))
-    // If `--DBMS_TO_GENERATE_GOLDEN_FILE` is not found, skip the test.
+    val dbmsConfig = comments.filter(_.startsWith(CrossDbmsQueryTestSuite.ONLY_IF_ARG))
+      .map(_.substring(CrossDbmsQueryTestSuite.ONLY_IF_ARG.length))
+    // If `--ONLY_IF` is found, check if the DBMS being used is allowed.
     if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
-      log.info(s"This test case (${testCase.name}) is ignored because it does not indicate " +
-        s"testing with $crossDbmsToGenerateGoldenFiles")
+      log.info(s"This test case (${testCase.name}) is ignored because it indicates that it is " +
+        "SPARK_ONLY")
     } else if (regenerateGoldenFiles) {
       runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
@@ -120,9 +139,7 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         // the already generated golden files.
         if (regenerateGoldenFiles) {
           val connectionUrl = Option(customConnectionUrl).filter(_.nonEmpty)
-          runner = runner.orElse(
-            Some(CrossDbmsQueryTestSuite.DBMS_TO_CONNECTION_MAPPING(
-              crossDbmsToGenerateGoldenFiles)(connectionUrl)))
+          runner = runner.orElse(Some(getConnection(connectionUrl))
           try {
             // Either of the below two lines can error. If we go into the catch statement, then it
             // is likely one of the following scenarios:
@@ -206,14 +223,14 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     val defaultResultsDir = new File(baseResourcePath, "results")
     val goldenFilePath = new File(
       defaultResultsDir, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
-    file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+    file.getAbsolutePath.replace(customInputFilePath, goldenFilePath) + ".out"
   }
 
   override lazy val listTestCases: Seq[TestCase] = {
-    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
+    listFilesRecursively(new File(customInputFilePath)).flatMap { file =>
       val resultFile = resultFileForInputFile(file)
       val absPath = file.getAbsolutePath
-      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      val testCaseName = absPath.stripPrefix(customInputFilePath).stripPrefix(File.separator)
       RegularTestCase(testCaseName, absPath, resultFile) :: Nil
     }.sortBy(_.name)
   }
@@ -221,18 +238,10 @@ class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
 object CrossDbmsQueryTestSuite {
 
-  // System argument to indicate which reference DBMS is being used.
-  private final val REF_DBMS_ARGUMENT = "REF_DBMS"
+  final val POSTGRES = "postgres"
+
   // System argument to indicate a custom connection URL to the reference DBMS.
   private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
   // Argument in input files to indicate that golden file should be generated with a reference DBMS
-  private final val DBMS_TO_GENERATE_GOLDEN_FILE = "--DBMS_TO_GENERATE_GOLDEN_FILE "
-
-  private final val POSTGRES = "postgres"
-  private final val SUPPORTED_DBMS = Seq(POSTGRES)
-  private final val DEFAULT_DBMS = POSTGRES
-  private final val DBMS_TO_CONNECTION_MAPPING = Map(
-    POSTGRES -> ((connection_url: Option[String]) =>
-      JdbcSQLQueryTestRunner(PostgresConnection(connection_url)))
-  )
+  private final val ONLY_IF_ARG = "--ONLY_IF "
 }
