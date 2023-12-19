@@ -16,9 +16,6 @@
 #
 
 import os
-import shutil
-import tempfile
-import unittest
 from contextlib import contextmanager
 
 import pandas as pd
@@ -33,12 +30,6 @@ def normalize_text(s):
 
 
 class CsvTestsMixin:
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp(prefix=CsvTests.__name__)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir, ignore_errors=True)
-
     @property
     def csv_text(self):
         return normalize_text(
@@ -331,94 +322,103 @@ class CsvTestsMixin:
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         psdf = ps.DataFrame(pdf)
 
-        tmp_dir = "{}/tmp1".format(self.tmp_dir)
+        with self.temp_dir() as dirpath:
+            tmp_dir = "{}/tmp1".format(dirpath)
 
-        psdf.to_csv(tmp_dir, num_files=1)
-        self._check_output(tmp_dir, pdf.to_csv(index=False))
+            psdf.to_csv(tmp_dir, num_files=1)
+            self._check_output(tmp_dir, pdf.to_csv(index=False))
 
-        tmp_dir = "{}/tmp2".format(self.tmp_dir)
+            tmp_dir = "{}/tmp2".format(dirpath)
 
-        self.assertRaises(KeyError, lambda: psdf.to_csv(tmp_dir, columns=["c"], num_files=1))
+            self.assertRaises(KeyError, lambda: psdf.to_csv(tmp_dir, columns=["c"], num_files=1))
 
-        # non-string names
-        pdf = pd.DataFrame({10: [1, 2, 3], 20: ["a", "b", "c"]})
-        psdf = ps.DataFrame(pdf)
+            # non-string names
+            pdf = pd.DataFrame({10: [1, 2, 3], 20: ["a", "b", "c"]})
+            psdf = ps.DataFrame(pdf)
 
-        tmp_dir = "{}/tmp3".format(self.tmp_dir)
+            tmp_dir = "{}/tmp3".format(dirpath)
 
-        psdf.to_csv(tmp_dir, num_files=1)
-        self._check_output(tmp_dir, pdf.to_csv(index=False))
+            psdf.to_csv(tmp_dir, num_files=1)
+            self._check_output(tmp_dir, pdf.to_csv(index=False))
 
-        tmp_dir = "{}/tmp4".format(self.tmp_dir)
+            tmp_dir = "{}/tmp4".format(dirpath)
 
-        psdf.to_csv(tmp_dir, columns=[10], num_files=1)
-        self._check_output(tmp_dir, pdf.to_csv(columns=[10], index=False))
+            psdf.to_csv(tmp_dir, columns=[10], num_files=1)
+            self._check_output(tmp_dir, pdf.to_csv(columns=[10], index=False))
 
-        tmp_dir = "{}/tmp5".format(self.tmp_dir)
+            tmp_dir = "{}/tmp5".format(dirpath)
 
-        self.assertRaises(TypeError, lambda: psdf.to_csv(tmp_dir, columns=10, num_files=1))
+            self.assertRaises(TypeError, lambda: psdf.to_csv(tmp_dir, columns=10, num_files=1))
 
     def test_to_csv_with_path_and_basic_options(self):
         pdf = pd.DataFrame({"aa": [1, 2, 3], "bb": ["a", "b", "c"]})
         psdf = ps.DataFrame(pdf)
 
-        psdf.to_csv(self.tmp_dir, num_files=1, sep="|", header=False, columns=["aa"])
-        expected = pdf.to_csv(index=False, sep="|", header=False, columns=["aa"])
+        with self.temp_dir() as dirpath:
+            psdf.to_csv(dirpath, num_files=1, sep="|", header=False, columns=["aa"])
+            expected = pdf.to_csv(index=False, sep="|", header=False, columns=["aa"])
 
-        self._check_output(self.tmp_dir, expected)
+            self._check_output(dirpath, expected)
 
     def test_to_csv_with_path_and_basic_options_multiindex_columns(self):
         pdf = pd.DataFrame({("x", "a"): [1, 2, 3], ("y", "b"): ["a", "b", "c"]})
         psdf = ps.DataFrame(pdf)
 
-        with self.assertRaises(ValueError):
-            psdf.to_csv(self.tmp_dir, num_files=1, sep="|", columns=[("x", "a")])
+        with self.temp_dir() as dirpath:
+            with self.assertRaises(ValueError):
+                psdf.to_csv(dirpath, num_files=1, sep="|", columns=[("x", "a")])
 
-        psdf.to_csv(self.tmp_dir, num_files=1, sep="|", header=["a"], columns=[("x", "a")])
-        pdf.columns = ["a", "b"]
-        expected = pdf.to_csv(index=False, sep="|", columns=["a"])
+            psdf.to_csv(dirpath, num_files=1, sep="|", header=["a"], columns=[("x", "a")])
+            pdf.columns = ["a", "b"]
+            expected = pdf.to_csv(index=False, sep="|", columns=["a"])
 
-        self._check_output(self.tmp_dir, expected)
+            self._check_output(dirpath, expected)
 
     def test_to_csv_with_path_and_pyspark_options(self):
         pdf = pd.DataFrame({"a": [1, 2, 3, None], "b": ["a", "b", "c", None]})
         psdf = ps.DataFrame(pdf)
 
-        psdf.to_csv(self.tmp_dir, nullValue="null", num_files=1)
-        expected = pdf.to_csv(index=False, na_rep="null")
+        with self.temp_dir() as dirpath:
+            psdf.to_csv(dirpath, nullValue="null", num_files=1)
+            expected = pdf.to_csv(index=False, na_rep="null")
 
-        self._check_output(self.tmp_dir, expected)
+            self._check_output(dirpath, expected)
 
     def test_to_csv_with_partition_cols(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         psdf = ps.DataFrame(pdf)
 
-        psdf.to_csv(self.tmp_dir, partition_cols="b", num_files=1)
+        with self.temp_dir() as dirpath:
+            psdf.to_csv(dirpath, partition_cols="b", num_files=1)
 
-        partition_paths = [path for path in os.listdir(self.tmp_dir) if path.startswith("b=")]
-        assert len(partition_paths) > 0
-        for partition_path in partition_paths:
-            column, value = partition_path.split("=")
-            expected = pdf[pdf[column] == value].drop("b", axis=1).to_csv(index=False)
+            partition_paths = [path for path in os.listdir(dirpath) if path.startswith("b=")]
+            assert len(partition_paths) > 0
+            for partition_path in partition_paths:
+                column, value = partition_path.split("=")
+                expected = pdf[pdf[column] == value].drop("b", axis=1).to_csv(index=False)
 
-            output_paths = [
-                path
-                for path in os.listdir("%s/%s" % (self.tmp_dir, partition_path))
-                if path.startswith("part-")
-            ]
-            assert len(output_paths) > 0
-            output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
-            with open(output_path) as f:
-                self.assertEqual(f.read(), expected)
+                output_paths = [
+                    path
+                    for path in os.listdir("%s/%s" % (dirpath, partition_path))
+                    if path.startswith("part-")
+                ]
+                assert len(output_paths) > 0
+                output_path = "%s/%s/%s" % (dirpath, partition_path, output_paths[0])
+                with open(output_path) as f:
+                    self.assertEqual(f.read(), expected)
 
 
-class CsvTests(CsvTestsMixin, PandasOnSparkTestCase, TestUtils):
+class CsvTests(
+    CsvTestsMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_csv import *  # noqa: F401
+    from pyspark.pandas.tests.io.test_csv import *  # noqa: F401
 
     try:
         import xmlrunner
