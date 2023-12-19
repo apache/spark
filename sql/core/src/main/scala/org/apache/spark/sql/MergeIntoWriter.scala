@@ -185,7 +185,9 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
  *
  * @tparam T                The type of data in the MergeIntoWriter.
  */
-case class WhenMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Option[Expression]) {
+case class WhenMatched[T] private[sql](
+    mergeIntoWriter: MergeIntoWriter[T],
+    condition: Option[Expression]) {
   /**
    * Specifies an action to update all matched rows in the DataFrame.
    *
@@ -233,7 +235,9 @@ case class WhenMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Optio
  *
  * @tparam T                The type of data in the MergeIntoWriter.
  */
-case class WhenNotMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Option[Expression]) {
+case class WhenNotMatched[T] private[sql](
+    mergeIntoWriter: MergeIntoWriter[T],
+    condition: Option[Expression]) {
 
   /**
    * Specifies an action to insert all non-matched rows into the DataFrame.
@@ -268,7 +272,7 @@ case class WhenNotMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Op
  * @param condition       an optional condition to be used with the merge actions.
  * @tparam T              the type parameter for the MergeIntoWriter.
  */
-case class WhenNotMatchedBySource[T] (
+case class WhenNotMatchedBySource[T] private[sql](
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Expression]) {
 
