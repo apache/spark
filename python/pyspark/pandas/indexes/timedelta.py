@@ -24,6 +24,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
+from pyspark.errors import PySparkAttributeError, PySparkTypeError
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
 from pyspark.pandas.series import Series
@@ -108,7 +109,7 @@ class TimedeltaIndex(Index):
                 FutureWarning,
             )
         if not is_hashable(name):
-            raise TypeError("Index.name must be a hashable type")
+            raise PySparkTypeError(message="Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
             if dtype is None:
@@ -136,7 +137,9 @@ class TimedeltaIndex(Index):
             else:
                 return partial(property_or_func, self)
 
-        raise AttributeError("'TimedeltaIndex' object has no attribute '{}'".format(item))
+        raise PySparkAttributeError(
+            error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+        )
 
     @property
     def days(self) -> Index:
@@ -202,4 +205,6 @@ class TimedeltaIndex(Index):
 
     @no_type_check
     def all(self, *args, **kwargs) -> None:
-        raise TypeError("Cannot perform 'all' with this index type: %s" % type(self).__name__)
+        raise PySparkTypeError(
+            message="Cannot perform 'all' with this index type: %s" % type(self).__name__
+        )

@@ -21,6 +21,7 @@ from datetime import timedelta
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.errors import PySparkAttributeError, PySparkTypeError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -90,12 +91,21 @@ class TimedeltaIndexTestsMixin:
         )
 
         # ps.TimedeltaIndex(ps.Index([1, 2, 3]))
-        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
+        with self.assertRaises(PySparkTypeError) as pe:
             ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)], name=[(1, 2)])
-        with self.assertRaisesRegex(
-            TypeError, "Cannot perform 'all' with this index type: TimedeltaIndex"
-        ):
+
+        self.check_error(
+            exception=pe.exception,
+            message="Index.name must be a hashable type",
+        )
+
+        with self.assertRaisesRegex(PySparkTypeError) as pe:
             psidx.all()
+
+        self.check_error(
+            exception=pe.exception,
+            message="Cannot perform 'all' with this index type: TimedeltaIndex",
+        )
 
     def test_properties(self):
         self.assert_eq(self.psidx.days, self.pidx.days)
@@ -104,6 +114,15 @@ class TimedeltaIndexTestsMixin:
         self.assert_eq(self.neg_psidx.days, self.neg_pidx.days)
         self.assert_eq(self.neg_psidx.seconds, self.neg_pidx.seconds)
         self.assert_eq(self.neg_psidx.microseconds, self.neg_pidx.microseconds)
+
+        with self.assertRaises(PySparkAttributeError) as pe:
+            self.psidx.x
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="ATTRIBUTE_NOT_SUPPORTED",
+            message_parameters={"attr_name": "x"},
+        )
 
 
 class TimedeltaIndexTests(TimedeltaIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
