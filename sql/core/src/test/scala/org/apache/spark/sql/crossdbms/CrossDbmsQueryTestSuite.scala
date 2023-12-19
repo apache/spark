@@ -38,14 +38,20 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  *    manually verify the golden files generated with your test.
  * 2. Add this line to your .sql file: --ONLY_IF spark
  *
- * You need to have a database server up before running this test. Two options:
- * - Install Docker and use the bash script in ./bin/generate_golden_files.sh to run a DBMS
- *   container and generate golden files.
- * - Otherwise, do manual installation. For example, for postgres:
- *   1. Install PostgreSQL.
- *     a. On a mac: `brew install postgresql@13`
- *   2. After installing PostgreSQL, start the database server, then create a role named pg with
- *      superuser permissions: `createuser -s pg`` OR `psql> CREATE role pg superuser``
+ * To re-generate golden files for entire suite, either run:
+ * 1. (Recommended) You need Docker on your machine. Install Docker and run the following command:
+ * {{{
+ *   bash ./bin/generate_golden_files_with_postgres.sh
+ * }}}
+ * 2.
+ *   a. You need to have a Postgres server up before running this test.
+ *      i. Install PostgreSQL. On a mac: `brew install postgresql@13`
+ *      ii. After installing PostgreSQL, start the database server, then create a role named pg with
+ *      superuser permissions: `createuser -s postgres` OR `psql> CREATE role postgres superuser`
+ *   b. Run the following command:
+ *     {{{
+ *       SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite"
+ *     }}}
  *
  * To indicate that the SQL file is not eligible for testing with this suite, add the following
  * comment into the input file:
@@ -58,25 +64,16 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  *   build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite"
  * }}}
  *
- * To re-generate golden files for entire suite, either run:
- * 1. (Recommended) You need Docker on your machine.
- * {{{
- *   bash ./bin/generate_golden_files.sh
- * }}}
- * 2.
- * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite"
- * }}}
- *
  * To re-generate golden file for a single test, e.g. `describe.sql`, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
- * To specify a DBMS to use (the default is postgres):
- * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite"
- * }}}
+ * This file adds a new comment argument, --ONLY_IF. This comment is used to indicate that the
+ * SQL file is not eligible for testing with this suite. For example, if you have a SQL file
+ * named `describe.sql`, and you want to exclude it from this suite, add the following comment
+ * into the input file:
+ * --ONLY_IF spark
  */
 
 class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
