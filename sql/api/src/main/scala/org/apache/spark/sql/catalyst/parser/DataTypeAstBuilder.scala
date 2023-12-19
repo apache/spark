@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
 
 class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -82,6 +82,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         DecimalType(precision.getText.toInt, scale.getText.toInt)
       case (VOID, Nil) => NullType
       case (INTERVAL, Nil) => CalendarIntervalType
+      case (VARIANT, Nil) => VariantType
       case (CHARACTER | CHAR | VARCHAR, Nil) =>
         throw QueryParsingErrors.charTypeMissingLengthError(ctx.`type`.getText, ctx)
       case (ARRAY | STRUCT | MAP, Nil) =>

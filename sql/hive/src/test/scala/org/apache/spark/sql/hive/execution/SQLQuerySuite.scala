@@ -149,8 +149,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
         Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
 
-      orders.toDF.createOrReplaceTempView("orders1")
-      orderUpdates.toDF.createOrReplaceTempView("orderupdates1")
+      orders.toDF().createOrReplaceTempView("orders1")
+      orderUpdates.toDF().createOrReplaceTempView("orderupdates1")
 
       withTable("orders", "orderupdates") {
         sql(
@@ -356,7 +356,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("explode nested Field") {
     withTempView("nestedArray") {
-      Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.createOrReplaceTempView("nestedArray")
+      Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF().createOrReplaceTempView("nestedArray")
       checkAnswer(
         sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
         Row(1) :: Row(2) :: Row(3) :: Nil)
@@ -1288,7 +1288,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             |) t
             |SELECT c
           """.stripMargin),
-        (0 until 5).map(i => Row(i + "#")))
+        (0 until 5).map(i => Row(s"$i#")))
     }
   }
 
@@ -1311,7 +1311,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           |WITH SERDEPROPERTIES('field.delim' = '|')
         """.stripMargin)
 
-      checkAnswer(df, (0 until 5).map(i => Row(i + "#", i + "#")))
+      checkAnswer(df, (0 until 5).map(i => Row(s"$i#", s"$i#")))
     }
   }
 
@@ -1410,7 +1410,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("run sql directly on files - hive") {
     withTempPath(f => {
-      spark.range(100).toDF.write.parquet(f.getCanonicalPath)
+      spark.range(100).toDF().write.parquet(f.getCanonicalPath)
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -2667,6 +2667,32 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |""".stripMargin)
       val df = sql("SELECT * FROM t")
       checkAnswer(df, Seq.empty[Row])
+    }
+  }
+
+  test("SPARK-46388: HiveAnalysis convert InsertIntoStatement to InsertIntoHiveTable " +
+    "iff child resolved") {
+    withTable("t") {
+      sql("CREATE TABLE t (a STRING)")
+      checkError(
+        exception = intercept[AnalysisException](sql("INSERT INTO t SELECT a*2 FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 38,
+          stop = 38) )
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("INSERT INTO t SELECT cast(a as short) FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 51,
+          stop = 51))
     }
   }
 }

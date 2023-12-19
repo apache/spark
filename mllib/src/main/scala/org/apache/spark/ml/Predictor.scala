@@ -194,7 +194,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     } else {
       this.logWarning(s"$uid: Predictor.transform() does nothing" +
         " because no output columns were set.")
-      dataset.toDF
+      dataset.toDF()
     }
   }
 

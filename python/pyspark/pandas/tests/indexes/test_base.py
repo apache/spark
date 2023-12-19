@@ -62,11 +62,11 @@ class IndexesTestsMixin:
             self.assert_eq(psdf.index.dtype, pdf.index.dtype)
 
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
-        with self.assertRaisesRegexp(ValueError, "The truth value of a Index is ambiguous."):
+        with self.assertRaisesRegex(ValueError, "The truth value of a Index is ambiguous."):
             bool(ps.Index([1]))
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.Index([1, 2, 3], name=[(1, 2, 3)])
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
     def test_index_from_series(self):
@@ -1278,11 +1278,10 @@ class IndexesTestsMixin:
         pidx = pd.DatetimeIndex(["2014-01-03", "2014-01-02", "2013-12-31"])
         psidx = ps.from_pandas(pidx)
 
-        # TODO: a pandas bug?
-        # self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
-        # self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
-        # self.assert_eq(psidx.asof("1999-01-02"), pidx.asof("1999-01-02"))
-        # self.assert_eq(repr(psidx.asof("2015-01-02")), repr(pidx.asof("2015-01-02")))
+        self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
+        self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
+        self.assert_eq(psidx.asof("1999-01-02"), pidx.asof("1999-01-02"))
+        self.assert_eq(repr(psidx.asof("2015-01-02")), repr(pidx.asof("2015-01-02")))
         self.assert_eq(psidx.asof("2014-01-01"), pd.Timestamp("2014-01-02 00:00:00"))
         self.assert_eq(psidx.asof("2014-01-02"), pd.Timestamp("2014-01-02 00:00:00"))
         self.assert_eq(psidx.asof("1999-01-02"), pd.Timestamp("2013-12-31 00:00:00"))

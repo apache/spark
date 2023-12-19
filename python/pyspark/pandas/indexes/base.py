@@ -72,6 +72,7 @@ from pyspark.pandas.utils import (
     validate_index_loc,
     ERROR_MESSAGE_CANNOT_COMBINE,
     log_advice,
+    xor,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -1468,8 +1469,7 @@ class Index(IndexOpsMixin):
 
         sdf_self = self._psdf._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._psdf._internal.spark_frame.select(other._internal.index_spark_columns)
-
-        sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
+        sdf_symdiff = xor(sdf_self, sdf_other)
 
         if sort:
             sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_column_names)
@@ -2117,47 +2117,6 @@ class Index(IndexOpsMixin):
             if self.name == other.name:
                 result.name = self.name
         return result if sort is None else cast(Index, result.sort_values())
-
-    @property
-    def is_all_dates(self) -> bool:
-        """
-        Return if all data types of the index are datetime.
-        remember that since pandas-on-Spark does not support multiple data types in an index,
-        so it returns True if any type of data is datetime.
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> from datetime import datetime
-
-        >>> idx = ps.Index([datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 2, 3, 0, 0, 0)])
-        >>> idx
-        DatetimeIndex(['2019-01-01', '2019-02-03'], dtype='datetime64[ns]', freq=None)
-
-        >>> idx.is_all_dates
-        True
-
-        >>> idx = ps.Index([datetime(2019, 1, 1, 0, 0, 0), None])
-        >>> idx
-        DatetimeIndex(['2019-01-01', 'NaT'], dtype='datetime64[ns]', freq=None)
-
-        >>> idx.is_all_dates
-        True
-
-        >>> idx = ps.Index([0, 1, 2])
-        >>> idx
-        Index([0, 1, 2], dtype='int64')
-
-        >>> idx.is_all_dates
-        False
-        """
-        warnings.warn(
-            "Index.is_all_dates is deprecated, will be removed in a future version.  "
-            "check index.inferred_type instead",
-            FutureWarning,
-        )
-        return isinstance(self.spark.data_type, (TimestampType, TimestampNTZType))
 
     def repeat(self, repeats: int) -> "Index":
         """

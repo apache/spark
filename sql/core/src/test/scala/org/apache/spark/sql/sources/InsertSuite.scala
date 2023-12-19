@@ -52,7 +52,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   override def schema: StructType = userSpecifiedSchema
 
   override def insert(input: DataFrame, overwrite: Boolean): Unit = {
-    input.collect
+    input.collect()
   }
 }
 
@@ -1112,11 +1112,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t1", "t2") {
         sql("create table t1(j int, s bigint default 42, x bigint default 43) using parquet")
         if (useDataFrames) {
-          Seq((1, 42, 43)).toDF.write.insertInto("t1")
-          Seq((2, 42, 43)).toDF.write.insertInto("t1")
-          Seq((3, 42, 43)).toDF.write.insertInto("t1")
-          Seq((4, 44, 43)).toDF.write.insertInto("t1")
-          Seq((5, 44, 43)).toDF.write.insertInto("t1")
+          Seq((1, 42, 43)).toDF().write.insertInto("t1")
+          Seq((2, 42, 43)).toDF().write.insertInto("t1")
+          Seq((3, 42, 43)).toDF().write.insertInto("t1")
+          Seq((4, 44, 43)).toDF().write.insertInto("t1")
+          Seq((5, 44, 43)).toDF().write.insertInto("t1")
         } else {
           sql("insert into t1(j) values(1)")
           sql("insert into t1(j, s) values(2, default)")
@@ -1753,8 +1753,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("alter table t alter column i set default false")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1246",
-        parameters = Map("name" -> "i", "fieldNames" -> "[`s`, `q`]"))
+        errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`", "columnName" -> "`i`")
+      )
     }
   }
 
@@ -1768,7 +1769,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
       def withTableT(f: => Unit): Unit = {
         sql(s"create table t(a string, i int) using $dataSource")
-        insertIntoT
+        insertIntoT()
         withTable("t") { f }
       }
       // Positive tests:
@@ -1790,7 +1791,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTableT {
         sql("alter table t add column (s string default concat('abc', 'def'))")
         if (config.useDataFrames) {
-          Seq((null, null, null)).toDF.write.insertInto("t")
+          Seq((null, null, null)).toDF().write.insertInto("t")
         } else {
           sql("insert into t values(null, null, null)")
         }
@@ -1914,10 +1915,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql(s"create table t(a string, i int default 42) using parquet")
       checkError(
         exception = intercept[AnalysisException] {
-          Seq("xyz").toDF.select("value", "default").write.insertInto("t")
+          Seq("xyz").toDF().select("value", "default").write.insertInto("t")
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"))
+        parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"),
+        context =
+          ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 
@@ -1983,7 +1986,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq(false).toDF.write.insertInto("t")
+          Seq(false).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2002,7 +2005,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2040,7 +2043,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2060,7 +2063,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2098,7 +2101,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2124,7 +2127,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t select 1, default")
         sql("alter table t alter column s drop default")
         if (config.useDataFrames) {
-          Seq((2, null)).toDF.write.insertInto("t")
+          Seq((2, null)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select 2, default")
         }
@@ -2172,7 +2175,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql(s"create table t(i boolean) using ${config.dataSource}")
         if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
+          Seq((false)).toDF().write.insertInto("t")
         } else {
           sql("insert into t select false")
         }
@@ -2602,6 +2605,30 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t2 (x Decimal(9, 0)) using parquet")
       sql("insert into t2 select 0 - (case when x = 1 then 1 else x end) from t1 where x = 1")
       checkAnswer(spark.table("t2"), Row(-1))
+    }
+  }
+
+  test("SPARK-46370: Querying a table should not invalidate the column defaults") {
+    withTable("t") {
+      // Create a table and insert some rows into it, changing the default value of a column
+      // throughout.
+      spark.sql("CREATE TABLE t(i INT, s STRING DEFAULT 'def') USING CSV")
+      spark.sql("INSERT INTO t SELECT 1, DEFAULT")
+      spark.sql("ALTER TABLE t ALTER COLUMN s DROP DEFAULT")
+      spark.sql("INSERT INTO t SELECT 2, DEFAULT")
+      // Run a query to trigger the table relation cache.
+      val results = spark.table("t").collect()
+      assert(results.length == 2)
+      // Change the column default value and insert another row. Then query the table's contents
+      // and the results should be correct.
+      spark.sql("ALTER TABLE t ALTER COLUMN s SET DEFAULT 'mno'")
+      spark.sql("INSERT INTO t SELECT 3, DEFAULT").collect()
+      checkAnswer(
+        spark.table("t"),
+        Seq(
+          Row(1, "def"),
+          Row(2, null),
+          Row(3, "mno")))
     }
   }
 

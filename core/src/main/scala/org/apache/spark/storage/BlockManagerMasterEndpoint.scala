@@ -22,14 +22,14 @@ import java.util.{HashMap => JHashMap}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext}
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
@@ -40,6 +40,7 @@ import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseG
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * BlockManagerMasterEndpoint is an [[IsolatedThreadSafeRpcEndpoint]] on the master node to
@@ -54,9 +55,14 @@ class BlockManagerMasterEndpoint(
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
     mapOutputTracker: MapOutputTrackerMaster,
-    shuffleManager: ShuffleManager,
+    private val _shuffleManager: ShuffleManager,
     isDriver: Boolean)
   extends IsolatedThreadSafeRpcEndpoint with Logging {
+
+  // We initialize the ShuffleManager later in SparkContext and Executor, to allow
+  // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
+  // (except for tests) and we ask for the instance from the SparkEnv.
+  private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
@@ -94,7 +100,8 @@ class BlockManagerMasterEndpoint(
 
   private val askThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
-  private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
+  private implicit val askExecutionContext: ExecutionContextExecutorService =
+    ExecutionContext.fromExecutorService(askThreadPool)
 
   private val topologyMapper = {
     val topologyMapperClassName = conf.get(
@@ -877,7 +884,7 @@ class BlockManagerMasterEndpoint(
 
   private def getLocationsMultipleBlockIds(
       blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
-    blockIds.map(blockId => getLocations(blockId))
+    blockIds.map(blockId => getLocations(blockId)).toImmutableArraySeq
   }
 
   /** Get the list of the peers of the given block manager */

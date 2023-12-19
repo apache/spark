@@ -1,6 +1,6 @@
 # Guidelines
 
-To throw a standardized user-facing error or exception, developers should specify the error class
+To throw a standardized user-facing error or exception, developers should specify the error class, a SQLSTATE,
 and message parameters rather than an arbitrary error message.
 
 ## Usage
@@ -10,7 +10,7 @@ and message parameters rather than an arbitrary error message.
    If true, use the error class `INTERNAL_ERROR` and skip to step 4.
 2. Check if an appropriate error class already exists in `error-classes.json`.
    If true, use the error class and skip to step 4.
-3. Add a new class to `error-classes.json`; keep in mind the invariants below.
+3. Add a new class with a new or existing SQLSTATE to `error-classes.json`; keep in mind the invariants below.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
@@ -26,9 +26,9 @@ Throw with arbitrary error message:
 
 `error-classes.json`
 
-    "PROBLEM_BECAUSE": {
-      "message": ["Problem <problem> because <cause>"],
-      "sqlState": "XXXXX"
+    "PROBLEM_BECAUSE" : {
+      "message" : ["Problem <problem> because <cause>"],
+      "sqlState" : "XXXXX"
     }
 
 `SparkException.scala`
@@ -70,6 +70,8 @@ Error classes are a succinct, human-readable representation of the error categor
 
 An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
+You should not introduce new uncategorized errors. Instead, convert them to proper errors whenever encountering them in new code.
+
 #### Invariants
 
 - Unique
@@ -79,7 +81,10 @@ An uncategorized errors can be assigned to a legacy error class with the prefix 
 ### Message
 
 Error messages provide a descriptive, human-readable representation of the error.
-The message format accepts string parameters via the C-style printf syntax.
+The message format accepts string parameters via the HTML tag syntax: e.g. <relationName>.
+
+The values passed to the message shoudl not themselves be messages.
+They should be: runtime-values, keywords, identifiers, or other values that are not translated.
 
 The quality of the error message should match the
 [guidelines](https://spark.apache.org/error-message-guidelines.html).
@@ -90,21 +95,24 @@ The quality of the error message should match the
 
 ### SQLSTATE
 
-SQLSTATE is an optional portable error identifier across SQL engines.
+SQLSTATE is an mandatory portable error identifier across SQL engines.
 SQLSTATE comprises a 2-character class value followed by a 3-character subclass value.
 Spark prefers to re-use existing SQLSTATEs, preferably used by multiple vendors.
 For extension Spark claims the 'K**' subclass range.
 If a new class is needed it will also claim the 'K0' class.
 
+Internal errors should use the 'XX' class. You can subdivide internal errors by component. 
+For example: The existing 'XXKD0' is used for an internal analyzer error.
+
 #### Invariants
 
-- Consistent across releases
+- Consistent across releases unless the error is internal.
 
 #### ANSI/ISO standard
 
 The following SQLSTATEs are collated from:
 - SQL2016
-- DB2 zOS
+- DB2 zOS/LUW
 - PostgreSQL 15
 - Oracle 12 (last published)
 - SQL Server
@@ -628,6 +636,7 @@ The following SQLSTATEs are collated from:
 |42613    |42   |Syntax Error or Access Rule Violation             |613     |Clauses are mutually exclusive.                             |DB2            |N       |DB2                                                                         |
 |42614    |42   |Syntax Error or Access Rule Violation             |614     |A duplicate keyword or clause is invalid.                   |DB2            |N       |DB2                                                                         |
 |42615    |42   |Syntax Error or Access Rule Violation             |615     |An invalid alternative was detected.                        |DB2            |N       |DB2                                                                         |
+|42616    |42   |Syntax Error or Access Rule Violation             |616     |Invalid options specified                                   |DB2            |N       |DB2                                                                         |
 |42617    |42   |Syntax Error or Access Rule Violation             |617     |The statement string is blank or empty.                     |DB2            |N       |DB2                                                                         |
 |42618    |42   |Syntax Error or Access Rule Violation             |618     |A variable is not allowed.                                  |DB2            |N       |DB2                                                                         |
 |42620    |42   |Syntax Error or Access Rule Violation             |620     |Read-only SCROLL was specified with the UPDATE clause.      |DB2            |N       |DB2                                                                         |
@@ -887,6 +896,7 @@ The following SQLSTATEs are collated from:
 |42KDC    |42   |Syntax error or Access Rule violation             |KDC     |Archived file reference.                                    |Databricks     |N       |Databricks                                                                  |
 |42KDD    |42   |Syntax error or Access Rule violation             |KDD     |Unsupported operation in streaming view.                    |Databricks     |N       |Databricks                                                                  |
 |42KDE    |42   |Syntax error or Access Rule violation             |KDE     |Unsupported operation on streaming dataset.                 |Databricks     |N       |Databricks                                                                  |
+|42KDF    |42   |Syntax error or Access Rule violation             |KDF     |A required routine parameter is missing an argument.        |Databricks     |N       |Databricks                                                                  |
 |42P01    |42   |Syntax error or Access Rule violation             |P01     |undefined_table                                             |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |42P02    |42   |Syntax Error or Access Rule Violation             |P02     |undefined_parameter                                         |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |42P03    |42   |Syntax Error or Access Rule Violation             |P03     |duplicate_cursor                                            |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
@@ -1300,6 +1310,7 @@ The following SQLSTATEs are collated from:
 |HZ320    |HZ   |RDA-specific condition                            |320     |version not supported                                       |RDA/SQL        |Y       |RDA/SQL                                                                     |
 |HZ321    |HZ   |RDA-specific condition                            |321     |TCP/IP error                                                |RDA/SQL        |Y       |RDA/SQL                                                                     |
 |HZ322    |HZ   |RDA-specific condition                            |322     |TLS alert                                                   |RDA/SQL        |Y       |RDA/SQL                                                                     |
+|ID001    |IM   |Invalid inverse distribution function             |001     |Invalid inverse distribution function                       |SQL/Foundation |N       |SQL/Foundation PostgreSQL Oracle Snowflake Redshift H2                      |
 |IM001    |IM   |ODBC driver                                       |001     |Driver does not support this function                       |SQL Server     |N       |SQL Server                                                                  |
 |IM002    |IM   |ODBC driver                                       |002     |Data source name not found and no default driver specified  |SQL Server     |N       |SQL Server                                                                  |
 |IM003    |IM   |ODBC driver                                       |003     |Specified driver could not be loaded                        |SQL Server     |N       |SQL Server                                                                  |
@@ -1338,7 +1349,7 @@ The following SQLSTATEs are collated from:
 |XX001    |XX   |Internal Error                                    |001     |data_corrupted                                              |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |XX002    |XX   |Internal Error                                    |002     |index_corrupted                                             |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |XXKD0    |XX   |Internal Error                                    |KD0     |Analysis - Bad plan                                         |Databricks     |N       |Databricks                                                                  |
-|XXKDA    |XX   |Internal Error                                    |KAS     |Scheduler (Aether Scheduler)                                |Databricks     |N       |Databricks                                                                  |
+|XXKDA    |XX   |Internal Error                                    |KAS     |Scheduler                                                   |Databricks     |N       |Databricks                                                                  |
 |XXKDS    |XX   |Internal Error                                    |KDS     |Delta Storage                                               |Databricks     |N       |Databricks                                                                  |
 |XXKUC    |XX   |Internal Error                                    |KUC     |Catalog Service (Unity Catalog)                             |Databricks     |N       |Databricks                                                                  |
 |XXKST    |XX   |Internal Error                                    |KST     |Streaming                                                   |Databricks     |N       |Databricks                                                                  |

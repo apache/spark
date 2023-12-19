@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
@@ -66,7 +67,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
         builder.append("[")
-        if (array.numElements > 0) {
+        if (array.numElements() > 0) {
           val toUTF8String = castToString(et)
           if (array.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(nullString)
@@ -74,7 +75,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
           var i = 1
-          while (i < array.numElements) {
+          while (i < array.numElements()) {
             builder.append(",")
             if (array.isNullAt(i)) {
               if (nullString.nonEmpty) builder.append(" " + nullString)
@@ -92,7 +93,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[MapData](map => {
         val builder = new UTF8StringBuilder
         builder.append(leftBracket)
-        if (map.numElements > 0) {
+        if (map.numElements() > 0) {
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
           val keyToUTF8String = castToString(kt)
@@ -106,7 +107,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
           }
           var i = 1
-          while (i < map.numElements) {
+          while (i < map.numElements()) {
             builder.append(", ")
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")
@@ -221,7 +222,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           val row = ctx.freshVariable("row", classOf[InternalRow])
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          val writeStructCode =
+            writeStructToStringBuilder(fields.map(_.dataType).toImmutableArraySeq, row, buffer, ctx)
           code"""
              |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();

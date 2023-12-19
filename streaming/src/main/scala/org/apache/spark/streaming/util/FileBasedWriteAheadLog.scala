@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class manages write ahead log files.
@@ -59,7 +60,7 @@ private[streaming] class FileBasedWriteAheadLog(
   import FileBasedWriteAheadLog._
 
   private val pastLogs = new ArrayBuffer[LogInfo]
-  private val callerName = getCallerName
+  private val callerName = getCallerName()
 
   private val threadpoolName = {
     "WriteAheadLogManager" + callerName.map(c => s" for $c").getOrElse("")
@@ -246,7 +247,7 @@ private[streaming] class FileBasedWriteAheadLog(
       // leads to much clearer code.
       if (fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
         val logFileInfo = logFilesTologInfo(
-          fileSystem.listStatus(logDirectoryPath).map { _.getPath })
+          fileSystem.listStatus(logDirectoryPath).map { _.getPath }.toImmutableArraySeq)
         pastLogs.clear()
         pastLogs ++= logFileInfo
         logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
@@ -314,8 +315,10 @@ private[streaming] object FileBasedWriteAheadLog {
     val groupSize = taskSupport.parallelismLevel.max(8)
 
     source.grouped(groupSize).flatMap { group =>
+      // scalastyle:off parvector
       val parallelCollection = new ParVector(group.toVector)
       parallelCollection.tasksupport = taskSupport
+      // scalastyle:on parvector
       parallelCollection.map(handler)
     }.flatten
   }

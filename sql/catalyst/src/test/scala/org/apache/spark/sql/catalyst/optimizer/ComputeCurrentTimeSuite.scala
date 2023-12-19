@@ -23,7 +23,7 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -133,6 +133,34 @@ class ComputeCurrentTimeSuite extends PlanTest {
     // there are timezones with a 30 or 45 minute offset
     val offsetsFromQuarterHour = lits.map( _ % Duration(15, MINUTES).toMicros).toSet
     assert(offsetsFromQuarterHour.size == 1)
+  }
+
+  test("No duplicate literals") {
+    def checkLiterals(f: (String) => Expression, expected: Int): Unit = {
+      val timestamps = ZoneId.SHORT_IDS.asScala.flatMap { case (zoneId, _) =>
+        // Request each timestamp multiple times.
+        (1 to 5).map { _ => Alias(f(zoneId), zoneId)() }
+      }.toSeq
+
+      val input = Project(timestamps, LocalRelation())
+      val plan = Optimize.execute(input).asInstanceOf[Project]
+
+      val uniqueLiteralObjectIds = new scala.collection.mutable.HashSet[Int]
+      plan.transformWithSubqueries { case subQuery =>
+        subQuery.transformAllExpressions { case literal: Literal =>
+          uniqueLiteralObjectIds += System.identityHashCode(literal)
+          literal
+        }
+      }
+
+      assert(expected === uniqueLiteralObjectIds.size)
+    }
+
+    val numTimezones = ZoneId.SHORT_IDS.size
+    checkLiterals({ _: String => CurrentTimestamp() }, 1)
+    checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numTimezones)
+    checkLiterals({ _: String => Now() }, 1)
+    checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numTimezones)
   }
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {

@@ -23,6 +23,7 @@ import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateSt
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 
 class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -60,7 +61,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Standardization with dense input when means and stds are provided") {
 
-    val dataRDD = sc.parallelize(denseData, 3)
+    val dataRDD = sc.parallelize(denseData.toImmutableArraySeq, 3)
 
     val standardizer1 = new StandardScaler(withMean = true, withStd = true)
     val standardizer2 = new StandardScaler()
@@ -128,7 +129,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Standardization with dense input") {
 
-    val dataRDD = sc.parallelize(denseData, 3)
+    val dataRDD = sc.parallelize(denseData.toImmutableArraySeq, 3)
 
     val standardizer1 = new StandardScaler(withMean = true, withStd = true)
     val standardizer2 = new StandardScaler()
@@ -193,7 +194,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Standardization with sparse input when means and stds are provided") {
 
-    val dataRDD = sc.parallelize(sparseData, 3)
+    val dataRDD = sc.parallelize(sparseData.toImmutableArraySeq, 3)
 
     val standardizer1 = new StandardScaler(withMean = true, withStd = true)
     val standardizer2 = new StandardScaler()
@@ -246,7 +247,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Standardization with sparse input") {
 
-    val dataRDD = sc.parallelize(sparseData, 3)
+    val dataRDD = sc.parallelize(sparseData.toImmutableArraySeq, 3)
 
     val standardizer1 = new StandardScaler(withMean = true, withStd = true)
     val standardizer2 = new StandardScaler()
@@ -295,7 +296,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Standardization with constant input when means and stds are provided") {
 
-    val dataRDD = sc.parallelize(constantData, 2)
+    val dataRDD = sc.parallelize(constantData.toImmutableArraySeq, 2)
 
     val standardizer1 = new StandardScaler(withMean = true, withStd = true)
     val standardizer2 = new StandardScaler(withMean = true, withStd = false)
@@ -323,7 +324,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Standardization with constant input") {
 
-    val dataRDD = sc.parallelize(constantData, 2)
+    val dataRDD = sc.parallelize(constantData.toImmutableArraySeq, 2)
 
     val standardizer1 = new StandardScaler(withMean = true, withStd = true)
     val standardizer2 = new StandardScaler(withMean = true, withStd = false)

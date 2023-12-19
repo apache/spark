@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.IdentityTransform
+import org.apache.spark.util.ArrayImplicits._
 
 case class DescribeTableExec(
     output: Seq[Attribute],
@@ -104,7 +105,7 @@ case class DescribeTableExec(
         rows ++= table.partitioning
           .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
           .map { fieldNames =>
-            val nestedField = table.schema.findNestedField(fieldNames)
+            val nestedField = table.schema.findNestedField(fieldNames.toImmutableArraySeq)
             assert(nestedField.isDefined,
               s"Not found the partition column ${fieldNames.map(quoteIfNeeded).mkString(".")} " +
               s"in the table schema ${table.schema().catalogString}.")

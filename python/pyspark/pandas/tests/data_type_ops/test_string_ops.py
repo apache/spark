@@ -36,10 +36,6 @@ class StringOpsTestsMixin:
         return pd.DataFrame({"this": ["x", "y", "z"], "that": ["z", "y", "x"]})
 
     @property
-    def bool_psdf(self):
-        return ps.from_pandas(self.bool_pdf)
-
-    @property
     def bool_non_numeric_pdf(self):
         return pd.concat([self.bool_pdf, self.non_numeric_pdf], axis=1)
 

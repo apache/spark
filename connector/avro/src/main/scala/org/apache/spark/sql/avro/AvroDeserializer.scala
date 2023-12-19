@@ -49,18 +49,21 @@ private[sql] class AvroDeserializer(
     rootCatalystType: DataType,
     positionalFieldMatch: Boolean,
     datetimeRebaseSpec: RebaseSpec,
-    filters: StructFilters) {
+    filters: StructFilters,
+    useStableIdForUnionType: Boolean) {
 
   def this(
       rootAvroType: Schema,
       rootCatalystType: DataType,
-      datetimeRebaseMode: String) = {
+      datetimeRebaseMode: String,
+      useStableIdForUnionType: Boolean) = {
     this(
       rootAvroType,
       rootCatalystType,
       positionalFieldMatch = false,
       RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
-      new NoopFilters)
+      new NoopFilters,
+      useStableIdForUnionType)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -102,6 +105,9 @@ private[sql] class AvroDeserializer(
       s"Cannot convert Avro type $rootAvroType to SQL type ${rootCatalystType.sql}.", ise)
   }
 
+  private lazy val preventReadingIncorrectType = !SQLConf.get
+    .getConf(SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA)
+
   def deserialize(data: Any): Option[Any] = converter(data)
 
   /**
@@ -118,9 +124,7 @@ private[sql] class AvroDeserializer(
     val incompatibleMsg = errorPrefix +
         s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
-    val realDataType = SchemaConverters.toSqlType(avroType).dataType
-    val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA
-    val preventReadingIncorrectType = !SQLConf.get.getConf(confKey)
+    val realDataType = SchemaConverters.toSqlType(avroType, useStableIdForUnionType).dataType
 
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>

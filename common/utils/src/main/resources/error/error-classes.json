@@ -31,6 +31,15 @@
     ],
     "sqlState" : "42702"
   },
+  "AMBIGUOUS_COLUMN_REFERENCE" : {
+    "message" : [
+      "Column <name> is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.",
+      "This column points to one of the DataFrame but Spark is unable to figure out which one.",
+      "Please alias the DataFrames with different names via `DataFrame.alias` before joining them,",
+      "and specify the column using qualified name, e.g. `df.alias(\"a\").join(df.alias(\"b\"), col(\"a.id\") > col(\"b.id\"))`."
+    ],
+    "sqlState" : "42702"
+  },
   "AMBIGUOUS_LATERAL_COLUMN_ALIAS" : {
     "message" : [
       "Lateral column alias <name> is ambiguous and has <n> matches."
@@ -104,6 +113,12 @@
     ],
     "sqlState" : "42KDE"
   },
+  "CANNOT_ALTER_PARTITION_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -133,6 +148,19 @@
       "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> is not in defined values for enum: <enumString>."
     ],
     "sqlState" : "42846"
+  },
+  "CANNOT_CREATE_DATA_SOURCE_TABLE" : {
+    "message" : [
+      "Failed to create data source table <tableName>:"
+    ],
+    "subClass" : {
+      "EXTERNAL_METADATA_UNSUPPORTED" : {
+        "message" : [
+          "provider '<provider>' does not support external metadata but a schema is provided. Please remove the schema when creating the table."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
   },
   "CANNOT_DECODE_URL" : {
     "message" : [
@@ -302,6 +330,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_SAVE_VARIANT" : {
+    "message" : [
+      "Cannot save variant data type into external storage."
+    ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -373,6 +407,12 @@
     ],
     "sqlState" : "22003"
   },
+  "CATALOG_NOT_FOUND" : {
+    "message" : [
+      "The catalog <catalogName> not found. Consider to set the SQL config <config> to a catalog plugin."
+    ],
+    "sqlState" : "42P08"
+  },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
       "Checkpoint block <rddBlockId> not found!",
@@ -398,6 +438,29 @@
       "Cannot find a short name for the codec <codecName>."
     ],
     "sqlState" : "42704"
+  },
+  "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
+    ],
+    "subClass" : {
+      "FUNCTION" : {
+        "message" : [
+          "unsuccessful try to create arrays in the function <functionName>."
+        ]
+      },
+      "INITIALIZE" : {
+        "message" : [
+          "cannot initialize an array with specified parameters."
+        ]
+      },
+      "PARAMETER" : {
+        "message" : [
+          "the value of parameter(s) <parameter> in the function <functionName> is invalid."
+        ]
+      }
+    },
+    "sqlState" : "54000"
   },
   "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
     "message" : [
@@ -806,6 +869,18 @@
     ],
     "sqlState" : "42K01"
   },
+  "DATA_SOURCE_ALREADY_EXISTS" : {
+    "message" : [
+      "Data source '<provider>' already exists in the registry. Please use a different name for the new data source."
+    ],
+    "sqlState" : "42710"
+  },
+  "DATA_SOURCE_NOT_EXIST" : {
+    "message" : [
+      "Data source '<provider>' not found. Please make sure the data source is registered."
+    ],
+    "sqlState" : "42704"
+  },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
       "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
@@ -937,6 +1012,18 @@
     ],
     "sqlState" : "54006"
   },
+  "EXCEPT_NESTED_COLUMN_INVALID_TYPE" : {
+    "message" : [
+      "EXCEPT column <columnName> was resolved and expected to be StructType, but found type <dataType>."
+    ],
+    "sqlState" : "428H2"
+  },
+  "EXCEPT_OVERLAPPING_COLUMNS" : {
+    "message" : [
+      "Columns in an EXCEPT list must be distinct and non-overlapping, but got (<columns>)."
+    ],
+    "sqlState" : "42702"
+  },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
       "'<operation>' expects a permanent view but <viewName> is a temp view."
@@ -985,6 +1072,12 @@
     ],
     "sqlState" : "42846"
   },
+  "EXPRESSION_ENCODING_FAILED" : {
+    "message" : [
+      "Failed to encode a value of the expressions: <expressions> to a row."
+    ],
+    "sqlState" : "42846"
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -993,7 +1086,7 @@
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
-      "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
+      "User defined function (<functionName>: (<signature>) => <result>) failed due to: <reason>."
     ],
     "sqlState" : "39000"
   },
@@ -1002,6 +1095,79 @@
       "Failed preparing of the function <funcName> for call. Please, double check function's arguments."
     ],
     "sqlState" : "38000"
+  },
+  "FAILED_JDBC" : {
+    "message" : [
+      "Failed JDBC <url> on the operation:"
+    ],
+    "subClass" : {
+      "ALTER_TABLE" : {
+        "message" : [
+          "Alter the table <tableName>."
+        ]
+      },
+      "CREATE_INDEX" : {
+        "message" : [
+          "Create the index <indexName> in the <tableName> table."
+        ]
+      },
+      "CREATE_NAMESPACE" : {
+        "message" : [
+          "Create the namespace <namespace>."
+        ]
+      },
+      "CREATE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Create a comment on the namespace: <namespace>."
+        ]
+      },
+      "CREATE_TABLE" : {
+        "message" : [
+          "Create the table <tableName>."
+        ]
+      },
+      "DROP_INDEX" : {
+        "message" : [
+          "Drop the index <indexName> in the <tableName> table."
+        ]
+      },
+      "DROP_NAMESPACE" : {
+        "message" : [
+          "Drop the namespace <namespace>."
+        ]
+      },
+      "GET_TABLES" : {
+        "message" : [
+          "Get tables from the namespace: <namespace>."
+        ]
+      },
+      "LIST_NAMESPACES" : {
+        "message" : [
+          "List namespaces."
+        ]
+      },
+      "NAMESPACE_EXISTS" : {
+        "message" : [
+          "Check that the namespace <namespace> exists."
+        ]
+      },
+      "REMOVE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Remove a comment on the namespace: <namespace>."
+        ]
+      },
+      "RENAME_TABLE" : {
+        "message" : [
+          "Rename the table <oldName> to <newName>."
+        ]
+      },
+      "TABLE_EXISTS" : {
+        "message" : [
+          "Check that the table <tableName> exists."
+        ]
+      }
+    },
+    "sqlState" : "HV000"
   },
   "FAILED_PARSE_STRUCT_TYPE" : {
     "message" : [
@@ -1044,6 +1210,12 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
     ],
     "sqlState" : "42809"
+  },
+  "FOUND_MULTIPLE_DATA_SOURCES" : {
+    "message" : [
+      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
+    ],
+    "sqlState" : "42710"
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
@@ -1719,6 +1891,11 @@
           "Session already exists."
         ]
       },
+      "SESSION_CLOSED" : {
+        "message" : [
+          "Session was closed."
+        ]
+      },
       "SESSION_NOT_FOUND" : {
         "message" : [
           "Session not found."
@@ -1772,6 +1949,29 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
+    "message" : [
+      "Invalid inverse distribution function <funcName>."
+    ],
+    "subClass" : {
+      "DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "Cannot use DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "WITHIN_GROUP_MISSING" : {
+        "message" : [
+          "WITHIN GROUP is required for inverse distribution function."
+        ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "Requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
+        ]
+      }
+    },
+    "sqlState" : "ID001"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -1957,9 +2157,19 @@
           "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
+      "CHARSET" : {
+        "message" : [
+          "expects one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', but got <charset>."
+        ]
+      },
       "DATETIME_UNIT" : {
         "message" : [
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
+        ]
+      },
+      "LENGTH" : {
+        "message" : [
+          "Expects `length` greater than or equal to 0, but got <length>."
         ]
       },
       "NULL" : {
@@ -1975,6 +2185,11 @@
       "REGEX_GROUP_INDEX" : {
         "message" : [
           "Expects group index between 0 and <groupCount>, but got <groupIndex>."
+        ]
+      },
+      "START" : {
+        "message" : [
+          "Expects a positive or a negative value for `start`, but got 0."
         ]
       },
       "ZERO_INDEX" : {
@@ -2039,6 +2254,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SCHEMA_OR_RELATION_NAME" : {
+    "message" : [
+      "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_SET_SYNTAX" : {
     "message" : [
       "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
@@ -2048,7 +2269,8 @@
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
-    ]
+    ],
+    "sqlState" : "42K08"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -2078,6 +2300,11 @@
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
+        ]
+      },
+      "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
+        "message" : [
+          "The function <prettyName> does not support <syntax>."
         ]
       },
       "INVALID_COLUMN_REFERENCE" : {
@@ -2173,6 +2400,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table."
+    ],
+    "sqlState" : "42K0E"
+  },
   "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
     "message" : [
       "The time travel timestamp expression <expr> is invalid."
@@ -2186,6 +2419,11 @@
       "NON_DETERMINISTIC" : {
         "message" : [
           "Must be deterministic."
+        ]
+      },
+      "OPTION" : {
+        "message" : [
+          "Timestamp string in the options must be able to cast to TIMESTAMP type."
         ]
       },
       "UNEVALUABLE" : {
@@ -2367,10 +2605,17 @@
     ],
     "sqlState" : "42803"
   },
+  "MULTIPLE_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify time travel in both the time travel clause and options."
+    ],
+    "sqlState" : "42K0E"
+  },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
@@ -2725,6 +2970,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
+    "message" : [
+      "Failed to <action> Python data source <type> in Python: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
@@ -2847,6 +3098,12 @@
     ],
     "sqlState" : "42601"
   },
+  "SPARK_JOB_CANCELLED" : {
+    "message" : [
+      "Job <jobId> cancelled <reason>"
+    ],
+    "sqlState" : "XXKDA"
+  },
   "SPECIFY_BUCKETING_IS_NOT_ALLOWED" : {
     "message" : [
       "A CREATE TABLE without explicit column list cannot specify bucketing information.",
@@ -2854,6 +3111,18 @@
       "Alternatively, allow bucketing information to be inferred by omitting the clause."
     ],
     "sqlState" : "42601"
+  },
+  "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
   },
   "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
     "message" : [
@@ -2880,6 +3149,81 @@
       "Static partition column <staticName> is also specified in the column list."
     ],
     "sqlState" : "42713"
+  },
+  "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
+    "message" : [
+      "No committed batch found, checkpoint location: <checkpointLocation>. Ensure that the query has run and committed any microbatch before stopping."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_CONFLICT_OPTIONS" : {
+    "message" : [
+      "The options <options> cannot be specified together. Please specify the one."
+    ],
+    "sqlState" : "42613"
+  },
+  "STDS_FAILED_TO_READ_STATE_SCHEMA" : {
+    "message" : [
+      "Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: <sourceOptions>.",
+      "Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists."
+    ],
+    "sqlState" : "42K03"
+  },
+  "STDS_INTERNAL_ERROR" : {
+    "message" : [
+      "Internal error: <message>",
+      "Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STDS_INVALID_OPTION_VALUE" : {
+    "message" : [
+      "Invalid value for source option '<optionName>':"
+    ],
+    "subClass" : {
+      "IS_EMPTY" : {
+        "message" : [
+          "cannot be empty."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "cannot be negative."
+        ]
+      },
+      "WITH_MESSAGE" : {
+        "message" : [
+          "<message>"
+        ]
+      }
+    },
+    "sqlState" : "42616"
+  },
+  "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
+    "message" : [
+      "The state does not have any partition. Please double check that the query points to the valid state. options: <sourceOptions>"
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_OFFSET_LOG_UNAVAILABLE" : {
+    "message" : [
+      "The offset log for <batchId> does not exist, checkpoint location: <checkpointLocation>.",
+      "Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_OFFSET_METADATA_LOG_UNAVAILABLE" : {
+    "message" : [
+      "Metadata is not available for offset log for <batchId>, checkpoint location: <checkpointLocation>.",
+      "The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata."
+    ],
+    "sqlState" : "KD006"
+  },
+  "STDS_REQUIRED_OPTION_UNSPECIFIED" : {
+    "message" : [
+      "'<optionName>' must be specified."
+    ],
+    "sqlState" : "42601"
   },
   "STREAM_FAILED" : {
     "message" : [
@@ -2953,17 +3297,17 @@
     ],
     "sqlState" : "428EK"
   },
-  "TOO_MANY_ARRAY_ELEMENTS" : {
-    "message" : [
-      "Cannot initialize array with <numElements> elements of size <size>."
-    ],
-    "sqlState" : "54000"
-  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
       "Expected <aliasesSize> aliases, but got <aliasesNames>.",
       "Please ensure that the number of aliases provided matches the number of columns output by the UDTF."
+    ],
+    "sqlState" : "42802"
+  },
+  "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias <aliasName>; please remove this alias and then try the query again."
     ],
     "sqlState" : "42802"
   },
@@ -3014,6 +3358,12 @@
       "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
+  },
+  "UNEXPECTED_SERIALIZER_FOR_CLASS" : {
+    "message" : [
+      "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
+    ],
+    "sqlState" : "42846"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -3380,6 +3730,11 @@
           "Unable to convert <orcType> of Orc to data type <toType>."
         ]
       },
+      "OVERWRITE_BY_SUBQUERY" : {
+        "message" : [
+          "INSERT OVERWRITE with a subquery condition."
+        ]
+      },
       "PANDAS_UDAF_IN_PIVOT" : {
         "message" : [
           "Pandas user defined aggregate function in the PIVOT clause."
@@ -3417,7 +3772,7 @@
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
-          "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+          "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
         ]
       },
       "REMOVE_NAMESPACE_COMMENT" : {
@@ -3689,7 +4044,8 @@
       "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.",
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
@@ -3789,6 +4145,12 @@
       }
     },
     "sqlState" : "42605"
+  },
+  "XML_ROW_TAG_MISSING" : {
+    "message" : [
+      "<rowTag> option is required for reading files in XML format."
+    ],
+    "sqlState" : "42KDF"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -3960,11 +4322,6 @@
       "<msg>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0061" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0062" : {
     "message" : [
       "<msg>."
@@ -4039,11 +4396,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1023" : {
-    "message" : [
-      "Function <prettyName> does not support <syntax>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1024" : {
@@ -4162,11 +4514,6 @@
       "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1055" : {
-    "message" : [
-      "The database name is not valid: <quoted>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1057" : {
     "message" : [
       "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
@@ -4185,11 +4532,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1065" : {
-    "message" : [
-      "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
     ]
   },
   "_LEGACY_ERROR_TEMP_1066" : {
@@ -4658,11 +5000,6 @@
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1200" : {
-    "message" : [
-      "<name> is not supported for v2 tables."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1201" : {
     "message" : [
       "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
@@ -4719,11 +5056,6 @@
   "_LEGACY_ERROR_TEMP_1219" : {
     "message" : [
       "Hive metastore does not support altering database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1221" : {
-    "message" : [
-      "Hive 0.12 doesn't support creating permanent functions. Please use Hive 0.13 or higher."
     ]
   },
   "_LEGACY_ERROR_TEMP_1222" : {
@@ -5112,11 +5444,6 @@
   "_LEGACY_ERROR_TEMP_1332" : {
     "message" : [
       "<errorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1334" : {
-    "message" : [
-      "Cannot specify both version and timestamp when time travelling the table."
     ]
   },
   "_LEGACY_ERROR_TEMP_1338" : {
@@ -5709,17 +6036,6 @@
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2152" : {
-    "message" : [
-      "Error while encoding: <e>",
-      "<expressions>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2153" : {
-    "message" : [
-      "class <clsName> has unexpected serializer: <objSerializer>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
@@ -5728,41 +6044,6 @@
   "_LEGACY_ERROR_TEMP_2155" : {
     "message" : [
       "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2156" : {
-    "message" : [
-      "The size function doesn't support the operand type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2157" : {
-    "message" : [
-      "Unexpected value for start in function <prettyName>: SQL array indices start at 1."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2158" : {
-    "message" : [
-      "Unexpected value for length in function <prettyName>: length must be greater than or equal to 0."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2159" : {
-    "message" : [
-      "Unsuccessful try to concat arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2160" : {
-    "message" : [
-      "Unsuccessful try to flatten an array of arrays with <numberOfElements> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2161" : {
-    "message" : [
-      "Unsuccessful try to create array with <count> elements due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2162" : {
-    "message" : [
-      "Unsuccessful try to union arrays with <length> elements due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2163" : {
@@ -5876,16 +6157,6 @@
       "<message>, db: <dbName>, table: <tableName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2190" : {
-    "message" : [
-      "DROP TABLE ... PURGE."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2191" : {
-    "message" : [
-      "ALTER TABLE ... DROP PARTITION ... PURGE."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2192" : {
     "message" : [
       "Partition filter cannot have both `\"` and `'` characters."
@@ -5904,11 +6175,6 @@
   "_LEGACY_ERROR_TEMP_2195" : {
     "message" : [
       "<cnf> when creating Hive client using classpath: <execJars> Please make sure that jars for your version of hive and hadoop are included in the paths passed to <key>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2197" : {
-    "message" : [
-      "LOCATION clause illegal for view partition."
     ]
   },
   "_LEGACY_ERROR_TEMP_2198" : {
@@ -5931,7 +6197,7 @@
       "Please move the data from the incorrect directory to the correct one, delete the",
       "incorrect directory, and then restart this query. If you believe you are receiving",
       "this message in error, you can disable it with the SQL conf",
-      "<StreamingCheckpointEscaptedPathCheckEnabled>."
+      "<StreamingCheckpointEscapedPathCheckEnabled>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2201" : {
@@ -6161,7 +6427,7 @@
   },
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
-      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {
@@ -6291,6 +6557,11 @@
   "_LEGACY_ERROR_TEMP_2446" : {
     "message" : [
       "Operation not allowed: <cmd> only works on table with location provided: <tableIdentWithDB>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2450" : {
+    "message" : [
+      "No handler for UDF/UDAF/UDTF '<clazz>'"
     ]
   },
   "_LEGACY_ERROR_TEMP_3000" : {
@@ -6505,6 +6776,269 @@
   "_LEGACY_ERROR_TEMP_3042" : {
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3050" : {
+    "message" : [
+      "Cannot modify the value of a static config: <k>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3051" : {
+    "message" : [
+      "When resolving <u>, fail to find subplan with plan_id=<planId> in <q>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3052" : {
+    "message" : [
+      "Unexpected resolved action: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3053" : {
+    "message" : [
+      "Unexpected WHEN NOT MATCHED action: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3054" : {
+    "message" : [
+      "<expr> is not currently supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3055" : {
+    "message" : [
+      "ScalarFunction '<scalarFunc.name>' neither implement magic method nor override 'produceResult'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3056" : {
+    "message" : [
+      "Unexpected row-level read relations (allow multiple = <allowMultipleReads>): <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3057" : {
+    "message" : [
+      "Cannot retrieve row-level operation from <table>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3058" : {
+    "message" : [
+      "Found duplicate column(s) <checkType>: <duplicateColumns>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3059" : {
+    "message" : [
+      "The positions provided (<pos>) cannot be resolved in",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3060" : {
+    "message" : [
+      "Couldn't find column <i> in:",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3061" : {
+    "message" : [
+      "<e>",
+      "<schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3062" : {
+    "message" : [
+      "Expected <columnPath> to be a nested data type, but found <o>. Was looking for the index of <attr> in a nested field"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3063" : {
+    "message" : [
+      "pivot is not supported on a streaming DataFrames/Datasets"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3065" : {
+    "message" : [
+      "<clazz>: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3066" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3067" : {
+    "message" : [
+      "Streaming aggregation doesn't support group aggregate pandas UDF"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3068" : {
+    "message" : [
+      "Global aggregation with session window in streaming query is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3069" : {
+    "message" : [
+      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3070" : {
+    "message" : [
+      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3071" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3072" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3073" : {
+    "message" : [
+      "Unexpected instruction: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3074" : {
+    "message" : [
+      "field <fieldName> not found from given schema <schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3075" : {
+    "message" : [
+      "Couldn't find scan attribute for <tableAttr> in <scanAttrs>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3076" : {
+    "message" : [
+      "Redefining watermark is disallowed. You can set the config '<config>' to 'false' to restore the previous behavior. Note that multiple stateful operators will be disallowed."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3077" : {
+    "message" : [
+      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3078" : {
+    "message" : [
+      "Can not match ParquetTable in the query."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3079" : {
+    "message" : [
+      "Dynamic partition cannot be the parent of a static partition."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3080" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3081" : {
+    "message" : [
+      "Save mode <mode> not allowed for Kafka. Allowed save modes are <append> and <errorIfExists> (default)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3082" : {
+    "message" : [
+      "Creating bucketed Hive serde table is not supported yet."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3083" : {
+    "message" : [
+      "Unable to infer the schema. The schema specification is required to create the table <tableName>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3084" : {
+    "message" : [
+      "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3085" : {
+    "message" : [
+      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3086" : {
+    "message" : [
+      "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3087" : {
+    "message" : [
+      "Cannot set or change the preserved property key: 'EXTERNAL'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3088" : {
+    "message" : [
+      "The metadata is corrupted. Unable to find the partition column names from the schema. schema: <schema>. Partition columns: <partColumnNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3089" : {
+    "message" : [
+      "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3090" : {
+    "message" : [
+      "Raw list type in java is unsupported because Spark cannot infer the element type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3091" : {
+    "message" : [
+      "Raw map type in java is unsupported because Spark cannot infer key and value types."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3092" : {
+    "message" : [
+      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because Spark cannot infer the data type for these type parameters."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3093" : {
+    "message" : [
+      "Unsupported java type <c>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3094" : {
+    "message" : [
+      "<dt> is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3095" : {
+    "message" : [
+      "<dt> cannot be converted to Hive TypeInfo"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3096" : {
+    "message" : [
+      "Converted table has <resLen> columns,",
+      "but source Hive table has <relLen> columns.",
+      "Set <key> to false,",
+      "or recreate table <ident> to workaround."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3097" : {
+    "message" : [
+      "Column in converted table has different data type with source Hive table's.",
+      "Set <key> to false,",
+      "or recreate table <ident> to workaround."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3100" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3101" : {
+    "message" : [
+      "The input is not a correct window column: <windowTime>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3102" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3103" : {
+    "message" : [
+      "Namespace '<namespace>' is non empty. <details>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

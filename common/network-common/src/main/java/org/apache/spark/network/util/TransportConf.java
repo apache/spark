@@ -300,6 +300,13 @@ public class TransportConf {
   }
 
   /**
+   * The password to the private key in the key store
+   */
+  public String sslRpcKeyPassword() {
+    return conf.get("spark.ssl.rpc.keyPassword", null);
+  }
+
+  /**
    * A PKCS#8 private key file in PEM format; can be relative to the current directory
    */
   public File sslRpcPrivateKey() {
@@ -314,8 +321,8 @@ public class TransportConf {
   /**
    * The password to the private key
    */
-  public String sslRpcKeyPassword() {
-    return conf.get("spark.ssl.rpc.keyPassword", null);
+  public String sslRpcPrivateKeyPassword() {
+    return conf.get("spark.ssl.rpc.privateKeyPassword", null);
   }
 
   /**
@@ -399,14 +406,6 @@ public class TransportConf {
       // It's fine for the trust store to be missing, we would default to trusting all.
       return true;
     }
-  }
-
-  /**
-   * If we can dangerously fallback to unencrypted connections if RPC over SSL is enabled
-   * but the key files are not present
-   */
-  public boolean sslRpcDangerouslyFallbackIfKeysNotPresent() {
-    return conf.getBoolean("spark.ssl.rpc.dangerouslyFallbackIfKeysNotPresent", false);
   }
 
   /**

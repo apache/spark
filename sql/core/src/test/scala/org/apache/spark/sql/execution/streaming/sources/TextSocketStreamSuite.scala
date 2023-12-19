@@ -87,7 +87,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
   test("backward compatibility with old path") {
     val ds = DataSource.lookupDataSource(
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider",
-      spark.sqlContext.conf).getConstructor().newInstance()
+      spark.sessionState.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[TextSocketSourceProvider], "Could not find socket source")
   }
 
@@ -358,7 +358,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       numPartitions = 2,
       options = new CaseInsensitiveStringMap(Map("includeTimestamp" -> "true").asJava))
     val partitions = stream.planInputPartitions(stream.initialOffset())
-    assert(partitions.size == 2)
+    assert(partitions.length == 2)
 
     val numRecords = 4
     // inject rows, read and check the data and offsets

@@ -57,7 +57,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
     val planner = new SparkConnectPlanner(executeHolder)
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataframe =
       Dataset.ofRows(
         sessionHolder.session,
@@ -65,11 +65,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         tracker)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
-    responseObserver.onNext(
-      MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
-    if (dataframe.queryExecution.observedMetrics.nonEmpty) {
-      responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
-    }
+    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
+    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
+      responseObserver.onNext)
   }
 
   type Batch = (Array[Byte], Long)
@@ -111,7 +109,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
-      val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
+      val response = proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
         .setRowCount(count)
@@ -235,25 +237,48 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
   }
 
   private def createObservedMetricsResponse(
       sessionId: String,
-      dataframe: DataFrame): ExecutePlanResponse = {
-    val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
-      val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
-      ExecutePlanResponse.ObservedMetrics
+      dataframe: DataFrame): Option[ExecutePlanResponse] = {
+    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
+      case (name, row) if !executeHolder.observations.contains(name) =>
+        val values = (0 until row.length).map { i =>
+          (if (row.schema != null) Some(row.schema.fieldNames(i)) else None, row(i))
+        }
+        name -> values
+    }
+    if (observedMetrics.nonEmpty) {
+      Some(SparkConnectPlanExecution
+        .createObservedMetricsResponse(sessionId, sessionHolder.serverSessionId, observedMetrics))
+    } else None
+  }
+}
+
+object SparkConnectPlanExecution {
+  def createObservedMetricsResponse(
+      sessionId: String,
+      serverSessionId: String,
+      metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
+    val observedMetrics = metrics.map { case (name, values) =>
+      val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-        .addAllValues(cols.asJava)
-        .build()
+      values.foreach { case (key, value) =>
+        metrics.addValues(toLiteralProto(value))
+        key.foreach(metrics.addKeys)
+      }
+      metrics.build()
     }
     // Prepare a response with the observed metrics.
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
+      .setServerSideSessionId(serverSessionId)
       .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }

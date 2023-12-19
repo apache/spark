@@ -25,6 +25,7 @@ import org.apache.spark.deploy.yarn.Client
 import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.YarnContainerInfoHelper
 
 /**
@@ -56,7 +57,7 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
   private lazy val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(env.conf)
 
   override def getUserClassPath: Seq[URL] =
-    Client.getUserClasspathUrls(env.conf, useClusterPath = true)
+    Client.getUserClasspathUrls(env.conf, useClusterPath = true).toImmutableArraySeq
 
   override def extractLogUrls: Map[String, String] = {
     YarnContainerInfoHelper.getLogUrls(hadoopConfiguration, container = None)

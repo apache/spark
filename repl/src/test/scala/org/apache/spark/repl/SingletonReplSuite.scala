@@ -191,7 +191,7 @@ class SingletonReplSuite extends SparkFunSuite {
 
   test("interacting with files") {
     val tempDir = Utils.createTempDir()
-    val out = new FileWriter(tempDir + "/input")
+    val out = new FileWriter(s"$tempDir/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
     out.write("Goodbye\n")

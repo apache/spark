@@ -16,22 +16,14 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_ops_on_diff_frames import (
-    OpsOnDiffFramesDisabledTestsMixin,
-    OpsOnDiffFramesEnabledTestsMixin,
-)
+from pyspark.pandas.tests.test_ops_on_diff_frames import OpsOnDiffFramesEnabledTestsMixin
+
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class OpsOnDiffFramesEnabledParityTests(
     OpsOnDiffFramesEnabledTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
-):
-    pass
-
-
-class OpsOnDiffFramesDisabledParityTests(
-    OpsOnDiffFramesDisabledTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
     pass
 

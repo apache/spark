@@ -32,6 +32,7 @@ import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /** Enumeration to identify current state of a Receiver */
@@ -108,7 +109,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private val receivedBlockTracker = new ReceivedBlockTracker(
     ssc.sparkContext.conf,
     ssc.sparkContext.hadoopConfiguration,
-    receiverInputStreamIds,
+    receiverInputStreamIds.toImmutableArraySeq,
     ssc.scheduler.clock,
     ssc.isCheckpointPresent,
     Option(ssc.checkpointDir)
@@ -244,11 +245,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    */
   def allocatedExecutors(): Map[Int, Option[String]] = synchronized {
     if (isTrackerStarted) {
-      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
-        _.runningExecutor.map {
+      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).transform { (_, v) =>
+        v.runningExecutor.map {
           _.executorId
         }
-      }.toMap
+      }
     } else {
       Map.empty
     }
@@ -443,7 +444,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     runDummySparkJob()
 
     logInfo("Starting " + receivers.length + " receivers")
-    endpoint.send(StartAllReceivers(receivers))
+    endpoint.send(StartAllReceivers(receivers.toImmutableArraySeq))
   }
 
   /** Check if tracker has been marked for starting */

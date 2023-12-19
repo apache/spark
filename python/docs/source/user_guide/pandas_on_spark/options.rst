@@ -16,6 +16,8 @@
     under the License.
 
 
+.. _user_guide.options:
+
 ====================
 Options and settings
 ====================

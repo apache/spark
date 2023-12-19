@@ -19,7 +19,6 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -27,12 +26,9 @@ check_dependencies(__name__)
 import threading
 import os
 import platform
-import random
-import time
 import urllib.parse
 import uuid
 import sys
-from types import TracebackType
 from typing import (
     Iterable,
     Iterator,
@@ -45,9 +41,6 @@ from typing import (
     Set,
     NoReturn,
     cast,
-    Callable,
-    Generator,
-    Type,
     TYPE_CHECKING,
     Sequence,
 )
@@ -58,17 +51,16 @@ import pyarrow as pa
 import google.protobuf.message
 from grpc_status import rpc_status
 import grpc
-from google.protobuf import text_format
+from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
+from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.client.logging import logger
-from pyspark.sql.connect.client.reattach import (
-    ExecutePlanResponseReattachableIterator,
-    RetryException,
-)
+from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
 from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -79,6 +71,7 @@ from pyspark.errors.exceptions.connect import (
     SparkConnectGrpcException,
 )
 from pyspark.sql.connect.expressions import (
+    LiteralExpression,
     PythonUDF,
     CommonInlineUserDefinedFunction,
     JavaUDF,
@@ -87,13 +80,13 @@ from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
 )
+from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError
-
+from pyspark.errors import PySparkValueError, PySparkAssertionError
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
@@ -334,7 +327,10 @@ class ChannelBuilder:
             try:
                 uuid.UUID(session_id, version=4)
             except ValueError as ve:
-                raise ValueError("Parameter value 'session_id' must be a valid UUID format.", ve)
+                raise PySparkValueError(
+                    error_class="INVALID_SESSION_UUID_ID",
+                    message_parameters={"arg_name": "session_id", "origin": str(ve)},
+                )
         return session_id
 
     def toChannel(self) -> grpc.Channel:
@@ -429,9 +425,10 @@ class PlanMetrics:
 
 
 class PlanObservedMetrics:
-    def __init__(self, name: str, metrics: List[pb2.Expression.Literal]):
+    def __init__(self, name: str, metrics: List[pb2.Expression.Literal], keys: List[str]):
         self._name = name
         self._metrics = metrics
+        self._keys = keys if keys else [f"observed_metric_{i}" for i in range(len(self.metrics))]
 
     def __repr__(self) -> str:
         return f"Plan observed({self._name}={self._metrics})"
@@ -443,6 +440,10 @@ class PlanObservedMetrics:
     @property
     def metrics(self) -> List[pb2.Expression.Literal]:
         return self._metrics
+
+    @property
+    def keys(self) -> List[str]:
+        return self._keys
 
 
 class AnalyzeResult:
@@ -548,38 +549,6 @@ class SparkConnectClient(object):
     Conceptually the remote spark session that communicates with the server
     """
 
-    @classmethod
-    def retry_exception(cls, e: Exception) -> bool:
-        """
-        Helper function that is used to identify if an exception thrown by the server
-        can be retried or not.
-
-        Parameters
-        ----------
-        e : Exception
-            The GRPC error as received from the server. Typed as Exception, because other exception
-            thrown during client processing can be passed here as well.
-
-        Returns
-        -------
-        True if the exception can be retried, False otherwise.
-
-        """
-        if not isinstance(e, grpc.RpcError):
-            return False
-
-        if e.code() in [grpc.StatusCode.INTERNAL]:
-            msg = str(e)
-
-            # This error happens if another RPC preempts this RPC.
-            if "INVALID_CURSOR.DISCONNECTED" in msg:
-                return True
-
-        if e.code() == grpc.StatusCode.UNAVAILABLE:
-            return True
-
-        return False
-
     def __init__(
         self,
         connection: Union[str, ChannelBuilder],
@@ -618,7 +587,12 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool
             Enable reattachable execution.
         """
-        self.thread_local = threading.local()
+
+        class ClientThreadLocals(threading.local):
+            tags: set = set()
+            inside_error_handling: bool = False
+
+        self.thread_local = ClientThreadLocals()
 
         # Parse the connection string.
         self._builder = (
@@ -627,21 +601,11 @@ class SparkConnectClient(object):
             else ChannelBuilder(connection, channel_options)
         )
         self._user_id = None
-        self._retry_policy = {
-            # Please synchronize changes here with Scala side
-            # GrpcRetryHandler.scala
-            #
-            # Note: the number of retries is selected so that the maximum tolerated wait
-            # is guaranteed to be at least 10 minutes
-            "max_retries": 15,
-            "backoff_multiplier": 4.0,
-            "initial_backoff": 50,
-            "max_backoff": 60000,
-            "jitter": 500,
-            "min_jitter_threshold": 2000,
-        }
-        if retry_policy:
-            self._retry_policy.update(retry_policy)
+        self._retry_policies: List[RetryPolicy] = []
+
+        retry_policy_args = retry_policy or dict()
+        default_policy = DefaultPolicy(**retry_policy_args)
+        self.set_retry_policies([default_policy])
 
         if self._builder.session_id is None:
             # Generate a unique session ID for this client. This UUID must be unique to allow
@@ -668,10 +632,12 @@ class SparkConnectClient(object):
         self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
 
+        # Capture the server-side session ID and set it to None initially. It will
+        # be updated on the first response received.
+        self._server_session_id: Optional[str] = None
+
     def _retrying(self) -> "Retrying":
-        return Retrying(
-            can_retry=SparkConnectClient.retry_exception, **self._retry_policy  # type: ignore
-        )
+        return Retrying(self._retry_policies)
 
     def disable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = False
@@ -680,6 +646,20 @@ class SparkConnectClient(object):
     def enable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = True
         return self
+
+    def set_retry_policies(self, policies: Iterable[RetryPolicy]) -> None:
+        """
+        Sets list of policies to be used for retries.
+        I.e. set_retry_policies([DefaultPolicy(), CustomPolicy()]).
+
+        """
+        self._retry_policies = list(policies)
+
+    def get_retry_policies(self) -> List[RetryPolicy]:
+        """
+        Return list of currently used policies
+        """
+        return list(self._retry_policies)
 
     def register_udf(
         self,
@@ -798,33 +778,37 @@ class SparkConnectClient(object):
     def _build_observed_metrics(
         self, metrics: Sequence["pb2.ExecutePlanResponse.ObservedMetrics"]
     ) -> Iterator[PlanObservedMetrics]:
-        return (PlanObservedMetrics(x.name, [v for v in x.values]) for x in metrics)
+        return (PlanObservedMetrics(x.name, [v for v in x.values], list(x.keys)) for x in metrics)
 
-    def to_table_as_iterator(self, plan: pb2.Plan) -> Iterator[Union[StructType, "pa.Table"]]:
+    def to_table_as_iterator(
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
+    ) -> Iterator[Union[StructType, "pa.Table"]]:
         """
         Return given plan as a PyArrow Table iterator.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        for response in self._execute_and_fetch_as_iterator(req):
+        for response in self._execute_and_fetch_as_iterator(req, observations):
             if isinstance(response, StructType):
                 yield response
             elif isinstance(response, pa.RecordBatch):
                 yield pa.Table.from_batches([response])
 
-    def to_table(self, plan: pb2.Plan) -> Tuple["pa.Table", Optional[StructType]]:
+    def to_table(
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
+    ) -> Tuple["pa.Table", Optional[StructType]]:
         """
         Return given plan as a PyArrow Table.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, schema, _, _, _ = self._execute_and_fetch(req)
+        table, schema, _, _, _ = self._execute_and_fetch(req, observations)
         assert table is not None
         return table, schema
 
-    def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
+    def to_pandas(self, plan: pb2.Plan, observations: Dict[str, Observation]) -> "pd.DataFrame":
         """
         Return given plan as a pandas DataFrame.
         """
@@ -836,7 +820,7 @@ class SparkConnectClient(object):
         )
         self_destruct = cast(str, self_destruct_conf).lower() == "true"
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, self_destruct=self_destruct
+            req, observations, self_destruct=self_destruct
         )
         assert table is not None
 
@@ -920,7 +904,10 @@ class SparkConnectClient(object):
         -------
         Single line string of the serialized proto message.
         """
-        return text_format.MessageToString(p, as_one_line=True)
+        try:
+            return text_format.MessageToString(p, as_one_line=True)
+        except RecursionError:
+            return "<Truncated message due to recursion error>"
 
     def schema(self, plan: pb2.Plan) -> StructType:
         """
@@ -945,7 +932,7 @@ class SparkConnectClient(object):
         return result
 
     def execute_command(
-        self, command: pb2.Command
+        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
     ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
         """
         Execute given command.
@@ -955,7 +942,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, _, properties = self._execute_and_fetch(req)
+        data, _, _, _, properties = self._execute_and_fetch(req, observations or {})
         if data is not None:
             return (data.to_pandas(), properties)
         else:
@@ -1109,11 +1096,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1132,17 +1115,13 @@ class SparkConnectClient(object):
         logger.info("Execute")
 
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
-            if b.session_id != self._session_id:
-                raise SparkConnectException(
-                    "Received incorrect session identifier for request: "
-                    f"{b.session_id} != {self._session_id}"
-                )
+            self._verify_response_integrity(b)
 
         try:
             if self._use_reattachable_execute:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
-                    req, self._stub, self._retry_policy, self._builder.metadata()
+                    req, self._stub, self._retrying, self._builder.metadata()
                 )
                 for b in generator:
                     handle_response(b)
@@ -1155,7 +1134,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch_as_iterator(
-        self, req: pb2.ExecutePlanRequest
+        self, req: pb2.ExecutePlanRequest, observations: Dict[str, Observation]
     ) -> Iterator[
         Union[
             "pa.RecordBatch",
@@ -1178,20 +1157,30 @@ class SparkConnectClient(object):
                 PlanMetrics,
                 PlanObservedMetrics,
                 Dict[str, Any],
+                any_pb2.Any,
             ]
         ]:
             nonlocal num_records
-            if b.session_id != self._session_id:
-                raise SparkConnectException(
-                    "Received incorrect session identifier for request: "
-                    f"{b.session_id} != {self._session_id}"
-                )
+            # The session ID is the local session ID and should match what we expect.
+            self._verify_response_integrity(b)
             if b.HasField("metrics"):
                 logger.debug("Received metric batch.")
                 yield from self._build_metrics(b.metrics)
             if b.observed_metrics:
                 logger.debug("Received observed metric batch.")
-                yield from self._build_observed_metrics(b.observed_metrics)
+                for observed_metrics in self._build_observed_metrics(b.observed_metrics):
+                    if observed_metrics.name in observations:
+                        observation_result = observations[observed_metrics.name]._result
+                        assert observation_result is not None
+                        observation_result.update(
+                            {
+                                key: LiteralExpression._to_value(metric)
+                                for key, metric in zip(
+                                    observed_metrics.keys, observed_metrics.metrics
+                                )
+                            }
+                        )
+                    yield observed_metrics
             if b.HasField("schema"):
                 logger.debug("Received the schema.")
                 dt = types.proto_schema_to_pyspark_data_type(b.schema)
@@ -1215,6 +1204,8 @@ class SparkConnectClient(object):
                     addresses = [address for address in resource.addresses]
                     resources[key] = ResourceInformation(name, addresses)
                 yield {"get_resources_command_result": resources}
+            if b.HasField("extension"):
+                yield b.extension
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1249,7 +1240,7 @@ class SparkConnectClient(object):
             if self._use_reattachable_execute:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
-                    req, self._stub, self._retry_policy, self._builder.metadata()
+                    req, self._stub, self._retrying, self._builder.metadata()
                 )
                 for b in generator:
                     yield from handle_response(b)
@@ -1262,7 +1253,10 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch(
-        self, req: pb2.ExecutePlanRequest, self_destruct: bool = False
+        self,
+        req: pb2.ExecutePlanRequest,
+        observations: Dict[str, Observation],
+        self_destruct: bool = False,
     ) -> Tuple[
         Optional["pa.Table"],
         Optional[StructType],
@@ -1278,7 +1272,7 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        for response in self._execute_and_fetch_as_iterator(req):
+        for response in self._execute_and_fetch_as_iterator(req, observations):
             if isinstance(response, StructType):
                 schema = response
             elif isinstance(response, pa.RecordBatch):
@@ -1366,11 +1360,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Config(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1409,11 +1399,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1425,11 +1411,7 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -1441,12 +1423,24 @@ class SparkConnectClient(object):
             for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
-                    if resp.session_id != self._session_id:
-                        raise SparkConnectException(
-                            "Received incorrect session identifier for request:"
-                            f"{resp.session_id} != {self._session_id}"
-                        )
+                    self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def release_session(self) -> None:
+        req = pb2.ReleaseSessionRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    resp = self._stub.ReleaseSession(req, metadata=self._builder.metadata())
+                    self._verify_response_integrity(resp)
+                    return
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)
@@ -1478,11 +1472,22 @@ class SparkConnectClient(object):
         """
         spark_job_tags_sep = ","
         if tag is None:
-            raise ValueError("Spark Connect tag cannot be null.")
+            raise PySparkValueError(
+                error_class="CANNOT_BE_NONE", message_paramters={"arg_name": "Spark Connect tag"}
+            )
         if spark_job_tags_sep in tag:
-            raise ValueError(f"Spark Connect tag cannot contain '{spark_job_tags_sep}'.")
+            raise PySparkValueError(
+                error_class="VALUE_ALLOWED",
+                message_parameters={
+                    "arg_name": "Spark Connect tag",
+                    "disallowed_value": spark_job_tags_sep,
+                },
+            )
         if len(tag) == 0:
-            raise ValueError("Spark Connect tag cannot be an empty string.")
+            raise PySparkValueError(
+                error_class="VALUE_NOT_NON_EMPTY_STR",
+                message_parameters={"arg_name": "Spark Connect tag", "arg_value": tag},
+            )
 
     def _handle_error(self, error: Exception) -> NoReturn:
         """
@@ -1497,14 +1502,24 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        if isinstance(error, grpc.RpcError):
-            self._handle_rpc_error(error)
-        elif isinstance(error, ValueError):
-            if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                raise SparkConnectException(
-                    error_class="NO_ACTIVE_SESSION", message_parameters=dict()
-                ) from None
-        raise error
+
+        if self.thread_local.inside_error_handling:
+            # We are already inside error handling routine,
+            # avoid recursive error processing (with potentially infinite recursion)
+            raise error
+
+        try:
+            self.thread_local.inside_error_handling = True
+            if isinstance(error, grpc.RpcError):
+                self._handle_rpc_error(error)
+            elif isinstance(error, ValueError):
+                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
+                    raise SparkConnectException(
+                        error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                    ) from None
+            raise error
+        finally:
+            self.thread_local.inside_error_handling = False
 
     def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
         if "errorId" not in info.metadata:
@@ -1522,6 +1537,20 @@ class SparkConnectClient(object):
             return self._stub.FetchErrorDetails(req)
         except grpc.RpcError:
             return None
+
+    def _display_server_stack_trace(self) -> bool:
+        from pyspark.sql.connect.conf import RuntimeConf
+
+        conf = RuntimeConf(self)
+        try:
+            if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+                return True
+            return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
+        except Exception as e:  # noqa: F841
+            # Falls back to true if an exception occurs during reading the config.
+            # Otherwise, it will recursively try to get the conf when it consistently
+            # fails, ending up with `RecursionError`.
+            return True
 
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
@@ -1553,7 +1582,10 @@ class SparkConnectClient(object):
                     d.Unpack(info)
 
                     raise convert_exception(
-                        info, status.message, self._fetch_enriched_error(info)
+                        info,
+                        status.message,
+                        self._fetch_enriched_error(info),
+                        self._display_server_stack_trace(),
                     ) from None
 
             raise SparkConnectGrpcException(status.message) from None
@@ -1561,12 +1593,15 @@ class SparkConnectClient(object):
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
     def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
-        for path in paths:
-            for attempt in self._retrying():
-                with attempt:
-                    self._artifact_manager.add_artifacts(
-                        path, pyfile=pyfile, archive=archive, file=file
-                    )
+        try:
+            for path in paths:
+                for attempt in self._retrying():
+                    with attempt:
+                        self._artifact_manager.add_artifacts(
+                            path, pyfile=pyfile, archive=archive, file=file
+                        )
+        except Exception as error:
+            self._handle_error(error)
 
     def copy_from_local_to_fs(self, local_path: str, dest_path: str) -> None:
         for attempt in self._retrying():
@@ -1579,144 +1614,41 @@ class SparkConnectClient(object):
                 return self._artifact_manager.cache_artifact(blob)
         raise SparkConnectException("Invalid state during retry exception handling.")
 
-
-class RetryState:
-    """
-    Simple state helper that captures the state between retries of the exceptions. It
-    keeps track of the last exception thrown and how many in total. When the task
-    finishes successfully done() returns True.
-    """
-
-    def __init__(self) -> None:
-        self._exception: Optional[BaseException] = None
-        self._done = False
-        self._count = 0
-
-    def set_exception(self, exc: BaseException) -> None:
-        self._exception = exc
-        self._count += 1
-
-    def throw(self) -> None:
-        raise self.exception()
-
-    def exception(self) -> BaseException:
-        if self._exception is None:
-            raise RuntimeError("No exception is set")
-        return self._exception
-
-    def set_done(self) -> None:
-        self._done = True
-
-    def count(self) -> int:
-        return self._count
-
-    def done(self) -> bool:
-        return self._done
-
-
-class AttemptManager:
-    """
-    Simple ContextManager that is used to capture the exception thrown inside the context.
-    """
-
-    def __init__(self, check: Callable[..., bool], retry_state: RetryState) -> None:
-        self._retry_state = retry_state
-        self._can_retry = check
-
-    def __enter__(self) -> None:
-        pass
-
-    def __exit__(
+    def _verify_response_integrity(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Optional[bool]:
-        if isinstance(exc_val, BaseException):
-            # Swallow the exception.
-            if self._can_retry(exc_val) or isinstance(exc_val, RetryException):
-                self._retry_state.set_exception(exc_val)
-                return True
-            # Bubble up the exception.
-            return False
-        else:
-            self._retry_state.set_done()
-            return None
-
-    def is_first_try(self) -> bool:
-        return self._retry_state._count == 0
-
-
-class Retrying:
-    """
-    This helper class is used as a generator together with a context manager to
-    allow retrying exceptions in particular code blocks. The Retrying can be configured
-    with a lambda function that is can be filtered what kind of exceptions should be
-    retried.
-
-    In addition, there are several parameters that are used to configure the exponential
-    backoff behavior.
-
-    An example to use this class looks like this:
-
-    .. code-block:: python
-
-        for attempt in Retrying(can_retry=lambda x: isinstance(x, TransientError)):
-            with attempt:
-                # do the work.
-
-    """
-
-    def __init__(
-        self,
-        max_retries: int,
-        initial_backoff: int,
-        max_backoff: int,
-        backoff_multiplier: float,
-        jitter: int,
-        min_jitter_threshold: int,
-        can_retry: Callable[..., bool] = lambda x: True,
-        sleep: Callable[[float], None] = time.sleep,
+        response: Union[
+            pb2.ConfigResponse,
+            pb2.ExecutePlanResponse,
+            pb2.InterruptResponse,
+            pb2.ReleaseExecuteResponse,
+            pb2.AddArtifactsResponse,
+            pb2.AnalyzePlanResponse,
+            pb2.FetchErrorDetailsResponse,
+            pb2.ReleaseSessionResponse,
+        ],
     ) -> None:
-        self._can_retry = can_retry
-        self._max_retries = max_retries
-        self._initial_backoff = initial_backoff
-        self._max_backoff = max_backoff
-        self._backoff_multiplier = backoff_multiplier
-        self._jitter = jitter
-        self._min_jitter_threshold = min_jitter_threshold
-        self._sleep = sleep
-
-    def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
-        Generator function to wrap the exception producing code block.
-
-        Returns
-        -------
-        A generator that yields the current attempt.
+        Verifies the integrity of the response. This method checks if the session ID and the
+        server-side session ID match. If not, it throws an exception.
+        Parameters
+        ----------
+        response - One of the different response types handled by the Spark Connect service
         """
-        retry_state = RetryState()
-        next_backoff: float = self._initial_backoff
-
-        if self._max_retries < 0:
-            raise ValueError("Can't have negative number of retries")
-
-        while not retry_state.done() and retry_state.count() <= self._max_retries:
-            # Do backoff
-            if retry_state.count() > 0:
-                # Randomize backoff for this iteration
-                backoff = next_backoff
-                next_backoff = min(self._max_backoff, next_backoff * self._backoff_multiplier)
-
-                if backoff >= self._min_jitter_threshold:
-                    backoff += random.uniform(0, self._jitter)
-
-                logger.debug(
-                    f"Will retry call after {backoff} ms sleep (error: {retry_state.exception()})"
+        if self._session_id != response.session_id:
+            raise PySparkAssertionError(
+                "Received incorrect session identifier for request:"
+                f"{response.session_id} != {self._session_id}"
+            )
+        if self._server_session_id is not None:
+            if (
+                response.server_side_session_id
+                and response.server_side_session_id != self._server_session_id
+            ):
+                raise PySparkAssertionError(
+                    "Received incorrect server side session identifier for request. "
+                    "Please create a new Spark Session to reconnect. ("
+                    f"{response.server_side_session_id} != {self._server_session_id})"
                 )
-                self._sleep(backoff / 1000.0)
-            yield AttemptManager(self._can_retry, retry_state)
-
-        if not retry_state.done():
-            # Exceeded number of retries, throw last exception we had
-            retry_state.throw()
+        else:
+            # Update the server side session ID.
+            self._server_session_id = response.server_side_session_id

@@ -107,7 +107,9 @@ class StreamingQueryListener(ABC):
         """
         pass
 
-    @abstractmethod
+    # NOTE: Do not mark this as abstract method, since we released this abstract class without
+    # this method in prior version and marking this as abstract method would break existing
+    # implementations.
     def onQueryIdle(self, event: "QueryIdleEvent") -> None:
         """
         Called when the query is idle and waiting for new data to process.

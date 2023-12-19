@@ -243,7 +243,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -257,7 +257,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 
@@ -437,7 +437,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   /**
@@ -630,12 +630,16 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
-   * @param message The error message to be placed to the returned exception.
    * @param e The dialect specific exception.
+   * @param errorClass The error class assigned in the case of an unclassified `e`
+   * @param messageParameters The message parameters of `errorClass`
    * @return `AnalysisException` or its sub-class.
    */
-  def classifyException(message: String, e: Throwable): AnalysisException = {
-    new AnalysisException(message, cause = Some(e))
+  def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String]): AnalysisException = {
+    new AnalysisException(errorClass, messageParameters, cause = Some(e))
   }
 
   /**

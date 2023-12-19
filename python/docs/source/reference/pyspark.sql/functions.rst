@@ -140,8 +140,6 @@ Mathematical Functions
     sqrt
     tan
     tanh
-    toDegrees
-    toRadians
     try_add
     try_divide
     try_multiply
@@ -225,14 +223,10 @@ Bitwise Functions
 
     bit_count
     bit_get
-    bitwiseNOT
     bitwise_not
     getbit
-    shiftLeft
     shiftleft
-    shiftRight
     shiftright
-    shiftRightUnsigned
     shiftrightunsigned
 
 
@@ -407,7 +401,6 @@ Aggregate Functions
     :toctree: api/
 
     any_value
-    approxCountDistinct
     approx_count_distinct
     approx_percentile
     array_agg
@@ -465,7 +458,6 @@ Aggregate Functions
     stddev_pop
     stddev_samp
     sum
-    sumDistinct
     sum_distinct
     try_avg
     try_sum
@@ -509,11 +501,11 @@ Partition Transformation Functions
 .. autosummary::
     :toctree: api/
 
-    years
-    months
-    days
-    hours
-    bucket
+    partitioning.years
+    partitioning.months
+    partitioning.days
+    partitioning.hours
+    partitioning.bucket
 
 
 CSV Functions
@@ -547,6 +539,7 @@ XML Functions
 
     from_xml
     schema_of_xml
+    to_xml
     xpath
     xpath_boolean
     xpath_double
@@ -592,6 +585,7 @@ Misc Functions
     monotonically_increasing_id
     raise_error
     reflect
+    session_user
     spark_partition_id
     try_aes_decrypt
     try_reflect

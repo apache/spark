@@ -155,7 +155,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             exception=pe.exception,
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={
-                "arg_name": "length",
+                "arg_name": "startPos",
                 "arg_type": "float",
             },
         )
@@ -379,7 +379,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         self.assertEqual(len(pdf.index), 4)
 
         res = pd.DataFrame(data={"id": [0, 30, 60, 90]})
-        self.assert_(pdf.equals(res), f"{pdf.to_string()} != {res.to_string()}")
+        self.assertTrue(pdf.equals(res), f"{pdf.to_string()} != {res.to_string()}")
 
     def test_literal_with_acceptable_type(self):
         for value, dataType in [

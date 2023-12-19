@@ -244,7 +244,9 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         df.select("name", METADATA_FILE_NAME).collect()
       },
       errorClass = "FIELD_NOT_FOUND",
-      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
+      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
+      context =
+        ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   metadataColumnsTest("SPARK-42683: df metadataColumn - schema conflict",
@@ -522,14 +524,20 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
               df.select("name", "_metadata.file_name").collect()
             },
             errorClass = "FIELD_NOT_FOUND",
-            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
+            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
+            context = ExpectedContext(
+              fragment = "select",
+              callSitePattern = getCurrentClassCallSitePattern))
 
           checkError(
             exception = intercept[AnalysisException] {
               df.select("name", "_METADATA.file_NAME").collect()
             },
             errorClass = "FIELD_NOT_FOUND",
-            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"))
+            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"),
+            context = ExpectedContext(
+              fragment = "select",
+              callSitePattern = getCurrentClassCallSitePattern))
         }
       }
     }
@@ -1075,7 +1083,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       // Transform the result into a literal that can be used in an expression.
       val metadataColumnFields = metadataColumnRow.schema.fields
         .map(field => lit(metadataColumnRow.getAs[Any](field.name)).as(field.name))
-      val metadataColumnStruct = struct(metadataColumnFields: _*)
+      import org.apache.spark.util.ArrayImplicits._
+      val metadataColumnStruct = struct(metadataColumnFields.toImmutableArraySeq: _*)
 
       val selectSingleRowDf = spark.read.load(dir.getAbsolutePath)
         .where(col("_metadata").equalTo(lit(metadataColumnStruct)))

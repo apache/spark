@@ -330,10 +330,18 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             "id",
         )
 
-        from pyspark.sql.observation import Observation
+        from pyspark.sql.connect.observation import Observation
+
+        class MockDF(DataFrame):
+            def __init__(self, df: DataFrame):
+                super().__init__(df._plan, df._session)
+
+            @property
+            def isStreaming(self) -> bool:
+                return False
 
         plan = (
-            df.filter(df.col_name > 3)
+            MockDF(df.filter(df.col_name > 3))
             .observe(Observation("my_metric"), min("id"), max("id"), sum("id"))
             ._plan.to_proto(self.connect)
         )

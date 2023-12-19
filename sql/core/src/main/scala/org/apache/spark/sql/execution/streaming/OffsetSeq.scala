@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager, SymmetricHashJoinStateManager}
@@ -88,7 +89,7 @@ case class OffsetSeqMetadata(
 }
 
 object OffsetSeqMetadata extends Logging {
-  private implicit val format = Serialization.formats(NoTypeHints)
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
   /**
    * These configs are related to streaming query execution and should not be changed across
    * batches of a streaming query. The values of these configs are persisted into the offset
@@ -118,7 +119,7 @@ object OffsetSeqMetadata extends Logging {
       StreamingAggregationStateManager.legacyVersion.toString,
     STREAMING_JOIN_STATE_FORMAT_VERSION.key ->
       SymmetricHashJoinStateManager.legacyVersion.toString,
-    STATE_STORE_COMPRESSION_CODEC.key -> "lz4",
+    STATE_STORE_COMPRESSION_CODEC.key -> CompressionCodec.LZ4,
     STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false"
   )
 

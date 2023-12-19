@@ -198,7 +198,7 @@ private[spark] class Client(
           // Break the while loop if the pod is completed or we don't want to wait
           if (watcher.watchOrStop(sId)) {
             watch.close()
-            break
+            break()
           }
         }
       }

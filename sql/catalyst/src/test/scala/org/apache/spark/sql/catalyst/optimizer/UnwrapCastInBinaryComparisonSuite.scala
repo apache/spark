@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.{LocalDate, LocalDateTime}
+import java.time.{LocalDate, LocalDateTime, ZoneId}
 
 import scala.collection.immutable.HashSet
 
@@ -25,10 +25,12 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils._
+import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -41,13 +43,14 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   val testRelation: LocalRelation = LocalRelation($"a".short, $"b".float,
-    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ)
+    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ, $"g".date)
   val f: BoundReference = $"a".short.canBeNull.at(0)
   val f2: BoundReference = $"b".float.canBeNull.at(1)
   val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)
   val f4: BoundReference = $"d".boolean.canBeNull.at(3)
   val f5: BoundReference = $"e".timestamp.notNull.at(4)
   val f6: BoundReference = $"f".timestampNTZ.canBeNull.at(5)
+  val f7: BoundReference = $"g".date.canBeNull.at(6)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
@@ -403,10 +406,52 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       castDate(f5) > nullLit || castDate(f6) > nullLit)
   }
 
+  test("SPARK-46069: Support unwrap timestamp type to date type") {
+    def doTest(
+        tsLit: Literal,
+        isStartOfDay: Boolean,
+        castTimestampFunc: Expression => Expression): Unit = {
+      val floorDate = Cast(tsLit, DateType, Some(conf.sessionLocalTimeZone))
+      val dateAddOne = DateAdd(floorDate, Literal(1, IntegerType))
+      assertEquivalent(castTimestampFunc(f7) > tsLit, f7 > floorDate)
+      if (isStartOfDay) {
+        assertEquivalent(castTimestampFunc(f7) >= tsLit, f7 >= floorDate)
+        assertEquivalent(castTimestampFunc(f7) === tsLit, f7 === floorDate)
+        assertEquivalent(castTimestampFunc(f7) <=> tsLit, f7 <=> floorDate)
+        assertEquivalent(castTimestampFunc(f7) < tsLit, f7 < floorDate)
+      } else {
+        assertEquivalent(castTimestampFunc(f7) >= tsLit, f7 >= dateAddOne)
+        assertEquivalent(castTimestampFunc(f7) === tsLit, f7.isNull && Literal(null, BooleanType))
+        assertEquivalent(castTimestampFunc(f7) <=> tsLit, FalseLiteral)
+        assertEquivalent(castTimestampFunc(f7) < tsLit, f7 < dateAddOne)
+      }
+      assertEquivalent(castTimestampFunc(f7) <= tsLit, f7 <= floorDate)
+    }
+
+    // Test isStartOfDay is true cases
+    val micros = SparkDateTimeUtils.daysToMicros(19704, ZoneId.of(conf.sessionLocalTimeZone))
+    val instant = java.time.Instant.ofEpochSecond(micros / 1000000)
+    val tsLit = Literal.create(instant, TimestampType)
+    doTest(tsLit, isStartOfDay = true, castTimestamp)
+
+    val tsNTZ = LocalDateTime.of(2023, 12, 13, 0, 0, 0, 0)
+    val tsNTZLit = Literal.create(tsNTZ, TimestampNTZType)
+    doTest(tsNTZLit, isStartOfDay = true, castTimestampNTZ)
+
+    // Test isStartOfDay is false cases
+    val tsLit2 = Literal.create(instant.plusSeconds(30), TimestampType)
+    val tsNTZ2 = LocalDateTime.of(2023, 12, 13, 0, 0, 30, 0)
+    doTest(tsLit2, isStartOfDay = false, castTimestamp)
+    val tsNTZLit2 = Literal.create(tsNTZ2, TimestampNTZType)
+    doTest(tsNTZLit2, isStartOfDay = false, castTimestampNTZ)
+  }
+
   private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
   private val ts2 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 999998000)
   private val ts3 = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
   private val ts4 = LocalDateTime.of(1, 1, 1, 0, 0, 0, 0)
+
+  private val dt1 = java.sql.Date.valueOf("2023-01-01")
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
@@ -429,16 +474,16 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     if (evaluate) {
       Seq(
-        (100.toShort, 3.14.toFloat, decimal2(100), true, ts1, ts1),
-        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false, ts2, ts2),
-        (null, Float.NaN, decimal2(12345.6789), null, null, null),
-        (null, null, null, null, null, null),
-        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3),
-        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4),
-        (0.toShort, Float.MaxValue, decimal2(0), null, null, null),
-        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null)
+        (100.toShort, 3.14.toFloat, decimal2(100), true, ts1, ts1, dt1),
+        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false, ts2, ts2, dt1),
+        (null, Float.NaN, decimal2(12345.6789), null, null, null, null),
+        (null, null, null, null, null, null, null),
+        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3, dt1),
+        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4, dt1),
+        (0.toShort, Float.MaxValue, decimal2(0), null, null, null, null),
+        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null, null)
       ).foreach(v => {
-        val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6)
+        val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6, v._7)
         checkEvaluation(e1, e2.eval(row), row)
       })
     }

@@ -1077,7 +1077,7 @@ class GeneralizedLinearRegressionModel private[ml] (
       this.logWarning(s"$uid: GeneralizedLinearRegressionModel.transform() does nothing" +
         " because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   /**
@@ -1418,7 +1418,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
         case Row(label: Double, pred: Double, weight: Double) =>
           (label, pred, weight)
     }
-    family.aic(t, deviance, numInstances, weightSum) + 2 * rank
+    family.aic(t, deviance, numInstances.toDouble, weightSum) + 2 * rank
   }
 }
 

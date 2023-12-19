@@ -22,6 +22,7 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 
 class LeastSquaresBlockAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -56,7 +57,7 @@ class LeastSquaresBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpark
       coefficients: Vector,
       fitIntercept: Boolean): LeastSquaresBlockAggregator = {
     val (featuresSummarizer, ySummarizer) =
-      Summarizer.getRegressionSummarizers(sc.parallelize(instances))
+      Summarizer.getRegressionSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val yStd = ySummarizer.std(0)
     val yMean = ySummarizer.mean(0)
     val featuresStd = featuresSummarizer.std.toArray
@@ -110,8 +111,8 @@ class LeastSquaresBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpark
   test("check sizes") {
     val rng = new scala.util.Random
     val numFeatures = instances.head.features.size
-    val coefVec = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble))
-    val block = InstanceBlock.fromInstances(instances)
+    val coefVec = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble()))
+    val block = InstanceBlock.fromInstances(instances.toImmutableArraySeq)
 
     val agg = getNewAggregator(instances, coefVec, fitIntercept = true)
 
@@ -127,7 +128,7 @@ class LeastSquaresBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpark
     val coefficients = Vectors.dense(1.0, 2.0)
     val numFeatures = coefficients.size
     val (featuresSummarizer, ySummarizer) =
-      Summarizer.getRegressionSummarizers(sc.parallelize(instances))
+      Summarizer.getRegressionSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val featuresStd = featuresSummarizer.std.toArray
     val featuresMean = featuresSummarizer.mean.toArray
     val yStd = ySummarizer.std(0)
@@ -162,7 +163,7 @@ class LeastSquaresBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpark
     Seq(1, 2, 4).foreach { blockSize =>
       val blocks1 = scaledInstances
         .grouped(blockSize)
-        .map(seq => InstanceBlock.fromInstances(seq))
+        .map(seq => InstanceBlock.fromInstances(seq.toImmutableArraySeq))
         .toArray
       val blocks2 = blocks1.map { block =>
         new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)

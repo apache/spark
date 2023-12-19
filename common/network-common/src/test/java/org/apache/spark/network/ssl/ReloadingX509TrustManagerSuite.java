@@ -28,16 +28,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.network.ssl.SslSampleConfigs.*;
 
 public class ReloadingX509TrustManagerSuite {
-
-  private final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManagerSuite.class);
 
   /**
    * Waits until reload count hits the requested value, sleeping 100ms at a time.
@@ -165,14 +161,17 @@ public class ReloadingX509TrustManagerSuite {
       // At this point we haven't reloaded, just the initial load
       assertEquals(0, tm.reloadCount);
 
+      // Wait so that the file modification time is different
+      Thread.sleep((tm.getReloadInterval() + 1000));
+
       // Add another cert
       Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
       certs.put("cert1", cert1);
       certs.put("cert2", cert2);
       createTrustStore(trustStore, "password", certs);
 
-      // Wait up to 5s until we reload
-      waitForReloadCount(tm, 1, 50);
+      // Wait up to 10s until we reload
+      waitForReloadCount(tm, 1, 100);
 
       assertEquals(2, tm.getAcceptedIssuers().length);
     } finally {
@@ -280,8 +279,6 @@ public class ReloadingX509TrustManagerSuite {
             new ReloadingX509TrustManager("jks", trustStoreSymlink, "password", 1);
     assertEquals(1, tm.getReloadInterval());
     assertEquals(0, tm.reloadCount);
-    logger.info("TRUST STORE 1 IS" + trustStore1);
-    logger.info("TRUST STORE 2 IS " + trustStore2);
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
@@ -289,13 +286,11 @@ public class ReloadingX509TrustManagerSuite {
       assertEquals(0, tm.reloadCount);
 
       // Repoint to trustStore2, which has another cert
-      logger.info("REPOINTING SYMLINK!!!");
       trustStoreSymlink.delete();
       Files.createSymbolicLink(trustStoreSymlink.toPath(), trustStore2.toPath());
-      logger.info("REPOINTED!!!");
 
-      // Wait up to 5s until we reload
-      waitForReloadCount(tm, 1, 50);
+      // Wait up to 10s until we reload
+      waitForReloadCount(tm, 1, 100);
 
       assertEquals(2, tm.getAcceptedIssuers().length);
 
@@ -303,8 +298,8 @@ public class ReloadingX509TrustManagerSuite {
       certs.put("cert3", cert3);
       createTrustStore(trustStore2, "password", certs);
 
-      // Wait up to 5s until we reload
-      waitForReloadCount(tm, 2, 50);
+      // Wait up to 10s until we reload
+      waitForReloadCount(tm, 2, 100);
 
       assertEquals(3, tm.getAcceptedIssuers().length);
     } finally {
