@@ -72,7 +72,7 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
 
-  protected def crossDbmsToGenerateGoldenFiles: String = "postgres"
+  protected def crossDbmsToGenerateGoldenFiles: String = CrossDbmsQueryTestSuite.POSTGRES
 
   // Reduce scope to subquery tests for now. That is where most correctness issues are.
   override protected def customInputFilePath: String = new File(inputFilePath, "subquery").getAbsolutePath
@@ -83,7 +83,7 @@ class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
   override protected def preprocessingCommands = Seq(
     // Custom function `double` to imitate Spark's function, so that more tests are covered.
     """
-      |CREATE FUNCTION OR REPLACE FUNCTION double(numeric_value numeric) RETURNS double precision
+      |CREATE OR REPLACE FUNCTION double(numeric_value numeric) RETURNS double precision
       |    AS 'select CAST($1 AS double precision);'
       |    LANGUAGE SQL
       |    IMMUTABLE
@@ -107,14 +107,16 @@ class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
 abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
   /**
-   * A String representing the database system being used.
+   * A String representing the database system being used. A list of these is defined in the
+   * companion object.
    */
   protected def crossDbmsToGenerateGoldenFiles: String
+  assert(CrossDbmsQueryTestSuite.SUPPORTED_DBMS.contains(crossDbmsToGenerateGoldenFiles))
 
   /**
    * A custom input file path where SQL tests are located, if desired.
    */
-  protected def customInputFilePath: String = super.inputFilePath
+  protected def customInputFilePath: String = inputFilePath
 
   /**
    * A function taking in an optional custom connection URL, and returns a [[SQLQueryTestRunner]]
@@ -123,8 +125,8 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   protected def getConnection: Option[String] => SQLQueryTestRunner
 
   /**
-   * Commands to be run before running queries to generate golden files, such as defining custom
-   * functions.
+   * Commands to be run on the DBMS before running queries to generate golden files, such as
+   * defining custom functions.
    */
   protected def preprocessingCommands: Seq[String]
 
@@ -265,6 +267,9 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 }
 
 object CrossDbmsQueryTestSuite {
+
+  final val POSTGRES = "postgres"
+  final val SUPPORTED_DBMS = Seq(POSTGRES)
 
   // System argument to indicate a custom connection URL to the reference DBMS.
   private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
