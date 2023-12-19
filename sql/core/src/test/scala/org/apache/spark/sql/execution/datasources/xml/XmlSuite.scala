@@ -22,8 +22,8 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
-import scala.collection.mutable
 import scala.collection.immutable.ArraySeq
+import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
