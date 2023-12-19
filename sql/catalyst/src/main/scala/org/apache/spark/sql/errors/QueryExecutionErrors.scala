@@ -2771,10 +2771,4 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("charset"),
         "charset" -> charset))
   }
-
-  def mergeIntoAPIError(): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "NO_MERGE_ACTION_ERROR",
-      messageParameters = Map.empty)
-  }
 }

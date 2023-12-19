@@ -2495,7 +2495,7 @@
     ],
     "sqlState" : "23K01"
   },
-  "NO_MERGE_ACTION_ERROR" : {
+  "NO_MERGE_ACTION_SPECIFIED" : {
     "message" : [
       "df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource."
     ]

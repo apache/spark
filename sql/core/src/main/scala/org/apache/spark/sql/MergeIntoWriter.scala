@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -31,6 +32,7 @@ import org.apache.spark.sql.functions.expr
  * @tparam T the type of data in the Dataset.
  * @param table the name of the target table for the merge operation.
  * @param ds the source Dataset to merge into the target table.
+ * @param on the merge condition.
  *
  * @since 4.0.0
  */
@@ -45,9 +47,9 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
 
   private val logicalPlan = df.queryExecution.logical
 
-  var matchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
-  var notMatchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
-  var notMatchedBySourceActions: Seq[MergeAction] = Seq.empty[MergeAction]
+  private[sql] var matchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
+  private[sql] var notMatchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
+  private[sql] var notMatchedBySourceActions: Seq[MergeAction] = Seq.empty[MergeAction]
 
   /**
    * Initialize a `WhenMatched` action without any condition.
@@ -154,7 +156,9 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
    */
   def merge(): Unit = {
     if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
-      throw QueryExecutionErrors.mergeIntoAPIError()
+      throw new SparkRuntimeException(
+        errorClass = "NO_MERGE_ACTION_SPECIFIED",
+        messageParameters = Map.empty)
     }
 
     val merge = MergeIntoTable(
@@ -182,7 +186,9 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
  *
  * @tparam T                The type of data in the MergeIntoWriter.
  */
-case class WhenMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Option[Expression]) {
+case class WhenMatched[T] private(
+    mergeIntoWriter: MergeIntoWriter[T],
+    condition: Option[Expression]) {
   /**
    * Specifies an action to update all matched rows in the DataFrame.
    *
@@ -230,7 +236,9 @@ case class WhenMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Optio
  *
  * @tparam T                The type of data in the MergeIntoWriter.
  */
-case class WhenNotMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Option[Expression]) {
+case class WhenNotMatched[T] private(
+    mergeIntoWriter: MergeIntoWriter[T],
+    condition: Option[Expression]) {
 
   /**
    * Specifies an action to insert all non-matched rows into the DataFrame.
@@ -265,7 +273,7 @@ case class WhenNotMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Op
  * @param condition       an optional condition to be used with the merge actions.
  * @tparam T              the type parameter for the MergeIntoWriter.
  */
-case class WhenNotMatchedBySource[T] (
+case class WhenNotMatchedBySource[T] private(
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Expression]) {
 
