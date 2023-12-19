@@ -22,7 +22,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, InsertStarAction, MergeAction, MergeIntoTable, UpdateAction, UpdateStarAction}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions.expr
 
 /**
@@ -186,9 +185,7 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
  *
  * @tparam T                The type of data in the MergeIntoWriter.
  */
-case class WhenMatched[T] private(
-    mergeIntoWriter: MergeIntoWriter[T],
-    condition: Option[Expression]) {
+case class WhenMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Option[Expression]) {
   /**
    * Specifies an action to update all matched rows in the DataFrame.
    *
@@ -236,9 +233,7 @@ case class WhenMatched[T] private(
  *
  * @tparam T                The type of data in the MergeIntoWriter.
  */
-case class WhenNotMatched[T] private(
-    mergeIntoWriter: MergeIntoWriter[T],
-    condition: Option[Expression]) {
+case class WhenNotMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Option[Expression]) {
 
   /**
    * Specifies an action to insert all non-matched rows into the DataFrame.
@@ -273,7 +268,7 @@ case class WhenNotMatched[T] private(
  * @param condition       an optional condition to be used with the merge actions.
  * @tparam T              the type parameter for the MergeIntoWriter.
  */
-case class WhenNotMatchedBySource[T] private(
+case class WhenNotMatchedBySource[T] (
     mergeIntoWriter: MergeIntoWriter[T],
     condition: Option[Expression]) {
 
