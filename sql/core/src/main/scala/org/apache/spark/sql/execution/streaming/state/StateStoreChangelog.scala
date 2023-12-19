@@ -48,7 +48,7 @@ object RecordType extends Enumeration {
  * @param file - name of file to use to write changelog
  * @param compressionCodec - compression method using for writing changelog file
  */
-class StateStoreChangelogWriter(
+abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec) extends Logging {
@@ -63,25 +63,13 @@ class StateStoreChangelogWriter(
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
   var size = 0
 
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
-      "implementation")
-  }
+  def put(key: Array[Byte], value: Array[Byte]): Unit
 
-  def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
-      "implementation")
-  }
+  def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit
 
-  def delete(key: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
-      "implementation")
-  }
+  def delete(key: Array[Byte]): Unit
 
-  def delete(key: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported on base changelog writer " +
-      "implementation")
-  }
+  def delete(key: Array[Byte], colFamilyName: String): Unit
 
   def abort(): Unit = {
     try {
@@ -142,6 +130,11 @@ class StateStoreChangelogWriterV1(
     size += 1
   }
 
+  override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v1")
+  }
+
   override def delete(key: Array[Byte]): Unit = {
     assert(compressedStream != null)
     compressedStream.writeInt(key.size)
@@ -149,6 +142,11 @@ class StateStoreChangelogWriterV1(
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)
     size += 1
+  }
+
+  override def delete(key: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v1")
   }
 }
 
@@ -168,6 +166,11 @@ class StateStoreChangelogWriterV2(
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
+  override def put(key: Array[Byte], value: Array[Byte]): Unit = {
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v2")
+  }
+
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
     assert(compressedStream != null)
     compressedStream.writeInt(RecordType.PUT_RECORD.toString.getBytes.size)
@@ -179,6 +182,11 @@ class StateStoreChangelogWriterV2(
     compressedStream.writeInt(colFamilyName.getBytes.size)
     compressedStream.write(colFamilyName.getBytes)
     size += 1
+  }
+
+  override def delete(key: Array[Byte]): Unit = {
+    throw new UnsupportedOperationException("Operation not supported with state " +
+      "changelog writer v2")
   }
 
   override def delete(key: Array[Byte], colFamilyName: String): Unit = {

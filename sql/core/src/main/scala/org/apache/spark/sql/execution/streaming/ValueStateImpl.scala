@@ -38,6 +38,8 @@ class ValueStateImpl[S](
     store: StateStore,
     stateName: String) extends ValueState[S] with Logging {
 
+  // TODO: validate places that are trying to encode the key and check if we can eliminate/
+  // add caching for some of these calls.
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
@@ -62,14 +64,17 @@ class ValueStateImpl[S](
 
   /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
-    val retRow = store.get(encodeKey(), stateName)
-    retRow != null
+    getImpl() != null
   }
 
   /** Function to return Option of value if exists and None otherwise */
   override def getOption(): Option[S] = {
-    if (exists()) {
-      Some(get())
+    val retRow = getImpl()
+    if (retRow != null) {
+      val resState = SerializationUtils
+        .deserialize(retRow.getBinary(0))
+        .asInstanceOf[S]
+      Some(resState)
     } else {
       None
     }
@@ -77,9 +82,8 @@ class ValueStateImpl[S](
 
   /** Function to return associated value with key if exists and null otherwise */
   override def get(): S = {
-    if (exists()) {
-      val retRow = store.get(encodeKey(), stateName)
-
+    val retRow = getImpl()
+    if (retRow != null) {
       val resState = SerializationUtils
         .deserialize(retRow.getBinary(0))
         .asInstanceOf[S]
@@ -87,6 +91,10 @@ class ValueStateImpl[S](
     } else {
       null.asInstanceOf[S]
     }
+  }
+
+  private def getImpl(): UnsafeRow = {
+    store.get(encodeKey(), stateName)
   }
 
   /** Function to update and overwrite state associated with given key */
