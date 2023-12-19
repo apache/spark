@@ -21,13 +21,16 @@ import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.Instant
 import java.util.TimeZone
+
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
+
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
@@ -2167,15 +2170,47 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("capture values interspersed between elements - simple") {
-    val df = spark.read.format("xml")
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <a>
+         |        value2
+         |        <b>1</b>
+         |        value3
+         |    </a>
+         |    value4
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
       .option("rowTag", "ROW")
       .option("multiLine", "true")
-      .load(getTestResourcePath(resDir + "values-simple.xml"))
+      .xml(input)
 
     checkAnswer(df, Seq(Row(Array("value1", "value4"), Row(Array("value2", "value3"), 1))))
   }
 
   test("capture values interspersed between elements - array") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <array>
+         |        value2
+         |        <b>1</b>
+         |        value3
+         |    </array>
+         |    <array>
+         |        value4
+         |        <b>2</b>
+         |        value5
+         |        <c>3</c>
+         |        value6
+         |    </array>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
     val expectedAns = Seq(
       Row(
         "value1",
@@ -2183,21 +2218,35 @@ class XmlSuite extends QueryTest with SharedSparkSession {
           Row(List("value2", "value3"), 1, null),
           Row(List("value4", "value5", "value6"), 2, 3))))
     val df = spark.read
-      .format("xml")
       .option("rowTag", "ROW")
       .option("multiLine", "true")
-      .load(getTestResourcePath(resDir + "values-array.xml"))
+      .xml(input)
 
     checkAnswer(df, expectedAns)
 
   }
 
   test("capture values interspersed between elements - nested struct") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct1>
+         |        <struct2>
+         |            <array>1</array>
+         |            value1
+         |            <array>2</array>
+         |            value2
+         |            <struct3>3</struct3>
+         |        </struct2>
+         |        value4
+         |    </struct1>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
     val df = spark.read
-      .format("xml")
       .option("rowTag", "ROW")
       .option("multiLine", "true")
-      .load(getTestResourcePath(resDir + "values-nested.xml"))
+      .xml(input)
 
     checkAnswer(
       df,
@@ -2212,12 +2261,52 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("capture values interspersed between elements - deeply nested") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <struct1>
+         |        value2
+         |        <struct2>
+         |            value3
+         |            <array1>
+         |                value4
+         |                <struct3>
+         |                    value5
+         |                    <array2>1</array2>
+         |                    value6
+         |                    <array2>2</array2>
+         |                    value7
+         |                </struct3>
+         |                value8
+         |                <string>string</string>
+         |                value9
+         |            </array1>
+         |            value10
+         |            <array1>
+         |                <struct3>
+         |                    <array2>3</array2>
+         |                    value11
+         |                    <array2>4</array2>
+         |                </struct3>
+         |                <string>string</string>
+         |                value12
+         |            </array1>
+         |            value13
+         |            <int>3</int>
+         |            value14
+         |        </struct2>
+         |        value15
+         |    </struct1>
+         |    value16
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
     val df = spark.read
-      .format("xml")
       .option("ignoreSurroundingSpaces", true)
       .option("rowTag", "ROW")
       .option("multiLine", "true")
-      .load(getTestResourcePath(resDir + "values-deeply-nested.xml"))
+      .xml(input)
 
     val expectedAns = Seq(Row(
       ArraySeq("value1", "value16"),
@@ -2233,12 +2322,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
             Row(
               ArraySeq("value12"),
               "string",
-              Row(ArraySeq("value11"), ArraySeq(3, 4))),
-          ),
-          3
-        )
-      )
-    ))
+              Row(ArraySeq("value11"), ArraySeq(3, 4)))),
+          3))))
 
     checkAnswer(df, expectedAns)
   }
