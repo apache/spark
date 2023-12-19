@@ -180,7 +180,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
       case Some(variable) => variable.copy(canFold = false)
       case _ =>
         throw QueryCompilationErrors
-          .unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"), expr.origin)
+          .unresolvedVariableError(
+            nameParts,
+            Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_CATALOG_NAME),
+            expr.origin)
     }
   }
 }
