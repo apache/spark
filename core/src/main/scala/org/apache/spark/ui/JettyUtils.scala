@@ -276,6 +276,7 @@ private[spark] object JettyUtils extends Logging {
     val serverExecutor = new ScheduledExecutorScheduler(s"$serverName-JettyScheduler", true)
 
     try {
+      server.setStopTimeout(5000)
       server.start()
 
       // As each acceptor and each selector will use one thread, the number of threads should at
@@ -298,6 +299,7 @@ private[spark] object JettyUtils extends Logging {
         connector.setReuseAddress(!Utils.isWindows)
          // spark-45248: set the idle timeout to prevent slow DoS
         connector.setIdleTimeout(8000)
+        connector.setStopTimeout(5000)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
