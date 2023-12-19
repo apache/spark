@@ -68,7 +68,7 @@ singleDataType
 
 singleTableSchema
     : colTypeList EOF
-    ;ml
+    ;
 
 statement
     : query                                                            #statementDefault

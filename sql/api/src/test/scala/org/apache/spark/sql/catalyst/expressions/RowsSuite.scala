@@ -31,5 +31,4 @@ class RowsSuite extends SparkFunSuite {
       parameters = Map("index" -> "0")
     )
   }
-
 }
