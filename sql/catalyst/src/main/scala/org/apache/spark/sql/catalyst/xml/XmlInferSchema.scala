@@ -159,7 +159,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     parser.peek match {
       case _: EndElement => NullType
       case _: StartElement => inferObject(parser)
-      case c: Characters if isEmptyString(c) =>
+      case c: Characters if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
         val data = c.getData
@@ -171,8 +171,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _: EndElement => StringType
           case _ => inferField(parser)
         }
-      // what about new line character
-      case c: Characters if !isEmptyString(c) =>
+      case c: Characters if !c.isWhiteSpace =>
         // This could be the characters of a character-only element, or could have mixed
         // characters and other complex structure
         val characterType = inferFrom(c.getData)
@@ -240,7 +239,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       parser.peek match {
         case _: EndElement | _: EndDocument => true
         case _: StartElement => false
-        case c: Characters if !isEmptyString(c) =>
+        case c: Characters if !c.isWhiteSpace =>
           val characterType = inferFrom(c.getData)
           parser.nextEvent()
           addOrUpdateType(options.valueTag, characterType)
@@ -291,7 +290,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
           addOrUpdateType(field, inferredType)
 
-        case c: Characters if !isEmptyString(c) =>
+        case c: Characters if !c.isWhiteSpace =>
           // This can be an attribute-only object
           val valueTagType = inferFrom(c.getData)
           addOrUpdateType(options.valueTag, valueTagType)
@@ -554,8 +553,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         )
     }
   }
-
-  private[xml] def isEmptyString(c: Characters): Boolean = c.getData.trim.isEmpty
 
   private def updateStructField(
       structType: StructType,

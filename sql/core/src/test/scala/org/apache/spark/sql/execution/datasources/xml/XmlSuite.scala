@@ -2173,7 +2173,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .option("multiLine", "true")
       .load(getTestResourcePath(resDir + "values-simple.xml"))
 
-    checkAnswer(df, Seq(Row("value1", Row(Array("value2", "value3"), 1))))
+    checkAnswer(df, Seq(Row(Array("value1", "value4"), Row(Array("value2", "value3"), 1))))
   }
 
   test("capture values interspersed between elements - array") {

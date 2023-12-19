@@ -625,7 +625,7 @@ class StaxXmlParser(
       case Some(index) =>
         schema(index).dataType match {
           case ArrayType(elementType, _) =>
-            val value = convertTo(string, elementType)
+            val value = convertTo(data, elementType)
             val result = if (row(index) == null) {
               ArrayBuffer(value)
             } else {
@@ -638,7 +638,7 @@ class StaxXmlParser(
             }
             row(index) = new GenericArrayData(result)
           case dataType =>
-            row(index) = convertTo(string, dataType)
+            row(index) = convertTo(data, dataType)
         }
       case None => // do nothing
     }
