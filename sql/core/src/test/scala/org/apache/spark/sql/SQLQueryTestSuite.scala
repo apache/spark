@@ -632,7 +632,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /**
    * Returns the desired file path for results, given the input file. This is implemented as a
-   * function because differente Suites extending this class may want their results files with
+   * function because different Suites extending this class may want their results files with
    * different names or in different locations.
    */
   protected def resultFileForInputFile(file: File): String = {
