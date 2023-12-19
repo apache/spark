@@ -1435,7 +1435,7 @@ public class ParquetVectorUpdaterFactory {
     return dt == DataTypes.TimestampType || dt == DataTypes.TimestampNTZType;
   }
 
-  boolean isDateTypeMatched(ColumnDescriptor descriptor) {
+  private static boolean isDateTypeMatched(ColumnDescriptor descriptor) {
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
     return typeAnnotation instanceof DateLogicalTypeAnnotation;
   }
