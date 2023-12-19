@@ -21,6 +21,7 @@ import sys
 import subprocess
 import tempfile
 import unittest
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql import SparkSession
 from pyspark.sql.chunk_api import persist_dataframe_as_chunks, read_chunk, unpersist_chunks
 
@@ -114,5 +115,8 @@ for chunk_id in chunk_ids:
         df = self.spark.range(16)
         chunks = persist_dataframe_as_chunks(df, 16)
         unpersist_chunks([chunks[0].id])
-        with self.assertRaisesRegex(RuntimeError, "cache does not exist or has been removed"):
+        with self.assertRaisesRegex(
+            PySparkRuntimeError,
+            "cache does not exist or has been removed",
+        ):
             read_chunk(chunks[0].id)

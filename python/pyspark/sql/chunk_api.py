@@ -25,6 +25,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
 from pyspark.serializers import read_with_length, write_with_length
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+from pyspark.errors import PySparkRuntimeError
 
 
 ChunkMeta = namedtuple("ChunkMeta", ["id", "row_count", "byte_count"])
@@ -42,11 +43,11 @@ def persist_dataframe_as_chunks(
     """
     spark = SparkSession.getActiveSession()
     if spark is None:
-        raise RuntimeError("Active spark session is required.")
+        raise PySparkRuntimeError("Active spark session is required.")
 
     sc = spark.sparkContext
     if sc.getConf().get("spark.python.dataFrameChunkRead.enabled", "false").lower() != "true":
-        raise RuntimeError(
+        raise PySparkRuntimeError(
             "In order to use 'persist_dataframe_as_chunks' API, you must set spark "
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true'."
         )
@@ -78,7 +79,7 @@ def read_chunk(chunk_id):
     """
 
     if "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT" not in os.environ:
-        raise ValueError(
+        raise PySparkRuntimeError(
             "In order to use dataframe chunk read API, you must set spark "
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true',"
             "and you must call 'read_chunk' API in pyspark driver, pyspark UDF,"
@@ -97,7 +98,7 @@ def read_chunk(chunk_id):
         err_message = read_with_length(sockfile).decode("utf-8")
 
         if err_message != "ok":
-            raise RuntimeError(f"Read chunk '{chunk_id}' failed (error: {err_message}).")
+            raise PySparkRuntimeError(f"Read chunk '{chunk_id}' failed (error: {err_message}).")
 
         arrow_serializer = ArrowStreamSerializer()
 
