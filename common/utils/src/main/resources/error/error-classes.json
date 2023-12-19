@@ -5,6 +5,12 @@
     ],
     "sqlState" : "42845"
   },
+  "ALL_PARAMETERS_MUST_BE_NAMED" : {
+    "message" : [
+      "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
+    ],
+    "sqlState" : "07001"
+  },
   "ALL_PARTITION_COLUMNS_NOT_ALLOWED" : {
     "message" : [
       "Cannot use all columns for partition columns."
@@ -1043,6 +1049,12 @@
     ],
     "sqlState" : "42702"
   },
+  "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES" : {
+    "message" : [
+      "The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (<aliases>), which is invalid; please update the command to specify unique aliases and then try it again."
+    ],
+    "sqlState" : "42701"
+  },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
       "'<operation>' expects a permanent view but <viewName> is a temp view."
@@ -1114,6 +1126,79 @@
       "Failed preparing of the function <funcName> for call. Please, double check function's arguments."
     ],
     "sqlState" : "38000"
+  },
+  "FAILED_JDBC" : {
+    "message" : [
+      "Failed JDBC <url> on the operation:"
+    ],
+    "subClass" : {
+      "ALTER_TABLE" : {
+        "message" : [
+          "Alter the table <tableName>."
+        ]
+      },
+      "CREATE_INDEX" : {
+        "message" : [
+          "Create the index <indexName> in the <tableName> table."
+        ]
+      },
+      "CREATE_NAMESPACE" : {
+        "message" : [
+          "Create the namespace <namespace>."
+        ]
+      },
+      "CREATE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Create a comment on the namespace: <namespace>."
+        ]
+      },
+      "CREATE_TABLE" : {
+        "message" : [
+          "Create the table <tableName>."
+        ]
+      },
+      "DROP_INDEX" : {
+        "message" : [
+          "Drop the index <indexName> in the <tableName> table."
+        ]
+      },
+      "DROP_NAMESPACE" : {
+        "message" : [
+          "Drop the namespace <namespace>."
+        ]
+      },
+      "GET_TABLES" : {
+        "message" : [
+          "Get tables from the namespace: <namespace>."
+        ]
+      },
+      "LIST_NAMESPACES" : {
+        "message" : [
+          "List namespaces."
+        ]
+      },
+      "NAMESPACE_EXISTS" : {
+        "message" : [
+          "Check that the namespace <namespace> exists."
+        ]
+      },
+      "REMOVE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Remove a comment on the namespace: <namespace>."
+        ]
+      },
+      "RENAME_TABLE" : {
+        "message" : [
+          "Rename the table <oldName> to <newName>."
+        ]
+      },
+      "TABLE_EXISTS" : {
+        "message" : [
+          "Check that the table <tableName> exists."
+        ]
+      }
+    },
+    "sqlState" : "HV000"
   },
   "FAILED_PARSE_STRUCT_TYPE" : {
     "message" : [
@@ -2176,6 +2261,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
+    "message" : [
+      "Parameterized query must either use positional, or named parameters, but not both."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
@@ -2246,6 +2337,11 @@
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
+        ]
+      },
+      "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
+        "message" : [
+          "The function <prettyName> does not support <syntax>."
         ]
       },
       "INVALID_COLUMN_REFERENCE" : {
@@ -2321,6 +2417,12 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "INVALID_STATEMENT_FOR_EXECUTE_INTO" : {
+    "message" : [
+      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: <sqlString>."
+    ],
+    "sqlState" : "07501"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
@@ -2398,6 +2500,12 @@
       "Invalid usage of <elem> in <prettyName>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Variable type must be string type but got <varType>."
+    ],
+    "sqlState" : "42K09"
   },
   "INVALID_VIEW_TEXT" : {
     "message" : [
@@ -2583,6 +2691,12 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ],
     "sqlState" : "42607"
+  },
+  "NESTED_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
+    ],
+    "sqlState" : "07501"
   },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
@@ -3540,6 +3654,14 @@
     ],
     "sqlState" : "42K0E"
   },
+  "UNSUPPORTED_EXPR_FOR_PARAMETER" : {
+    "message" : [
+      "A query parameter contains unsupported expression.",
+      "Parameters can either be variables or literals.",
+      "Invalid expression: [<invalidExprSql>]"
+    ],
+    "sqlState" : "42K0E"
+  },
   "UNSUPPORTED_EXPR_FOR_WINDOW" : {
     "message" : [
       "Expression <sqlExpr> not supported within a window function."
@@ -4337,11 +4459,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1023" : {
-    "message" : [
-      "Function <prettyName> does not support <syntax>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1024" : {
@@ -6795,11 +6912,6 @@
   "_LEGACY_ERROR_TEMP_3063" : {
     "message" : [
       "pivot is not supported on a streaming DataFrames/Datasets"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3064" : {
-    "message" : [
-      "<msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3065" : {

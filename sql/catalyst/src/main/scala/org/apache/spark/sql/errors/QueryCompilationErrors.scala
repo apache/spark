@@ -611,8 +611,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1023",
-      messageParameters = Map("prettyName" -> prettyName, "syntax" -> syntax))
+      errorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      messageParameters = Map("prettyName" -> toSQLId(prettyName), "syntax" -> toSQLStmt(syntax)))
   }
 
   def nonDeterministicFilterInAggregateError(): Throwable = {
@@ -762,6 +762,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "variableName" -> toSQLId(name),
         "searchPath" -> toSQLId(searchPath)))
+  }
+
+  def unresolvedVariableError(
+      name: Seq[String],
+      searchPath: Seq[String],
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVED_VARIABLE",
+      messageParameters = Map(
+        "variableName" -> toSQLId(name),
+        "searchPath" -> toSQLId(searchPath)),
+      origin = origin)
   }
 
   def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
@@ -1952,6 +1964,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "requiredType" -> toSQLType(dataType),
         "inputSql" -> toSQLExpr(expression),
         "inputType" -> toSQLType(expression.dataType)))
+  }
+
+  def unexpectedNullError(exprName: String, expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      messageParameters = Map(
+        "exprName" -> toSQLId(exprName),
+        "sqlExpr" -> toSQLExpr(expression)
+      ))
   }
 
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
@@ -3864,5 +3885,43 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new InvalidUDFClassException(
       errorClass = "_LEGACY_ERROR_TEMP_2450",
       messageParameters = Map("invalidClass" -> invalidClass))
+  }
+
+  def unsupportedParameterExpression(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_EXPR_FOR_PARAMETER",
+      messageParameters = Map(
+        "invalidExprSql" -> toSQLExpr(expr)),
+      origin = expr.origin)
+  }
+
+  def invalidQueryAllParametersMustBeNamed(expr: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      errorClass = "ALL_PARAMETERS_MUST_BE_NAMED",
+      messageParameters = Map("exprs" -> expr.map(e => toSQLExpr(e)).mkString(", ")))
+  }
+
+  def invalidQueryMixedQueryParameters(): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+      messageParameters = Map.empty)
+  }
+
+  def invalidExecuteImmediateVariableType(dataType: DataType): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      messageParameters = Map("varType" -> toSQLType(dataType)))
+  }
+
+  def invalidStatementForExecuteInto(queryString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
+  }
+
+  def nestedExecuteImmediate(queryString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "NESTED_EXECUTE_IMMEDIATE",
+      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 }

@@ -431,7 +431,7 @@ Other generic options can be found in <a href="https://spark.apache.org/docs/lat
 
 ### Configuration
 
-Configuration of Parquet can be done using the `setConf` method on `SparkSession` or by running
+Configuration of Parquet can be done via `spark.conf.set` or by running
 `SET key=value` commands using SQL.
 
 <table>

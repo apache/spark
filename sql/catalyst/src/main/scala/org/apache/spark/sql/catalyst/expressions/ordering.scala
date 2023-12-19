@@ -37,7 +37,13 @@ class BaseOrdering extends Ordering[InternalRow] {
  * An interpreted row ordering comparator.
  */
 class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
-  private lazy val physicalDataTypes = ordering.map(order => PhysicalDataType(order.dataType))
+  private lazy val physicalDataTypes = ordering.map { order =>
+    val dt = order.dataType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case _ => order.dataType
+    }
+    PhysicalDataType(dt)
+  }
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(bindReferences(ordering, inputSchema))

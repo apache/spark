@@ -256,6 +256,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
   override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
+      new SubstituteExecuteImmediate(catalogManager),
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
@@ -2333,9 +2334,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case owg: SupportsOrderingWithinGroup if u.isDistinct =>
           throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
             owg.prettyName)
-        case owg: SupportsOrderingWithinGroup if u.orderingWithinGroup.isEmpty =>
+        case owg: SupportsOrderingWithinGroup
+          if !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
           throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
             owg.prettyName)
+        case owg: SupportsOrderingWithinGroup
+          if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
+          throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+            owg.prettyName, 0, u.orderingWithinGroup.length)
         case f
           if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
@@ -2384,7 +2390,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
           // After parse, the inverse distribution functions not set the ordering within group yet.
           val newAgg = agg match {
-            case owg: SupportsOrderingWithinGroup if u.orderingWithinGroup.nonEmpty =>
+            case owg: SupportsOrderingWithinGroup
+              if !owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
               owg.withOrderingWithinGroup(u.orderingWithinGroup)
             case _ =>
               agg

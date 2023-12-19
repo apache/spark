@@ -29,6 +29,12 @@ Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
 
 Non-deterministic expression `<sqlExpr>` should not appear in the arguments of an aggregate function.
 
+### ALL_PARAMETERS_MUST_BE_NAMED
+
+SQLSTATE: 07001
+
+Using name parameterized queries requires all parameters to be named. Parameters missing names: `<exprs>`.
+
 ### ALL_PARTITION_COLUMNS_NOT_ALLOWED
 
 SQLSTATE: KD005
@@ -621,6 +627,12 @@ EXCEPT column `<columnName>` was resolved and expected to be StructType, but fou
 
 Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
 
+### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
+
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (`<aliases>`), which is invalid; please update the command to specify unique aliases and then try it again.
+
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -672,6 +684,14 @@ User defined function (`<functionName>`: (`<signature>`) => `<result>`) failed d
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
 Failed preparing of the function `<funcName>` for call. Please, double check function's arguments.
+
+### [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
+
+SQLSTATE: HV000
+
+Failed JDBC `<url>` on the operation:
+
+For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
 
 ### FAILED_PARSE_STRUCT_TYPE
 
@@ -1257,6 +1277,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 `<value>` is an invalid property value, please use quotes, e.g. SET `<key>`=`<value>`
 
+### INVALID_QUERY_MIXED_QUERY_PARAMETERS
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Parameterized query must either use positional, or named parameters, but not both.
+
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
 [SQLSTATE: 42K07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1290,6 +1316,12 @@ The argument `<name>` of `sql()` is invalid. Consider to replace it either by a 
 Invalid SQL syntax:
 
 For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
+
+### INVALID_STATEMENT_FOR_EXECUTE_INTO
+
+SQLSTATE: 07501
+
+The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1342,6 +1374,12 @@ The url is invalid: `<url>`. If necessary set `<ansiConfig>` to "false" to bypas
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Invalid usage of `<elem>` in `<prettyName>`.
+
+### INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Variable type must be string type but got `<varType>`.
 
 ### INVALID_VIEW_TEXT
 
@@ -1486,6 +1524,12 @@ Set "spark.sql.allowNamedFunctionArguments" to "true" to turn on feature.
 [SQLSTATE: 42607](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
+
+### NESTED_EXECUTE_IMMEDIATE
+
+SQLSTATE: 07501
+
+Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
 
 ### NON_FOLDABLE_ARGUMENT
 
@@ -2317,6 +2361,14 @@ Cannot create generated column `<fieldName>` with generation expression `<expres
 A query operator contains one or more unsupported expressions.
 Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.
 Invalid expressions: [`<invalidExprSqls>`]
+
+### UNSUPPORTED_EXPR_FOR_PARAMETER
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A query parameter contains unsupported expression.
+Parameters can either be variables or literals.
+Invalid expression: [`<invalidExprSql>`]
 
 ### UNSUPPORTED_EXPR_FOR_WINDOW
 
