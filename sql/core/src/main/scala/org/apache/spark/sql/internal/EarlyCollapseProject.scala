@@ -28,10 +28,9 @@ private[sql] object EarlyCollapseProject {
   def unapply(logicalPlan: LogicalPlan): Option[LogicalPlan] =
     logicalPlan match {
       case newP @ Project(newProjList, p @ Project(projList, child)) if
-        p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
-        newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
-        !child.isInstanceOf[Window] && !child.isInstanceOf[Aggregate] =>
-
+          p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
+          newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
+          !child.isInstanceOf[Window] =>
         // In the new column list identify those Named Expressions which are just attributes and
         // hence pass thru
         val (_, tinkeredOrNewNamedExprs) = newProjList.partition {
