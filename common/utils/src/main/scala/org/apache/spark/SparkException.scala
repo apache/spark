@@ -113,7 +113,7 @@ object SparkException {
    * @param errorClass The error class to type if the requirement isn't passed
    * @param messageParameters Message parameters to append to the message
    */
-  def checkArgs(
+  def require(
       requirement: Boolean,
       errorClass: String,
       messageParameters: Map[String, String]): Unit = {

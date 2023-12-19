@@ -1300,11 +1300,11 @@ trait ComplexTypeMergingExpression extends Expression {
   lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
 
   def dataTypeCheck: Unit = {
-    SparkException.checkArgs(
+    SparkException.require(
       requirement = inputTypesForMerging.nonEmpty,
       errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
       messageParameters = Map("expression" -> this.toString))
-    SparkException.checkArgs(
+    SparkException.require(
       requirement = TypeCoercion.haveSameType(inputTypesForMerging),
       errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
       messageParameters = Map(
