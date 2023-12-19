@@ -619,7 +619,7 @@ class StaxXmlParser(
       row: Array[Any],
       schema: StructType,
       name: String,
-      string: String,
+      data: String,
       addToTail: Boolean = true): InternalRow = {
     schema.getFieldIndex(name) match {
       case Some(index) =>
