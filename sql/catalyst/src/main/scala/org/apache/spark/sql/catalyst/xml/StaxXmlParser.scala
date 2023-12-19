@@ -627,6 +627,8 @@ class XmlTokenizer(
                 "Skipping the rest of" +
                   " the content in the corrupted file during schema inference",
                 e)
+            case e: Throwable =>
+              throw e
           }
       } finally {
         if (nextString.isEmpty) {
