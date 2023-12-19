@@ -79,6 +79,17 @@ class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
 
   override protected def getConnection: Option[String] => JdbcSQLQueryTestRunner =
     (connection_url: Option[String]) => JdbcSQLQueryTestRunner(PostgresConnection(connection_url))
+
+  override protected def preprocessingCommands = Seq(
+    // Custom function `double` to imitate Spark's function, so that more tests are covered.
+    """
+      |CREATE FUNCTION OR REPLACE FUNCTION double(numeric_value numeric) RETURNS double precision
+      |    AS 'select CAST($1 AS double precision);'
+      |    LANGUAGE SQL
+      |    IMMUTABLE
+      |    RETURNS NULL ON NULL INPUT;
+      |""".stripMargin
+  )
 }
 
 /**
@@ -95,9 +106,27 @@ class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
  */
 abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
+  /**
+   * A String representing the database system being used.
+   */
   protected def crossDbmsToGenerateGoldenFiles: String
-  protected def customInputFilePath: String
+
+  /**
+   * A custom input file path where SQL tests are located, if desired.
+   */
+  protected def customInputFilePath: String = super.inputFilePath
+
+  /**
+   * A function taking in an optional custom connection URL, and returns a [[SQLQueryTestRunner]]
+   * specific to the database system.
+   */
   protected def getConnection: Option[String] => SQLQueryTestRunner
+
+  /**
+   * Commands to be run before running queries to generate golden files, such as defining custom
+   * functions.
+   */
+  protected def preprocessingCommands: Seq[String]
 
   private def customConnectionUrl: String = System.getenv(
     CrossDbmsQueryTestSuite.REF_DBMS_CONNECTION_URL)
@@ -137,6 +166,8 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         if (regenerateGoldenFiles) {
           val connectionUrl = Option(customConnectionUrl).filter(_.nonEmpty)
           runner = runner.orElse(Some(getConnection(connectionUrl)))
+          preprocessingCommands.foreach(command => runner.foreach(_.runQuery(command)))
+
           try {
             // Either of the below two lines can error. If we go into the catch statement, then it
             // is likely one of the following scenarios:
