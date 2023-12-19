@@ -75,8 +75,7 @@ class QueryInfoImpl(
  * @param store - instance of state store
  */
 class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
-  extends StatefulProcessorHandle
-  with Logging {
+  extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
   private def buildQueryInfo(): QueryInfo = {

@@ -33,12 +33,13 @@ trait StatefulProcessor[K, I, O] extends Serializable {
    * Function that will be invoked as the first method that allows for users to
    * initialize all their state variables and perform other init actions before handling data.
    * @param handle - reference to the statefulProcessorHandle that the user can use to perform
-   *               future actions
+   *               actions like creating state variables, accessing queryInfo etc. Please refer to
+   *               [[StatefulProcessorHandle]] for more details.
    * @param outputMode - output mode for the stateful processor
    */
   def init(
-    handle: StatefulProcessorHandle,
-    outputMode: OutputMode): Unit
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key
@@ -50,9 +51,9 @@ trait StatefulProcessor[K, I, O] extends Serializable {
    * @return - Zero or more output rows
    */
   def handleInputRows(
-    key: K,
-    inputRows: Iterator[I],
-    timerValues: TimerValues): Iterator[O]
+      key: K,
+      inputRows: Iterator[I],
+      timerValues: TimerValues): Iterator[O]
 
   /**
    * Function called as the last method that allows for users to perform

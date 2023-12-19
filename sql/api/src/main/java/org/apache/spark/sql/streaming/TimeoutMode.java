@@ -31,5 +31,5 @@ public class TimeoutMode {
   /**
    * Stateful processor that does not register timers
    */
-  public static TimeoutMode NoTimeouts() { return NoTimeouts$.MODULE$; }
+  public static TimeoutMode noTimeouts() { return noTimeouts$.MODULE$; }
 }

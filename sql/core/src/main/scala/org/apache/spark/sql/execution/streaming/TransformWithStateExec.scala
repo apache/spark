@@ -62,6 +62,7 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
+  // TODO: update this to run no-data batches when timer support is added
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = false
 
   override protected def withNewChildInternal(
