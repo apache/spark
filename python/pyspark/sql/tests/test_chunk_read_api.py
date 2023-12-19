@@ -29,12 +29,13 @@ class ChunkReadApiTests(unittest.TestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
-        self.spark = SparkSession.builder \
-            .master("local-cluster[2, 1, 1024]") \
-            .appName(class_name) \
-            .config("spark.python.dataFrameChunkRead.enabled", "true") \
-            .config("spark.task.maxFailures", "1") \
+        self.spark = (
+            SparkSession.builder.master("local-cluster[2, 1, 1024]")
+            .appName(class_name)
+            .config("spark.python.dataFrameChunkRead.enabled", "true")
+            .config("spark.task.maxFailures", "1")
             .getOrCreate()
+        )
         self.sc = self.spark.sparkContext
 
         self.test_df = self.spark.range(0, 16, 1, 2)
@@ -84,7 +85,6 @@ for chunk_id in chunk_ids:
 
     def test_read_chunk_in_driver_child_proc(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             with open(os.path.join(tmp_dir, "read_chunk_and_save.py"), "w") as f:
                 f.write(self.child_proc_test_code)
 
@@ -97,7 +97,6 @@ for chunk_id in chunk_ids:
 
     def test_read_chunk_in_udf_worker_child_proc(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             with open(os.path.join(tmp_dir, "read_chunk_and_save.py"), "w") as f:
                 f.write(self.child_proc_test_code)
 

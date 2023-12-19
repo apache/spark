@@ -30,7 +30,9 @@ from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 ChunkMeta = namedtuple("ChunkMeta", ["id", "row_count", "byte_count"])
 
 
-def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int) -> list[ChunkMeta]:
+def persist_dataframe_as_chunks(
+    dataframe: DataFrame, max_records_per_batch: int
+) -> list[ChunkMeta]:
     """
     Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
     It tries to persist data to spark worker memory firstly, if memory is not sufficient,
@@ -43,17 +45,15 @@ def persist_dataframe_as_chunks(dataframe: DataFrame, max_records_per_batch: int
         raise RuntimeError("Active spark session is required.")
 
     sc = spark.sparkContext
-    if (
-        sc.getConf().get("spark.python.dataFrameChunkRead.enabled", "false").lower()
-        != "true"
-    ):
+    if sc.getConf().get("spark.python.dataFrameChunkRead.enabled", "false").lower() != "true":
         raise RuntimeError(
             "In order to use 'persist_dataframe_as_chunks' API, you must set spark "
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true'."
         )
     chunk_meta_list = list(
-        sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils
-        .persistDataFrameAsArrowBatchChunks(dataframe._jdf, max_records_per_batch)
+        sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(
+            dataframe._jdf, max_records_per_batch
+        )
     )
     return [
         ChunkMeta(java_chunk_meta.id(), java_chunk_meta.rowCount(), java_chunk_meta.byteCount())
@@ -119,6 +119,3 @@ def read_chunk(chunk_id):
         return arrow_table
     finally:
         sockfile.close()
-
-
-
