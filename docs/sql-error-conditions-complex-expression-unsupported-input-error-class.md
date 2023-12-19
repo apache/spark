@@ -21,14 +21,13 @@ license: |
 
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot process input data types for expression: `<expression>`.
+Cannot process input data types for the expression: `<expression>`.
 
 This error class has the following derived error classes:
 
 ## MISMATCHED_TYPES
 
-All input types must be the same except nullable, containsNull, valueContainsNull flags.
-The input types found are `<inputTypes>`.
+All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types `<inputTypes>`.
 
 ## NO_INPUTS
 
