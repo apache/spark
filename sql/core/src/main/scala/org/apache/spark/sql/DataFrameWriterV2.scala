@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.IntegerType
  */
 @Experimental
 final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
-  extends CreateTableWriter[T] {
+    extends CreateTableWriter[T] {
 
   private val df: DataFrame = ds.toDF()
 
