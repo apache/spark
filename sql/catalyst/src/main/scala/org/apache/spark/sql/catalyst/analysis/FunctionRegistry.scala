@@ -775,6 +775,7 @@ object FunctionRegistry {
     expression[In]("in"),
     expression[Not]("not"),
     expression[Or]("or"),
+    expression[Between]("between"),
 
     // comparison operators
     expression[EqualNullSafe]("<=>"),

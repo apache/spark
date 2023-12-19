@@ -481,16 +481,6 @@ abstract class TypeCoercionBase {
             Coalesce(es.map(castIfNotSameType(_, finalDataType)))
           case None => c
         }
-      case b @ Between(proj, lower, upper) if !haveSameType(b.inputTypesForMerging) && b.resolved =>
-        findWiderCommonType(
-          Seq(proj.dataType, lower.dataType, upper.dataType)) match {
-        case Some(finalDataType) => Between(
-          castIfNotSameType(proj, finalDataType),
-          castIfNotSameType(lower, finalDataType),
-          castIfNotSameType(upper, finalDataType)
-        )
-        case None => b
-      }
       // When finding wider type for `Greatest` and `Least`, we should handle decimal types even if
       // we need to truncate, but we should not promote one side to string if the other side is
       // string.g
@@ -921,7 +911,7 @@ object TypeCoercion extends TypeCoercionBase {
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  private def findCommonTypeForBinaryComparison(
+  def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
     case (StringType, DateType)
       => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
@@ -948,19 +938,6 @@ object TypeCoercion extends TypeCoercionBase {
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
     case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
     case (l, r) => None
-  }
-
-  /**
-   * Same as [[findCommonTypeForBinaryComparison]], but for BETWEEN operator.
-   */
-  private def findCommonTypeForBetweenComparison(
-    proj: DataType, lower: DataType, upper: DataType, conf: SQLConf): Option[DataType] = {
-    Seq(Some(lower), Some(upper)).foldLeft(Option(proj))((t1, t2) =>
-      (t1, t2) match {
-        case (Some(t1), Some(t2)) if t1 == t2 => Some(t1)
-        case (Some(t1), Some(t2)) => findCommonTypeForBinaryComparison(t1, t2, conf)
-        case _ => None
-      })
   }
 
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
@@ -1145,13 +1122,6 @@ object TypeCoercion extends TypeCoercionBase {
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
-      case b @ Between(proj, lower, upper)
-        if findCommonTypeForBetweenComparison(
-          proj.dataType, lower.dataType, upper.dataType, conf).isDefined =>
-        val commonType = findCommonTypeForBetweenComparison(
-          proj.dataType, lower.dataType, upper.dataType, conf).get
-        b.makeCopy(Array(castIfNotSameType(proj, commonType), castIfNotSameType(lower, commonType),
-          castIfNotSameType(upper, commonType)))
     }
   }
 
