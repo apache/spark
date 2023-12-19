@@ -170,6 +170,55 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
     val qe = sparkSession.sessionState.executePlan(merge)
     qe.assertCommandExecuted()
   }
+
+  def withNewMatchedUpdateAction(condition: Option[Expression]): MergeIntoWriter[T] = {
+    this.matchedActions = this.matchedActions :+ UpdateStarAction(condition)
+    this
+  }
+
+  def withNewMatchedUpdateAction(
+      condition: Option[Expression],
+      map: Map[String, Column]): MergeIntoWriter[T] = {
+    this.matchedActions = this.matchedActions :+
+      UpdateAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this
+  }
+
+  def withNewMatchedDeleteAction(condition: Option[Expression]): MergeIntoWriter[T] = {
+    this.matchedActions = this.matchedActions :+ DeleteAction(condition)
+    this
+  }
+
+  def withNewNotMatchedInsertAction(condition: Option[Expression]): MergeIntoWriter[T] = {
+    this.notMatchedActions = this.notMatchedActions :+ InsertStarAction(condition)
+    this
+  }
+
+  def withNewNotMatchedInsertAction(
+      condition: Option[Expression],
+      map: Map[String, Column]): MergeIntoWriter[T] = {
+    this.notMatchedActions = this.notMatchedActions :+
+      InsertAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this
+  }
+
+  def withNewNotMatchedBySourceUpdateAction(condition: Option[Expression]): MergeIntoWriter[T] = {
+    this.notMatchedBySourceActions = this.notMatchedBySourceActions :+ UpdateStarAction(condition)
+    this
+  }
+
+  def withNewNotMatchedBySourceUpdateAction(
+      condition: Option[Expression],
+      map: Map[String, Column]): MergeIntoWriter[T] = {
+    this.notMatchedBySourceActions = this.notMatchedBySourceActions :+
+      UpdateAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+    this
+  }
+
+  def withNewNotMatchedBySourceDeleteAction(condition: Option[Expression]): MergeIntoWriter[T] = {
+    this.notMatchedBySourceActions = this.notMatchedBySourceActions :+ DeleteAction(condition)
+    this
+  }
 }
 
 /**
@@ -194,21 +243,18 @@ case class WhenMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the update all action configured.
    */
   def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.matchedActions = mergeIntoWriter.matchedActions :+ UpdateStarAction(condition)
-    this.mergeIntoWriter
+    mergeIntoWriter.withNewMatchedUpdateAction(condition)
   }
 
   /**
    * Specifies an action to update matched rows in the DataFrame with the provided column
    * assignments.
    *
-   * @param set A Map of column names to Column expressions representing the updates to be applied.
+   * @param map A Map of column names to Column expressions representing the updates to be applied.
    * @return The MergeIntoWriter instance with the update action configured.
    */
-  def update(set: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.matchedActions = mergeIntoWriter.matchedActions :+
-      UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this.mergeIntoWriter
+  def update(map: Map[String, Column]): MergeIntoWriter[T] = {
+    mergeIntoWriter.withNewMatchedUpdateAction(condition, map)
   }
 
   /**
@@ -217,8 +263,7 @@ case class WhenMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the delete action configured.
    */
   def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.matchedActions = mergeIntoWriter.matchedActions :+ DeleteAction(condition)
-    this.mergeIntoWriter
+    mergeIntoWriter.withNewMatchedDeleteAction(condition)
   }
 }
 
@@ -226,13 +271,12 @@ case class WhenMatched[T] private[sql](
  * A class for defining actions to be taken when no matching rows are found in a DataFrame
  * during a merge operation.
  *
- * @param MergeIntoWriter   The DMergeIntoWriter instance responsible for writing data to a
+ * @param MergeIntoWriter   The MergeIntoWriter instance responsible for writing data to a
  *                          target DataFrame.
  * @param condition         An optional condition Expression that specifies when the actions
  *                          defined in this configuration should be applied.
  *                          If the condition is None, the actions will be applied when there
  *                          are no matching rows.
- *
  * @tparam T                The type of data in the MergeIntoWriter.
  */
 case class WhenNotMatched[T] private[sql](
@@ -245,24 +289,21 @@ case class WhenNotMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the insert all action configured.
    */
   def insertAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.notMatchedActions =
-      mergeIntoWriter.notMatchedActions :+ InsertStarAction(condition)
-    this.mergeIntoWriter
+    mergeIntoWriter.withNewNotMatchedInsertAction(condition)
   }
 
   /**
    * Specifies an action to insert non-matched rows into the DataFrame with the provided
    * column assignments.
    *
-   * @param set A Map of column names to Column expressions representing the values to be inserted.
+   * @param map A Map of column names to Column expressions representing the values to be inserted.
    * @return The MergeIntoWriter instance with the insert action configured.
    */
-  def insert(set: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.notMatchedActions = mergeIntoWriter.notMatchedActions :+
-      InsertAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this.mergeIntoWriter
+  def insert(map: Map[String, Column]): MergeIntoWriter[T] = {
+    mergeIntoWriter.withNewNotMatchedInsertAction(condition, map)
   }
 }
+
 
 /**
  * A class for defining actions to be performed when there is no match by source
@@ -270,7 +311,7 @@ case class WhenNotMatched[T] private[sql](
  *
  * @param MergeIntoWriter the MergeIntoWriter instance to which the merge actions will be applied.
  * @param condition       an optional condition to be used with the merge actions.
- * @tparam T              the type parameter for the MergeIntoWriter.
+ * @tparam T the type parameter for the MergeIntoWriter.
  */
 case class WhenNotMatchedBySource[T] private[sql](
     mergeIntoWriter: MergeIntoWriter[T],
@@ -283,22 +324,18 @@ case class WhenNotMatchedBySource[T] private[sql](
    * @return The MergeIntoWriter instance with the update all action configured.
    */
   def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.notMatchedBySourceActions =
-      mergeIntoWriter.notMatchedBySourceActions :+ UpdateStarAction(condition)
-    this.mergeIntoWriter
+    mergeIntoWriter.withNewNotMatchedBySourceUpdateAction(condition)
   }
 
   /**
    * Specifies an action to update non-matched rows in the target DataFrame with the provided
    * column assignments when not matched by the source.
    *
-   * @param set A Map of column names to Column expressions representing the updates to be applied.
+   * @param map A Map of column names to Column expressions representing the updates to be applied.
    * @return The MergeIntoWriter instance with the update action configured.
    */
-  def update(set: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.notMatchedBySourceActions = mergeIntoWriter.notMatchedBySourceActions :+
-      UpdateAction(condition, set.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this.mergeIntoWriter
+  def update(map: Map[String, Column]): MergeIntoWriter[T] = {
+    mergeIntoWriter.withNewNotMatchedBySourceUpdateAction(condition, map)
   }
 
   /**
@@ -308,8 +345,6 @@ case class WhenNotMatchedBySource[T] private[sql](
    * @return The MergeIntoWriter instance with the delete action configured.
    */
   def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.notMatchedBySourceActions =
-      mergeIntoWriter.notMatchedBySourceActions :+ DeleteAction(condition)
-    this.mergeIntoWriter
+    mergeIntoWriter.withNewNotMatchedBySourceDeleteAction(condition)
   }
 }

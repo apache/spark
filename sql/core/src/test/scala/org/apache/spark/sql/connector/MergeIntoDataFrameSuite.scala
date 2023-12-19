@@ -18,9 +18,9 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions.{array, col, lit, map, struct}
+import org.apache.spark.sql.functions._
 
-abstract class MergeIntoDFWriterV2SuiteBase extends RowLevelOperationSuiteBase {
+class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   import testImplicits._
 
