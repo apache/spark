@@ -442,18 +442,10 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
     val attemptId = context.attemptNumber()
     val dataWriter = writerFactory.createWriter(partId, taskId).asInstanceOf[W]
 
-    var count = 0L
+    val iterWithMetrics = IteratorWithMetrics(iter, dataWriter, customMetrics)
+
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      val iterWithMetrics = iter.map { row =>
-        if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-          CustomMetrics.updateMetrics(
-            dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
-        }
-        count += 1
-        row
-      }
-
       writeAll(dataWriter, iterWithMetrics)
 
       CustomMetrics.updateMetrics(
@@ -482,7 +474,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId, " +
         s"stage $stageId.$stageAttempt)")
 
-      DataWritingSparkTaskResult(count, msg)
+      DataWritingSparkTaskResult(iterWithMetrics.count, msg)
 
     })(catchBlock = {
       // If there is an error, abort this writer
@@ -494,6 +486,24 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
     }, finallyBlock = {
       dataWriter.close()
     })
+  }
+
+  private case class IteratorWithMetrics(
+      iter: Iterator[InternalRow],
+      dataWriter: W,
+      customMetrics: Map[String, SQLMetric]) extends Iterator[InternalRow] {
+    var count = 0L
+
+    override def hasNext: Boolean = iter.hasNext
+
+    override def next(): InternalRow = {
+      if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+        CustomMetrics.updateMetrics(
+          dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
+      }
+      count += 1
+      iter.next()
+    }
   }
 }
 
