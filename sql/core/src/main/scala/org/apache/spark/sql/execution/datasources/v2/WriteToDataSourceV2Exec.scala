@@ -421,7 +421,13 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
 trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serializable {
 
-  protected def write(writer: W, row: InternalRow): Unit
+  protected def write(writer: W, row: InternalRow): Unit = {}
+
+  protected def writeAll(writer: W, iter: Iterator[InternalRow]): Unit = {
+    while (iter.hasNext) {
+      write(writer, iter.next())
+    }
+  }
 
   def run(
       writerFactory: DataWriterFactory,
@@ -439,16 +445,16 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
     var count = 0L
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      while (iter.hasNext) {
+      val iterWithMetrics = iter.map { row =>
         if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
           CustomMetrics.updateMetrics(
             dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
         }
-
-        // Count is here.
         count += 1
-        write(dataWriter, iter.next())
+        row
       }
+
+      writeAll(dataWriter, iterWithMetrics)
 
       CustomMetrics.updateMetrics(
         dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
@@ -492,8 +498,10 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 }
 
 object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
-  override protected def write(writer: DataWriter[InternalRow], row: InternalRow): Unit = {
-    writer.write(row)
+  override protected def writeAll(
+      writer: DataWriter[InternalRow],
+      iter: Iterator[InternalRow]): Unit = {
+    writer.writeAll(iter.asJava)
   }
 }
 
