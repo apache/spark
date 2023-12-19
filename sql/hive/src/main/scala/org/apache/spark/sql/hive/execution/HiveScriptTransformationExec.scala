@@ -45,13 +45,13 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  * @param child logical plan whose output is transformed.
- * @param ioschema the class set that defines how to handle input/output data.
+ * @param ioSchema the class set that defines how to handle input/output data.
  */
 private[hive] case class HiveScriptTransformationExec(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    ioschema: ScriptTransformationIOSchema)
+    ioSchema: ScriptTransformationIOSchema)
   extends BaseScriptTransformationExec {
   import HiveScriptIOSchema._
 
@@ -68,7 +68,7 @@ private[hive] case class HiveScriptTransformationExec(
       val scriptOutputStream = new DataInputStream(inputStream)
 
       val scriptOutputReader =
-        recordReader(ioschema, scriptOutputStream, hadoopConf).orNull
+        recordReader(ioSchema, scriptOutputStream, hadoopConf).orNull
 
       var scriptOutputWritable: Writable = null
       val reusedWritableObject = outputSerde.getSerializedClass.getConstructor().newInstance()
@@ -145,7 +145,7 @@ private[hive] case class HiveScriptTransformationExec(
 
     val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
-    val (inputSerde, inputSoi) = initInputSerDe(ioschema, child.output).getOrElse((null, null))
+    val (inputSerde, inputSoi) = initInputSerDe(ioSchema, child.output).getOrElse((null, null))
 
     // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
     // We will use StringBuffer to pass data, in this case, we should cast data as string too.
@@ -164,7 +164,7 @@ private[hive] case class HiveScriptTransformationExec(
       finalInput.map(_.dataType),
       inputSerde,
       inputSoi,
-      ioschema,
+      ioSchema,
       outputStream,
       proc,
       stderrBuffer,
@@ -173,7 +173,7 @@ private[hive] case class HiveScriptTransformationExec(
     )
 
     val (outputSerde, outputSoi) = {
-      initOutputSerDe(ioschema, output).getOrElse((null, null))
+      initOutputSerDe(ioSchema, output).getOrElse((null, null))
     }
 
     val outputIterator = if (outputSerde == null) {
@@ -239,11 +239,11 @@ private[hive] case class HiveScriptTransformationWriterThread(
 object HiveScriptIOSchema extends HiveInspectors {
 
   def initInputSerDe(
-      ioschema: ScriptTransformationIOSchema,
+      ioSchema: ScriptTransformationIOSchema,
       input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
-    ioschema.inputSerdeClass.map { serdeClass =>
+    ioSchema.inputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(input)
-      val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.inputSerdeProps)
+      val serde = initSerDe(serdeClass, columns, columnTypes, ioSchema.inputSerdeProps)
       val fieldObjectInspectors = columnTypes.map(toInspector)
       val objectInspector = ObjectInspectorFactory
         .getStandardStructObjectInspector(columns.asJava, fieldObjectInspectors.asJava)
@@ -252,11 +252,11 @@ object HiveScriptIOSchema extends HiveInspectors {
   }
 
   def initOutputSerDe(
-      ioschema: ScriptTransformationIOSchema,
+      ioSchema: ScriptTransformationIOSchema,
       output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
-    ioschema.outputSerdeClass.map { serdeClass =>
+    ioSchema.outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
-      val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.outputSerdeProps)
+      val serde = initSerDe(serdeClass, columns, columnTypes, ioSchema.outputSerdeProps)
       val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
       (serde, structObjectInspector)
     }
@@ -292,10 +292,10 @@ object HiveScriptIOSchema extends HiveInspectors {
   }
 
   def recordReader(
-      ioschema: ScriptTransformationIOSchema,
+      ioSchema: ScriptTransformationIOSchema,
       inputStream: InputStream,
       conf: Configuration): Option[RecordReader] = {
-    ioschema.recordReaderClass.map { klass =>
+    ioSchema.recordReaderClass.map { klass =>
       val instance = Utils.classForName[RecordReader](klass).getConstructor().
         newInstance()
       val props = new Properties()
@@ -308,10 +308,10 @@ object HiveScriptIOSchema extends HiveInspectors {
   }
 
   def recordWriter(
-      ioschema: ScriptTransformationIOSchema,
+      ioSchema: ScriptTransformationIOSchema,
       outputStream: OutputStream,
       conf: Configuration): Option[RecordWriter] = {
-    ioschema.recordWriterClass.map { klass =>
+    ioSchema.recordWriterClass.map { klass =>
       val instance = Utils.classForName[RecordWriter](klass).getConstructor().
         newInstance()
       instance.initialize(outputStream, conf)

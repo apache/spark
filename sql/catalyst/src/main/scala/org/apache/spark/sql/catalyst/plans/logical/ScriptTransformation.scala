@@ -25,13 +25,13 @@ import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
  *
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
- * @param ioschema the input and output schema applied in the execution of the script.
+ * @param ioSchema the input and output schema applied in the execution of the script.
  */
 case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: LogicalPlan,
-    ioschema: ScriptInputOutputSchema) extends UnaryNode with ReferenceAllColumns[LogicalPlan] {
+    ioSchema: ScriptInputOutputSchema) extends UnaryNode with ReferenceAllColumns[LogicalPlan] {
   override protected def withNewChildInternal(newChild: LogicalPlan): ScriptTransformation =
     copy(child = newChild)
 }

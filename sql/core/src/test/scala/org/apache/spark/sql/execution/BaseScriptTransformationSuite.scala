@@ -71,7 +71,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
-      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec
+      ioSchema: ScriptTransformationIOSchema): BaseScriptTransformationExec
 
   test("cat without SerDe") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
@@ -83,7 +83,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = defaultIOSchema
+        ioSchema = defaultIOSchema
       ),
       rowsDf.collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -100,7 +100,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
-          ioschema = defaultIOSchema
+          ioSchema = defaultIOSchema
         ),
         rowsDf.collect().toImmutableArraySeq)
     }
@@ -158,7 +158,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
           child = child,
-          ioschema = defaultIOSchema.copy(schemaLess = true)
+          ioSchema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
           $"a".cast("string").as("key"),
@@ -172,7 +172,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
           child = child,
-          ioschema = defaultIOSchema.copy(schemaLess = true)
+          ioSchema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
           $"a".cast("string").as("key"),
@@ -186,7 +186,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
           child = child,
-          ioschema = defaultIOSchema.copy(schemaLess = true)
+          ioSchema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
           $"a".cast("string").as("key"),
@@ -204,7 +204,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = defaultIOSchema)
+          ioSchema = defaultIOSchema)
       SparkPlanTest.executePlan(plan, spark.sqlContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
@@ -241,7 +241,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
               AttributeReference("i", BooleanType)(),
               AttributeReference("j", BinaryType)()),
             child = child,
-            ioschema = serde
+            ioSchema = serde
           ),
           df.select($"a", $"b", $"c", $"d", $"e",
             $"f", $"g", $"h", $"i", $"j").collect().toImmutableArraySeq)
@@ -282,7 +282,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
                 StructField("_2", IntegerType))))(),
             AttributeReference("e", new SimpleTupleUDT)()),
           child = child,
-          ioschema = defaultIOSchema
+          ioSchema = defaultIOSchema
         ),
         df.select($"a", $"b", $"c", $"d", $"e").collect().toImmutableArraySeq)
     }
@@ -390,7 +390,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           AttributeReference("c", StringType)(),
           AttributeReference("d", StringType)()),
         child = child,
-        ioschema = defaultIOSchema
+        ioSchema = defaultIOSchema
       ),
       df.select(
         $"a".cast("string").as("a"),
@@ -483,7 +483,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
                   Array(StructField("a", ArrayType(IntegerType)),
                     StructField("d", MapType(StringType, ArrayType(StringType)))))))))()),
           child = child,
-          ioschema = defaultIOSchema
+          ioSchema = defaultIOSchema
         ),
         df.select($"a", $"b", $"c", $"d", $"e",
           $"f", $"g").collect().toImmutableArraySeq)
@@ -652,7 +652,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("ym", YearMonthIntervalType())(),
             AttributeReference("dt", DayTimeIntervalType())()),
           child = child,
-          ioschema = defaultIOSchema
+          ioSchema = defaultIOSchema
         ),
         df.select($"ym", $"dt").collect().toImmutableArraySeq)
     }
@@ -667,7 +667,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         output = Seq(
           AttributeReference("col", TimestampNTZType)()),
         child = child,
-        ioschema = defaultIOSchema
+        ioSchema = defaultIOSchema
       ),
       df.select($"col").collect().toImmutableArraySeq)
   }

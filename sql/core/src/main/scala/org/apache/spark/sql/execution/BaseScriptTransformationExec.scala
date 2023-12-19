@@ -44,13 +44,13 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   def script: String
   def output: Seq[Attribute]
   def child: SparkPlan
-  def ioschema: ScriptTransformationIOSchema
+  def ioSchema: ScriptTransformationIOSchema
 
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
     child.output.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
-          new StructsToJson(ioschema.inputSerdeProps.toMap, in)
+          new StructsToJson(ioSchema.inputSerdeProps.toMap, in)
             .withTimeZone(conf.sessionLocalTimeZone)
         case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
       }
@@ -114,8 +114,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       var curLine: String = null
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
-      val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
-      val processRowWithoutSerde = if (!ioschema.schemaLess) {
+      val outputRowFormat = ioSchema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
+      val processRowWithoutSerde = if (!ioSchema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
             prevLine.split(outputRowFormat, -1).padTo(outputFieldWriters.size, null)
@@ -236,7 +236,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         converter)
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
-          ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
+          ioSchema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
         wrapperConvertException(data =>
           complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
@@ -250,7 +250,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {
-        if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+        if (data == ioSchema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
           null
         } else {
           try {

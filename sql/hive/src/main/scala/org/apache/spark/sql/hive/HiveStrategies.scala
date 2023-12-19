@@ -293,8 +293,8 @@ private[hive] trait HiveStrategies {
 
   object HiveScripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ScriptTransformation(script, output, child, ioschema) =>
-        val hiveIoSchema = ScriptTransformationIOSchema(ioschema)
+      case ScriptTransformation(script, output, child, ioSchema) =>
+        val hiveIoSchema = ScriptTransformationIOSchema(ioSchema)
         HiveScriptTransformationExec(script, output, planLater(child), hiveIoSchema) :: Nil
       case _ => Nil
     }

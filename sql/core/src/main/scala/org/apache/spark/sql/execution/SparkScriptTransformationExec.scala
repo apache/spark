@@ -33,13 +33,13 @@ import org.apache.spark.util.CircularBuffer
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  * @param child logical plan whose output is transformed.
- * @param ioschema the class set that defines how to handle input/output data.
+ * @param ioSchema the class set that defines how to handle input/output data.
  */
 case class SparkScriptTransformationExec(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    ioschema: ScriptTransformationIOSchema)
+    ioSchema: ScriptTransformationIOSchema)
   extends BaseScriptTransformationExec {
 
   override def processIterator(
@@ -55,7 +55,7 @@ case class SparkScriptTransformationExec(
     val writerThread = SparkScriptTransformationWriterThread(
       inputIterator.map(outputProjection),
       inputExpressionsWithoutSerde.map(_.dataType),
-      ioschema,
+      ioSchema,
       outputStream,
       proc,
       stderrBuffer,

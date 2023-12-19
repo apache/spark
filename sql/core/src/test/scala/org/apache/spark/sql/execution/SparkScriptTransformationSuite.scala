@@ -31,12 +31,12 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
-      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
+      ioSchema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
     SparkScriptTransformationExec(
       script = script,
       output = output,
       child = child,
-      ioschema = ioschema
+      ioSchema = ioSchema
     )
   }
 

@@ -50,12 +50,12 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
-      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
+      ioSchema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
     HiveScriptTransformationExec(
       script = script,
       output = output,
       child = child,
-      ioschema = ioschema
+      ioSchema = ioSchema
     )
   }
 
@@ -76,7 +76,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = hiveIOSchema
+        ioSchema = hiveIOSchema
       ),
       rowsDf.collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -93,7 +93,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
-          ioschema = hiveIOSchema
+          ioSchema = hiveIOSchema
         ),
         rowsDf.collect().toImmutableArraySeq)
     }
