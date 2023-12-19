@@ -1290,7 +1290,7 @@ abstract class SeptenaryExpression extends Expression {
  * type. This is usually utilized by the expressions (e.g. [[CaseWhen]]) that combine data from
  * multiple child expressions of non-primitive types.
  */
-trait ComplexTypeMergingExpression extends Expression {
+trait ComplexTypeMergingExpression extends Expression with QueryErrorsBase {
 
   /**
    * A collection of data types used for resolution the output type of the expression. By default,
@@ -1303,13 +1303,13 @@ trait ComplexTypeMergingExpression extends Expression {
     SparkException.require(
       requirement = inputTypesForMerging.nonEmpty,
       errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
-      messageParameters = Map("expression" -> this.toString))
+      messageParameters = Map("expression" -> toSQLExpr(this)))
     SparkException.require(
       requirement = TypeCoercion.haveSameType(inputTypesForMerging),
       errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
       messageParameters = Map(
-        "expression" -> this.toString,
-        "inputTypes" -> inputTypesForMerging.mkString("\n\t")))
+        "expression" -> toSQLExpr(this),
+        "inputTypes" -> inputTypesForMerging.map(toSQLType).mkString(", ")))
   }
 
   private lazy val internalDataType: DataType = {
