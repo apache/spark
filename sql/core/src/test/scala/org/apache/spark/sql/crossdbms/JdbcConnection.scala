@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.crossdbms
 
-import java.sql.{DriverManager, PreparedStatement, ResultSet}
+import java.sql.{DriverManager, ResultSet}
 import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer

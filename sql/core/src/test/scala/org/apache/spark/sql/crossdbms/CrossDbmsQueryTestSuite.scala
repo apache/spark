@@ -68,12 +68,6 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.crossdbms.PostgreSQLQueryTestSuite -- -z describe.sql"
  * }}}
- *
- * This file adds a new comment argument, --ONLY_IF. This comment is used to indicate that the
- * SQL file is not eligible for testing with this suite. For example, if you have a SQL file
- * named `describe.sql`, and you want to exclude it from this suite, add the following comment
- * into the input file:
- * --ONLY_IF spark
  */
 
 class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
@@ -92,6 +86,12 @@ class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
  * to generate golden files with other DBMS to perform cross-checking for correctness. It generates
  * another set of golden files. Note that this is not currently run on all SQL input files by
  * default because there is incompatibility between SQL dialects for Spark and the other DBMS.
+ *
+ * This suite adds a new comment argument, --ONLY_IF. This comment is used to indicate the DBMS for
+ * which is eligible for the SQL file . For example, if you have a SQL file named `describe.sql`,
+ * and you want to indicate that postgres is incompatible, add the following comment into the input
+ * file:
+ * --ONLY_IF spark
  */
 abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
@@ -111,9 +111,9 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
     val dbmsConfig = comments.filter(_.startsWith(CrossDbmsQueryTestSuite.ONLY_IF_ARG))
       .map(_.substring(CrossDbmsQueryTestSuite.ONLY_IF_ARG.length))
     // If `--ONLY_IF` is found, check if the DBMS being used is allowed.
-    if (!dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
+    if (dbmsConfig.nonEmpty && !dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
       log.info(s"This test case (${testCase.name}) is ignored because it indicates that it is " +
-        "SPARK_ONLY")
+        s"not eligible with $crossDbmsToGenerateGoldenFiles.")
     } else if (regenerateGoldenFiles) {
       runQueries(queries, testCase, settings.toImmutableArraySeq)
     } else {
@@ -136,7 +136,7 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
         // the already generated golden files.
         if (regenerateGoldenFiles) {
           val connectionUrl = Option(customConnectionUrl).filter(_.nonEmpty)
-          runner = runner.orElse(Some(getConnection(connectionUrl))
+          runner = runner.orElse(Some(getConnection(connectionUrl)))
           try {
             // Either of the below two lines can error. If we go into the catch statement, then it
             // is likely one of the following scenarios:
