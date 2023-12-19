@@ -2377,6 +2377,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val input = spark.createDataset(Seq(xmlString))
     val df = spark.read
       .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
       .option("multiLine", "true")
       .xml(input)
 
@@ -2411,6 +2412,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
           Row(List("value4", "value5", "value6"), 2, 3))))
     val df = spark.read
       .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
       .option("multiLine", "true")
       .xml(input)
 
@@ -2437,6 +2439,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val input = spark.createDataset(Seq(xmlString))
     val df = spark.read
       .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
       .option("multiLine", "true")
       .xml(input)
 
