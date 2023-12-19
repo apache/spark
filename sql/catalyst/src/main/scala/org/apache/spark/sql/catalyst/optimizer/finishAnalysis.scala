@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -87,7 +88,7 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
         table.rows.map { row => InternalRow.fromSeq(
             row.map(e =>
               try {
-                e.eval()
+                prepareForEval(e).eval()
               } catch {
                 case NonFatal(ex) =>
                   table.failAnalysis(

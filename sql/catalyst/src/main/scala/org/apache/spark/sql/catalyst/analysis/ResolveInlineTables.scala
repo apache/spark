@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.util.control.NonFatal
-
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.optimizer.EvalInlineTables
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -39,7 +37,8 @@ object ResolveInlineTables extends Rule[LogicalPlan]
       case table: UnresolvedInlineTable if table.expressionsResolved =>
         validateInputDimension(table)
         validateInputEvaluable(table)
-        findCommonTypesAndCast(table)
+        val resolvedTable = findCommonTypesAndCast(table)
+        earlyEvalIfPossible(resolvedTable)
     }
   }
 
@@ -93,7 +92,8 @@ object ResolveInlineTables extends Rule[LogicalPlan]
    *
    * This is package visible for unit testing.
    */
-  private[analysis] def findCommonTypesAndCast(table: UnresolvedInlineTable): LeafNode = {
+  private[analysis] def findCommonTypesAndCast(table: UnresolvedInlineTable):
+    ResolvedInlineTable = {
     // For each column, traverse all the values and find a common data type and nullability.
     val fields = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
@@ -120,27 +120,18 @@ object ResolveInlineTables extends Rule[LogicalPlan]
       }
     }
 
-    val noCurrentLike: Boolean = castedRows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
-    if (noCurrentLike) {
-      val evalRows: Seq[InternalRow] =
-        castedRows.map { row =>
-          InternalRow.fromSeq(
-            row.map(e =>
-              try {
-                prepareForEval(e).eval()
-              } catch {
-                case NonFatal(ex) =>
-                  table.failAnalysis(
-                    errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
-                    messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
-                    cause = ex)
-              }))
-        }
-      // We can evaluate this expression.
-      LocalRelation(attributes, evalRows)
-    } else {
-      // Delay resolution after we have CURRENT_LIKE handled.
-      ResolvedInlineTable(castedRows, attributes)
-    }
+    ResolvedInlineTable(castedRows, attributes)
+  }
+
+  /**
+   * This function attempts to early evaluate rows in inline table.
+   * If evaluation doesn't rely on non-deterministic expressions (e.g. current_like)
+   * expressions will be evaluated and inlined as [[LocalRelation]]
+   * This is package visible for unit testing.
+   */
+  private[analysis] def earlyEvalIfPossible(table: ResolvedInlineTable): LogicalPlan = {
+      def earlyEvalPossible =
+        table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
+      if (earlyEvalPossible) EvalInlineTables(table) else table
   }
 }

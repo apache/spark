@@ -86,8 +86,8 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   test("cast and execute") {
     val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(2L))))
-    val converted = ResolveInlineTables.findCommonTypesAndCast(table)
-      .asInstanceOf[LocalRelation]
+    val resolved = ResolveInlineTables.findCommonTypesAndCast(table)
+    val converted = ResolveInlineTables.earlyEvalIfPossible(resolved).asInstanceOf[LocalRelation]
 
     assert(converted.output.map(_.dataType) == Seq(LongType))
     assert(converted.data.size == 2)
@@ -99,9 +99,11 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     val table = UnresolvedInlineTable(Seq("c1"), Seq(
       Seq(CurrentTimestamp()), Seq(CurrentTimestamp())))
     val casted = ResolveInlineTables.findCommonTypesAndCast(table)
-      .asInstanceOf[ResolvedInlineTable]
+    val earlyEval = ResolveInlineTables.earlyEvalIfPossible(casted)
+    // Early eval should keep it in expression form.
+    assert(earlyEval.isInstanceOf[ResolvedInlineTable])
 
-    EvalInlineTables(ComputeCurrentTime(casted)) match {
+    EvalInlineTables(ComputeCurrentTime(earlyEval)) match {
       case LocalRelation(output, data, _) =>
         assert(output.map(_.dataType) == Seq(TimestampType))
         assert(data.size == 2)
