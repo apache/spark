@@ -104,7 +104,7 @@ object ResolveInlineTables extends Rule[LogicalPlan]
         case d: DecimalType =>
           StructField(name, tpe,
             nullable = column.exists(_.nullable) ||
-              inputTypes.exists(t => Cast.canNullSafeCastToDecimal(t, d)))
+              inputTypes.exists(t => !Cast.canNullSafeCastToDecimal(t, d)))
         case _ => StructField(name, tpe, nullable = column.exists(_.nullable))
       }
     }
