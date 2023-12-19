@@ -218,7 +218,7 @@ class StaxXmlParser(
           case _: EndElement =>
             // It couldn't be an array of value tags
             // as the opening tag is immediately followed by a closing tag.
-            if (isEmptyString(c)) {
+            if (c.isWhiteSpace) {
               return null
             }
             val indexOpt = getFieldNameToIndex(st).get(options.valueTag)
@@ -229,7 +229,7 @@ class StaxXmlParser(
             }
           case _ =>
             val row = convertObject(parser, st)
-            if (!isEmptyString(c)) {
+            if (!c.isWhiteSpace) {
               addOrUpdate(row.toSeq(st).toArray, st, options.valueTag, c.getData, addToTail = false)
             } else {
               row
@@ -276,7 +276,7 @@ class StaxXmlParser(
           kvPairs +=
             (UTF8String.fromString(StaxXmlParserUtils.getName(e.asStartElement.getName, options)) ->
             convertField(parser, valueType))
-        case c: Characters if !isEmptyString(c) =>
+        case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
           kvPairs +=
           // TODO: We don't support an array value tags in map yet.
@@ -424,7 +424,7 @@ class StaxXmlParser(
             badRecordException = badRecordException.orElse(Some(e))
         }
 
-        case c: Characters if !isEmptyString(c) =>
+        case c: Characters if !c.isWhiteSpace =>
           addOrUpdate(row, schema, options.valueTag, c.getData)
 
         case _: EndElement =>
@@ -589,13 +589,6 @@ class StaxXmlParser(
       castTo(data, FloatType).asInstanceOf[Float]
     }
   }
-  private[xml] def isEmptyString(c: Characters): Boolean = {
-    if (options.ignoreSurroundingSpaces) {
-      c.getData.trim.isEmpty
-    } else {
-      c.isWhiteSpace
-    }
-  }
 
   @tailrec
   private def parseAndCheckEndElement(
@@ -605,7 +598,7 @@ class StaxXmlParser(
     parser.peek match {
       case _: EndElement | _: EndDocument => true
       case _: StartElement => false
-      case c: Characters if !isEmptyString(c) =>
+      case c: Characters if !c.isWhiteSpace =>
         parser.nextEvent()
         addOrUpdate(row, schema, options.valueTag, c.getData)
         parseAndCheckEndElement(row, schema, parser)
