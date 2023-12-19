@@ -31,9 +31,8 @@ import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, SafeModeAction}
 import org.apache.hadoop.hdfs.DistributedFileSystem
-import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -51,6 +50,7 @@ import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.kvstore._
 
 /**
@@ -185,7 +185,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private def clearInaccessibleList(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
-    inaccessibleList.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
+    inaccessibleList.asScala.filterInPlace((_, creationTime) => creationTime >= expiredThreshold)
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -204,7 +204,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     if (!Utils.isTesting) {
       ThreadUtils.newDaemonFixedThreadPool(NUM_PROCESSING_THREADS, "log-replay-executor")
     } else {
-      ThreadUtils.sameThreadExecutorService
+      ThreadUtils.sameThreadExecutorService()
     }
   }
 
@@ -317,7 +317,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Split a comma separated String, filter out any empty items, and return a Sequence of strings
    */
   private def stringToSeq(list: String): Seq[String] = {
-    list.split(',').map(_.trim).filter(!_.isEmpty)
+    list.split(',').map(_.trim).filter(_.nonEmpty).toImmutableArraySeq
   }
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
@@ -457,7 +457,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // right after this check and before the check for stale entities will be identified as stale
       // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
-      val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      val updated = Option(fs.listStatus(new Path(logDir)))
+        .map(_.toImmutableArraySeq).getOrElse(Nil)
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry =>
           if (isProcessing(entry.getPath)) {
@@ -859,7 +860,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           try {
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
-            if (!fs.isFile(new Path(inProgressLog))) {
+            if (!SparkHadoopUtil.isFile(fs, new Path(inProgressLog))) {
               listing.synchronized {
                 listing.delete(classOf[LogInfo], inProgressLog)
               }
@@ -1158,7 +1159,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
     /* true to check only for Active NNs status */
-    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET, true)
+    dfs.setSafeMode(SafeModeAction.GET, true)
   }
 
   /**
@@ -1288,7 +1289,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val diskStore = KVUtils.open(lease.tmpPath, metadata, conf, live = false)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
-        override def onSwitchToDiskStoreSuccess: Unit = {
+        override def onSwitchToDiskStoreSuccess(): Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)

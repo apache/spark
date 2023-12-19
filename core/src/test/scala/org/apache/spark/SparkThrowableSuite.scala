@@ -65,16 +65,13 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   def checkIfUnique(ss: Seq[Any]): Unit = {
-    val dups = ss.groupBy(identity).mapValues(_.size).filter(_._2 > 1).keys.toSeq
-    assert(dups.isEmpty)
+    val dups = ss.groupBy(identity).transform((_, v) => v.size).filter(_._2 > 1).keys.toSeq
+    assert(dups.isEmpty, s"Duplicate error classes: ${dups.mkString(", ")}")
   }
 
   def checkCondition(ss: Seq[String], fx: String => Boolean): Unit = {
     ss.foreach { s =>
-      if (!fx(s)) {
-        print(s)
-      }
-      assert(fx(s))
+      assert(fx(s), s)
     }
   }
 
@@ -116,6 +113,15 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("SQLSTATE is mandatory") {
+    val errorClassesNoSqlState = errorReader.errorInfoMap.filter {
+      case (error: String, info: ErrorInfo) =>
+        !error.startsWith("_LEGACY_ERROR_TEMP") && info.sqlState.isEmpty
+    }.keys.toSeq
+    assert(errorClassesNoSqlState.isEmpty,
+      s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
+  }
+
   test("SQLSTATE invariants") {
     val sqlStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState)
     val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
@@ -146,8 +152,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
-      .filterKeys(!_.startsWith("_LEGACY_ERROR_"))
-      .filterKeys(!_.startsWith("INTERNAL_ERROR"))
+      .filter { case (k, _) => !k.startsWith("_LEGACY_ERROR_") }
+      .filter { case (k, _) => !k.startsWith("INTERNAL_ERROR") }
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
@@ -407,7 +413,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[DIVIDE_BY_ZERO] Division by zero. " +
       "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
         "If necessary set foo to \"false\" " +
-        "to bypass this error.")
+        "to bypass this error. SQLSTATE: 22012")
   }
 
   test("Error message is formatted") {
@@ -417,7 +423,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+      " SQLSTATE: 42703"
     )
 
     assert(
@@ -429,7 +436,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         ""
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+        " SQLSTATE: 42703"
     )
   }
 
@@ -440,7 +448,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`${bar}`, `baz`")
       ) ==
         "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]."
+          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]." +
+          " SQLSTATE: 42703"
     )
   }
 
@@ -493,11 +502,14 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Get message in the specified format") {
     import ErrorMessageFormat._
     class TestQueryContext extends QueryContext {
+      override val contextType = QueryContextType.SQL
       override val objectName = "v1"
       override val objectType = "VIEW"
       override val startIndex = 2
       override val stopIndex = -1
       override val fragment = "1 / 0"
+      override def callSite: String = throw new UnsupportedOperationException
+      override val summary = ""
     }
     val e = new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
@@ -507,8 +519,9 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     assert(SparkThrowableHelper.getMessage(e, PRETTY) ===
       "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
-      "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
-      "\nQuery summary")
+        "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
+        " SQLSTATE: 22012" +
+        "\nQuery summary")
     // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
       """{
@@ -566,6 +579,54 @@ class SparkThrowableSuite extends SparkFunSuite {
         |    "message" : "Test message"
         |  }
         |}""".stripMargin)
+
+    class TestQueryContext2 extends QueryContext {
+      override val contextType = QueryContextType.DataFrame
+      override def objectName: String = throw new UnsupportedOperationException
+      override def objectType: String = throw new UnsupportedOperationException
+      override def startIndex: Int = throw new UnsupportedOperationException
+      override def stopIndex: Int = throw new UnsupportedOperationException
+      override val fragment: String = "div"
+      override val callSite: String = "SimpleApp$.main(SimpleApp.scala:9)"
+      override val summary = ""
+    }
+    val e4 = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "CONFIG"),
+      context = Array(new TestQueryContext2),
+      summary = "Query summary")
+
+    assert(SparkThrowableHelper.getMessage(e4, PRETTY) ===
+        "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
+            "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
+            " SQLSTATE: 22012\nQuery summary")
+    // scalastyle:off line.size.limit
+    assert(SparkThrowableHelper.getMessage(e4, MINIMAL) ===
+        """{
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "CONFIG"
+          |  },
+          |  "queryContext" : [ {
+          |    "fragment" : "div",
+          |    "callSite" : "SimpleApp$.main(SimpleApp.scala:9)"
+          |  } ]
+          |}""".stripMargin)
+    assert(SparkThrowableHelper.getMessage(e4, STANDARD) ===
+        """{
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "CONFIG"
+          |  },
+          |  "queryContext" : [ {
+          |    "fragment" : "div",
+          |    "callSite" : "SimpleApp$.main(SimpleApp.scala:9)"
+          |  } ]
+          |}""".stripMargin)
+    // scalastyle:on line.size.limit
   }
 
   test("overwrite error classes") {

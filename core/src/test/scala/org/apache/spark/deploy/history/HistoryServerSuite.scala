@@ -52,6 +52,7 @@ import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -408,7 +409,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     def listDir(dir: Path): Seq[FileStatus] = {
       val statuses = fs.listStatus(dir)
       statuses.flatMap(
-        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat))
+        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat)).toImmutableArraySeq
     }
 
     def dumpLogDir(msg: String = ""): Unit = {
@@ -541,7 +542,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
     val jobcount = getNumJobs("/jobs")
-    assert(!isApplicationCompleted(provider.getListing().next))
+    assert(!isApplicationCompleted(provider.getListing().next()))
 
     listApplications(false) should contain(appId)
 
@@ -549,7 +550,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(isApplicationCompleted(provider.getListing().next),
+      assert(isApplicationCompleted(provider.getListing().next()),
         s"application never completed, server=$server\n")
     }
 

@@ -291,7 +291,7 @@ Amazon EMR has its own S3-aware committers for parquet data.
 For instructions on use, see
 [the EMRFS S3-optimized committer](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-s3-optimized-committer.html)
 
-For implementation and performanc details, see
+For implementation and performance details, see
 ["Improve Apache Spark write performance on Apache Parquet formats with the EMRFS S3-optimized committer"](https://aws.amazon.com/blogs/big-data/improve-apache-spark-write-performance-on-apache-parquet-formats-with-the-emrfs-s3-optimized-committer/
 
 

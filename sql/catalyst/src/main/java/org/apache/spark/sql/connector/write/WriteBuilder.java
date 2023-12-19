@@ -56,7 +56,7 @@ public interface WriteBuilder {
    *
    * @deprecated use {@link #build()} instead.
    */
-  @Deprecated
+  @Deprecated(since = "3.2.0")
   default BatchWrite buildForBatch() {
     throw new UnsupportedOperationException(getClass().getName() +
       " does not support batch write");
@@ -67,7 +67,7 @@ public interface WriteBuilder {
    *
    * @deprecated use {@link #build()} instead.
    */
-  @Deprecated
+  @Deprecated(since = "3.2.0")
   default StreamingWrite buildForStreaming() {
     throw new UnsupportedOperationException(getClass().getName() +
       " does not support streaming write");

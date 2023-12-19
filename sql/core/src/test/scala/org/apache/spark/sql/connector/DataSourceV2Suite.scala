@@ -18,10 +18,12 @@
 package org.apache.spark.sql.connector
 
 import java.io.File
+import java.util
 import java.util.OptionalLong
 
 import test.org.apache.spark.sql.connector._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
@@ -44,6 +46,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -75,6 +78,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       case d: BatchScanExec =>
         d.batch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
     }.head
+  }
+
+  test("invalid data source") {
+    intercept[IllegalArgumentException] {
+      spark.read.format(classOf[InvalidDataSource].getName).load()
+    }
   }
 
   test("simplest implementation") {
@@ -224,11 +233,11 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val e = intercept[IllegalArgumentException](spark.read.format(cls.getName).load())
         assert(e.getMessage.contains("requires a user-supplied schema"))
 
-        val schema = new StructType().add("i", "int").add("s", "string")
+        val schema = new StructType().add("i", "int").add("j", "int")
         val df = spark.read.format(cls.getName).schema(schema).load()
 
         assert(df.schema == schema)
-        assert(df.collect().isEmpty)
+        checkAnswer(df, Seq(Row(0, 0), Row(1, -1)))
       }
     }
   }
@@ -626,8 +635,205 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
-}
 
+  test("SPARK-46043: create table in SQL using a DSv2 source") {
+    Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        // Create a table with empty schema.
+        withTable("test") {
+          sql(s"CREATE TABLE test USING ${cls.getName}")
+          checkAnswer(
+            sql(s"SELECT * FROM test WHERE i < 3"),
+            Seq(Row(0, 0), Row(1, -1), Row(2, -2)))
+        }
+        // Create a table with non-empty schema is not allowed.
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            sql(s"CREATE TABLE test(a INT, b INT) USING ${cls.getName}")
+          },
+          errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+          parameters = Map("tableName" -> "`default`.`test`", "provider" -> cls.getName)
+        )
+      }
+    }
+  }
+
+  test("SPARK-46043: create table in SQL with schema required data source") {
+    val cls = classOf[SchemaRequiredDataSource]
+    val e = intercept[IllegalArgumentException] {
+      sql(s"CREATE TABLE test USING ${cls.getName}")
+    }
+    assert(e.getMessage.contains("requires a user-supplied schema"))
+    withTable("test") {
+      sql(s"CREATE TABLE test(i INT, j INT) USING ${cls.getName}")
+      checkAnswer(sql(s"SELECT * FROM test"), Seq(Row(0, 0), Row(1, -1)))
+    }
+    withTable("test") {
+      sql(s"CREATE TABLE test(i INT) USING ${cls.getName}")
+      checkAnswer(sql(s"SELECT * FROM test"), Seq(Row(0), Row(1)))
+    }
+    withTable("test") {
+      // Test the behavior when there is a mismatch between the schema defined in the
+      // CREATE TABLE command and the actual schema produced by the data source. The
+      // resulting behavior is not guaranteed and may vary based on the data source's
+      // implementation.
+      sql(s"CREATE TABLE test(i INT, j INT, k INT) USING ${cls.getName}")
+      val e = intercept[Exception] {
+        sql("SELECT * FROM test").collect()
+      }
+      assert(e.getMessage.contains(
+        "java.lang.ArrayIndexOutOfBoundsException: Index 2 out of bounds for length 2"))
+    }
+  }
+
+  test("SPARK-46043: create table in SQL with partitioning required data source") {
+    val cls = classOf[PartitionsRequiredDataSource]
+    val e = intercept[IllegalArgumentException](
+      sql(s"CREATE TABLE test(a INT) USING ${cls.getName}"))
+    assert(e.getMessage.contains("user-supplied partitioning"))
+    withTable("test") {
+      sql(s"CREATE TABLE test(i INT, j INT) USING ${cls.getName} PARTITIONED BY (i)")
+      checkAnswer(sql(s"SELECT * FROM test"), Seq(Row(0, 0), Row(1, -1)))
+    }
+  }
+
+  test("SPARK-46043: create table in SQL with path option") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/test"
+      Seq((0, 1), (1, 2)).toDF("x", "y").write.format("csv").save(path)
+      withTable("test") {
+        sql(
+          s"""
+             |CREATE TABLE test USING ${cls.getName}
+             |OPTIONS (PATH '$path')
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(1, 2)))
+        sql(
+          s"""
+             |CREATE OR REPLACE TABLE test USING ${cls.getName}
+             |OPTIONS (PATH '${dir.getCanonicalPath}/non-existing')
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Nil)
+        sql(
+          s"""
+             |CREATE OR REPLACE TABLE test USING ${cls.getName}
+             |LOCATION '$path'
+             |""".stripMargin)
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(1, 2)))
+      }
+    }
+  }
+
+  test("SPARK-46273: insert into") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTable("test") {
+      sql(
+        s"""
+           |CREATE TABLE test (x INT, y INT) USING ${cls.getName}
+           |""".stripMargin)
+      sql("INSERT INTO test VALUES (1, 2)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2)))
+      // Insert by name
+      sql("INSERT INTO test(y, x) VALUES (3, 2)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3)))
+      // Can be casted automatically
+      sql("INSERT INTO test(y, x) VALUES (4L, 3L)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4)))
+      // Insert values by name
+      sql("INSERT INTO test BY NAME VALUES (5, 4) t(y, x)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4), Row(4, 5)))
+      // Missing columns
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO test VALUES (4)")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "tableColumns" -> "`x`, `y`",
+          "dataColumns" -> "`col1`"
+        )
+      )
+      // Duplicate columns
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO test(x, x) VALUES (4, 5)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`x`"))
+    }
+  }
+
+  test("SPARK-46273: insert overwrite") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTable("test") {
+      sql(
+        s"""
+           |CREATE TABLE test USING ${cls.getName}
+           |AS VALUES (0, 1), (1, 2) t(x, y)
+           |""".stripMargin)
+      sql(
+        s"""
+           |INSERT OVERWRITE test VALUES (2, 3), (3, 4)
+           |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3), Row(3, 4)))
+      // Insert overwrite by name
+      sql("INSERT OVERWRITE test(y, x) VALUES (3, 2)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3)))
+      // Can be casted automatically
+      sql("INSERT OVERWRITE test(y, x) VALUES (4L, 3L)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(3, 4)))
+    }
+  }
+
+  test("SPARK-46273: insert into with partition") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTable("test") {
+      sql(s"CREATE TABLE test(x INT, y INT) USING ${cls.getName} PARTITIONED BY (x, y)")
+      sql("INSERT INTO test PARTITION(x = 1) VALUES (2)")
+      sql("INSERT INTO test PARTITION(x = 2, y) VALUES (3)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3)))
+      sql("INSERT INTO test PARTITION(y, x = 3) VALUES (4)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4)))
+      sql("INSERT INTO test PARTITION(x, y) VALUES (4, 5)")
+      checkAnswer(sql("SELECT * FROM test"), Seq(Row(1, 2), Row(2, 3), Row(3, 4), Row(4, 5)))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT INTO test PARTITION(z = 1) VALUES (2)")
+        },
+        errorClass = "NON_PARTITION_COLUMN",
+        parameters = Map("columnName" -> "`z`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT INTO test PARTITION(x, y = 1) VALUES (2, 3)")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "tableColumns" -> "`x`, `y`",
+          "dataColumns" -> "`col1`, `y`, `col2`")
+      )
+    }
+  }
+
+  test("SPARK-46273: insert overwrite with partition") {
+    val cls = classOf[SupportsExternalMetadataDataSource]
+    withTable("test") {
+      sql(s"CREATE TABLE test (x INT, y INT) USING ${cls.getName} PARTITIONED BY (x, y)")
+      sql("INSERT INTO test PARTITION(x = 1) VALUES (2)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT OVERWRITE test PARTITION(x = 1) VALUES (5)")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test`",
+          "operation" -> "overwrite by filter in batch mode")
+      )
+    }
+  }
+}
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
 
@@ -903,7 +1109,9 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
 class SchemaRequiredDataSource extends TableProvider {
 
   class MyScanBuilder(schema: StructType) extends SimpleScanBuilder {
-    override def planInputPartitions(): Array[InputPartition] = Array.empty
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, 2))
+    }
 
     override def readSchema(): StructType = schema
   }
@@ -926,6 +1134,12 @@ class SchemaRequiredDataSource extends TableProvider {
         new MyScanBuilder(userGivenSchema)
       }
     }
+  }
+}
+
+class PartitionsRequiredDataSource extends SchemaRequiredDataSource {
+  override def inferPartitioning(options: CaseInsensitiveStringMap): Array[Transform] = {
+    throw new IllegalArgumentException("requires user-supplied partitioning")
   }
 }
 
@@ -1058,7 +1272,7 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(
-        Option(options.get("partitionKeys")).map(_.split(",")),
+        Option(options.get("partitionKeys")).map(_.split(",").toImmutableArraySeq),
         Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
       )
     }
@@ -1120,6 +1334,26 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
   }
 }
 
+class SupportsExternalMetadataDataSource extends SimpleWritableDataSource {
+  override def supportsExternalMetadata(): Boolean = true
+
+  class TestTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      options: CaseInsensitiveStringMap) extends MyTable(options) {
+    override def schema(): StructType = schema
+
+    override def partitioning(): Array[Transform] = partitioning
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new TestTable(schema, partitioning, new CaseInsensitiveStringMap(properties))
+  }
+}
+
 class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSource {
   override def supportsExternalMetadata(): Boolean = true
 
@@ -1154,4 +1388,10 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
       }
     }
   }
+}
+
+class InvalidDataSource extends TestingV2Source {
+  throw new IllegalArgumentException("test error")
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = null
 }

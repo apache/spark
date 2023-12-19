@@ -47,7 +47,7 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
         val selectExpr = (1 to width).map(i => s"value as c$i")
         // repartition to ensure we will write multiple files
         val df = spark.range(values)
-          .map(_ => Random.nextInt).selectExpr(selectExpr: _*).repartition(files)
+          .map(_ => Random.nextInt()).selectExpr(selectExpr: _*).repartition(files)
           .persist(StorageLevel.DISK_ONLY)
         // cache the data to ensure we are not benchmarking range or repartition
         df.noop()
@@ -55,7 +55,7 @@ object AvroWriteBenchmark extends DataSourceWriteBenchmark {
         val benchmark = new Benchmark(s"Write wide rows into $files files", values, output = output)
         benchmark.addCase("Write wide rows") { _ =>
           spark.sql("SELECT * FROM t1").
-            write.format("avro").save(s"${dir.getCanonicalPath}/${Random.nextLong.abs}")
+            write.format("avro").save(s"${dir.getCanonicalPath}/${Random.nextLong().abs}")
         }
         benchmark.run()
       }

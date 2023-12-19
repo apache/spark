@@ -35,7 +35,7 @@ abstract class BaseArrowPythonRunner(
     _timeZoneId: String,
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
     funcs, evalType, argOffsets, jobArtifactUUID)
@@ -45,6 +45,8 @@ abstract class BaseArrowPythonRunner(
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)
+
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 

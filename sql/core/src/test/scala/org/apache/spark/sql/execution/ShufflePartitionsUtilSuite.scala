@@ -21,6 +21,7 @@ import org.apache.spark.{LocalSparkContext, MapOutputStatistics, MapOutputTracke
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.sql.execution.adaptive.ShufflePartitionsUtil
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.ArrayImplicits._
 
 class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -35,7 +36,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         Some(new MapOutputStatistics(index, bytesByPartitionId))
     }
     val estimatedPartitionStartIndices = ShufflePartitionsUtil.coalescePartitions(
-      mapOutputStatistics,
+      mapOutputStatistics.toImmutableArraySeq,
       Seq.fill(mapOutputStatistics.length)(None),
       targetSize,
       minNumPartitions,
@@ -103,7 +104,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq.fill(2)(None), targetSize, 1, 0)
       assert(coalesced.isEmpty)
     }
@@ -340,7 +341,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq(
           Some(specs1),
           Some(specs2)),
@@ -373,7 +374,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq(
           Some(specs1),
           Some(specs2)),
@@ -412,7 +413,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq(
           Some(specs1),
           Some(specs2)),
@@ -455,7 +456,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq(
           Some(specs1),
           Some(specs2)),
@@ -495,7 +496,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq(
           Some(specs1),
           Some(specs2)),
@@ -522,7 +523,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq(
           Some(specs1),
           Some(specs2)),
@@ -542,7 +543,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
         Seq(
           Some(specs1),
           None),
@@ -558,7 +559,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val coalesced = ShufflePartitionsUtil.coalescePartitions(
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-          None),
+          None).toImmutableArraySeq,
         Seq(
           Some(specs1),
           Some(specs2)),
@@ -577,7 +578,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         ShufflePartitionsUtil.coalescePartitions(
           Array(
             Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
           Seq(
             Some(specs1),
             Some(specs2)),
@@ -595,7 +596,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         ShufflePartitionsUtil.coalescePartitions(
           Array(
             Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
           Seq(
             Some(specs1),
             Some(specs2)),
@@ -614,7 +615,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         ShufflePartitionsUtil.coalescePartitions(
           Array(
             Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
           Seq(
             Some(specs1),
             Some(specs2)),
@@ -635,7 +636,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         ShufflePartitionsUtil.coalescePartitions(
           Array(
             Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
           Seq(
             Some(specs1),
             Some(specs2)),
@@ -653,7 +654,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         ShufflePartitionsUtil.coalescePartitions(
           Array(
             Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
           Seq(
             Some(specs1),
             Some(specs2)),
@@ -672,7 +673,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         ShufflePartitionsUtil.coalescePartitions(
           Array(
             Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
           Seq(
             Some(specs1),
             Some(specs2)),
@@ -691,7 +692,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
         ShufflePartitionsUtil.coalescePartitions(
           Array(
             Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
           Seq(
             Some(specs1),
             Some(specs2)),
@@ -788,7 +789,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
     val coalesced = ShufflePartitionsUtil.coalescePartitions(
       Array(
         Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-        Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+        Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
       Seq(
         Some(specs1),
         Some(specs2)),

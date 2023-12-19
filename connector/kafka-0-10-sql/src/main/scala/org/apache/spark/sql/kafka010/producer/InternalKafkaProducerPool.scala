@@ -120,7 +120,7 @@ private[producer] class InternalKafkaProducerPool(
     val curTimeNs = clock.nanoTime()
     val producers = new mutable.ArrayBuffer[CachedProducerEntry]()
     synchronized {
-      cache.retain { case (_, v) =>
+      cache.filterInPlace { case (_, v) =>
         if (v.expired(curTimeNs)) {
           producers += v
           false

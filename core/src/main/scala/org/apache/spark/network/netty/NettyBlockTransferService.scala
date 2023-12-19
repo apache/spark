@@ -70,7 +70,11 @@ private[spark] class NettyBlockTransferService(
     val rpcHandler = new NettyBlockRpcServer(conf.getAppId, serializer, blockDataManager)
     var serverBootstrap: Option[TransportServerBootstrap] = None
     var clientBootstrap: Option[TransportClientBootstrap] = None
-    this.transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
+    this.transportConf = SparkTransportConf.fromSparkConf(
+      conf,
+      "shuffle",
+      numCores,
+      sslOptions = Some(securityManager.getRpcSSLOptions()))
     if (authEnabled) {
       serverBootstrap = Some(new AuthServerBootstrap(transportConf, securityManager))
       clientBootstrap = Some(new AuthClientBootstrap(transportConf, conf.getAppId, securityManager))

@@ -65,6 +65,18 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Row(1, "1", null) :: Row(1, null, "3") :: Row(2, "2", null) :: Row(2, null, "4") :: Nil)
   }
 
+  test("lead/lag with positive offset that greater than window group size") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    checkAnswer(
+      df.select(
+        $"key",
+        lead("value", 3).over(window),
+        lag("value", 3).over(window)),
+      Row(1, null, null) :: Row(1, null, null) :: Row(2, null, null) :: Row(2, null, null) :: Nil)
+  }
+
   test("lead/lag with negative offset") {
     val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")
@@ -75,6 +87,18 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         lead("value", -1).over(window),
         lag("value", -1).over(window)),
       Row(1, null, "3") :: Row(1, "1", null) :: Row(2, null, "4") :: Row(2, "2", null) :: Nil)
+  }
+
+  test("lead/lag with negative offset that absolute value greater than window group size") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    checkAnswer(
+      df.select(
+        $"key",
+        lead("value", -3).over(window),
+        lag("value", -3).over(window)),
+      Row(1, null, null) :: Row(1, null, null) :: Row(2, null, null) :: Row(2, null, null) :: Nil)
   }
 
   test("reverse lead/lag with negative offset") {
@@ -184,7 +208,9 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
           """BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\)"""")
       ),
-      matchPVals = true
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
     checkError(
@@ -198,7 +224,9 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
           """BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\)"""")
       ),
-      matchPVals = true
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
     checkError(
@@ -212,7 +240,9 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
           """BETWEEN -1 FOLLOWING AND 1 FOLLOWING\)"""")
       ),
-      matchPVals = true
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
   }
@@ -240,7 +270,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\""
-      )
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -255,7 +286,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\""
-      )
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -270,7 +302,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND 1 FOLLOWING\""
-      )
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -462,7 +495,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "upper" -> "\"2\"",
         "lowerType" -> "\"INTERVAL\"",
         "upperType" -> "\"BIGINT\""
-      )
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -481,7 +515,8 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
         "location" -> "lower",
-        "expression" -> "\"nonfoldableliteral()\"")
+        "expression" -> "\"nonfoldableliteral()\""),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 

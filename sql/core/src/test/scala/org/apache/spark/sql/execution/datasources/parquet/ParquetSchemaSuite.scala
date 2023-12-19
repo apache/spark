@@ -27,6 +27,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.desc
@@ -1083,6 +1084,27 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
             "physicalType" -> "INT32"),
           matchPVals = true
         )
+      }
+    }
+  }
+
+  test("SPARK-45604: schema mismatch failure error on timestamp_ntz to array<timestamp_ntz>") {
+    import testImplicits._
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val timestamp = java.time.LocalDateTime.of(1, 2, 3, 4, 5)
+      val df1 = Seq((1, timestamp)).toDF()
+      val df2 = Seq((2, Array(timestamp))).toDF()
+      df1.write.mode("overwrite").parquet(s"$path/parquet")
+      df2.write.mode("append").parquet(s"$path/parquet")
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        val e = intercept[SparkException] {
+          spark.read.schema(df2.schema).parquet(s"$path/parquet").collect()
+        }
+        assert(e.getCause.isInstanceOf[SparkException])
+        assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
       }
     }
   }
@@ -2395,7 +2417,39 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       inferTimestampNTZ = inferTimestampNTZ)
   }
 
-  private def testSchemaClipping(
+  test("SPARK-46056: " +
+    "schema with default existence value and binary array decimal type") {
+    import scala.jdk.CollectionConverters._
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val data = Seq(Row(Decimal("13.0")))
+
+      // decimal type does not fit in int or long
+      val wideDecimal = DecimalType(32, 10)
+      val initialSchema = StructType(Seq(
+        StructField("f1", wideDecimal)
+      ))
+
+      val evolvedSchemaWithDefaultValue = StructType(Seq(
+        StructField("f1", wideDecimal),
+        StructField("f2", wideDecimal).withExistenceDefaultValue("42.0")
+      ))
+
+      val df = spark.createDataFrame(data.asJava, initialSchema)
+      df.write.mode("overwrite").parquet(s"$path/parquet")
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        val res = spark.read.schema(evolvedSchemaWithDefaultValue)
+          .parquet(s"$path/parquet").collect()
+        assert(res.length == 1)
+        assert(res(0).getDecimal(0).toBigInteger.longValueExact() == 13)
+        assert(res(0).getDecimal(1).toBigInteger.longValueExact() == 42)
+      }
+    }
+  }
+
+    private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,

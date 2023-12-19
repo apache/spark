@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundRefer
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
 
@@ -78,13 +79,13 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
-      endpointsExpression = CreateArray(Array(10L).map(Literal(_))))
+      endpointsExpression = CreateArray(Array(10L).map(Literal(_)).toImmutableArraySeq))
     assert(wrongEndpoints.checkInputDataTypes() ==
       DataTypeMismatch("WRONG_NUM_ENDPOINTS", Map("actualNumber" -> "1")))
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
-      endpointsExpression = CreateArray(Array("foobar").map(Literal(_))))
+      endpointsExpression = CreateArray(Array("foobar").map(Literal(_)).toImmutableArraySeq))
     // scalastyle:off line.size.limit
     assert(wrongEndpoints.checkInputDataTypes() ==
       DataTypeMismatch(
@@ -104,7 +105,8 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       rsd: Double = 0.05): (ApproxCountDistinctForIntervals, InternalRow, Array[Long]) = {
     val input = new SpecificInternalRow(Seq(dt))
     val aggFunc = ApproxCountDistinctForIntervals(
-      BoundReference(0, dt, nullable = true), CreateArray(endpoints.map(Literal(_))), rsd)
+      BoundReference(0, dt, nullable = true),
+      CreateArray(endpoints.map(Literal(_)).toImmutableArraySeq), rsd)
     (aggFunc, input, aggFunc.createAggregationBuffer())
   }
 
@@ -151,7 +153,8 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         value: Double,
         expectedIntervalIndex: Int): Unit = {
       val aggFunc = ApproxCountDistinctForIntervals(
-        BoundReference(0, DoubleType, nullable = true), CreateArray(endpoints.map(Literal(_))))
+        BoundReference(0, DoubleType, nullable = true),
+        CreateArray(endpoints.map(Literal(_)).toImmutableArraySeq))
       assert(aggFunc.findHllppIndex(value) == expectedIntervalIndex)
     }
     val endpoints = Array[Double](0, 3, 6, 10)

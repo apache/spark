@@ -53,9 +53,13 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
   private var conf: SparkConf = _
   private var pushedBlocks = new ArrayBuffer[String]
 
+  def createSparkConf(): SparkConf = {
+    new SparkConf(loadDefaults = false)
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
-    conf = new SparkConf(loadDefaults = false)
+    conf = createSparkConf()
     MockitoAnnotations.openMocks(this).close()
     when(dependency.shuffleId).thenReturn(0)
     when(dependency.partitioner).thenReturn(new HashPartitioner(8))
@@ -478,5 +482,11 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
       super.notifyDriverAboutPushCompletion()
       semaphore.release()
     }
+  }
+}
+
+class SslShuffleBlockPusherSuite extends ShuffleBlockPusherSuite {
+  override def createSparkConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

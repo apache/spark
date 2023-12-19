@@ -115,7 +115,7 @@ class SparkConnectServiceSuite
         .build()
       val response2 = handler.process(request2, sparkSessionHolder)
       assert(response2.hasExplain)
-      assert(response2.getExplain.getExplainString.size > 0)
+      assert(response2.getExplain.getExplainString.length > 0)
 
       val request3 = proto.AnalyzePlanRequest
         .newBuilder()
@@ -606,7 +606,7 @@ class SparkConnectServiceSuite
           }
 
           override def onError(throwable: Throwable): Unit = {
-            verifyEvents.onCanceled
+            verifyEvents.onCanceled()
           }
 
           override def onCompleted(): Unit = {
@@ -841,12 +841,12 @@ class SparkConnectServiceSuite
     spark.sparkContext.addSparkListener(verifyEvents.listener)
     Utils.tryWithSafeFinally({
       f(verifyEvents)
-      SparkConnectService.invalidateAllSessions()
+      SparkConnectService.sessionManager.invalidateAllSessions()
       verifyEvents.onSessionClosed()
     }) {
       verifyEvents.waitUntilEmpty()
       spark.sparkContext.removeSparkListener(verifyEvents.listener)
-      SparkConnectService.invalidateAllSessions()
+      SparkConnectService.sessionManager.invalidateAllSessions()
       SparkConnectPluginRegistry.reset()
     }
   }

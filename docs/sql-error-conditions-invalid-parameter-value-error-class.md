@@ -45,9 +45,17 @@ expects one of binary formats 'base64', 'hex', 'utf-8', but got `<invalidFormat>
 
 expects an integer value in [0, `<upper>`), but got `<invalidValue>`.
 
+## CHARSET
+
+expects one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', but got `<charset>`.
+
 ## DATETIME_UNIT
 
 expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal `<invalidValue>`.
+
+## LENGTH
+
+Expects `length` greater than or equal to 0, but got `<length>`.
 
 ## NULL
 
@@ -60,6 +68,10 @@ expects a non-NULL value.
 ## REGEX_GROUP_INDEX
 
 Expects group index between 0 and `<groupCount>`, but got `<groupIndex>`.
+
+## START
+
+Expects a positive or a negative value for `start`, but got 0.
 
 ## ZERO_INDEX
 

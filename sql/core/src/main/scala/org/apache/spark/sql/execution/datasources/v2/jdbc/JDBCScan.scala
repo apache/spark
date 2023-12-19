@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 case class JDBCScan(
     relation: JDBCRelation,
@@ -58,13 +59,13 @@ case class JDBCScan(
   override def description(): String = {
     val (aggString, groupByString) = if (groupByColumns.nonEmpty) {
       val groupByColumnsLength = groupByColumns.get.length
-      (seqToString(pushedAggregateColumn.drop(groupByColumnsLength)),
-        seqToString(pushedAggregateColumn.take(groupByColumnsLength)))
+      (seqToString(pushedAggregateColumn.drop(groupByColumnsLength).toImmutableArraySeq),
+        seqToString(pushedAggregateColumn.take(groupByColumnsLength).toImmutableArraySeq))
     } else {
       ("[]", "[]")
     }
     super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
-      ", PushedPredicates: " + seqToString(pushedPredicates) +
+      ", PushedPredicates: " + seqToString(pushedPredicates.toImmutableArraySeq) +
       ", PushedAggregates: " + aggString + ", PushedGroupBy: " + groupByString
   }
 

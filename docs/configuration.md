@@ -135,7 +135,7 @@ of the most common options to set are:
 
 ### Application Properties
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.app.name</code></td>
@@ -522,13 +522,34 @@ of the most common options to set are:
   </td>
   <td>3.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.executor.maxNumFailures</code></td>
+  <td>numExecutors * 2, with minimum of 3</td>
+  <td>
+    The maximum number of executor failures before failing the application.
+    This configuration only takes effect on YARN, or Kubernetes when 
+    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+    Interval after which executor failures will be considered independent and
+    not accumulate towards the attempt count.
+    This configuration only takes effect on YARN, or Kubernetes when 
+    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
 
 ### Runtime Environment
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.driver.extraClassPath</code></td>
@@ -666,7 +687,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
-  <td>(none)</td>
+  <td>-1</td>
   <td>
     Sets the number of latest rolling log files that are going to be retained by the system.
     Older log files will be deleted. Disabled by default.
@@ -684,7 +705,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
-  <td>(none)</td>
+  <td>1024 * 1024</td>
   <td>
     Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
@@ -915,7 +936,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Shuffle Behavior
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.reducer.maxSizeInFlight</code></td>
@@ -1290,7 +1311,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Spark UI
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.eventLog.logBlockUpdates.enabled</code></td>
@@ -1682,7 +1703,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Compression and Serialization
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.broadcast.compress</code></td>
@@ -1759,6 +1780,25 @@ Apart from these, the following properties are also available, and may be useful
     configuration only applies to `spark.io.compression.codec`.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.bufferPool.enabled</code></td>
+  <td>true</td>
+  <td>
+    If true, enable buffer pool of ZSTD JNI library.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.workers</code></td>
+  <td>0</td>
+  <td>
+    Thread size spawned to compress in parallel when using Zstd. When value is 0
+    no worker is spawned, it works in single-threaded mode. When value > 0, it triggers
+    asynchronous mode, corresponding number of threads are spawned. More workers improve
+    performance, but also increase memory cost.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.classesToRegister</code></td>
@@ -1880,7 +1920,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Memory Management
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.memory.fraction</code></td>
@@ -2005,7 +2045,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Execution Behavior
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.broadcast.blockSize</code></td>
@@ -2250,7 +2290,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Executor Metrics
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.eventLog.logStageExecutorMetrics</code></td>
@@ -2318,7 +2358,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Networking
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.rpc.message.maxSize</code></td>
@@ -2481,7 +2521,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Scheduling
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.cores.max</code></td>
@@ -2962,7 +3002,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Barrier Execution Mode
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.barrier.sync.timeout</code></td>
@@ -3009,7 +3049,7 @@ Apart from these, the following properties are also available, and may be useful
 
 ### Dynamic Allocation
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.dynamicAllocation.enabled</code></td>
@@ -3151,7 +3191,7 @@ finer granularity starting from driver and executor. Take RPC module as example 
 like shuffle, just replace "rpc" with "shuffle" in the property names except
 <code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code>, which is only for RPC module.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.{driver|executor}.rpc.io.serverThreads</code></td>
@@ -3294,7 +3334,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### Spark Streaming
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.streaming.backpressure.enabled</code></td>
@@ -3426,7 +3466,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### SparkR
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.r.numRBackendThreads</code></td>
@@ -3482,7 +3522,7 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### GraphX
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.graphx.pregel.checkpointInterval</code></td>
@@ -3494,32 +3534,6 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>2.2.0</td>
 </tr>
 </table>
-
-### Deploy
-
-<table class="table table-striped">
-  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-  <tr>
-    <td><code>spark.deploy.recoveryMode</code></td>
-    <td>NONE</td>
-    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
-    This is only applicable for cluster mode when running with Standalone.</td>
-    <td>0.8.1</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.url</code></td>
-    <td>None</td>
-    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
-    <td>0.8.1</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.dir</code></td>
-    <td>None</td>
-    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
-    <td>0.8.1</td>
-  </tr>
-</table>
-
 
 ### Cluster Managers
 
@@ -3545,7 +3559,7 @@ copy `conf/spark-env.sh.template` to create it. Make sure you make the copy exec
 The following variables can be set in `spark-env.sh`:
 
 
-<table class="table table-striped">
+<table>
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>JAVA_HOME</code></td>
@@ -3682,7 +3696,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
 
 ### External Shuffle service(server) side configuration options
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code></td>
@@ -3716,7 +3730,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
 
 ### Client side configuration options
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.shuffle.push.enabled</code></td>

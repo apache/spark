@@ -19,6 +19,8 @@ package org.apache.spark.sql.errors
 import org.apache.spark._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.ByteType
@@ -53,6 +55,26 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
       context = ExpectedContext(fragment = "6/0", start = 7, stop = 9))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        OneRowRelation().select(lit(5) / lit(0)).collect()
+      },
+      errorClass = "DIVIDE_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "div", callSitePattern = getCurrentClassCallSitePattern))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        OneRowRelation().select(lit(5).divide(lit(0))).collect()
+      },
+      errorClass = "DIVIDE_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "divide",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
@@ -92,6 +114,21 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1))",
         start = 7,
         stop = 49))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        OneRowRelation().select(lit("66666666666666.666").cast("DECIMAL(8, 1)")).collect()
+      },
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      sqlState = "22003",
+      parameters = Map(
+        "value" -> "66666666666666.666",
+        "precision" -> "8",
+        "scale" -> "1",
+        "config" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "cast",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INVALID_ARRAY_INDEX: get element from array") {
@@ -102,6 +139,16 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       errorClass = "INVALID_ARRAY_INDEX",
       parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
       context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8]", start = 7, stop = 29))
+
+    checkError(
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        OneRowRelation().select(lit(Array(1, 2, 3, 4, 5))(8)).collect()
+      },
+      errorClass = "INVALID_ARRAY_INDEX",
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "apply",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
@@ -115,6 +162,15 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         fragment = "element_at(array(1, 2, 3, 4, 5), 8)",
         start = 7,
         stop = 41))
+
+    checkError(
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        OneRowRelation().select(element_at(lit(Array(1, 2, 3, 4, 5)), 8)).collect()
+      },
+      errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      context =
+        ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INVALID_INDEX_OF_ZERO: element_at from array by index zero") {
@@ -129,6 +185,15 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         start = 7,
         stop = 41)
     )
+
+    checkError(
+      exception = intercept[SparkRuntimeException](
+        OneRowRelation().select(element_at(lit(Array(1, 2, 3, 4, 5)), 0)).collect()
+      ),
+      errorClass = "INVALID_INDEX_OF_ZERO",
+      parameters = Map.empty,
+      context =
+        ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("CAST_INVALID_INPUT: cast string to double") {
@@ -146,6 +211,20 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         fragment = "CAST('111111111111xe23' AS DOUBLE)",
         start = 7,
         stop = 40))
+
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        OneRowRelation().select(lit("111111111111xe23").cast("DOUBLE")).collect()
+      },
+      errorClass = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'111111111111xe23'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"DOUBLE\"",
+        "ansiConfig" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "cast",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("CANNOT_PARSE_TIMESTAMP: parse string to timestamp") {

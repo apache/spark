@@ -341,6 +341,11 @@ def assertPandasOnSparkEqual(
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 3.5.1
+        `assertPandasOnSparkEqual` will be removed in Spark 4.0.0.
+        Use `ps.testing.assert_frame_equal`, `ps.testing.assert_series_equal`
+        and `ps.testing.assert_index_equal` instead.
+
     Parameters
     ----------
     actual: pandas-on-Spark DataFrame, Series, or Index
@@ -393,6 +398,12 @@ def assertPandasOnSparkEqual(
     >>> s2 = ps.Index([212.3, 100.0001])
     >>> assertPandasOnSparkEqual(s1, s2, almost=True)  # pass, ps.Index obj are almost equal
     """
+    warnings.warn(
+        "`assertPandasOnSparkEqual` will be removed in Spark 4.0.0. "
+        "Use `ps.testing.assert_frame_equal`, `ps.testing.assert_series_equal` "
+        "and `ps.testing.assert_index_equal` instead.",
+        FutureWarning,
+    )
     if actual is None and expected is None:
         return True
     elif actual is None or expected is None:
@@ -469,8 +480,8 @@ class PandasOnSparkTestUtils:
         check_row_order: bool = True,
     ):
         """
-        Asserts if two arbitrary objects are equal or not. If given objects are Koalas DataFrame
-        or Series, they are converted into pandas' and compared.
+        Asserts if two arbitrary objects are equal or not. If given objects are
+        Pandas-on-Spark DataFrame or Series, they are converted into pandas' and compared.
 
         :param left: object to compare
         :param right: object to compare

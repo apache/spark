@@ -545,7 +545,7 @@ checkpointed offsets after a failure. See the earlier section on
 [fault-tolerance semantics](#fault-tolerance-semantics).
 Here are the details of all the sources in Spark.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Source</th>
@@ -1819,7 +1819,7 @@ regarding watermark delays and whether data will be dropped or not.
 
 ##### Support matrix for joins in streaming queries
 
-<table class="table table-striped">
+<table>
 <thead>
   <tr>
     <th>Left Input</th>
@@ -2307,7 +2307,7 @@ to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
 
 Here are the configs regarding to RocksDB instance of the state store provider:
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Config Name</th>
@@ -2390,6 +2390,11 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Allow the rocksdb runtime to use fallocate to pre-allocate disk space for logs, etc...  Disable for apps that have many smaller state stores to trade off disk space for write performance.</td>
     <td>true</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.compression</td>
+    <td>Compression type used in RocksDB. The string is converted RocksDB compression type through RocksDB Java API getCompressionType(). </td>
+    <td>lz4</td>
+  </tr>
 </table>
 
 ##### RocksDB State Store Memory Management
@@ -2447,6 +2452,14 @@ Specifically for built-in HDFS state store provider, users can check the state s
 it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
 User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
 
+#### State Data Source (Experimental)
+
+Apache Spark provides a streaming state related data source that provides the ability to manipulate state stores in the checkpoint. Users can run the batch query with State Data Source to get the visibility of the states for existing streaming query.
+
+As of Spark 4.0, the data source only supports read feature. See [State Data Source Integration Guide](structured-streaming-state-data-source.html) for more details.
+
+NOTE: this data source is currently marked as experimental - source options and the behavior (output) might be subject to change.
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter)/[Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html) docs)
@@ -2483,7 +2496,7 @@ More information to be added in future releases.
 Different types of streaming queries support different output modes.
 Here is the compatibility matrix.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Query Type</th>
@@ -2622,7 +2635,7 @@ meant for debugging purposes only. See the earlier section on
 [fault-tolerance semantics](#fault-tolerance-semantics).
 Here are the details of all the sinks in Spark.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Sink</th>
@@ -3210,7 +3223,7 @@ The trigger settings of a streaming query define the timing of streaming data pr
 the query is going to be executed as micro-batch query with a fixed batch interval or as a continuous processing query.
 Here are the different kinds of triggers that are supported.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Trigger Type</th>

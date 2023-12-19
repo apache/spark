@@ -28,6 +28,7 @@ import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * A mutable version of {@link ColumnarRow}, which is used in the vectorized hash map for hash
@@ -143,6 +144,11 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
+  public VariantVal getVariant(int ordinal) {
+    return columns[ordinal].getVariant(rowId);
+  }
+
+  @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
     return columns[ordinal].getStruct(rowId);
   }
@@ -185,8 +191,8 @@ public final class MutableColumnarRow extends InternalRow {
       return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType)dataType).fields().length);
+    } else if (dataType instanceof StructType structType) {
+      return getStruct(ordinal, structType.fields().length);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
     } else {

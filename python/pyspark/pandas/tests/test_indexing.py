@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import SparkPandasIndexingError
+from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
 from pyspark.testing.pandasutils import ComparisonTestBase, compare_both
 
 
@@ -742,13 +742,13 @@ class IndexingTest(ComparisonTestBase):
         self.assertRaises(AttributeError, lambda: psdf.X)
 
         # not str/unicode
-        # TODO?: pdf = pd.DataFrame(np.random.randn(10, 5))
-        # TODO?: psdf = ps.from_pandas(pdf)
-        # TODO?: self.assert_eq(psdf[0], pdf[0])
-        # TODO?: self.assert_eq(psdf[[1, 2]], pdf[[1, 2]])
+        pdf = pd.DataFrame(np.random.randn(10, 5))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf[0], pdf[0])
+        self.assert_eq(psdf[[1, 2]], pdf[[1, 2]])
 
-        # TODO?: self.assertRaises(KeyError, lambda: pdf[8])
-        # TODO?: self.assertRaises(KeyError, lambda: pdf[[1, 8]])
+        self.assertRaises(KeyError, lambda: pdf[8])
+        self.assertRaises(KeyError, lambda: pdf[[1, 8]])
 
         # non-string column names
         pdf = pd.DataFrame(
@@ -901,6 +901,12 @@ class IndexingTest(ComparisonTestBase):
             self.assert_eq(psdf.iloc[:1, indexer], pdf.iloc[:1, indexer])
             self.assert_eq(psdf.iloc[:-1, indexer], pdf.iloc[:-1, indexer])
             # self.assert_eq(psdf.iloc[psdf.index == 2, indexer], pdf.iloc[pdf.index == 2, indexer])
+
+        self.assertRaisesRegex(
+            SparkPandasNotImplementedError,
+            ".iloc requires numeric slice, conditional boolean",
+            lambda: ps.range(10).iloc["a", :],
+        )
 
     def test_iloc_multiindex_columns(self):
         arrays = [np.array(["bar", "bar", "baz", "baz"]), np.array(["one", "two", "one", "two"])]

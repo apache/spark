@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Interva
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 class UnivocityGenerator(
     schema: StructType,
@@ -103,7 +104,7 @@ class UnivocityGenerator(
       }
       i += 1
     }
-    values
+    values.toImmutableArraySeq
   }
 
   def writeHeaders(): Unit = {

@@ -37,6 +37,7 @@ import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -428,9 +429,10 @@ private[tree] object TreeEnsembleModel extends Logging {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
-        tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
-      }
+      val dataRDD = sc.parallelize(model.trees.zipWithIndex.toImmutableArraySeq)
+        .flatMap { case (tree, treeId) =>
+          tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
+        }
       spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
@@ -438,7 +440,7 @@ private[tree] object TreeEnsembleModel extends Logging {
      * Read metadata from the loaded JSON metadata.
      */
     def readMetadata(metadata: JValue): Metadata = {
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       (metadata \ "metadata").extract[Metadata]
     }
 

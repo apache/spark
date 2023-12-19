@@ -74,7 +74,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
   private def show(now: Long, stages: Seq[StageData]): Unit = {
-    val width = TerminalWidth / stages.size
+    val width = TerminalWidth / stages.length
     val bar = stages.map { s =>
       val total = s.numTasks
       val header = s"[Stage ${s.stageId}:"
@@ -94,7 +94,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     // only refresh if it's changed OR after 1 minute (or the ssh connection will be closed
     // after idle some time)
     if (bar != lastProgressBar || now - lastUpdateTime > 60 * 1000L) {
-      System.err.print(CR + bar + CR)
+      System.err.print(s"$CR$bar$CR")
       lastUpdateTime = now
     }
     lastProgressBar = bar
@@ -105,7 +105,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    */
   private def clear(): Unit = {
     if (!lastProgressBar.isEmpty) {
-      System.err.printf(CR + " " * TerminalWidth + CR)
+      System.err.printf(s"$CR${" " * TerminalWidth}$CR")
       lastProgressBar = ""
     }
   }

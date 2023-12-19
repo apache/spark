@@ -28,7 +28,6 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
-import kafka.api.Request
 import kafka.server.{HostedPartition, KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.zk.KafkaZkClient
@@ -40,6 +39,7 @@ import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.network.ListenerName
+import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.SystemTime
@@ -54,6 +54,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaTokenUtil
 import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -377,7 +378,8 @@ class KafkaTestUtils(
   }
 
   def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
-    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster()).mapValues(_.size).toSeq
+    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster())
+      .map { case (k, v) => (k, v.size) }.toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -438,6 +440,10 @@ class KafkaTestUtils(
       }
     }
     offsets
+  }
+
+  def sendMessages(msgs: Array[ProducerRecord[String, String]]): Seq[(String, RecordMetadata)] = {
+    sendMessages(msgs.toImmutableArraySeq)
   }
 
   def cleanupLogs(): Unit = {
@@ -597,7 +603,7 @@ class KafkaTestUtils(
         .getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
         zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
-          Request.isValidBrokerId(partitionState.leader) &&
+          FetchRequest.isValidBrokerId(partitionState.leader) &&
           !partitionState.replicas.isEmpty
 
       case _ =>

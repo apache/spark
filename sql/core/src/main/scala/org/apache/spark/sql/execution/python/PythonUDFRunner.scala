@@ -44,6 +44,8 @@ abstract class BasePythonUDFRunner(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
   protected override def newWriter(

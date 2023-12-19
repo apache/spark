@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -147,6 +148,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
 
     val batches = (
     Batch("Finish Analysis", Once, FinishAnalysis) ::
+    // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
+    // may produce `With` expressions that need to be rewritten.
+    Batch("Rewrite With expression", Once, RewriteWithExpression) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -765,7 +769,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
+      val project = Project(a.aggregateExpressions, LocalLimit(le, a.child))
+      project.setTagValue(Project.dataOrderIrrelevantTag, ())
+      Limit(le, project)
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
@@ -1055,7 +1061,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .filter(_.references.exists(producerMap.contains))
       .flatMap(collectReferences)
       .groupBy(identity)
-      .mapValues(_.size)
+      .transform((_, v) => v.size)
       .forall {
         case (reference, count) =>
           val producer = producerMap.getOrElse(reference, reference)
@@ -1579,6 +1585,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
         right = recursiveRemoveSort(originRight, true))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
       g.copy(child = recursiveRemoveSort(originChild, true))
+    case p: Project if p.getTagValue(Project.dataOrderIrrelevantTag).isDefined =>
+      p.copy(child = recursiveRemoveSort(p.child, true))
   }
 
   /**
@@ -1957,7 +1965,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
 
         case other =>
-          throw new IllegalStateException(s"Unexpected join type: $other")
+          throw SparkException.internalError(s"Unexpected join type: $other")
       }
 
     // push down the join filter into sub query scanning if applicable
@@ -1993,7 +2001,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           Join(newLeft, newRight, joinType, newJoinCond, hint)
 
         case other =>
-          throw new IllegalStateException(s"Unexpected join type: $other")
+          throw SparkException.internalError(s"Unexpected join type: $other")
       }
   }
 }

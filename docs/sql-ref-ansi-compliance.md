@@ -240,6 +240,25 @@ The least common type resolution is used to:
 - Derive the result type for expressions such as the case expression.
 - Derive the element, key, or value types for array and map constructors.
 Special rules are applied if the least common type resolves to FLOAT. With float type values, if any of the types is INT, BIGINT, or DECIMAL the least common type is pushed to DOUBLE to avoid potential loss of digits.
+
+Decimal type is a bit more complicated here, as it's not a simple type but has parameters: precision and scale.
+A `decimal(precision, scale)` means the value can have at most `precision - scale` digits in the integral part and `scale` digits in the fractional part.
+A least common type between decimal types should have enough digits in both integral and fractional parts to represent all values.
+More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s2)` has the scale of `max(s1, s2)` and precision of `max(s1, s2) + max(p1 - s1, p2 - s2)`.
+However, decimal types in Spark have a maximum precision: 38. If the final decimal type need more precision, we must do truncation.
+Since the digits in the integral part are more significant, Spark truncates the digits in the fractional part first. For example, `decimal(48, 20)` will be reduced to `decimal(38, 10)`.
+
+Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
+
+| Operation  | Result precision                         | Result scale        |
+|------------|------------------------------------------|---------------------|
+| e1 + e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1  | max(s1, s2)         |
+| e1 - e2    | max(s1, s2) + max(p1 - s1, p2 - s2) + 1	| max(s1, s2)         |
+| e1 * e2    | p1 + p2 + 1	                        | s1 + s2             |
+| e1 / e2    | p1 - s1 + s2 + max(6, s1 + p2 + 1)       | max(6, s1 + p2 + 1) |
+| e1 % e2    | min(p1 - s1, p2 - s2) + max(s1, s2)      | max(s1, s2)         |
+
+The truncation rule is also different for arithmetic operations: they retain at least 6 digits in the fractional part, which means we can only reduce `scale` to 6. Overflow may happen in this case.
   
 ```sql
 -- The coalesce function accepts any set of argument types as long as they share a least common type. 
@@ -671,6 +690,7 @@ Below is a list of all the keywords in Spark SQL.
 |VARCHAR|non-reserved|non-reserved|reserved|
 |VAR|non-reserved|non-reserved|non-reserved|
 |VARIABLE|non-reserved|non-reserved|non-reserved|
+|VARIANT|non-reserved|non-reserved|reserved|
 |VERSION|non-reserved|non-reserved|non-reserved|
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|

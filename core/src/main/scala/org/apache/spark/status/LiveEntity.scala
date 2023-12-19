@@ -364,7 +364,7 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       executorLogs,
       memoryMetrics,
       excludedInStages,
-      Some(peakExecutorMetrics).filter(_.isSet),
+      Some(peakExecutorMetrics).filter(_.isSet()),
       attributes,
       resources,
       resourceProfileId,
@@ -408,7 +408,7 @@ private class LiveExecutorStageSummary(
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
       isExcluded,
-      Some(peakExecutorMetrics).filter(_.isSet),
+      Some(peakExecutorMetrics).filter(_.isSet()),
       isExcluded)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
@@ -472,7 +472,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
   val peakExecutorMetrics = new ExecutorMetrics()
 
   lazy val speculationStageSummary: LiveSpeculationStageSummary =
-    new LiveSpeculationStageSummary(info.stageId, info.attemptNumber)
+    new LiveSpeculationStageSummary(info.stageId, info.attemptNumber())
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
@@ -480,14 +480,14 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
 
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,
-      new LiveExecutorStageSummary(info.stageId, info.attemptNumber, executorId))
+      new LiveExecutorStageSummary(info.stageId, info.attemptNumber(), executorId))
   }
 
   def toApi(): v1.StageData = {
     new v1.StageData(
       status = status,
       stageId = info.stageId,
-      attemptId = info.attemptNumber,
+      attemptId = info.attemptNumber(),
       numTasks = info.numTasks,
       numActiveTasks = activeTasks,
       numCompleteTasks = completedTasks,
@@ -559,7 +559,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
       speculationSummary = None,
       killedTasksSummary = killedSummary,
       resourceProfileId = info.resourceProfileId,
-      peakExecutorMetrics = Some(peakExecutorMetrics).filter(_.isSet),
+      peakExecutorMetrics = Some(peakExecutorMetrics).filter(_.isSet()),
       taskMetricsDistributions = None,
       executorMetricsDistributions = None,
       isShufflePushEnabled = info.isShufflePushEnabled,

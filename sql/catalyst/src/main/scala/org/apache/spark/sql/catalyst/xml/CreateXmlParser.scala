@@ -29,7 +29,7 @@ import sun.nio.cs.StreamDecoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
 
-private[sql] object CreateXmlParser extends Serializable {
+object CreateXmlParser extends Serializable {
   val filter = new EventFilter {
     override def accept(event: XMLEvent): Boolean =
     // Ignore comments and processing instructions

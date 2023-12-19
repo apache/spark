@@ -544,7 +544,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     val expected = (0 until 3).map { p =>
       var v = (0 until size).map { i => (i / 4, i) }.filter { case (k, _) => k % 3 == p }.toSet
       if (withPartialAgg) {
-        v = v.groupBy(_._1).mapValues { s => s.map(_._2).sum }.toSet
+        v = v.groupBy(_._1).transform((_, s) => s.map(_._2).sum).toSet
       }
       (p, v.toSet)
     }.toSet
