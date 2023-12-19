@@ -507,8 +507,7 @@
     "subClass" : {
       "MISMATCHED_TYPES" : {
         "message" : [
-          "All input types must be the same except nullable, containsNull, valueContainsNull flags.",
-          "The input types found are <inputTypes>."
+          "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
         ]
       },
       "NO_INPUTS" : {
