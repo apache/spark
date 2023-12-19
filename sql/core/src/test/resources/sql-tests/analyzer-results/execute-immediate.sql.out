@@ -507,7 +507,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`system`.`spark_catalog`",
+    "searchPath" : "`system`.`session`",
     "variableName" : "`id`"
   },
   "queryContext" : [ {
