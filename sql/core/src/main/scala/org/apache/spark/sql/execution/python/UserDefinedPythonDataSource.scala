@@ -291,7 +291,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     }.toArray
   }
 
-  private def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
+  def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
     SimplePythonFunction(
       command = pickledFunc.toImmutableArraySeq,
       envVars = dataSourceCls.envVars,

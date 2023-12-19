@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
 
 
-__all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
+__all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataStreamReader", "DataSourceRegistration"]
 
 
 class DataSource(ABC):
@@ -128,6 +128,12 @@ class DataSource(ABC):
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "reader"},
+        )
+
+    def stream_reader(self, schema: StructType) -> "DataStreamReader":
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "writer"},
         )
 
     def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
@@ -354,6 +360,30 @@ class DataSourceWriter(ABC):
         messages : List[WriterCommitMessage]
             A list of commit messages.
         """
+        ...
+
+
+class DataStreamOffset:
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def set_value(self, json_str: str) -> None:
+        self.value = self.from_json(json_str)
+
+class DataStreamReader(ABC):
+    def latest_offset(self) -> DataStreamOffset:
+        ...
+
+    def partitions(self, start: DataStreamOffset, end: DataStreamOffset) -> Sequence[InputPartition]:
+        ...
+
+    def read(self, partition) -> Iterator[Union[Tuple, Row]]:
+        ...
+
+    def offset_to_json(self, offset: DataStreamOffset) -> str:
+        ...
+
+    def json_to_offset(self, json: str) -> DataStreamOffset:
         ...
 
 

@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTes
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   import IntegratedUDFTestUtils._
@@ -36,6 +37,25 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |        yield (0, partition.value)
       |        yield (1, partition.value)
       |        yield (2, partition.value)
+      |""".stripMargin
+
+  private def simpleDataStreamReaderScript: String =
+    """
+      |from pyspark.sql.datasource import DataStreamReader, InputPartition, DataStreamOffset
+      |
+      |class SimpleDataStreamReader(DataStreamReader):
+      |    def latest_offset(self):
+      |        return DataStreamOffset(0)
+      |    def partitions(self, start: DataStreamOffset, end: DataStreamOffset):
+      |        return [InputPartition(i) for i in range(start.value, end.value + 1)]
+      |    def read(self, partition):
+      |        yield (0, partition.value)
+      |        yield (1, partition.value)
+      |        yield (2, partition.value)
+      |    def offset_to_json(self, offset):
+      |        return "SimpleDataStreamOffset"
+      |    def json_to_offset(self, json):
+      |        return DataStreamOffset(0)
       |""".stripMargin
 
   test("simple data source") {
@@ -62,6 +82,34 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
     }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+  }
+
+  test("simple data stream source") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def stream_reader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val inputSchema = StructType.fromDDL("input BINARY")
+    val schema = StructType.fromDDL("id INT, partition INT")
+    val dataSource = createUserDefinedPythonDataSource(
+      name = dataSourceName, pythonScript = dataSourceScript)
+    val dataSourceInPython = dataSource
+      .createDataSourceInPython(dataSourceName, CaseInsensitiveStringMap.empty, Some(schema))
+    val func = dataSource.createPythonFunction(
+      dataSourceInPython.dataSource)
+    val streamingSourceRunner =
+      new StreamingSourcePythonRunner(func, inputSchema, schema)
+    streamingSourceRunner.init()
+    // assert(streamingSourceRunner.latestOffset() == "SimpleDataStreamOffset")
+    assert(streamingSourceRunner
+      .partitions("SimpleDataStreamOffset", "SimpleDataStreamOffset") == 2)
+    streamingSourceRunner.stop()
   }
 
   test("simple data source with string schema") {
