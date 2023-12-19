@@ -383,7 +383,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 }.toMap
 
                 if (transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
-                  val projectionToForceOnCdPlan = cachedPlan.output.map(cdAttribToInAttrib)
+                  val projectionToForceOnCdPlan = cachedPlan.output.flatMap(cdAttr =>
+                    cdAttribToInAttrib.get(cdAttr).map(Seq(_)).getOrElse(Seq.empty))
                   val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
                     case (ne, indx) => if (incomingToCachedPlanIndxMapping.exists(_._1 == indx)) {
                       ne.toAttribute

@@ -20,7 +20,7 @@ package org.apache.spark.sql.internal
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, UserDefinedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Window}
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 import org.apache.spark.util.Utils
 
@@ -93,7 +93,16 @@ private[sql] object EarlyCollapseProject {
             }
           }
           remappedNewProjListResult match {
-            case Success(remappedNewProjList) => Option(Project(remappedNewProjList, child))
+            case Success(remappedNewProjList) =>
+              val newProject = Project(remappedNewProjList, child)
+              val droppedNamedExprs = projList.filter(ne =>
+                remappedNewProjList.forall(_.toAttribute != ne.toAttribute))
+              val newDroppedList = p.getTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS).map(
+                _ ++ droppedNamedExprs).getOrElse(droppedNamedExprs)
+              if (newDroppedList.nonEmpty) {
+                newProject.setTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS, newDroppedList)
+              }
+              Option(newProject)
 
             case Failure(x) => if (Utils.isTesting) {
               throw x
