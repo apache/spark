@@ -64,33 +64,15 @@ def partitions_func(reader, infile, outfile):
     end_offset_json = utf8_deserializer.loads(infile)
     partitions = reader.partitions(reader.json_to_offset(start_offset_json), reader.json_to_offset(end_offset_json))
     # Return the serialized partition values.
-    # write_int(len(partitions), outfile)
-    write_int(2, outfile)
+    write_int(len(partitions), outfile)
     for partition in partitions:
         pickleSer._write_with_length(partition, outfile)
+
 
 def read_func(reader, infile, outfile):
     write_int(read_func_id, outfile)
 
 def main(infile: IO, outfile: IO) -> None:
-    """
-    Main method for planning a data source read.
-
-    This process is invoked from the `UserDefinedPythonDataSourceReadRunner.runInPython`
-    method in the optimizer rule `PlanPythonDataSourceScan` in JVM. This process is responsible
-    for creating a `DataSourceReader` object and send the information needed back to the JVM.
-
-    The infile and outfile are connected to the JVM via a socket. The JVM sends the following
-    information to this process via the socket:
-    - a `DataSource` instance representing the data source
-    - a `StructType` instance representing the output schema of the data source
-
-    This process then creates a `DataSourceReader` instance by calling the `reader` method
-    on the `DataSource` instance. Then it calls the `partitions()` method of the reader and
-    constructs a Python UDTF using the `read()` method of the reader.
-
-    The partition values and the UDTF are then serialized and sent back to the JVM via the socket.
-    """
     try:
 
         check_python_version(infile)
@@ -166,9 +148,10 @@ def main(infile: IO, outfile: IO) -> None:
         write_int(0, outfile)
         outfile.flush()
 
+        # handle method call from socket
         while True:
             func_id = read_int(infile)
-            if func_id == func_id == latest_offsets_func_id:
+            if func_id == latest_offsets_func_id:
                 latest_offset_func(reader, outfile)
             elif func_id == partitions_func_id:
                 partitions_func(reader, infile, outfile)

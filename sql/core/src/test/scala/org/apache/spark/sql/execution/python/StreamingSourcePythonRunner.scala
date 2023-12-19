@@ -94,7 +94,7 @@ class StreamingSourcePythonRunner(
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
     val pythonIncludes = func.pythonIncludes.asScala.toSet
-    PythonWorkerUtils.writeSparkFiles(Some("afd"), pythonIncludes, dataOut)
+    PythonWorkerUtils.writeSparkFiles(Some("streaming_job"), pythonIncludes, dataOut)
 
     // Send the user function to python process
     PythonWorkerUtils.writePythonFunction(func, dataOut)
@@ -122,22 +122,23 @@ class StreamingSourcePythonRunner(
     PythonWorkerUtils.readUTF(dataIn)
   }
 
-  def partitions(start: String, end: String): Int = {
+  def partitions(start: String, end: String): List[Array[Byte]] = {
     dataOut.writeInt(partitions_func_id)
-    dataOut.writeUTF(start)
-    dataOut.writeUTF(end)
+    PythonWorkerUtils.writeUTF(start, dataOut)
+    PythonWorkerUtils.writeUTF(end, dataOut)
     dataOut.flush()
     // Receive the list of partitions, if any.
     val pickledPartitions = ArrayBuffer.empty[Array[Byte]]
     val numPartitions = dataIn.readInt()
-
-      /*
+    if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val error = PythonWorkerUtils.readUTF(dataIn)
+      println(s"ppd $error")
+    }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
       pickledPartitions.append(pickledPartition)
     }
     pickledPartitions.toList
-       */
   }
 
   def read(): Unit = {

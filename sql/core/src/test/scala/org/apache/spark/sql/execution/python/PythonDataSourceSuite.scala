@@ -47,7 +47,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |    def latest_offset(self):
       |        return DataStreamOffset(0)
       |    def partitions(self, start: DataStreamOffset, end: DataStreamOffset):
-      |        return [InputPartition(i) for i in range(start.value, end.value + 1)]
+      |        return [InputPartition(i) for i in range(start.value, end.value + 2)]
       |    def read(self, partition):
       |        yield (0, partition.value)
       |        yield (1, partition.value)
@@ -106,9 +106,12 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val streamingSourceRunner =
       new StreamingSourcePythonRunner(func, inputSchema, schema)
     streamingSourceRunner.init()
-    // assert(streamingSourceRunner.latestOffset() == "SimpleDataStreamOffset")
-    assert(streamingSourceRunner
-      .partitions("SimpleDataStreamOffset", "SimpleDataStreamOffset") == 2)
+    for (i <- 1 to 50) {
+      assert(streamingSourceRunner.latestOffset() == "SimpleDataStreamOffset")
+      assert(streamingSourceRunner
+        .partitions("SimpleDataStreamOffset", "SimpleDataStreamOffset").size == 2)
+      Thread.sleep(500)
+    }
     streamingSourceRunner.stop()
   }
 
