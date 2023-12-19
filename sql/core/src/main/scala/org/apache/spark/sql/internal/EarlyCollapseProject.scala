@@ -43,9 +43,9 @@ private[sql] object EarlyCollapseProject {
           projList.flatMap(ne => ne match {
             case _: AttributeReference => Seq.empty[(Attribute, Expression)]
 
-            case al@Alias(expr, _) =>
-              if (childOutput.contains(al.toAttribute)) {
-                Seq(al.toAttribute -> expr)
+            case al@Alias(attr: AttributeReference, _) =>
+              if (childOutput.contains(attr)) {
+                Seq(al.toAttribute -> transferMetadata(al.toAttribute, attr))
               } else {
                 Seq.empty[(Attribute, Expression)]
               }
@@ -87,7 +87,7 @@ private[sql] object EarlyCollapseProject {
                     attribsRemappedInProj.get(attr).orElse(projList.find(
                       _.toAttribute.canonicalized == attr.canonicalized).map {
                       case al: Alias => al.child
-                      case x => x
+                      case x => attr
                     }).getOrElse(attr)
                 }).asInstanceOf[NamedExpression]
             }
@@ -97,8 +97,14 @@ private[sql] object EarlyCollapseProject {
               val newProject = Project(remappedNewProjList, child)
               val droppedNamedExprs = projList.filter(ne =>
                 remappedNewProjList.forall(_.toAttribute != ne.toAttribute))
-              val newDroppedList = p.getTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS).map(
-                _ ++ droppedNamedExprs).getOrElse(droppedNamedExprs)
+              val prevDroppedColsPart1 = p.getTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS).
+                getOrElse(Seq.empty)
+              // remove any attribs which have been added back in the new project list
+              val prevDroppedColsPart2 = prevDroppedColsPart1.filterNot(x =>
+                remappedNewProjList.exists(y => y.toAttribute == x.toAttribute || y.name == x.name))
+              val prevDroppedColsFinal = prevDroppedColsPart2.filterNot(x =>
+                droppedNamedExprs.exists(y => y == x || y.name == x.name))
+              val newDroppedList = droppedNamedExprs ++ prevDroppedColsFinal
               if (newDroppedList.nonEmpty) {
                 newProject.setTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS, newDroppedList)
               }
