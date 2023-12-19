@@ -2424,6 +2424,70 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df4, Seq(Row(1100.0, 1100.0), Row(1200.0, 1200.0), Row(1250.0, 1250.0)))
   }
 
+  test("scan with aggregate push-down: MODE with filter and group by") {
+    val df1 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  MODE(salary, true)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df1)
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1,
+      """
+        |PushedAggregates: [MODE(SALARY, true)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df1, Seq(Row(1, 9000.00), Row(2, 10000.00), Row(6, 12000.00)))
+
+    val df2 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  MODE(salary)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df2)
+    checkAggregateRemoved(df2, false)
+    checkPushedInfo(df2,
+      """
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df2, Seq(Row(1, 10000.00), Row(2, 10000.00), Row(6, 12000.00)))
+
+    val df3 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  MODE() WITHIN GROUP (ORDER BY salary)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df3)
+    checkAggregateRemoved(df3)
+    checkPushedInfo(df3,
+      """
+        |PushedAggregates: [MODE(SALARY, true)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df3, Seq(Row(1, 9000.00), Row(2, 10000.00), Row(6, 12000.00)))
+
+    val df4 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  MODE() WITHIN GROUP (ORDER BY salary DESC)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df4)
+    checkAggregateRemoved(df4)
+    checkPushedInfo(df4,
+      """
+        |PushedAggregates: [MODE(SALARY, false)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df4, Seq(Row(1, 10000.00), Row(2, 12000.00), Row(6, 12000.00)))
+  }
+
   test("scan with aggregate push-down: aggregate over alias push down") {
     val cols = Seq("a", "b", "c", "d", "e")
     val df1 = sql("SELECT * FROM h2.test.employee").toDF(cols: _*)
@@ -2860,8 +2924,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       },
       errorClass = "INDEX_ALREADY_EXISTS",
       parameters = Map(
-        "indexName" -> "people_index",
-        "tableName" -> "test.people"
+        "indexName" -> "`people_index`",
+        "tableName" -> "`test`.`people`"
       )
     )
     assert(jdbcTable.indexExists("people_index"))
@@ -2877,7 +2941,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
       errorClass = "INDEX_NOT_FOUND",
-      parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
+      parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()

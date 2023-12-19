@@ -665,6 +665,14 @@ User defined function (`<functionName>`: (`<signature>`) => `<result>`) failed d
 
 Failed preparing of the function `<funcName>` for call. Please, double check function's arguments.
 
+### [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
+
+SQLSTATE: HV000
+
+Failed JDBC `<url>` on the operation:
+
+For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
+
 ### FAILED_PARSE_STRUCT_TYPE
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)

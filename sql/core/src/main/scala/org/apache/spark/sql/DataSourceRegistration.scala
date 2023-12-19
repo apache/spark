@@ -43,6 +43,6 @@ private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataS
          | pythonExec: ${dataSource.dataSourceCls.pythonExec}
       """.stripMargin)
 
-    dataSourceManager.registerDataSource(name, dataSource.builder)
+    dataSourceManager.registerDataSource(name, dataSource)
   }
 }

@@ -358,10 +358,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       case _: EqualTo =>
         if (isStartOfDay) {
           EqualTo(fromExp, floorDate)
-        } else if (!fromExp.nullable) {
-          FalseLiteral
         } else {
-          And(EqualTo(fromExp, floorDate), EqualTo(fromExp, dateAddOne))
+          falseIfNotNull(fromExp)
         }
       case _: EqualNullSafe =>
         if (isStartOfDay) EqualNullSafe(fromExp, floorDate) else FalseLiteral

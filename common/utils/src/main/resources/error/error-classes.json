@@ -1096,6 +1096,79 @@
     ],
     "sqlState" : "38000"
   },
+  "FAILED_JDBC" : {
+    "message" : [
+      "Failed JDBC <url> on the operation:"
+    ],
+    "subClass" : {
+      "ALTER_TABLE" : {
+        "message" : [
+          "Alter the table <tableName>."
+        ]
+      },
+      "CREATE_INDEX" : {
+        "message" : [
+          "Create the index <indexName> in the <tableName> table."
+        ]
+      },
+      "CREATE_NAMESPACE" : {
+        "message" : [
+          "Create the namespace <namespace>."
+        ]
+      },
+      "CREATE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Create a comment on the namespace: <namespace>."
+        ]
+      },
+      "CREATE_TABLE" : {
+        "message" : [
+          "Create the table <tableName>."
+        ]
+      },
+      "DROP_INDEX" : {
+        "message" : [
+          "Drop the index <indexName> in the <tableName> table."
+        ]
+      },
+      "DROP_NAMESPACE" : {
+        "message" : [
+          "Drop the namespace <namespace>."
+        ]
+      },
+      "GET_TABLES" : {
+        "message" : [
+          "Get tables from the namespace: <namespace>."
+        ]
+      },
+      "LIST_NAMESPACES" : {
+        "message" : [
+          "List namespaces."
+        ]
+      },
+      "NAMESPACE_EXISTS" : {
+        "message" : [
+          "Check that the namespace <namespace> exists."
+        ]
+      },
+      "REMOVE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Remove a comment on the namespace: <namespace>."
+        ]
+      },
+      "RENAME_TABLE" : {
+        "message" : [
+          "Rename the table <oldName> to <newName>."
+        ]
+      },
+      "TABLE_EXISTS" : {
+        "message" : [
+          "Check that the table <tableName> exists."
+        ]
+      }
+    },
+    "sqlState" : "HV000"
+  },
   "FAILED_PARSE_STRUCT_TYPE" : {
     "message" : [
       "Failed parsing struct: <raw>."
@@ -2227,6 +2300,11 @@
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
+        ]
+      },
+      "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
+        "message" : [
+          "The function <prettyName> does not support <syntax>."
         ]
       },
       "INVALID_COLUMN_REFERENCE" : {
@@ -4318,11 +4396,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1023" : {
-    "message" : [
-      "Function <prettyName> does not support <syntax>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1024" : {
@@ -6776,11 +6849,6 @@
   "_LEGACY_ERROR_TEMP_3063" : {
     "message" : [
       "pivot is not supported on a streaming DataFrames/Datasets"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3064" : {
-    "message" : [
-      "<msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3065" : {

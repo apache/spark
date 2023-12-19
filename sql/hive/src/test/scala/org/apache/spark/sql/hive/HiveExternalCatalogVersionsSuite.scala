@@ -40,8 +40,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
-import org.apache.spark.util.{Utils, VersionUtils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * Test HiveExternalCatalog backward compatibility.
@@ -95,13 +95,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       mirrors.distinct :+ "https://archive.apache.org/dist" :+ PROCESS_TABLES.releaseMirror
     logInfo(s"Trying to download Spark $version from $sites")
     for (site <- sites) {
-      val filename = VersionUtils.majorMinorPatchVersion(version) match {
-        case Some((major, _, _)) if major > 3 => s"spark-$version-bin-hadoop3.tgz"
-        case Some((3, minor, _)) if minor >= 3 => s"spark-$version-bin-hadoop3.tgz"
-        case Some((3, minor, _)) if minor < 3 => s"spark-$version-bin-hadoop3.2.tgz"
-        case Some((_, _, _)) => s"spark-$version-bin-hadoop2.7.tgz"
-        case None => s"spark-$version-bin-hadoop2.7.tgz"
-      }
+      val filename = s"spark-$version-bin-hadoop3.tgz"
       val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
       try {

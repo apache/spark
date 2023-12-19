@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.python.PandasGroupUtils._
 /**
  * Base class for Python-based FlatMapCoGroupsIn*Exec.
  */
-trait FlatMapCoGroupsInPythonExec extends SparkPlan with BinaryExecNode with PythonSQLMetrics {
+trait FlatMapCoGroupsInBatchExec extends SparkPlan with BinaryExecNode with PythonSQLMetrics {
   val leftGroup: Seq[Attribute]
   val rightGroup: Seq[Attribute]
   val func: Expression
