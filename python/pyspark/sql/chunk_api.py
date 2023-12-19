@@ -52,7 +52,8 @@ def persist_dataframe_as_chunks(
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true'."
         )
     chunk_meta_list = list(
-        sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(
+        sc._jvm.org  # type: ignore[union-attr]
+        .apache.spark.sql.api.python.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(
             dataframe._jdf, max_records_per_batch
         )
     )
@@ -67,11 +68,14 @@ def unpersist_chunks(chunk_ids: list[str]) -> None:
     Unpersist chunks by chunk ids.
     This function is only available when it is called from spark driver process.
     """
-    sc = SparkSession.getActiveSession().sparkContext
-    sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.unpersistChunks(chunk_ids)
+    sc = SparkSession.getActiveSession().sparkContext  # type: ignore[union-attr]
+    (
+        sc._jvm.org  # type: ignore[union-attr]
+        .apache.spark.sql.api.python.ChunkReadUtils.unpersistChunks(chunk_ids)
+    )
 
 
-def read_chunk(chunk_id):
+def read_chunk(chunk_id: str) -> pa.Table:
     """
     Read chunk by id, return this chunk as an arrow table.
     You can call this function from spark driver, spark python UDF python,
