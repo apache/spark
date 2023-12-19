@@ -38,8 +38,28 @@ import org.apache.spark.util.NextIterator
 object RecordType extends Enumeration {
   type RecordType = Value
 
+  val EOF_RECORD = Value("eof_record")
   val PUT_RECORD = Value("put_record")
   val DELETE_RECORD = Value("delete_record")
+
+  // Generate byte representation of each record type
+  def getRecordTypeAsByte(recordType: RecordType): Byte = {
+    recordType match {
+      case EOF_RECORD => 0x00.toByte
+      case PUT_RECORD => 0x01.toByte
+      case DELETE_RECORD => 0x10.toByte
+    }
+  }
+
+  // Generate record type from byte representation
+  def getRecordTypeFromByte(byte: Byte): RecordType = {
+    byte match {
+      case 0x00 => EOF_RECORD
+      case 0x01 => PUT_RECORD
+      case 0x10 => DELETE_RECORD
+      case _ => throw new RuntimeException(s"Found invalid record type for value=$byte")
+    }
+  }
 }
 
 /**
@@ -58,7 +78,7 @@ abstract class StateStoreChangelogWriter(
     new DataOutputStream(compressed)
   }
 
-  private var backingFileStream: CancellableFSDataOutputStream =
+  protected var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
   var size = 0
@@ -90,21 +110,7 @@ abstract class StateStoreChangelogWriter(
     }
   }
 
-  def commit(): Unit = {
-    try {
-      // -1 in the key length field mean EOF.
-      compressedStream.writeInt(-1)
-      compressedStream.close()
-    } catch {
-      case e: Throwable =>
-        abort()
-        logError(s"Fail to commit changelog file $file because of exception $e")
-        throw e
-    } finally {
-      backingFileStream = null
-      compressedStream = null
-    }
-  }
+  def commit(): Unit
 }
 
 /**
@@ -148,17 +154,33 @@ class StateStoreChangelogWriterV1(
     throw new UnsupportedOperationException("Operation not supported with state " +
       "changelog writer v1")
   }
+
+  override def commit(): Unit = {
+    try {
+      // -1 in the key length field mean EOF.
+      compressedStream.writeInt(-1)
+      compressedStream.close()
+    } catch {
+      case e: Throwable =>
+        abort()
+        logError(s"Fail to commit changelog file $file because of exception $e")
+        throw e
+    } finally {
+      backingFileStream = null
+      compressedStream = null
+    }
+  }
 }
 
 /**
  * Write changes to the key value state store instance to a changelog file.
- * There are 2 types of records, put and delete.
+ * There are 2 types of data records, put and delete.
  * A put record is written as: | record type | key length
  *    | key content | value length | value content | col family name length | col family name | -1 |
  * A delete record is written as: | record type | key length | key content | -1
  *    | col family name length | col family name | -1 |
- * Write an Int -1 to signal the end of file.
- * The overall changelog format is: | put record | delete record | ... | put record | -1 |
+ * Write an EOF_RECORD to signal the end of file.
+ * The overall changelog format is: | put record | delete record | ... | put record | eof record |
  */
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
@@ -173,8 +195,7 @@ class StateStoreChangelogWriterV2(
 
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
     assert(compressedStream != null)
-    compressedStream.writeInt(RecordType.PUT_RECORD.toString.getBytes.size)
-    compressedStream.write(RecordType.PUT_RECORD.toString.getBytes)
+    compressedStream.write(RecordType.getRecordTypeAsByte(RecordType.PUT_RECORD))
     compressedStream.writeInt(key.size)
     compressedStream.write(key)
     compressedStream.writeInt(value.size)
@@ -191,8 +212,7 @@ class StateStoreChangelogWriterV2(
 
   override def delete(key: Array[Byte], colFamilyName: String): Unit = {
     assert(compressedStream != null)
-    compressedStream.writeInt(RecordType.DELETE_RECORD.toString.getBytes.size)
-    compressedStream.write(RecordType.DELETE_RECORD.toString.getBytes)
+    compressedStream.write(RecordType.getRecordTypeAsByte(RecordType.DELETE_RECORD))
     compressedStream.writeInt(key.size)
     compressedStream.write(key)
     // -1 in the value field means record deletion.
@@ -200,6 +220,22 @@ class StateStoreChangelogWriterV2(
     compressedStream.writeInt(colFamilyName.getBytes.size)
     compressedStream.write(colFamilyName.getBytes)
     size += 1
+  }
+
+  def commit(): Unit = {
+    try {
+      // write EOF_RECORD to signal end of file
+      compressedStream.write(RecordType.getRecordTypeAsByte(RecordType.EOF_RECORD))
+      compressedStream.close()
+    } catch {
+      case e: Throwable =>
+        abort()
+        logError(s"Fail to commit changelog file $file because of exception $e")
+        throw e
+    } finally {
+      backingFileStream = null
+      compressedStream = null
+    }
   }
 }
 
@@ -209,7 +245,7 @@ class StateStoreChangelogWriterV2(
  * @param fileToRead - name of file to use to read changelog
  * @param compressionCodec - de-compression method using for reading changelog file
  */
-class StateStoreChangelogReader(
+abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
@@ -230,10 +266,7 @@ class StateStoreChangelogReader(
 
   def close(): Unit = { if (input != null) input.close() }
 
-  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String) = {
-    throw new UnsupportedOperationException("Iterator operations not supported on base " +
-      "changelog reader implementation")
-  }
+  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String)
 }
 
 /**
@@ -297,20 +330,12 @@ class StateStoreChangelogReaderV2(
   }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String) = {
-    val recordTypeSize = input.readInt()
-    // A -1 key size mean end of file.
-    if (recordTypeSize == -1) {
+    val recordType = RecordType.getRecordTypeFromByte(input.readByte())
+    // A EOF_RECORD means end of file.
+    if (recordType == RecordType.EOF_RECORD) {
       finished = true
       null
-    } else if (recordTypeSize < 0) {
-      throw new IOException(
-        s"Error reading streaming state file $fileToRead: " +
-        s"record type size cannot be $recordTypeSize")
     } else {
-      val recordTypeBuffer = new Array[Byte](recordTypeSize)
-      ByteStreams.readFully(input, recordTypeBuffer, 0, recordTypeSize)
-      val recordTypeStr = recordTypeBuffer.map(_.toChar).mkString
-      val recordType = RecordType.withName(recordTypeStr)
       recordType match {
         case RecordType.PUT_RECORD =>
           val keyBuffer = parseBuffer(input)
