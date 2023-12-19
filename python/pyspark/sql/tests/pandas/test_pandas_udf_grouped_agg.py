@@ -720,9 +720,6 @@ class GroupedAggPandasUDFTestsMixin:
 
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
-    def test_unsupported_types(self):
-        super().test_unsupported_types()
-
     pass
 
 

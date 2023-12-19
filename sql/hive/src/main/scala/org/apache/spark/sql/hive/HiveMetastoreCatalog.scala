@@ -301,17 +301,20 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // it, but also respect the exprId in table relation output.
     if (result.output.length != relation.output.length) {
       throw new AnalysisException(
-        s"Converted table has ${result.output.length} columns, " +
-        s"but source Hive table has ${relation.output.length} columns. " +
-        s"Set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false, " +
-        s"or recreate table ${relation.tableMeta.identifier} to workaround.")
+        errorClass = "_LEGACY_ERROR_TEMP_3096",
+        messageParameters = Map(
+          "resLen" ->  result.output.length.toString,
+          "relLen" -> relation.output.length.toString,
+          "key" -> HiveUtils.CONVERT_METASTORE_PARQUET.key,
+          "ident" -> relation.tableMeta.identifier.toString))
     }
     if (!result.output.zip(relation.output).forall {
           case (a1, a2) => a1.dataType == a2.dataType }) {
       throw new AnalysisException(
-        s"Column in converted table has different data type with source Hive table's. " +
-          s"Set ${HiveUtils.CONVERT_METASTORE_PARQUET.key} to false, " +
-          s"or recreate table ${relation.tableMeta.identifier} to workaround.")
+        errorClass = "_LEGACY_ERROR_TEMP_3097",
+        messageParameters = Map(
+          "key" -> HiveUtils.CONVERT_METASTORE_PARQUET.key,
+          "ident" -> relation.tableMeta.identifier.toString))
     }
     val newOutput = result.output.zip(relation.output).map {
       case (a1, a2) => a1.withExprId(a2.exprId)

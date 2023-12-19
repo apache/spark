@@ -144,15 +144,22 @@ private object DB2Dialect extends JdbcDialect {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String]): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
-          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case "42893" =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+          case _ => super.classifyException(e, errorClass, messageParameters)
         }
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, errorClass, messageParameters)
     }
   }
 

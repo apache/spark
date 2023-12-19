@@ -568,7 +568,9 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
         // HiveExternalCatalog may be the first one to notice and throw an exception, which will
         // then be caught and converted to a RuntimeException with a descriptive message.
         case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
-          throw new AnalysisException(ex.getMessage)
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3066",
+            messageParameters = Map("msg" -> ex.getMessage))
       }
     }
   }

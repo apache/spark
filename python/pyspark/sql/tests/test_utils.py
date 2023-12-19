@@ -19,6 +19,7 @@ import unittest
 import difflib
 from itertools import zip_longest
 
+from pyspark.errors import QueryContextType
 from pyspark.sql.functions import sha2, to_timestamp
 from pyspark.errors import (
     AnalysisException,
@@ -1701,11 +1702,9 @@ class UtilsTestsMixin:
 
         self.assertTrue("apple" in error_message and "banana" not in error_message)
 
-
-class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
-        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
+        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b").collect())
 
     def test_capture_user_friendly_exception(self):
         try:
@@ -1744,11 +1743,43 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
 
     def test_get_error_class_state(self):
         # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
+        exception = None
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
-            self.assertEqual(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-            self.assertEqual(e.getSqlState(), "42703")
+            exception = e
+
+        self.assertIsNotNone(exception)
+        self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+        self.assertEqual(exception.getSqlState(), "42703")
+        self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
+        self.assertIn(
+            (
+                "[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column, variable, or function "
+                "parameter with name `a` cannot be resolved.  SQLSTATE: 42703"
+            ),
+            exception.getMessage(),
+        )
+        self.assertEqual(len(exception.getQueryContext()), 1)
+        qc = exception.getQueryContext()[0]
+        self.assertEqual(qc.fragment(), "a")
+        self.assertEqual(qc.stopIndex(), 7)
+        self.assertEqual(qc.startIndex(), 7)
+        self.assertEqual(qc.contextType(), QueryContextType.SQL)
+        self.assertEqual(qc.objectName(), "")
+        self.assertEqual(qc.objectType(), "")
+
+        try:
+            self.spark.sql("""SELECT assert_true(FALSE)""")
+        except AnalysisException as e:
+            self.assertIsNone(e.getErrorClass())
+            self.assertIsNone(e.getSqlState())
+            self.assertEqual(e.getMessageParameters(), {})
+            self.assertEqual(e.getMessage(), "")
+
+
+class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+    pass
 
 
 if __name__ == "__main__":

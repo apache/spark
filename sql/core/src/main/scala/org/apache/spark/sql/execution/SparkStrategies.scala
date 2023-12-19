@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -420,7 +421,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
           throw new AnalysisException(
-            "Streaming aggregation doesn't support group aggregate pandas UDF")
+            errorClass = "_LEGACY_ERROR_TEMP_3067",
+            messageParameters = Map.empty)
         }
 
         val sessionWindowOption = namedGroupingExpressions.find { p =>
@@ -552,7 +554,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if (distinctAggChildSets.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our `RewriteDistinctAggregates` should take care this case.
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             "You hit a query analyzer bug. Please report your query to Spark user mailing list.")
         }
 
@@ -751,8 +753,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonUDTFExec(
           udtf, requiredChildOutput, resultAttrs, planLater(child), evalType) :: Nil
-      case PythonDataSourcePartitions(output, partitions) =>
-        PythonDataSourcePartitionsExec(output, partitions) :: Nil
       case _ =>
         Nil
     }
@@ -782,27 +782,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy())) :: Nil
 
       case logical.Distinct(child) =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Intersect(left, right, false) =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           "logical intersect  operator should have been replaced by semi-join in the optimizer")
       case logical.Intersect(left, right, true) =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           "logical intersect operator should have been replaced by union, aggregate" +
             " and generate operators in the optimizer")
       case logical.Except(left, right, false) =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           "logical except operator should have been replaced by anti-join in the optimizer")
       case logical.Except(left, right, true) =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           "logical except (all) operator should have been replaced by union, aggregate" +
             " and generate operators in the optimizer")
       case logical.ResolvedHint(child, hints) =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           "ResolvedHint operator should have been replaced by join hint in the optimizer")
       case Deduplicate(_, child) if !child.isStreaming =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           "Deduplicate operator for non streaming data source should have been replaced " +
             "by aggregate in the optimizer")
 
@@ -838,8 +838,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child, isBarrier) =>
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier) :: Nil
-      case logical.PythonMapInArrow(func, output, child, isBarrier) =>
-        execution.python.PythonMapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
+      case logical.MapInArrow(func, output, child, isBarrier) =>
+        execution.python.MapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>

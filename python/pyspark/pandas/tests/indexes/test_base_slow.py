@@ -24,13 +24,6 @@ from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 
 
 class IndexesSlowTestsMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
-        )
-
     def test_append(self):
         # Index
         pidx = pd.Index(range(10000))
