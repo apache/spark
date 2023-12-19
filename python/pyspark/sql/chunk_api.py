@@ -52,8 +52,7 @@ def persist_dataframe_as_chunks(
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true'."
         )
     chunk_meta_list = list(
-        sc._jvm.org  # type: ignore[union-attr]
-        .apache.spark.sql.api.python.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(
+        sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(  # type: ignore[union-attr]
             dataframe._jdf, max_records_per_batch
         )
     )
@@ -70,8 +69,9 @@ def unpersist_chunks(chunk_ids: list[str]) -> None:
     """
     sc = SparkSession.getActiveSession().sparkContext  # type: ignore[union-attr]
     (
-        sc._jvm.org  # type: ignore[union-attr]
-        .apache.spark.sql.api.python.ChunkReadUtils.unpersistChunks(chunk_ids)
+        sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.unpersistChunks(  # type: ignore[union-attr]
+            chunk_ids
+        )
     )
 
 
