@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.crossdbms
 
-import java.sql.{DriverManager, ResultSet}
+import java.sql.{DriverManager, PreparedStatement, ResultSet}
 import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
@@ -103,13 +103,16 @@ private[crossdbms] case class PostgresConnection(connection_url: Option[String] 
   }
 
   def dropTable(tableName: String): Unit = {
-    val dropTableSql = s"DROP TABLE IF EXISTS $tableName"
-    stmt.executeUpdate(dropTableSql)
+    val st = conn.prepareStatement("DROP TABLE IF EXISTS ?")
+    st.setString(1, tableName)
+    st.executeUpdate()
   }
 
   def createTable(tableName: String, schemaString: String): Unit = {
-    val createTableSql = s"CREATE TABLE $tableName ($schemaString)"
-    stmt.executeUpdate(createTableSql)
+    val st = conn.prepareStatement("CREATE TABLE ? (?)")
+    st.setString(1, tableName)
+    st.setString(2, schemaString)
+    st.executeUpdate()
   }
 
   def loadData(df: DataFrame, tableName: String): Unit = {
