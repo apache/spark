@@ -182,7 +182,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
         throw QueryCompilationErrors
           .unresolvedVariableError(
             nameParts,
-            Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_CATALOG_NAME),
+            Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE),
             expr.origin)
     }
   }
