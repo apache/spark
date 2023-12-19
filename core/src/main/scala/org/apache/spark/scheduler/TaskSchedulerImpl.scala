@@ -200,10 +200,6 @@ private[spark] class TaskSchedulerImpl(
 
   protected val defaultRackValue: Option[String] = None
 
-  /** Whether to abort a stage after canceling all of its tasks. */
-  private val legacyAbortStageAfterCancelTasks =
-    sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS)
-
   private def maybeInitBarrierCoordinator(): Unit = {
     if (barrierCoordinator == null) {
       barrierCoordinator = new BarrierCoordinator(barrierSyncTimeout, sc.listenerBus,
@@ -300,9 +296,10 @@ private[spark] class TaskSchedulerImpl(
     new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
   }
 
-  // Kill all the tasks in all the stage attempts of the same stage Id. Abort the stage attempts
-  // if enabled otherwise mark the attempts as zombie only. The stage attempt will be finished and
-  // cleaned up once all the tasks has been finished.
+  // Kill all the tasks in all the stage attempts of the same stage Id. Note stage attempts won't
+  // be aborted but will be marked as zombie. The stage attempt will be finished and cleaned up
+  // once all the tasks has been finished. The stage attempt could be aborted after the call of
+  // `cancelTasks` if required.
   override def cancelTasks(
       stageId: Int,
       interruptThread: Boolean,
@@ -322,13 +319,7 @@ private[spark] class TaskSchedulerImpl(
             backend.killTask(tid, execId, interruptThread, s"Stage cancelled: $reason")
           }
         }
-        if (legacyAbortStageAfterCancelTasks) {
-          // Abort the stage is not necessary here. This is just for restoring the previous
-          // behavior in case we hit some issues after the change.
-          tsm.abort("Stage %s.%s was cancelled".format(stageId, tsm.taskSet.stageAttemptId))
-        } else {
-          tsm.suspend()
-        }
+        tsm.suspend()
         logInfo("Stage %s.%s was cancelled".format(stageId, tsm.taskSet.stageAttemptId))
       }
     }

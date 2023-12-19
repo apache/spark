@@ -38,7 +38,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
+import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
@@ -273,7 +273,13 @@ private[spark] class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
-  private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[spark] var eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  // Used for test only. Some tests uses the same thread of the event poster to
+  // process the events to ensure the deterministic behavior during the test.
+  private[spark] def setEventProcessLoop(loop: DAGSchedulerEventProcessLoop): Unit = {
+    eventProcessLoop = loop
+  }
+
   taskScheduler.setDAGScheduler(this)
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf, isDriver = true)
@@ -2862,6 +2868,9 @@ private[spark] class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
+              if (sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS)) {
+                stageFailed(stageId, reason)
+              }
               markStageAsFinished(stage, Some(reason))
             } catch {
               case e: UnsupportedOperationException =>
