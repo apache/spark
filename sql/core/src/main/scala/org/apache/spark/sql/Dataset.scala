@@ -4135,8 +4135,7 @@ class Dataset[T] private[sql](
    * Scala Examples:
    * {{{
    *   spark.table("source")
-   *     .mergeInto("target")
-   *     .on($"source.id" === $"target.id")
+   *     .mergeInto("target", $"source.id" === $"target.id")
    *     .whenMatched($"salary" === 100)
    *     .delete()
    *     .whenNotMatched()
@@ -4157,8 +4156,7 @@ class Dataset[T] private[sql](
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
 
-    val writer = new MergeIntoWriter[T](table, this)
-    writer.on(condition)
+    new MergeIntoWriter[T](table, this, condition)
   }
 
   /**

@@ -2774,7 +2774,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def mergeIntoAPIError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "MERGE_INTO_API_ERROR",
+      errorClass = "NO_MERGE_ACTION_ERROR",
       messageParameters = Map.empty)
   }
 }

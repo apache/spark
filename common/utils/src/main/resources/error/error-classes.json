@@ -2495,9 +2495,9 @@
     ],
     "sqlState" : "23K01"
   },
-  "MERGE_INTO_API_ERROR" : {
+  "NO_MERGE_ACTION_ERROR" : {
     "message" : [
-      "MergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource."
+      "df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource."
     ]
   },
   "MISSING_AGGREGATION" : {

@@ -35,16 +35,16 @@ import org.apache.spark.sql.types.IntegerType
  * @since 3.0.0
  */
 @Experimental
-class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
-    extends CreateTableWriter[T]{
+final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
+  extends CreateTableWriter[T] {
 
   private val df: DataFrame = ds.toDF()
 
-  val sparkSession = ds.sparkSession
+  private val sparkSession = ds.sparkSession
 
-  val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
+  private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
- val logicalPlan = df.queryExecution.logical
+  private val logicalPlan = df.queryExecution.logical
 
   private var provider: Option[String] = None
 
@@ -134,6 +134,7 @@ class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     internalReplace(orCreate = true)
   }
 
+
   /**
    * Append the contents of the data frame to the output table.
    *
@@ -165,7 +166,6 @@ class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       UnresolvedRelation(tableName), logicalPlan, condition.expr, options.toMap)
     runCommand(overwrite)
   }
-
 
   /**
    * Overwrite all partition for which the data frame contains at least one row with the contents

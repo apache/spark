@@ -35,27 +35,19 @@ import org.apache.spark.sql.functions.expr
  * @since 4.0.0
  */
 @Experimental
-class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T])
-  extends DataFrameWriterV2[T](table, ds) {
+class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column) {
 
-  var on: Option[Column] = None
+  private val df: DataFrame = ds.toDF()
+
+  private val sparkSession = ds.sparkSession
+
+  private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
+
+  private val logicalPlan = df.queryExecution.logical
+
   var matchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
   var notMatchedActions: Seq[MergeAction] = Seq.empty[MergeAction]
   var notMatchedBySourceActions: Seq[MergeAction] = Seq.empty[MergeAction]
-
-  /**
-   * Specifies the merge condition.
-   *
-   * Sets the condition to be used for merging data. This condition is used to determine
-   * how rows from the source DataFrame are matched with rows in the target table.
-   *
-   * @param condition a `Column` representing the merge condition.
-   * @return the current `MergeIntoWriter` instance with the specified merge condition set.
-   */
-  def on(condition: Column): MergeIntoWriter[T] = {
-    this.on = Some(condition)
-    this
-  }
 
   /**
    * Initialize a `WhenMatched` action without any condition.
@@ -168,7 +160,7 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T])
     val merge = MergeIntoTable(
       UnresolvedRelation(tableName),
       logicalPlan,
-      on.get.expr,
+      on.expr,
       matchedActions,
       notMatchedActions,
       notMatchedBySourceActions)
@@ -179,7 +171,7 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T])
 
 /**
  * A class for defining actions to be taken when matching rows in a DataFrame during
- * an update operation.
+ * a merge operation.
  *
  * @param mergeIntoWriter   The MergeIntoWriter instance responsible for writing data to a
  *                          target DataFrame.
@@ -227,7 +219,7 @@ case class WhenMatched[T] (mergeIntoWriter: MergeIntoWriter[T], condition: Optio
 
 /**
  * A class for defining actions to be taken when no matching rows are found in a DataFrame
- * during an update operation.
+ * during a merge operation.
  *
  * @param MergeIntoWriter   The DMergeIntoWriter instance responsible for writing data to a
  *                          target DataFrame.
