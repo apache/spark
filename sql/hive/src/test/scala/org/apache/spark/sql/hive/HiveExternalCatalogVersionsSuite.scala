@@ -66,13 +66,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
   val hiveVersion = HiveUtils.builtinHiveVersion
-  private val skipReleaseVersions =
-    sys.env.getOrElse("SKIP_SPARK_RELEASE_VERSIONS", "").split(",").toSet
-  // scalastyle:off println
-  println("-----------------")
-  println(s"Skip release versions: $skipReleaseVersions")
-  println("-----------------")
-  // scalastyle:on println
 
   override def afterAll(): Unit = {
     try {
@@ -219,58 +212,51 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
-      // scalastyle:off println
-      println("-----------------")
-      println(s"Release versions: $version")
-      println("-----------------")
-      // scalastyle:on println
-      if (!skipReleaseVersions.contains(version)) {
-        val sparkHome = new File(sparkTestingDir, s"spark-$version")
-        if (!sparkHome.exists()) {
-          tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
-        }
-
-        // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
-        val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
-        val args = Seq(
-          "--name", "prepare testing tables",
-          "--master", "local[2]",
-          "--conf", s"${UI_ENABLED.key}=false",
-          "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-          "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
-          "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
-          "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
-          "--conf", s"spark.sql.test.version.index=$index",
-          "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
-            JavaModuleOptions.defaultModuleOptions(),
-          tempPyFile.getCanonicalPath)
-        runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
+      val sparkHome = new File(sparkTestingDir, s"spark-$version")
+      if (!sparkHome.exists()) {
+        tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
+
+      // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
+      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
+      val args = Seq(
+        "--name", "prepare testing tables",
+        "--master", "local[2]",
+        "--conf", s"${UI_ENABLED.key}=false",
+        "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+        "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
+        "--conf", s"spark.sql.test.version.index=$index",
+        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
+          JavaModuleOptions.defaultModuleOptions(),
+        tempPyFile.getCanonicalPath)
+      runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
     }
 
     tempPyFile.delete()
   }
 
   test("backward compatibility") {
-    if (!skipReleaseVersions.contains("master")) {
-      assume(PROCESS_TABLES.isPythonVersionAvailable)
-      val args = Seq(
-        "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
-        "--name", "HiveExternalCatalog backward compatibility test",
-        "--master", "local[2]",
-        "--conf", s"${UI_ENABLED.key}=false",
-        "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
-        "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
-        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
-        unusedJar.toString)
-      if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
-    }
+    assume(PROCESS_TABLES.isPythonVersionAvailable)
+    val args = Seq(
+      "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
+      "--name", "HiveExternalCatalog backward compatibility test",
+      "--master", "local[2]",
+      "--conf", s"${UI_ENABLED.key}=false",
+      "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+      "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
+      "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
+      unusedJar.toString)
+    if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
   }
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  private val skipReleaseVersions =
+    sys.env.getOrElse("SKIP_SPARK_RELEASE_VERSIONS", "").split(",").toSet
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
@@ -285,7 +271,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .filter(_.contains("""<a href="spark-"""))
         .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
-        .filter(_ < org.apache.spark.SPARK_VERSION).toImmutableArraySeq
+        .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil
