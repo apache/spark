@@ -36,7 +36,7 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  *    files with the instructions below. This is recommended because it will run your queries
  *    against postgres, providing higher correctness testing confidence, and you won't have to
  *    manually verify the golden files generated with your test.
- * 2. Add this line to your .sql file: --SPARK_ONLY
+ * 2. Add this line to your .sql file: --ONLY_IF spark
  *
  * You need to have a database server up before running this test. Two options:
  * - Install Docker and use the bash script in ./bin/generate_golden_files.sh to run a DBMS
@@ -50,7 +50,7 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  * To indicate that the SQL file is not eligible for testing with this suite, add the following
  * comment into the input file:
  * {{{
- *   --SPARK_ONLY
+ *   --ONLY_IF spark
  * }}}
  *
  * And then, to run the entire test suite, with the default cross DBMS:
@@ -81,12 +81,12 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
 
-  def crossDbmsToGenerateGoldenFiles: String = CrossDbmsQueryTestSuite.POSTGRES
+  protected def crossDbmsToGenerateGoldenFiles: String = "postgres"
 
   // Reduce scope to subquery tests for now. That is where most correctness issues are.
-  override def customInputFilePath: String = new File(inputFilePath, "subquery").getAbsolutePath
+  override protected def customInputFilePath: String = new File(inputFilePath, "subquery").getAbsolutePath
 
-  override def getConnection: Option[String] => JdbcSQLQueryTestRunner =
+  override protected def getConnection: Option[String] => JdbcSQLQueryTestRunner =
     (connection_url: Option[String]) => JdbcSQLQueryTestRunner(PostgresConnection(connection_url))
 }
 
@@ -99,8 +99,8 @@ class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
 abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
   protected def crossDbmsToGenerateGoldenFiles: String
-  protected def customInputFilePath: String = inputFilePath
-  protected def getConnection: Option[String] => JdbcSQLQueryTestRunner
+  protected def customInputFilePath: String
+  protected def getConnection: Option[String] => SQLQueryTestRunner
 
   private def customConnectionUrl: String = System.getenv(
     CrossDbmsQueryTestSuite.REF_DBMS_CONNECTION_URL)
@@ -238,10 +238,8 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
 
 object CrossDbmsQueryTestSuite {
 
-  final val POSTGRES = "postgres"
-
   // System argument to indicate a custom connection URL to the reference DBMS.
   private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
-  // Argument in input files to indicate that golden file should be generated with a reference DBMS
+  // Argument in input files to indicate that the sql file is restricted to certain systems.
   private final val ONLY_IF_ARG = "--ONLY_IF "
 }
