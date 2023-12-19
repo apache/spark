@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *  <li><pre>REGR_R2(input1, input2)</pre> Since 3.4.0</li>
  *  <li><pre>REGR_SLOPE(input1, input2)</pre> Since 3.4.0</li>
  *  <li><pre>REGR_SXY(input1, input2)</pre> Since 3.4.0</li>
+ *  <li><pre>MODE(input1[, inverse])</pre> Since 4.0.0</li>
  * </ol>
  *
  * @since 3.3.0

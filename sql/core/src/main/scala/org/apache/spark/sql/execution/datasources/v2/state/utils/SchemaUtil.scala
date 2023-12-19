@@ -23,7 +23,11 @@ object SchemaUtil {
   def getSchemaAsDataType(schema: StructType, fieldName: String): DataType = {
     schema.getFieldIndex(fieldName) match {
       case Some(idx) => schema(idx).dataType
-      case _ => throw new AnalysisException(s"field $fieldName not found from given schema $schema")
+      case _ => throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3074",
+        messageParameters = Map(
+          "fieldName" -> fieldName,
+          "schema" -> schema.toString()))
     }
   }
 }

@@ -189,9 +189,9 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       case node: EventTimeWatermarkExec =>
         val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
         if (inputWatermarks.nonEmpty) {
-          throw new AnalysisException("Redefining watermark is disallowed. You can set the " +
-            s"config '${SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key}' to 'false' to restore " +
-            "the previous behavior. Note that multiple stateful operators will be disallowed.")
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3076",
+            messageParameters = Map("config" -> SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
         }
 
         nodeToOutputWatermark.put(node.id, Some(originWatermark))
