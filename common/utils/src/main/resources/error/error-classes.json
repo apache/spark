@@ -502,7 +502,7 @@
   },
   "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT" : {
     "message" : [
-      "Cannot process input data types for expression: <expression>."
+      "Cannot process input data types for the expression: <expression>."
     ],
     "subClass" : {
       "MISMATCHED_TYPES" : {
