@@ -16,13 +16,13 @@
 #
 import unittest
 
-from pyspark.pandas.tests.groupby.test_stat import GroupbyStatMixin
+from pyspark.pandas.tests.groupby.test_stat_prod import ProdTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class GroupbyParityStatTests(
-    GroupbyStatMixin,
+class GroupbyStatProdParityTests(
+    ProdTestsMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
@@ -30,7 +30,7 @@ class GroupbyParityStatTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.groupby.test_parity_stat import *  # noqa: F401
+    from pyspark.pandas.tests.connect.groupby.test_parity_stat_prod import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
