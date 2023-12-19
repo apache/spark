@@ -197,7 +197,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def cacheDataFrameById(dfId: String, df: DataFrame): Unit = {
     if (dataFrameCache.putIfAbsent(dfId, df) != null) {
-      SparkException.internalError(s"A dataframe is already associated with id $dfId")
+      throw SparkException.internalError(s"A dataframe is already associated with id $dfId")
     }
   }
 
@@ -221,7 +221,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def cacheListenerById(id: String, listener: StreamingQueryListener): Unit = {
     if (listenerCache.putIfAbsent(id, listener) != null) {
-      SparkException.internalError(s"A listener is already associated with id $id")
+      throw SparkException.internalError(s"A listener is already associated with id $id")
     }
   }
 
