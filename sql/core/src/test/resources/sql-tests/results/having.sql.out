@@ -137,9 +137,114 @@ struct<c1:int>
 
 
 -- !query
+SELECT k FROM hav GROUP BY k ORDER BY k
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+two
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY k
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k ORDER BY k
+-- !query schema
+struct<length(k):int>
+-- !query output
+3
+5
+3
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY k
+-- !query schema
+struct<length(k):int>
+-- !query output
+3
+5
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k ORDER BY length(k)
+-- !query schema
+struct<length(k):int>
+-- !query output
+3
+3
+5
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY length(k)
+-- !query schema
+struct<length(k):int>
+-- !query output
+3
+5
+
+
+-- !query
+SELECT k FROM hav GROUP BY k ORDER BY length(k)
+-- !query schema
+struct<k:string>
+-- !query output
+one
+two
+three
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY length(k)
+-- !query schema
+struct<k:string>
+-- !query output
+one
+three
+
+
+-- !query
+SELECT k, sum(v) FROM hav GROUP BY k ORDER BY sum(v)
+-- !query schema
+struct<k:string,sum(v):bigint>
+-- !query output
+two	2
+three	3
+one	6
+
+
+-- !query
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v)
 -- !query schema
 struct<k:string,sum(v):bigint>
 -- !query output
 three	3
 one	6
+
+
+-- !query
+SELECT k, sum(v) FROM hav GROUP BY k ORDER BY avg(v)
+-- !query schema
+struct<k:string,sum(v):bigint>
+-- !query output
+two	2
+one	6
+three	3
+
+
+-- !query
+SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v)
+-- !query schema
+struct<k:string,sum(v):bigint>
+-- !query output
+one	6
+three	3

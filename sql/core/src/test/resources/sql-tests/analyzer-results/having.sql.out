@@ -182,6 +182,134 @@ Filter (c1#x = 1)
 
 
 -- !query
+SELECT k FROM hav GROUP BY k ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Aggregate [k#x], [k#x]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x,v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter (sum(v#x)#xL > cast(2 as bigint))
+      +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v#x)#xL]
+         +- SubqueryAlias hav
+            +- View (`hav`, [k#x,v#x])
+               +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias hav
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k ORDER BY k
+-- !query analysis
+Project [length(k)#x]
++- Sort [k#x ASC NULLS FIRST], true
+   +- Aggregate [k#x], [length(k#x) AS length(k)#x, k#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x,v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY k
+-- !query analysis
+Project [length(k)#x]
++- Sort [k#x ASC NULLS FIRST], true
+   +- Project [length(k)#x, k#x]
+      +- Filter (sum(v#x)#xL > cast(2 as bigint))
+         +- Aggregate [k#x], [length(k#x) AS length(k)#x, sum(v#x) AS sum(v#x)#xL, k#x]
+            +- SubqueryAlias hav
+               +- View (`hav`, [k#x,v#x])
+                  +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                     +- Project [k#x, v#x]
+                        +- SubqueryAlias hav
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k ORDER BY length(k)
+-- !query analysis
+Sort [length(k)#x ASC NULLS FIRST], true
++- Aggregate [k#x], [length(k#x) AS length(k)#x]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x,v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT length(k) FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY length(k)
+-- !query analysis
+Project [length(k)#x]
++- Sort [length(k#x) ASC NULLS FIRST], true
+   +- Project [length(k)#x, k#x]
+      +- Filter (max(v#x)#x > 2)
+         +- Aggregate [k#x], [length(k#x) AS length(k)#x, max(v#x) AS max(v#x)#x, k#x]
+            +- SubqueryAlias hav
+               +- View (`hav`, [k#x,v#x])
+                  +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                     +- Project [k#x, v#x]
+                        +- SubqueryAlias hav
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k FROM hav GROUP BY k ORDER BY length(k)
+-- !query analysis
+Sort [length(k#x) ASC NULLS FIRST], true
++- Aggregate [k#x], [k#x]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x,v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY length(k)
+-- !query analysis
+Sort [length(k#x) ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter (max(v#x)#x > 2)
+      +- Aggregate [k#x], [k#x, max(v#x) AS max(v#x)#x]
+         +- SubqueryAlias hav
+            +- View (`hav`, [k#x,v#x])
+               +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias hav
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k, sum(v) FROM hav GROUP BY k ORDER BY sum(v)
+-- !query analysis
+Sort [sum(v)#xL ASC NULLS FIRST], true
++- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x,v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v)
 -- !query analysis
 Sort [sum(v)#xL ASC NULLS FIRST], true
@@ -193,3 +321,32 @@ Sort [sum(v)#xL ASC NULLS FIRST], true
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
                      +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k, sum(v) FROM hav GROUP BY k ORDER BY avg(v)
+-- !query analysis
+Project [k#x, sum(v)#xL]
++- Sort [avg(v#x)#x ASC NULLS FIRST], true
+   +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v#x)#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x,v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v)
+-- !query analysis
+Project [k#x, sum(v)#xL]
++- Sort [avg(v#x)#x ASC NULLS FIRST], true
+   +- Filter (sum(v)#xL > cast(2 as bigint))
+      +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v#x)#x]
+         +- SubqueryAlias hav
+            +- View (`hav`, [k#x,v#x])
+               +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+                  +- Project [k#x, v#x]
+                     +- SubqueryAlias hav
+                        +- LocalRelation [k#x, v#x]

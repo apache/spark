@@ -34,5 +34,26 @@ SELECT c1 FROM VALUES (1, 2) as t(c1, c2) GROUP BY CUBE(t.c1) HAVING t.c1 = 1;
 SELECT c1 FROM VALUES (1, 2) as t(c1, c2) GROUP BY ROLLUP(t.c1) HAVING t.c1 = 1;
 SELECT c1 FROM VALUES (1, 2) as t(c1, c2) GROUP BY t.c1 HAVING t.c1 = 1;
 
--- SPARK-28386: Cannot resolve ORDER BY columns with GROUP BY and HAVING
-SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v)
+-- SPARK-28386: Resolve ORDER BY column with/without HAVING clause, while the column presents on SELECT list
+SELECT k FROM hav GROUP BY k ORDER BY k;
+SELECT k FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY k;
+
+-- SPARK-28386: Resolve ORDER BY column with/without HAVING clause, while the column does not present on SELECT list
+SELECT length(k) FROM hav GROUP BY k ORDER BY k;
+SELECT length(k) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY k;
+
+-- SPARK-28386: Resolve ORDER BY scalar function with/without HAVING clause, while the scalar function presents on SELECT list
+SELECT length(k) FROM hav GROUP BY k ORDER BY length(k);
+SELECT length(k) FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY length(k);
+
+-- SPARK-28386: Resolve ORDER BY scalar function with/without HAVING clause, while the scalar function does not present on SELECT list
+SELECT k FROM hav GROUP BY k ORDER BY length(k);
+SELECT k FROM hav GROUP BY k HAVING max(v) > 2 ORDER BY length(k);
+
+-- SPARK-28386: Resolve ORDER BY agg function with/without HAVING clause, while the agg function presents on SELECT list
+SELECT k, sum(v) FROM hav GROUP BY k ORDER BY sum(v);
+SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY sum(v);
+
+-- SPARK-28386: Resolve ORDER BY agg function with/without HAVING clause, while the agg function does not present on SELECT list
+SELECT k, sum(v) FROM hav GROUP BY k ORDER BY avg(v);
+SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v);
