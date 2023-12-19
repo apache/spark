@@ -1,6 +1,6 @@
 -- Tests HAVING clause in subquery.
 
-CREATE TEMPORARY VIEW EMP AS SELECT * FROM (VALUES
+CREATE TEMPORARY VIEW EMP AS VALUES
   (100, 'emp 1', date '2005-01-01', double(100.00), 10),
   (100, 'emp 1', date '2005-01-01', double(100.00), 10),
   (200, 'emp 2', date '2003-01-01', double(200.00), 10),
@@ -9,19 +9,19 @@ CREATE TEMPORARY VIEW EMP AS SELECT * FROM (VALUES
   (500, 'emp 5', date '2001-01-01', double(400.00), NULL),
   (600, 'emp 6 - no dept', date '2001-01-01', double(400.00), 100),
   (700, 'emp 7', date '2010-01-01', double(400.00), 100),
-  (800, 'emp 8', date '2016-01-01', double(150.00), 70))
+  (800, 'emp 8', date '2016-01-01', double(150.00), 70)
 AS EMP(id, emp_name, hiredate, salary, dept_id);
 
-CREATE TEMPORARY VIEW DEPT AS SELECT * FROM (VALUES
+CREATE TEMPORARY VIEW DEPT AS VALUES
   (10, 'dept 1', 'CA'),
   (20, 'dept 2', 'NY'),
   (30, 'dept 3', 'TX'),
   (40, 'dept 4 - unassigned', 'OR'),
   (50, 'dept 5 - unassigned', 'NJ'),
-  (70, 'dept 7', 'FL'))
+  (70, 'dept 7', 'FL')
 AS DEPT(dept_id, dept_name, state);
 
-CREATE TEMPORARY VIEW BONUS AS SELECT * FROM (VALUES
+CREATE TEMPORARY VIEW BONUS AS VALUES
   ('emp 1', double(10.00)),
   ('emp 1', double(20.00)),
   ('emp 2', double(300.00)),
@@ -29,7 +29,7 @@ CREATE TEMPORARY VIEW BONUS AS SELECT * FROM (VALUES
   ('emp 3', double(300.00)),
   ('emp 4', double(100.00)),
   ('emp 5', double(1000.00)),
-  ('emp 6 - no dept', double(500.00)))
+  ('emp 6 - no dept', double(500.00))
 AS BONUS(emp_name, bonus_amt);
 
 -- simple having in subquery. 
