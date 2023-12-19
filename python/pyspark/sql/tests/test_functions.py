@@ -1007,7 +1007,10 @@ class FunctionsTestsMixin:
             (datetime.datetime(2023, 1, 6), 26),
         ]
         df = self.spark.createDataFrame(data, ["date", "temperature"])
-        to_sec = lambda i: i * 86400
+
+        def to_sec(i):
+            return i * 86400
+
         w = Window.orderBy(F.col("date").cast("timestamp").cast("long")).rangeBetween(-to_sec(3), 0)
         res = df.withColumn("3_day_avg_temp", F.avg("temperature").over(w))
         rs = sorted(res.collect())
