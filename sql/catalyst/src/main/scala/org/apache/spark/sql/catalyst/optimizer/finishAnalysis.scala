@@ -86,7 +86,7 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
     case table: ResolvedInlineTable =>
       val newRows: Seq[InternalRow] =
         table.rows.map { row => InternalRow.fromSeq(
-            row.map(e =>
+            row.map { e =>
               try {
                 prepareForEval(e).eval()
               } catch {
@@ -95,7 +95,7 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
                     errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
                     messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
                     cause = ex)
-              }))
+              }})
         }
 
       LocalRelation(table.output, newRows)
