@@ -21,16 +21,13 @@ import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.Instant
 import java.util.TimeZone
-
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
-
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
@@ -43,6 +40,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+import scala.collection.immutable.ArraySeq
 
 class XmlSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -2210,5 +2209,37 @@ class XmlSuite extends QueryTest with SharedSparkSession {
               Array("value1", "value2"),
               Array(1, 2),
               3)))))
+  }
+
+  test("capture values interspersed between elements - deeply nested") {
+    val df = spark.read
+      .format("xml")
+      .option("ignoreSurroundingSpaces", true)
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "values-deeply-nested.xml"))
+
+    val expectedAns = Seq(Row(
+      ArraySeq("value1", "value16"),
+      Row(
+        ArraySeq("value2", "value15"),
+        Row(
+          ArraySeq("value3", "value10", "value13", "value14"),
+          Array(
+            Row(
+              ArraySeq("value4", "value8", "value9"),
+              "string",
+              Row(ArraySeq("value5", "value6", "value7"), ArraySeq(1, 2))),
+            Row(
+              ArraySeq("value12"),
+              "string",
+              Row(ArraySeq("value11"), ArraySeq(3, 4))),
+          ),
+          3
+        )
+      )
+    ))
+
+    checkAnswer(df, expectedAns)
   }
 }
