@@ -145,41 +145,36 @@ public class VectorizedColumnReader {
 
   private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName,
                                           DataType sparkType) {
-    // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date /
-    // decimal scale rebasing.
-    return switch (typeName) {
-      case INT32 -> {
+    boolean isSupported = false;
+    // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date
+    // rebasing.
+    switch (typeName) {
+      case INT32: {
         boolean needsUpcast = sparkType == LongType || sparkType == TimestampNTZType ||
                 !DecimalType.is32BitDecimalType(sparkType);
         boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
-          !"CORRECTED".equals(datetimeRebaseMode);
-        yield !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);
+                !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase;
+        break;
       }
-      case INT64 -> {
+      case INT64: {
         boolean needsUpcast = !DecimalType.is64BitDecimalType(sparkType) ||
                 updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
-          !"CORRECTED".equals(datetimeRebaseMode);
-        yield !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);
+                !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase;
+        break;
       }
-      case FLOAT -> sparkType == FloatType;
-      case DOUBLE, BINARY -> !needsDecimalScaleRebase(sparkType);
-      default -> false;
-    };
+      case FLOAT:
+        isSupported = sparkType == FloatType;
+        break;
+      case DOUBLE:
+      case BINARY:
+        isSupported = true;
+        break;
+    }
+    return isSupported;
   }
-
-  /**
-   * Returns whether the Parquet type of this column and the given spark type are two decimal types
-   * with different scales.
-   */
-  private boolean needsDecimalScaleRebase(DataType sparkType) {
-    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-    if (!(typeAnnotation instanceof DecimalLogicalTypeAnnotation)) return false;
-    if (!(sparkType instanceof DecimalType)) return false;
-    DecimalLogicalTypeAnnotation parquetDecimal = (DecimalLogicalTypeAnnotation) typeAnnotation;
-    DecimalType sparkDecimal = (DecimalType) sparkType;
-    return parquetDecimal.getScale() != sparkDecimal.scale();
-}
 
   /**
    * Reads `total` rows from this columnReader into column.

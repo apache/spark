@@ -22,6 +22,7 @@ import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
@@ -98,7 +99,7 @@ public class ParquetVectorUpdaterFactory {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new IntegerWithRebaseUpdater(failIfRebase);
           }
-        } else if (sparkType == DataTypes.TimestampNTZType) {
+        } else if (sparkType == DataTypes.TimestampNTZType && isDateTypeMatched(descriptor)) {
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new DateToTimestampNTZUpdater();
           } else {
@@ -376,8 +377,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; ++i) {
-        long days = DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC);
-        values.putLong(offset + i, days);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
@@ -420,8 +420,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; ++i) {
-        int rebasedDays = rebaseDays(valuesReader.readInteger(), failIfRebase);
-        values.putLong(offset + i, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
+        readValue(offset + i, values, valuesReader);
       }
     }
 
@@ -1434,6 +1433,11 @@ public class ParquetVectorUpdaterFactory {
 
   private static boolean isTimestamp(DataType dt) {
     return dt == DataTypes.TimestampType || dt == DataTypes.TimestampNTZType;
+  }
+
+  boolean isDateTypeMatched(ColumnDescriptor descriptor) {
+    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+    return typeAnnotation instanceof DateLogicalTypeAnnotation;
   }
 
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {

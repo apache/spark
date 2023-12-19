@@ -27,7 +27,8 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -50,8 +51,10 @@ class ParquetTypeWideningSuite
       toType: DataType,
       expectError: => Boolean): Unit = {
     val timestampRebaseModes = toType match {
-      case _: TimestampNTZType | _: DateType => Seq("CORRECTED", "LEGACY")
-      case _ => Seq("CORRECTED")
+      case _: TimestampNTZType | _: DateType =>
+        Seq(LegacyBehaviorPolicy.CORRECTED, LegacyBehaviorPolicy.LEGACY)
+      case _ =>
+        Seq(LegacyBehaviorPolicy.CORRECTED)
     }
     for {
       dictionaryEnabled <- Seq(true, false)
@@ -72,8 +75,10 @@ class ParquetTypeWideningSuite
               assert(
                 exception.getCause.getCause
                   .isInstanceOf[SchemaColumnConvertNotSupportedException] ||
-                  exception.getCause.getCause
-                    .isInstanceOf[org.apache.parquet.io.ParquetDecodingException])
+                exception.getCause.getCause
+                  .isInstanceOf[org.apache.parquet.io.ParquetDecodingException] ||
+                exception.getCause.getMessage.contains(
+                  "Unable to create Parquet converter for data type"))
             } else {
               checkAnswer(readParquetFiles(dir, toType), expected.select($"a".cast(toType)))
             }
@@ -102,12 +107,13 @@ class ParquetTypeWideningSuite
       values: Seq[String],
       dataType: DataType,
       dictionaryEnabled: Boolean,
-      timestampRebaseMode: String = "CORRECTED"): DataFrame = {
+      timestampRebaseMode: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED)
+    : DataFrame = {
     val repeatedValues = List.fill(if (dictionaryEnabled) 10 else 1)(values).flatten
     val df = repeatedValues.toDF("a").select(col("a").cast(dataType))
     withSQLConf(
       ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString,
-      SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> timestampRebaseMode) {
+      SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> timestampRebaseMode.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
     }
 
@@ -160,12 +166,30 @@ class ParquetTypeWideningSuite
       (Seq("1", "2", Int.MinValue.toString), LongType, IntegerType),
       (Seq("1.23", "10.34"), DoubleType, FloatType),
       (Seq("1.23", "10.34"), FloatType, LongType),
-      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), TimestampNTZType, DateType)
+      (Seq("1.23", "10.34"), LongType, DateType),
+      (Seq("1.23", "10.34"), IntegerType, TimestampType),
+      (Seq("1.23", "10.34"), IntegerType, TimestampNTZType),
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampType)
     )
   }
     test(s"unsupported parquet conversion $fromType -> $toType") {
       checkAllParquetReaders(values, fromType, toType, expectError = true)
     }
+
+  for {
+    (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), TimestampType, DateType),
+      (Seq("2020-01-01", "2020-01-02", "1312-02-27"), TimestampNTZType, DateType))
+    outputTimestampType <- ParquetOutputTimestampType.values
+  }
+  test(s"unsupported parquet timestamp conversion $fromType ($outputTimestampType) -> $toType") {
+    withSQLConf(
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outputTimestampType.toString,
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LegacyBehaviorPolicy.CORRECTED.toString
+    ) {
+      checkAllParquetReaders(values, fromType, toType, expectError = true)
+    }
+  }
 
   for {
     (fromPrecision, toPrecision) <-
