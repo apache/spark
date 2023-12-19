@@ -712,6 +712,11 @@ ERROR_CLASSES_JSON = """
       "No active Spark session found. Please create a new Spark session before running the code."
     ]
   },
+  "NO_OBSERVE_BEFORE_GET" : {
+    "message" : [
+      "Should observe by calling `DataFrame.observe` before `get`."
+    ]
+  },
   "NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME" : {
     "message" : [
       "Only allows <arg_name> to be a path without scheme, and Spark Driver should use the default scheme to determine the destination file system."
@@ -750,6 +755,16 @@ ERROR_CLASSES_JSON = """
   "PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED" : {
     "message" : [
         "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE" : {
+    "message" : [
+        "The data type of the returned value ('<type>') from the Python data source '<name>' is not supported. Supported types: <supported_types>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The number of columns in the result does not match the required schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the 'read' method have the same number of columns as required by the output schema."
     ]
   },
   "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
@@ -816,6 +831,11 @@ ERROR_CLASSES_JSON = """
   "RETRIES_EXCEEDED" : {
     "message" : [
       "The maximum number of retries has been exceeded."
+    ]
+  },
+  "REUSE_OBSERVATION" : {
+    "message" : [
+      "An Observation can be used with a DataFrame only once."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {

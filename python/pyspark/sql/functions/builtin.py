@@ -798,12 +798,12 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
     >>> df.groupby("course").agg(mode("year")).show()
-    +------+-----------------+
-    |course|mode(year, false)|
-    +------+-----------------+
-    |  Java|             2012|
-    |dotNET|             2012|
-    +------+-----------------+
+    +------+----------+
+    |course|mode(year)|
+    +------+----------+
+    |  Java|      2012|
+    |dotNET|      2012|
+    +------+----------+
 
     When multiple values have the same greatest frequency then either any of values is returned if
     deterministic is false or is not defined, or the lowest value is returned if deterministic is
@@ -811,11 +811,11 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
     >>> df2.select(mode("col", False), mode("col", True)).show()
-    +----------------+---------------+
-    |mode(col, false)|mode(col, true)|
-    +----------------+---------------+
-    |               0|            -10|
-    +----------------+---------------+
+    +---------+---------------------------------------+
+    |mode(col)|mode() WITHIN GROUP (ORDER BY col DESC)|
+    +---------+---------------------------------------+
+    |        0|                                    -10|
+    +---------+---------------------------------------+
     """
     return _invoke_function("mode", _to_java_column(col), deterministic)
 

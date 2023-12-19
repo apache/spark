@@ -100,7 +100,11 @@ public class RocksDBProvider {
           // is unusable
           checkVersion(tmpDb, version, mapper);
         } catch (RocksDBException e) {
+          tmpDb.close();
           throw new IOException(e.getMessage(), e);
+        } catch (IOException ioe) {
+          tmpDb.close();
+          throw ioe;
         }
       }
       return tmpDb;

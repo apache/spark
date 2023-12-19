@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.{ByteArrayInputStream, InputStream, PrintStream}
+import java.io.{ByteArrayInputStream, File, InputStream, PrintStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import java.util.Arrays
@@ -83,14 +83,10 @@ class ArtifactManager(
     uri.getScheme match {
       case "file" =>
         val path = Paths.get(uri)
-        val artifact = path.getFileName.toString match {
-          case jar if jar.endsWith(".jar") =>
-            newJarArtifact(path.getFileName, new LocalFile(path))
-          case cf if cf.endsWith(".class") =>
-            newClassArtifact(path.getFileName, new LocalFile(path))
-          case other =>
-            throw new UnsupportedOperationException(s"Unsupported file format: $other")
-        }
+        val artifact = Artifact.newArtifactFromExtension(
+          path.getFileName.toString,
+          path.getFileName,
+          new LocalFile(path))
         Seq[Artifact](artifact)
 
       case "ivy" =>
@@ -107,6 +103,55 @@ class ArtifactManager(
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    */
   def addArtifact(uri: URI): Unit = addArtifacts(parseArtifacts(uri))
+
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new InMemory(bytes))
+    addArtifacts(artifact :: Nil)
+  }
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(source: String, target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new LocalFile(Paths.get(source)))
+    addArtifacts(artifact :: Nil)
+  }
 
   /**
    * Add multiple artifacts to the session.
@@ -366,12 +411,26 @@ object Artifact {
   val JAR_PREFIX: Path = Paths.get("jars")
   val CACHE_PREFIX: Path = Paths.get("cache")
 
-  def newJarArtifact(fileName: Path, storage: LocalData): Artifact = {
-    newArtifact(JAR_PREFIX, ".jar", fileName, storage)
+  def newArtifactFromExtension(
+      fileName: String,
+      targetFilePath: Path,
+      storage: LocalData): Artifact = {
+    fileName match {
+      case jar if jar.endsWith(".jar") =>
+        newJarArtifact(targetFilePath, storage)
+      case cf if cf.endsWith(".class") =>
+        newClassArtifact(targetFilePath, storage)
+      case other =>
+        throw new UnsupportedOperationException(s"Unsupported file format: $other")
+    }
   }
 
-  def newClassArtifact(fileName: Path, storage: LocalData): Artifact = {
-    newArtifact(CLASS_PREFIX, ".class", fileName, storage)
+  def newJarArtifact(targetFilePath: Path, storage: LocalData): Artifact = {
+    newArtifact(JAR_PREFIX, ".jar", targetFilePath, storage)
+  }
+
+  def newClassArtifact(targetFilePath: Path, storage: LocalData): Artifact = {
+    newArtifact(CLASS_PREFIX, ".class", targetFilePath, storage)
   }
 
   def newCacheArtifact(id: String, storage: LocalData): Artifact = {
@@ -412,14 +471,29 @@ object Artifact {
     jars.map(p => Paths.get(p)).map(path => newJarArtifact(path.getFileName, new LocalFile(path)))
   }
 
+  private def concatenatePaths(basePath: Path, otherPath: Path): Path = {
+    // We avoid using the `.resolve()` method here to ensure that we're concatenating the two
+    // paths even if `otherPath` is absolute.
+    val concatenatedPath = Paths.get(basePath.toString, otherPath.toString)
+    // Note: The normalized resulting path may still reference parent directories if the
+    // `otherPath` contains sufficient number of parent operators (i.e "..").
+    // Example: `basePath` = "/base", `otherPath` = "subdir/../../file.txt"
+    // Then, `concatenatedPath` = "/base/subdir/../../file.txt"
+    // and `normalizedPath` = "/base/file.txt".
+    val normalizedPath = concatenatedPath.normalize()
+    // Verify that the prefix of the `normalizedPath` starts with `basePath/`.
+    require(
+      normalizedPath != basePath && normalizedPath.startsWith(s"$basePath${File.separator}"))
+    normalizedPath
+  }
+
   private def newArtifact(
       prefix: Path,
       requiredSuffix: String,
-      fileName: Path,
+      targetFilePath: Path,
       storage: LocalData): Artifact = {
-    require(!fileName.isAbsolute)
-    require(fileName.toString.endsWith(requiredSuffix))
-    new Artifact(prefix.resolve(fileName), storage)
+    require(targetFilePath.toString.endsWith(requiredSuffix))
+    new Artifact(concatenatePaths(prefix, targetFilePath), storage)
   }
 
   /**
