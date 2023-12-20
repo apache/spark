@@ -421,7 +421,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
 trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serializable {
 
-  protected def write(writer: W, iter: Iterator[InternalRow]): Unit
+  protected def write(writer: W, iter: java.util.Iterator[InternalRow]): Unit
 
   def run(
       writerFactory: DataWriterFactory,
@@ -485,7 +485,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
   private case class IteratorWithMetrics(
       iter: Iterator[InternalRow],
       dataWriter: W,
-      customMetrics: Map[String, SQLMetric]) extends Iterator[InternalRow] {
+      customMetrics: Map[String, SQLMetric]) extends java.util.Iterator[InternalRow] {
     var count = 0L
 
     override def hasNext: Boolean = iter.hasNext
@@ -503,8 +503,8 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 
 object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
   override protected def write(
-      writer: DataWriter[InternalRow], iter: Iterator[InternalRow]): Unit = {
-    writer.writeAll(iter.asJava)
+      writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    writer.writeAll(iter)
   }
 }
 
@@ -515,7 +515,7 @@ case class DeltaWritingSparkTask(
   private lazy val rowIdProjection = projections.rowIdProjection
 
   override protected def write(
-      writer: DeltaWriter[InternalRow], iter: Iterator[InternalRow]): Unit = {
+      writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     while (iter.hasNext) {
       val row = iter.next()
       val operation = row.getInt(0)
@@ -549,7 +549,7 @@ case class DeltaWithMetadataWritingSparkTask(
   private lazy val metadataProjection = projections.metadataProjection.orNull
 
   override protected def write(
-      writer: DeltaWriter[InternalRow], iter: Iterator[InternalRow]): Unit = {
+      writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     while (iter.hasNext) {
       val row = iter.next()
       val operation = row.getInt(0)
