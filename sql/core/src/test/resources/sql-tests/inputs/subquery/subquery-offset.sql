@@ -1,6 +1,9 @@
-create table x(x1 int, x2 int);
+drop table if exists x;
+drop table if exists y;
+
+create table x(x1 int, x2 int) using json;
 insert into x values (1, 1), (2, 2);
-create table y(y1 int, y2 int);
+create table y(y1 int, y2 int) using json;
 insert into y values (1, 1), (1, 2), (2, 4);
 
 select * from x where exists (select * from y where x1 = y1 limit 1 offset 2);
@@ -48,3 +51,6 @@ JOIN LATERAL (SELECT max(dept.dept_id) a
                    ORDER  BY state
                    LIMIT 2
                    OFFSET 1);
+
+drop table x;
+drop table y;
