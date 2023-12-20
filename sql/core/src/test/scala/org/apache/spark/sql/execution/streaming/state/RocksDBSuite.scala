@@ -628,8 +628,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1)
-    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString)
-    for (j <- 2 to 4) changelogWriter.delete(j.toString)
+
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString))
+
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1)
     val entries = changelogReader.toSeq
@@ -654,9 +656,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1, true)
-    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString,
-      StateStore.DEFAULT_COL_FAMILY_NAME)
-    for (j <- 2 to 4) changelogWriter.delete(j.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
+    (1 to 5).foreach { i =>
+      changelogWriter.put(i.toString, i.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
+    (2 to 4).foreach { j =>
+      changelogWriter.delete(j.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1, true)
     val entries = changelogReader.toSeq
@@ -683,13 +690,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1, true)
-    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString,
-      testColFamily1)
-    for (j <- 2 to 4) changelogWriter.delete(j.toString, testColFamily1)
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString, testColFamily1))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString, testColFamily1))
 
-    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString,
-      testColFamily2)
-    for (j <- 2 to 4) changelogWriter.delete(j.toString, testColFamily2)
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString, testColFamily2))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString, testColFamily2))
 
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1, true)

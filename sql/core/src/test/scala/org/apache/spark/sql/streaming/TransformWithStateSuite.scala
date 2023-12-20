@@ -29,8 +29,9 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   @transient private var _countState: ValueState[Long] = _
   @transient var _processorHandle: StatefulProcessorHandle = _
 
-  override def init(handle: StatefulProcessorHandle,
-    outputMode: OutputMode) : Unit = {
+  override def init(
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     assert(handle.getQueryInfo().getOperatorId == 0)
@@ -58,9 +59,10 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
   @transient private var _tempState: ValueState[Long] = _
 
-  override def handleInputRows(key: String,
-    inputRows: Iterator[String],
-    timerValues: TimerValues): Iterator[(String, String)] = {
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
     _tempState = _processorHandle.getValueState[Long]("tempState")
     Iterator.empty

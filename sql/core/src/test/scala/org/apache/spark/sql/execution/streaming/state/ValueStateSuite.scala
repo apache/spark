@@ -61,11 +61,11 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   private def newStoreProviderWithValueState(
-    storeId: StateStoreId,
-    numColsPrefixKey: Int,
-    sqlConf: Option[SQLConf] = None,
-    conf: Configuration = new Configuration,
-    useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
+      storeId: StateStoreId,
+      numColsPrefixKey: Int,
+      sqlConf: Option[SQLConf] = None,
+      conf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
@@ -75,7 +75,7 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   private def tryWithProviderResource[T](
-    provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
+      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
     try {
       f(provider)
     } finally {
@@ -100,6 +100,7 @@ class ValueStateSuite extends SharedSparkSession
       ImplicitKeyTracker.setImplicitKey("test_key")
       assert(ImplicitKeyTracker.getImplicitKeyOption.isDefined)
       testState.update(123)
+      assert(testState.get() === 123)
 
       ImplicitKeyTracker.removeImplicitKey()
       assert(ImplicitKeyTracker.getImplicitKeyOption.isEmpty)
