@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
@@ -1290,7 +1291,7 @@ abstract class SeptenaryExpression extends Expression {
  * type. This is usually utilized by the expressions (e.g. [[CaseWhen]]) that combine data from
  * multiple child expressions of non-primitive types.
  */
-trait ComplexTypeMergingExpression extends Expression with QueryErrorsBase {
+trait ComplexTypeMergingExpression extends Expression {
 
   /**
    * A collection of data types used for resolution the output type of the expression. By default,
