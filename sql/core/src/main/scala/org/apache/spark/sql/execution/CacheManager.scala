@@ -364,6 +364,23 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     index -> matchIndexInCdPlanProj
                 }.partition(_._2 != -1)
 
+                // Now there is a possible case wherea literal is present in IMR as attribute
+                // and the incoming project also has that literal somewhere in the alias. Though
+                // we do not need to read it but looks like the deserializer fails if we skip that
+                // literal in the projection enforced on IMR. so in effect even if we do not
+                // require an attribute it still needs to be present in the projection forced
+                // also its possible that some attribute from IMR can be used in subexpression
+                // of the incoming projection. so we have to handle that
+                val unusedAttribsOfCDPlanToGenIncomingAttr =
+                  cdPlanProject.projectList.indices.filterNot(i =>
+                    incomingToCachedPlanIndxMapping.exists(_._2 == i)).map(i => {
+                      val cdAttrib = cdPlanProject.projectList(i)
+                      i -> AttributeReference(cdAttrib.name, cdAttrib.dataType,
+                             cdAttrib.nullable, cdAttrib.metadata)(qualifier = cdAttrib.qualifier)
+                    })
+
+
+
                 // If expressions of inComingProjNoDirectMapping can be expressed in terms of the
                 // incoming attribute refs or incoming alias exprs,  which can be mapped directly
                 // to the CachedPlan's output, we are good. so lets transform such indirectly
@@ -376,7 +393,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     val ne = incomingProject.projectList(incomngIndex)
                     val modifiedNe = ne.transformDown {
                       case expr => directlyMappedIncomingProjs.find(ne => ne.toAttribute == expr
-                      || ne.children.headOption.contains(expr)).
+                      || ne.children.headOption.contains(expr)).orElse(
+                        unusedAttribsOfCDPlanToGenIncomingAttr.find {
+                          case(i, _) => val cdNe = canonicalizedCdProj.projectList(i)
+                            cdNe.children.headOption.contains(expr.canonicalized)
+                        }.map(_._2)).
                         map(ne => Replaceable(ne.toAttribute)).getOrElse(expr)
                     }.asInstanceOf[NamedExpression]
                     incomngIndex -> modifiedNe
@@ -389,8 +410,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 }.toMap
 
                 if (transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
-                  val projectionToForceOnCdPlan = cachedPlan.output.flatMap(cdAttr =>
-                    cdAttribToInAttrib.get(cdAttr).map(Seq(_)).getOrElse(Seq.empty))
+                  val projectionToForceOnCdPlan = cachedPlan.output.zipWithIndex.map {
+                    case (cdAttr, i) =>
+                      cdAttribToInAttrib.getOrElse(cdAttr,
+                        unusedAttribsOfCDPlanToGenIncomingAttr.find(_._1 == i).map(_._2).get)
+                  }
+
                   val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
                     case (ne, indx) => if (incomingToCachedPlanIndxMapping.exists(_._1 == indx)) {
                       ne.toAttribute
