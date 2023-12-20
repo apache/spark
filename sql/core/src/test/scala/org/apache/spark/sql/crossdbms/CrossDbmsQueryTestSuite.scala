@@ -99,9 +99,9 @@ class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
  * default because there is incompatibility between SQL dialects for Spark and the other DBMS.
  *
  * This suite adds a new comment argument, --ONLY_IF. This comment is used to indicate the DBMS for
- * which is eligible for the SQL file . For example, if you have a SQL file named `describe.sql`,
- * and you want to indicate that postgres is incompatible, add the following comment into the input
- * file:
+ * which is eligible for the SQL file. These strings are defined in the companion object. For
+ * example, if you have a SQL file named `describe.sql`, and you want to indicate that Postgres is
+ * incompatible, add the following comment into the input file:
  * --ONLY_IF spark
  */
 abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
