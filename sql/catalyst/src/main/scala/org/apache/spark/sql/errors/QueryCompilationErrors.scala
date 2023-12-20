@@ -926,8 +926,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(table.name(), "either micro-batch or continuous scan")
   }
 
-  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table.name(), "append in batch mode")
+  def unsupportedAppendInBatchModeError(name: String): Throwable = {
+    unsupportedTableOperationError(name, "append in batch mode")
   }
 
   def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
@@ -3923,5 +3923,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     throw new AnalysisException(
       errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
+  }
+
+  def dataSourceTableSchemaMismatchError(
+      tableSchema: StructType, actualSchema: StructType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+      messageParameters = Map(
+        "tableSchema" -> toSQLType(tableSchema),
+        "actualSchema" -> toSQLType(actualSchema)))
   }
 }
