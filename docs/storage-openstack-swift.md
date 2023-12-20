@@ -60,6 +60,7 @@ required by Keystone.
 The following table contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
 any (alphanumeric) name.
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Meaning</th><th>Required</th></tr></thead>
 <tr>
@@ -103,6 +104,7 @@ any (alphanumeric) name.
   <td>Mandatory</td>
 </tr>
 </table>
+</div>
 
 For example, assume <code>PROVIDER=SparkTest</code> and Keystone contains user <code>tester</code> with password <code>testing</code>
 defined for tenant <code>test</code>. Then <code>core-site.xml</code> should include:

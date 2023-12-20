@@ -77,6 +77,7 @@ sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g
 
 The following Spark driver properties can be set in `sparkConfig` with `sparkR.session` from RStudio:
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr></thead>
   <tr>
@@ -588,6 +589,7 @@ The following example shows how to save/load a MLlib model by SparkR.
 {% include_example read_write r/ml/ml.R %}
 
 # Data type mapping between R and Spark
+<div class="table-wrapper">
 <table>
 <thead><tr><th>R</th><th>Spark</th></tr></thead>
 <tr>
@@ -655,6 +657,7 @@ The following example shows how to save/load a MLlib model by SparkR.
   <td>map</td>
 </tr>
 </table>
+</div>
 
 # Structured Streaming
 
@@ -728,6 +731,7 @@ function is masking another function.
 
 The following functions are masked by the SparkR package:
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th>Masked function</th><th>How to Access</th></tr></thead>
   <tr>
@@ -745,6 +749,7 @@ The following functions are masked by the SparkR package:
     <td><code>base::sample(x, size, replace = FALSE, prob = NULL)</code></td>
   </tr>
 </table>
+</div>
 
 Since part of SparkR is modeled on the `dplyr` package, certain functions in SparkR share the same names with those in `dplyr`. Depending on the load order of the two packages, some functions from the package loaded first are masked by those in the package loaded after. In such case, prefix such calls with the package name, for instance, `SparkR::cume_dist(x)` or `dplyr::cume_dist(x)`.
 

@@ -69,6 +69,7 @@ The history server can be configured as follows:
 
 ### Environment Variables
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
@@ -97,6 +98,7 @@ The history server can be configured as follows:
     </td>
   </tr>
 </table>
+</div>
 
 ### Applying compaction on rolling event log files
 
@@ -145,6 +147,7 @@ Use it with caution.
 Security options for the Spark History Server are covered more detail in the
 [Security](security.html#web-ui) page.
 
+<div class="table-wrapper">
 <table>
   <thead>
   <tr>
@@ -432,6 +435,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>3.4.0</td>
   </tr>
 </table>
+</div>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
 making it easy to identify slow tasks, data skew, etc.
@@ -470,6 +474,7 @@ only for applications in cluster mode, not applications in client mode. Applicat
 can be identified by their `[attempt-id]`. In the API listed below, when running in YARN cluster mode,
 `[app-id]` will actually be `[base-app-id]/[attempt-id]`, where `[base-app-id]` is the YARN application ID.
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th>Endpoint</th><th>Meaning</th></tr></thead>
   <tr>
@@ -656,6 +661,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>Get the current spark version.</td>
   </tr>
 </table>
+</div>
 
 The number of jobs and stages which can be retrieved is constrained by the same retention
 mechanism of the standalone Spark UI; `"spark.ui.retainedJobs"` defines the threshold
@@ -669,6 +675,7 @@ The REST API exposes the values of the Task Metrics collected by Spark executors
 of task execution. The metrics can be used for performance troubleshooting and workload characterization.
 A list of the available metrics, with a short description:
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -815,6 +822,7 @@ A list of the available metrics, with a short description:
      in nanoseconds.</td>
   </tr>
 </table>
+</div>
 
 ### Executor Metrics
 
@@ -827,6 +835,7 @@ In addition, aggregated per-stage peak values of the executor memory metrics are
 Executor memory metrics are also exposed via the Spark metrics system based on the [Dropwizard metrics library](https://metrics.dropwizard.io/4.2.0).
 A list of the available metrics, with a short description:
 
+<div class="table-wrapper">
 <table>
   <thead>
       <tr><th>Executor Level Metric name</th>
@@ -1008,6 +1017,7 @@ A list of the available metrics, with a short description:
     The value is expressed in milliseconds.</td>
   </tr>
 </table>
+</div>
 The computation of RSS and Vmem are based on [proc(5)](http://man7.org/linux/man-pages/man5/proc.5.html)
 
 ### API Versioning Policy

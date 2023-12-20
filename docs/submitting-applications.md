@@ -148,6 +148,7 @@ export HADOOP_CONF_DIR=XXX
 
 The master URL passed to Spark can be in one of the following formats:
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Master URL</th><th>Meaning</th></tr></thead>
 <tr><td> <code>local</code> </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
@@ -173,6 +174,7 @@ The master URL passed to Spark can be in one of the following formats:
         <code>k8s://http://HOST:PORT</code>.
 </td></tr>
 </table>
+</div>
 
 
 # Loading Configuration from a File

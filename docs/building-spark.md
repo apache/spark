@@ -284,6 +284,7 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 
 ### Related environment variables
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
@@ -301,6 +302,7 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
   </td>
 </tr>
 </table>
+</div>
 
 ### Building and testing on IPv6-only environment
 

@@ -53,6 +53,7 @@ You should see the new node listed there, along with its number of CPUs and memo
 
 Finally, the following configuration options can be passed to the master and worker:
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th style="width:21%">Argument</th><th>Meaning</th></tr></thead>
   <tr>
@@ -88,6 +89,7 @@ Finally, the following configuration options can be passed to the master and wor
     <td>Path to a custom Spark properties file to load (default: conf/spark-defaults.conf)</td>
   </tr>
 </table>
+</div>
 
 
 # Cluster Launch Scripts
@@ -116,6 +118,7 @@ Note that these scripts must be executed on the machine you want to run the Spar
 
 You can optionally configure the cluster further by setting environment variables in `conf/spark-env.sh`. Create this file by starting with the `conf/spark-env.sh.template`, and _copy it to all your worker machines_ for the settings to take effect. The following settings are available:
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
@@ -183,11 +186,13 @@ You can optionally configure the cluster further by setting environment variable
     <td>The public DNS name of the Spark master and workers (default: none).</td>
   </tr>
 </table>
+</div>
 
 **Note:** The launch scripts do not currently support Windows. To run a Spark cluster on Windows, start the master and workers by hand.
 
 SPARK_MASTER_OPTS supports the following system properties:
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -499,6 +504,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>4.0.0</td>
 </tr>
 </table>
+</div>
 
 # Resource Allocation and Configuration Overview
 
@@ -527,6 +533,7 @@ You can also pass an option `--total-executor-cores <numCores>` to control the n
 
 Spark applications supports the following configuration properties specific to standalone mode:
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
@@ -540,6 +547,7 @@ Spark applications supports the following configuration properties specific to s
   <td>3.1.0</td>
   </tr>
 </table>
+</div>
 
 
 # Launching Spark Applications
@@ -577,6 +585,7 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 <code>version</code> is a protocol version, <code>v1</code> as of today, and
 <code>action</code> is one of the following supported actions.
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th style="width:21%">Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
   <tr>
@@ -610,6 +619,7 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
     <td>4.0.0</td>
   </tr>
 </table>
+</div>
 
 The following is a <code>curl</code> CLI command example with the `pi.py` and REST API.
 
@@ -756,6 +766,7 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th style="width:21%">System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
@@ -821,6 +832,7 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td>0.8.1</td>
   </tr>
 </table>
+</div>
 
 **Details**
 

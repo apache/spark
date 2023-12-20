@@ -51,6 +51,7 @@ The *node impurity* is a measure of the homogeneity of the labels at the node. T
 implementation provides two impurity measures for classification (Gini impurity and entropy) and one
 impurity measure for regression (variance).
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr><th>Impurity</th><th>Task</th><th>Formula</th><th>Description</th></tr>
@@ -74,6 +75,7 @@ impurity measure for regression (variance).
     </tr>
   </tbody>
 </table>
+</div>
 
 The *information gain* is the difference between the parent node impurity and the weighted sum of
 the two child node impurities. Assuming that a split $s$ partitions the dataset `$D$` of size `$N$`

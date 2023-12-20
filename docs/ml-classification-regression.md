@@ -703,6 +703,7 @@ others.
 
 ###  Available families
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -739,6 +740,7 @@ others.
     <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
   </tbody>
 </table>
+</div>
 
 **Examples**
 
@@ -1224,6 +1226,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Input Columns
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -1248,9 +1251,11 @@ All output columns are optional; to exclude an output column, set its correspond
     </tr>
   </tbody>
 </table>
+</div>
 
 ### Output Columns
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -1292,6 +1297,7 @@ All output columns are optional; to exclude an output column, set its correspond
       </tr>
   </tbody>
 </table>
+</div>
 
 
 # Tree Ensembles
@@ -1326,6 +1332,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -1350,9 +1357,11 @@ All output columns are optional; to exclude an output column, set its correspond
     </tr>
   </tbody>
 </table>
+</div>
 
 #### Output Columns (Predictions)
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -1387,6 +1396,7 @@ All output columns are optional; to exclude an output column, set its correspond
     </tr>
   </tbody>
 </table>
+</div>
 
 
 
@@ -1407,6 +1417,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -1431,11 +1442,13 @@ All output columns are optional; to exclude an output column, set its correspond
     </tr>
   </tbody>
 </table>
+</div>
 
 Note that `GBTClassifier` currently only supports binary labels.
 
 #### Output Columns (Predictions)
 
+<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -1456,5 +1469,6 @@ Note that `GBTClassifier` currently only supports binary labels.
     </tr>
   </tbody>
 </table>
+</div>
 
 In the future, `GBTClassifier` will also output columns for `rawPrediction` and `probability`, just as `RandomForestClassifier` does.

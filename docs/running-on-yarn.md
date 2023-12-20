@@ -143,6 +143,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Spark Properties
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -676,9 +677,11 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.5.0</td>
 </tr>
 </table>
+</div>
 
 #### Available patterns for SHS custom executor log URL
 
+<div class="table-wrapper">
 <table>
     <thead><tr><th>Pattern</th><th>Meaning</th></tr></thead>
     <tr>
@@ -718,6 +721,7 @@ To use a custom metrics.properties for the application master and executors, upd
       <td><code>stdout</code>, <code>stderr</code>.</td>
     </tr>
 </table>
+</div>
 
 For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
 
@@ -766,6 +770,7 @@ staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -815,6 +820,7 @@ staging directory of the Spark application.
   <td>3.2.0</td>
 </tr>
 </table>
+</div>
 
 ## Troubleshooting Kerberos
 
@@ -865,6 +871,7 @@ to avoid garbage collection issues during shuffle.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
@@ -908,6 +915,7 @@ The following extra configuration options are available when the shuffle service
   <td>3.4.0</td>
 </tr>
 </table>
+</div>
 
 Please note that the instructions above assume that the default shuffle service name,
 `spark_shuffle`, has been used. It is possible to use any name here, but the values used in the

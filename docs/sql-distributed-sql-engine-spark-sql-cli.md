@@ -62,6 +62,7 @@ For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-c
 
 ## Supported comment types
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Comment</th><th>Example</th></tr></thead>
 <tr>
@@ -95,6 +96,7 @@ For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-c
   </td>
 </tr>
 </table>
+</div>
 
 ## Spark SQL CLI Interactive Shell Commands
 
@@ -115,6 +117,7 @@ Use `;` (semicolon) to terminate commands. Notice:
    ```
    However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two commands separated and throw parser error (`unclosed bracketed comment` and `Syntax error at or near '*/'`).
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Command</th><th>Description</th></tr></thead>
 <tr>
@@ -138,6 +141,7 @@ Use `;` (semicolon) to terminate commands. Notice:
   <td>Executes a script file inside the CLI.</td>
 </tr>
 </table>
+</div>
 
 ## Examples
 

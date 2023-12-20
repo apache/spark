@@ -592,6 +592,8 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
+
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -1651,6 +1653,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 </table>
+</div>
 
 #### Pod template properties
 
@@ -1658,6 +1661,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Metadata
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
@@ -1691,9 +1695,11 @@ See the below table for the full list of pod specifications that will be overwri
   </td>
 </tr>
 </table>
+</div>
 
 ### Pod Spec
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
@@ -1742,11 +1748,13 @@ See the below table for the full list of pod specifications that will be overwri
   </td>
 </tr>
 </table>
+</div>
 
 ### Container spec
 
 The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
 
+<div class="table-wrapper">
 <table>
 <thead><tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
@@ -1799,6 +1807,7 @@ The following affect the driver and executor containers. All other containers in
   </td>
 </tr>
 </table>
+</div>
 
 ### Resource Allocation and Configuration Overview
 

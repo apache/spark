@@ -52,6 +52,7 @@ Data source options of CSV can be set via:
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
@@ -267,4 +268,5 @@ Data source options of CSV can be set via:
     <td>write</td>
   </tr>
 </table>
+</div>
 Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">Generic File Source Options</a>.

@@ -75,6 +75,7 @@ format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int)
 By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
 creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th>Property Name</th><th>Meaning</th></tr></thead>
   <tr>
@@ -110,6 +111,7 @@ creating table, you can create a table using storage handler at Hive side, and u
     </td>
   </tr>
 </table>
+</div>
 
 All other properties defined with `OPTIONS` will be regarded as Hive serde properties.
 
@@ -123,6 +125,7 @@ will compile against built-in Hive and use those classes for internal execution 
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
@@ -210,3 +213,4 @@ The following options can be used to configure the version of Hive that is used 
     <td>1.4.0</td>
   </tr>
 </table>
+</div>

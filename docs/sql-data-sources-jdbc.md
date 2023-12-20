@@ -51,6 +51,7 @@ For connection properties, users can specify the JDBC connection properties in t
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources.
 
+<div class="table-wrapper">
 <table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
@@ -374,6 +375,7 @@ logging into the data sources.
     <td>read</td>
   </tr>
 </table>
+</div>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
 Before using <code>keytab</code> and <code>principal</code> configuration options, please make sure the following requirements are met:

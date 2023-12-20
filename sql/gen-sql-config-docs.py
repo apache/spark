@@ -76,6 +76,7 @@ def generate_sql_configs_table_html(sql_configs, path):
     with open(path, 'w') as f:
         f.write(dedent(
             """
+            <div class="table-wrapper">
             <table class="table">
             <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
             """
@@ -119,7 +120,7 @@ def generate_sql_configs_table_html(sql_configs, path):
                     version=config.version
                 )
             ))
-        f.write("</table>\n")
+        f.write("</table>\n</div>\n")
 
 
 if __name__ == "__main__":
