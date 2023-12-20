@@ -1098,14 +1098,3 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
-
-  maven-test:
-    name: "Run Maven Test"
-    permissions:
-      packages: write
-    uses: ./.github/workflows/maven_test.yml
-    with:
-      envs: >-
-        {
-          "SKIP_SPARK_RELEASE_VERSIONS": "3.3.4,3.4.2,3.5.0"
-        }
