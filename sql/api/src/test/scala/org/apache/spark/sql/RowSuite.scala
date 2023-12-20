@@ -14,11 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 
-class RowsSuite extends SparkFunSuite {
+class RowSuite extends SparkFunSuite {
   test("Row handles null value") {
     val input: Array[Any] = Array(null)
     val genericRow = new GenericRow(input)
