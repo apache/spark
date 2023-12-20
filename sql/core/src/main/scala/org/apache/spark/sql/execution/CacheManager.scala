@@ -75,7 +75,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
-    cachedData.foreach(_.cachedRepresentation.toOption.get.cacheBuilder.clearCache())
+    cachedData.foreach(_.cachedRepresentation.fold(CacheManager.inMemoryRelationExtractor, identity)
+      .cacheBuilder.clearCache())
     cachedData = IndexedSeq[CachedData]()
   }
 
@@ -220,7 +221,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     this.synchronized {
       cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
     }
-    plansToUncache.foreach { _.cachedRepresentation.toOption.get.cacheBuilder.clearCache(blocking) }
+    plansToUncache.foreach { _.cachedRepresentation.
+      fold(CacheManager.inMemoryRelationExtractor, identity).cacheBuilder.clearCache(blocking) }
 
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
@@ -237,7 +239,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         // 2) The buffer has been cleared, but `isCachedColumnBuffersLoaded` returns true, then we
         //    will keep it as it is. It means the physical plan has been re-compiled already in the
         //    other thread.
-        val cacheAlreadyLoaded = cd.cachedRepresentation.toOption.get.cacheBuilder.
+        val cacheAlreadyLoaded = cd.cachedRepresentation.
+          fold(CacheManager.inMemoryRelationExtractor, identity).cacheBuilder.
           isCachedColumnBuffersLoaded
         cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
       })
@@ -251,8 +254,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       column: Seq[Attribute]): Unit = {
     val relation = cachedData.cachedRepresentation
     val (rowCount, newColStats) =
-      CommandUtils.computeColumnStats(sparkSession, relation.toOption.get, column)
-    relation.toOption.get.updateStats(rowCount, newColStats)
+      CommandUtils.computeColumnStats(sparkSession, relation.merge, column)
+    relation.fold(CacheManager.inMemoryRelationExtractor, identity).
+      updateStats(rowCount, newColStats)
   }
 
   /**
@@ -274,11 +278,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
     needToRecache.foreach { cd =>
-      cd.cachedRepresentation.toOption.get.cacheBuilder.clearCache()
+      cd.cachedRepresentation.fold(CacheManager.inMemoryRelationExtractor, identity).
+        cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(cd.cachedRepresentation.toOption.get.cacheBuilder, qe)
+        InMemoryRelation(cd.cachedRepresentation.
+          fold(CacheManager.inMemoryRelationExtractor, identity).cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = Right(newCache))
       this.synchronized {
@@ -531,4 +537,9 @@ private case class Replaceable(attribToUse: Attribute) extends LeafExpression {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw new UnsupportedOperationException()
   override def dataType: DataType = attribToUse.dataType
+}
+
+object CacheManager {
+  val inMemoryRelationExtractor = (plan: LogicalPlan) => plan.collectLeaves().head.
+    asInstanceOf[InMemoryRelation]
 }
