@@ -856,7 +856,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(failure.getMessage === "Job aborted due to stage failure: some failure")
     assert(sparkListener.failedStages === Seq(0))
     assertDataStructuresEmpty()
-    Thread.sleep(3000)
   }
 
   test("trivial job cancellation") {
