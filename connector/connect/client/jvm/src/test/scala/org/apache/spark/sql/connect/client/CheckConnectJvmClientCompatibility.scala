@@ -434,27 +434,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
 
-      // DataFrameWriterV2
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriterV2.matchedActions"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriterV2.notMatchedActions"),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.DataFrameWriterV2.notMatchedBySourceActions"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.matchedActions_="),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.notMatchedActions_="),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.notMatchedBySourceActions_="),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.on"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.whenMatched"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.whenNotMatched"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.whenNotMatchedBySource"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameWriterV2.merge"),
+      // MergeIntoWriter
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenMatched$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.WhenNotMatched"),
