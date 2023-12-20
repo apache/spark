@@ -244,14 +244,15 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)
-    // TODO After SPARK-46400, we need to run the following logic
     if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
   }
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
-  // TODO After SPARK-46400 and applying it to the already released Spark version,
-  //  we can remove the following logic
+  // TODO In SPARK-46302, the env SKIP_SPARK_RELEASE_VERSIONS has been added to
+  //  allow Maven tests to skip problematic release versions.
+  //  Related issues will be fixed in SPARK-46400, and testing will be resumed
+  //  after the fixed Spark 3.x version is released.
   private val skipReleaseVersions =
     sys.env.getOrElse("SKIP_SPARK_RELEASE_VERSIONS", "").split(",").toSet
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
