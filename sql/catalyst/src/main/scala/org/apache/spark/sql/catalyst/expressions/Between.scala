@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "BETWEEN(projection, lower, upper) - Returns true if `projection` > `lower` and `projection` <  `upper`.",
+  usage = "expr1 [NOT] BETWEEN expr2 AND expr3 - Returns true if `projection` > `lower` and `projection` <  `upper`.",
   examples = """
     Examples:
       > SELECT 0.5 _FUNC_ 0.1 AND 1.0;
