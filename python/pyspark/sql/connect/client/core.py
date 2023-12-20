@@ -51,7 +51,7 @@ import pyarrow as pa
 import google.protobuf.message
 from grpc_status import rpc_status
 import grpc
-from google.protobuf import text_format
+from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
 from pyspark.loose_version import LooseVersion
@@ -587,7 +587,12 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool
             Enable reattachable execution.
         """
-        self.thread_local = threading.local()
+
+        class ClientThreadLocals(threading.local):
+            tags: set = set()
+            inside_error_handling: bool = False
+
+        self.thread_local = ClientThreadLocals()
 
         # Parse the connection string.
         self._builder = (
@@ -1152,6 +1157,7 @@ class SparkConnectClient(object):
                 PlanMetrics,
                 PlanObservedMetrics,
                 Dict[str, Any],
+                any_pb2.Any,
             ]
         ]:
             nonlocal num_records
@@ -1198,6 +1204,8 @@ class SparkConnectClient(object):
                     addresses = [address for address in resource.addresses]
                     resources[key] = ResourceInformation(name, addresses)
                 yield {"get_resources_command_result": resources}
+            if b.HasField("extension"):
+                yield b.extension
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1494,14 +1502,24 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        if isinstance(error, grpc.RpcError):
-            self._handle_rpc_error(error)
-        elif isinstance(error, ValueError):
-            if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                raise SparkConnectException(
-                    error_class="NO_ACTIVE_SESSION", message_parameters=dict()
-                ) from None
-        raise error
+
+        if self.thread_local.inside_error_handling:
+            # We are already inside error handling routine,
+            # avoid recursive error processing (with potentially infinite recursion)
+            raise error
+
+        try:
+            self.thread_local.inside_error_handling = True
+            if isinstance(error, grpc.RpcError):
+                self._handle_rpc_error(error)
+            elif isinstance(error, ValueError):
+                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
+                    raise SparkConnectException(
+                        error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                    ) from None
+            raise error
+        finally:
+            self.thread_local.inside_error_handling = False
 
     def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
         if "errorId" not in info.metadata:

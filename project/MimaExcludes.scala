@@ -100,6 +100,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.CacheId$"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.CacheId.apply"),
 
+    // SPARK-46410: Assign error classes/subclasses to JdbcUtils.classifyException
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcDialect.classifyException"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")

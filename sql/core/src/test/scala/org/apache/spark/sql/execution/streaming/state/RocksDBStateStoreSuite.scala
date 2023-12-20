@@ -131,19 +131,25 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
     withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
       tryWithProviderResource(newStoreProvider()) { provider =>
-          val store = provider.getStore(0)
-          // Verify state after updating
-          put(store, "a", 0, 1)
-          assert(get(store, "a", 0) === Some(1))
-          assert(store.commit() === 1)
-          provider.doMaintenance()
-          assert(store.hasCommitted)
-          val storeMetrics = store.metrics
-          assert(storeMetrics.numKeys === 1)
+        val store = provider.getStore(0)
+        // Verify state after updating
+        put(store, "a", 0, 1)
+        assert(get(store, "a", 0) === Some(1))
+        assert(store.commit() === 1)
+        provider.doMaintenance()
+        assert(store.hasCommitted)
+        val storeMetrics = store.metrics
+        assert(storeMetrics.numKeys === 1)
+        // SPARK-46249 - In the case of changelog checkpointing, the snapshot upload happens in
+        // the context of the background maintenance thread. The file manager metrics are updated
+        // here and will be available as part of the next metrics update. So we cannot rely on the
+        // file manager metrics to be available here for this version.
+        if (!isChangelogCheckpointingEnabled) {
           assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
           assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
           assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
           assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+        }
       }
     }
   }

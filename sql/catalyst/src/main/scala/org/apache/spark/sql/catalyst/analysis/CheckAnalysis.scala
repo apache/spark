@@ -223,8 +223,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw new IllegalStateException(
-          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
+        throw SparkException.internalError(
+          "Logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -748,7 +748,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[Generate] &&
             !o.isInstanceOf[CreateVariable] &&
             !o.isInstanceOf[MapInPandas] &&
-            !o.isInstanceOf[PythonMapInArrow] &&
+            !o.isInstanceOf[MapInArrow] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
@@ -757,7 +757,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))
             )
 
-          case _: UnresolvedHint => throw new IllegalStateException(
+          case _: UnresolvedHint => throw SparkException.internalError(
             "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
@@ -1374,11 +1374,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Correlated subquery can have a LIMIT clause
         case l @ Limit(_, input) =>
           failOnInvalidOuterReference(l)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_LIMIT_ENABLED))
 
         case o @ Offset(_, input) =>
           failOnInvalidOuterReference(o)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only

@@ -40,7 +40,7 @@ from pyspark.sql.types import (
 from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
+from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
@@ -339,7 +339,13 @@ class UserDefinedFunction:
             try:
                 # StructType is not yet allowed as a return type, explicitly check here to fail fast
                 if isinstance(self._returnType_placeholder, StructType):
-                    raise TypeError
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
+                            f"{self._returnType_placeholder}"
+                        },
+                    )
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
                 raise PySparkNotImplementedError(
@@ -410,9 +416,12 @@ class UserDefinedFunction:
             if profiler_enabled and memory_profiler_enabled:
                 # When both profilers are enabled, they interfere with each other,
                 # that makes the result profile misleading.
-                raise RuntimeError(
-                    "'spark.python.profile' and 'spark.python.profile.memory' configuration"
-                    " cannot be enabled together."
+                raise PySparkRuntimeError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": "'spark.python.profile' and "
+                        "'spark.python.profile.memory' configuration"
+                    },
                 )
             elif profiler_enabled:
                 f = self.func

@@ -21,6 +21,7 @@ import java.io.CharArrayWriter
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -92,7 +93,7 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw new IllegalStateException("Expected one row from CSV parser.")
+      throw SparkException.internalError("Expected one row from CSV parser.")
     }
   }
 

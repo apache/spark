@@ -551,7 +551,7 @@ class SparkConnectPlanner(
               baseRel,
               isBarrier)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
-            logical.PythonMapInArrow(
+            logical.MapInArrow(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
@@ -595,12 +595,21 @@ class SparkConnectPlanner(
         val cols =
           rel.getGroupingExpressionsList.asScala.toSeq.map(expr =>
             Column(transformExpression(expr)))
-
-        Dataset
+        val group = Dataset
           .ofRows(session, transformRelation(rel.getInput))
           .groupBy(cols: _*)
-          .flatMapGroupsInPandas(pythonUdf)
-          .logicalPlan
+
+        pythonUdf.evalType match {
+          case PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF =>
+            group.flatMapGroupsInPandas(pythonUdf).logicalPlan
+
+          case PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF =>
+            group.flatMapGroupsInArrow(pythonUdf).logicalPlan
+
+          case _ =>
+            throw InvalidPlanInput(
+              s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+        }
 
       case _ =>
         throw InvalidPlanInput(
@@ -718,7 +727,17 @@ class SparkConnectPlanner(
           .ofRows(session, transformRelation(rel.getOther))
           .groupBy(otherCols: _*)
 
-        input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
+        pythonUdf.evalType match {
+          case PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF =>
+            input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
+
+          case PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF =>
+            input.flatMapCoGroupsInArrow(other, pythonUdf).logicalPlan
+
+          case _ =>
+            throw InvalidPlanInput(
+              s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+        }
 
       case _ =>
         throw InvalidPlanInput(
@@ -932,7 +951,9 @@ class SparkConnectPlanner(
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
         val function = createPythonUserDefinedTableFunction(fun)
-        function.builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+        function.builder(
+          fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+          session.sessionState.sqlParser)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -960,10 +981,21 @@ class SparkConnectPlanner(
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .withColumnsRenamed(rel.getRenameColumnsMapMap)
-      .logicalPlan
+    if (rel.getRenamesCount > 0) {
+      val (colNames, newColNames) = rel.getRenamesList.asScala.toSeq.map { rename =>
+        (rename.getColName, rename.getNewColName)
+      }.unzip
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .withColumnsRenamed(colNames, newColNames)
+        .logicalPlan
+    } else {
+      // for backward compatibility
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .withColumnsRenamed(rel.getRenameColumnsMapMap)
+        .logicalPlan
+    }
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
@@ -1693,7 +1725,7 @@ class SparkConnectPlanner(
         children(2) match {
           case Literal(b, BinaryType) if b != null =>
             (Some(b.asInstanceOf[Array[Byte]]), Map.empty[String, String])
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
             (None, ExprUtils.convertToMapData(CreateMap(arguments)))
           case other =>
             throw InvalidPlanInput(
@@ -1709,7 +1741,7 @@ class SparkConnectPlanner(
               s"DescFilePath in $functionName should be a literal binary, but got $other")
         }
         val map = children(3) match {
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
             ExprUtils.convertToMapData(CreateMap(arguments))
           case other =>
             throw InvalidPlanInput(
@@ -2043,7 +2075,8 @@ class SparkConnectPlanner(
   @scala.annotation.tailrec
   private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
     case map: CreateMap => ExprUtils.convertToMapData(map)
-    case UnresolvedFunction(Seq("map"), args, _, _, _) => extractMapData(CreateMap(args), field)
+    case UnresolvedFunction(Seq("map"), args, _, _, _, _) =>
+      extractMapData(CreateMap(args), field)
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
   }
 

@@ -1811,9 +1811,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def catalogPluginClassNotFoundError(name: String): Throwable = {
+  def catalogNotFoundError(name: String): Throwable = {
     new CatalogNotFoundException(
-      s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+      errorClass = "CATALOG_NOT_FOUND",
+      messageParameters = Map(
+        "catalogName" -> toSQLId(name),
+        "config" -> toSQLConf(s"spark.sql.catalog.$name")))
   }
 
   def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {

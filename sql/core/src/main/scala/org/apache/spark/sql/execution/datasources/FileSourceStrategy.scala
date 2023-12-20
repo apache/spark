@@ -259,9 +259,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         metadataStruct.dataType.asInstanceOf[StructType].fields.foreach {
           case FileSourceGeneratedMetadataStructField(field, internalName) =>
             if (schemaColumns.contains(internalName)) {
-              throw new AnalysisException(internalName +
-                s"${internalName} is a reserved column name that cannot be read in combination " +
-                s"with ${FileFormat.METADATA_NAME}.${field.name} column.")
+              throw new AnalysisException(
+                errorClass = "_LEGACY_ERROR_TEMP_3069",
+                messageParameters = Map(
+                  "internalName" -> internalName,
+                  "colName" -> s"${FileFormat.METADATA_NAME}.${field.name}"
+                ))
             }
 
             // NOTE: Readers require the internal column to be nullable because it's not part of the
@@ -276,7 +279,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             metadataColumnsByName.put(field.name, attr)
             constantMetadataColumns += attr
 
-          case field => throw new AnalysisException(s"Unrecognized file metadata field: $field")
+          case field => throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3070",
+            messageParameters = Map("field" -> field.toString))
         }
       }
 

@@ -513,8 +513,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
         //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
         //  df1.select(df2.a)   <-   illegal reference df2.a
-        throw new AnalysisException(s"When resolving $u, " +
-          s"fail to find subplan with plan_id=$planId in $q")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3051",
+          messageParameters = Map(
+            "u" -> u.toString,
+            "planId" -> planId.toString,
+            "q" -> q.toString))
       }
     })
 

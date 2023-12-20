@@ -19,6 +19,7 @@ from typing import final, Any, Dict, Iterator, List, Sequence, Tuple, Type, Unio
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
+from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -103,7 +104,10 @@ class DataSource(ABC):
         >>> def schema(self):
         ...   return StructType().add("a", "int").add("b", "string")
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "schema"},
+        )
 
     def reader(self, schema: StructType) -> "DataSourceReader":
         """
@@ -121,9 +125,12 @@ class DataSource(ABC):
         reader : DataSourceReader
             A reader instance for this data source.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "reader"},
+        )
 
-    def writer(self, schema: StructType, saveMode: str) -> "DataSourceWriter":
+    def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
         """
         Returns a ``DataSourceWriter`` instance for writing data.
 
@@ -133,16 +140,18 @@ class DataSource(ABC):
         ----------
         schema : StructType
             The schema of the data to be written.
-        saveMode : str
-            A string identifies the save mode. It can be one of the following:
-            `append`, `overwrite`, `error`, `ignore`.
+        overwrite : bool
+            A flag indicating whether to overwrite existing data when writing to the data source.
 
         Returns
         -------
         writer : DataSourceWriter
             A writer instance for this data source.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "writer"},
+        )
 
 
 class InputPartition:
@@ -239,7 +248,10 @@ class DataSourceReader(ABC):
         >>> def partitions(self):
         ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "partitions"},
+        )
 
     @abstractmethod
     def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:

@@ -742,13 +742,13 @@ class IndexingTest(ComparisonTestBase):
         self.assertRaises(AttributeError, lambda: psdf.X)
 
         # not str/unicode
-        # TODO?: pdf = pd.DataFrame(np.random.randn(10, 5))
-        # TODO?: psdf = ps.from_pandas(pdf)
-        # TODO?: self.assert_eq(psdf[0], pdf[0])
-        # TODO?: self.assert_eq(psdf[[1, 2]], pdf[[1, 2]])
+        pdf = pd.DataFrame(np.random.randn(10, 5))
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf[0], pdf[0])
+        self.assert_eq(psdf[[1, 2]], pdf[[1, 2]])
 
-        # TODO?: self.assertRaises(KeyError, lambda: pdf[8])
-        # TODO?: self.assertRaises(KeyError, lambda: pdf[[1, 8]])
+        self.assertRaises(KeyError, lambda: pdf[8])
+        self.assertRaises(KeyError, lambda: pdf[[1, 8]])
 
         # non-string column names
         pdf = pd.DataFrame(

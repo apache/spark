@@ -24,21 +24,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbySplitApplyMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
     def test_split_apply_combine_on_series(self):
         # TODO(SPARK-45228): Enabling string type columns for `test_split_apply_combine_on_series`
         #  when Pandas regression is fixed
