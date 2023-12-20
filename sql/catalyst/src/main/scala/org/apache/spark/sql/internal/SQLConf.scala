@@ -4115,6 +4115,7 @@ object SQLConf {
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -4639,6 +4640,8 @@ object SQLConf {
         """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead."""),
       DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
         s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead."),
+      DeprecatedConfig(PARQUET_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${PARQUET_REBASE_MODE_IN_READ.key}' instead."),
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
@@ -4711,9 +4714,6 @@ object SQLConf {
       RemovedConfig("spark.sql.legacy.parquet.datetimeRebaseModeInWrite", "4.0.0",
         LegacyBehaviorPolicy.CORRECTED.toString,
         s"Use '${PARQUET_REBASE_MODE_IN_WRITE.key}' instead."),
-      RemovedConfig("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "4.0.0",
-        LegacyBehaviorPolicy.CORRECTED.toString,
-        s"Use '${PARQUET_REBASE_MODE_IN_READ.key}' instead."),
       RemovedConfig("spark.sql.legacy.avro.datetimeRebaseModeInWrite", "4.0.0",
         LegacyBehaviorPolicy.CORRECTED.toString,
         s"Use '${AVRO_REBASE_MODE_IN_WRITE.key}' instead."),

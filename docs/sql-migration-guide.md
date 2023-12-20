@@ -34,7 +34,6 @@ license: |
   - `spark.sql.parquet.int96RebaseModeInWrite` instead of `spark.sql.legacy.parquet.int96RebaseModeInWrite`
   - `spark.sql.parquet.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.parquet.datetimeRebaseModeInWrite`
   - `spark.sql.parquet.int96RebaseModeInRead` instead of `spark.sql.legacy.parquet.int96RebaseModeInRead`
-  - `spark.sql.parquet.datetimeRebaseModeInRead` instead of `spark.sql.legacy.parquet.datetimeRebaseModeInRead`
   - `spark.sql.avro.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.avro.datetimeRebaseModeInWrite`
   - `spark.sql.avro.datetimeRebaseModeInRead` instead of `spark.sql.legacy.avro.datetimeRebaseModeInRead`
 
