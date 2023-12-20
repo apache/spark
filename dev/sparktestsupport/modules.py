@@ -742,7 +742,9 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_internal",
         "pyspark.pandas.tests.test_namespace",
         "pyspark.pandas.tests.test_numpy_compat",
-        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_expanding",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_expanding",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_expanding_adv",
+        "pyspark.pandas.tests.diff_frames_ops.test_groupby_expanding_count",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling",
         "pyspark.pandas.tests.test_repr",
         "pyspark.pandas.tests.resample.test_on",
@@ -1128,7 +1130,6 @@ pyspark_pandas_connect_part1 = Module(
         "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_object",
         "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_prefix",
         "pyspark.pandas.tests.connect.reshape.test_parity_merge_asof",
-        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby_expanding",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1229,6 +1230,9 @@ pyspark_pandas_connect_part3 = Module(
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_shift",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_split_apply_combine",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_transform",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_expanding",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_expanding_adv",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_expanding_count",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
