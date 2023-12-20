@@ -19,20 +19,11 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class OpsOnDiffFramesGroupByExpandingTestsMixin:
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        set_option("compute.ops_on_diff_frames", True)
-
-    @classmethod
-    def tearDownClass(cls):
-        reset_option("compute.ops_on_diff_frames")
-        super().tearDownClass()
-
+class GroupByExpandingTestingFuncMixin:
     def _test_groupby_expanding_func(self, f):
         pser = pd.Series([1, 2, 3])
         pkey = pd.Series([1, 2, 3], name="a")
@@ -63,8 +54,17 @@ class OpsOnDiffFramesGroupByExpandingTestsMixin:
             getattr(pdf.groupby(pkey)[["b"]].expanding(2), f)().sort_index(),
         )
 
-    def test_groupby_expanding_count(self):
-        self._test_groupby_expanding_func("count")
+
+class GroupByExpandingMixin(GroupByExpandingTestingFuncMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        set_option("compute.ops_on_diff_frames", True)
+
+    @classmethod
+    def tearDownClass(cls):
+        reset_option("compute.ops_on_diff_frames")
+        super().tearDownClass()
 
     def test_groupby_expanding_min(self):
         self._test_groupby_expanding_func("min")
@@ -78,22 +78,18 @@ class OpsOnDiffFramesGroupByExpandingTestsMixin:
     def test_groupby_expanding_sum(self):
         self._test_groupby_expanding_func("sum")
 
-    def test_groupby_expanding_std(self):
-        self._test_groupby_expanding_func("std")
 
-    def test_groupby_expanding_var(self):
-        self._test_groupby_expanding_func("var")
-
-
-class OpsOnDiffFramesGroupByExpandingTests(
-    OpsOnDiffFramesGroupByExpandingTestsMixin, PandasOnSparkTestCase, TestUtils
+class GroupByExpandingTests(
+    GroupByExpandingMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_ops_on_diff_frames_groupby_expanding import *  # noqa: F401
+    from pyspark.pandas.tests.diff_frames_ops.test_groupby_expanding import *  # noqa
 
     try:
         import xmlrunner
