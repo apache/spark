@@ -6,6 +6,7 @@
 -- 3. Join type: inner / left outer / right outer / full outer / left semi / left anti
 -- 4. AND or OR for the join condition
 
+--ONLY_IF spark
 CREATE TEMP VIEW x(x1, x2) AS VALUES
     (2, 1),
     (1, 1),
