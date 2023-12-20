@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.storage.StorageLevel
 
 /**
