@@ -655,6 +655,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
    *                          operator.
+   * @param timeoutMode The timeout mode of the stateful processor.
    * @param outputMode The output mode of the stateful processor. Defaults to APPEND mode.
    *
    */

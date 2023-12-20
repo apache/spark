@@ -297,8 +297,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // Now enable changelog checkpointing in a checkpoint created by a state store
     // that disable changelog checkpointing.
     val enableChangelogCheckpointingConf =
-    dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30,
-      minDeltasForSnapshot = 1)
+      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30,
+        minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = enableChangelogCheckpointingConf) { db =>
       for (version <- 1 to 30) {
         db.load(version)
@@ -469,8 +469,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled(s"RocksDB: get, put, iterator, commit, laod " +
-    s"with multiple column families") {
+  test(s"RocksDB: get, put, iterator, commit, load with multiple column families") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val colFamily1: String = "abc"
@@ -634,11 +633,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1)
     val entries = changelogReader.toSeq
-    val expectedEntries = (1 to 5).map(i =>
+    val expectedEntries = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
-        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)) ++
-      (2 to 4).map(j => (RecordType.DELETE_RECORD, j.toString.getBytes,
-        null, StateStore.DEFAULT_COL_FAMILY_NAME))
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&
@@ -658,11 +660,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1, true)
     val entries = changelogReader.toSeq
-    val expectedEntries = (1 to 5).map(i =>
+    val expectedEntries = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
-        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)) ++
-      (2 to 4).map(j => (RecordType.DELETE_RECORD, j.toString.getBytes,
-        null, StateStore.DEFAULT_COL_FAMILY_NAME))
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&
@@ -689,20 +694,23 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1, true)
     val entries = changelogReader.toSeq
-    val expectedEntriesForColFamily1 = (1 to 5).map(i =>
+    val expectedEntriesForColFamily1 = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
-        i.toString.getBytes, testColFamily1)) ++
-      (2 to 4).map(j => (RecordType.DELETE_RECORD, j.toString.getBytes,
-        null, testColFamily1))
+        i.toString.getBytes, testColFamily1)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, testColFamily1)
+    }
 
-    val expectedEntriesForColFamily2 = (1 to 5).map(i =>
+    val expectedEntriesForColFamily2 = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
-        i.toString.getBytes, testColFamily2)) ++
-      (2 to 4).map(j => (RecordType.DELETE_RECORD, j.toString.getBytes,
-        null, testColFamily2))
+        i.toString.getBytes, testColFamily2)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, testColFamily2)
+    }
 
     val expectedEntries = expectedEntriesForColFamily1 ++ expectedEntriesForColFamily2
-
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&

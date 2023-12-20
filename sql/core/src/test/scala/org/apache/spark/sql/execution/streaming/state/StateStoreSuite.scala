@@ -791,12 +791,15 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
   }
 
-  override def newStoreProvider(storeId: StateStoreId,
-    useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
+  override def newStoreProvider(
+      storeId: StateStoreId,
+      useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
     newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
   }
 
-  def newStoreProvider(storeId: StateStoreId, conf: Configuration): HDFSBackedStateStoreProvider = {
+  def newStoreProvider(
+      storeId: StateStoreId,
+      conf: Configuration): HDFSBackedStateStoreProvider = {
     newStoreProvider(
       storeId.operatorId,
       storeId.partitionId,
