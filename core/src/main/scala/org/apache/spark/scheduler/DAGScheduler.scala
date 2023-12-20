@@ -327,6 +327,10 @@ private[spark] class DAGScheduler(
   private val trackingCacheVisibility: Boolean =
     sc.getConf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
+  /** Whether to abort a stage after canceling all of its tasks. */
+  private val legacyAbortStageAfterCancelTasks =
+    sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS)
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -2868,7 +2872,7 @@ private[spark] class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
-              if (sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS)) {
+              if (legacyAbortStageAfterCancelTasks) {
                 stageFailed(stageId, reason)
               }
               markStageAsFinished(stage, Some(reason))
