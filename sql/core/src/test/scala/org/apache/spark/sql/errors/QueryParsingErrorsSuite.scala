@@ -32,6 +32,33 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     intercept[ParseException](sql(sqlText).collect())
   }
 
+  test("EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES: duplicate aliases provided in using statement") {
+    val query = "EXECUTE IMMEDIATE 'SELECT 1707 WHERE ? = 1' USING 1 as first" +
+      ", 2 as first, 3 as second, 4 as second, 5 as third"
+    checkError(
+      exception = parseException(query),
+      errorClass = "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+      parameters = Map("aliases" -> "`second`, `first`"),
+      context = ExpectedContext(
+        "USING 1 as first, 2 as first, 3 as second, 4 as second, 5 as third",
+        start = 44,
+        stop = 109)
+    )
+  }
+
+  test("PARSE_SYNTAX_ERROR: Execute immediate syntax error with INTO specified") {
+    val query = "EXECUTE IMMEDIATE 'SELCT 1707 WHERE ? = 1' INTO a USING 1"
+    checkError(
+      exception = parseException(query),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'SELCT'", "hint" -> ""),
+      context = ExpectedContext(
+        start = 0,
+        stop = 56,
+        fragment = query)
+    )
+  }
+
   test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
     withSQLConf("spark.sql.allowNamedFunctionArguments" -> "false") {
       checkError(
