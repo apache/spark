@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -28,10 +28,11 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
  *    includes metadata columns as well.
  * 2. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.
- * 3. If the child plan is Aggregate, resolves the column to [[TempResolvedColumn]] with the output
- *    of Aggregate's child plan. This is to allow Sort to host grouping expressions and aggregate
- *    functions, which can be pushed down to the Aggregate later. For example,
- *    `SELECT max(a) FROM t GROUP BY b ORDER BY min(a)`.
+ * 3. If the child plan is Aggregate or Filter(_, Aggregate), resolves the column to
+ *    [[TempResolvedColumn]] with the output of Aggregate's child plan.
+ *    This is to allow Sort to host grouping expressions and aggregate functions, which can
+ *    be pushed down to the Aggregate later. For example,
+ *    `SELECT max(a) FROM t GROUP BY b HAVING max(a) > 1 ORDER BY min(a)`.
  * 4. Resolves the column to [[AttributeReference]] with the output of a descendant plan node.
  *    Spark will propagate the missing attributes from the descendant plan node to the Sort node.
  *    This is to allow users to ORDER BY columns that are not in the SELECT clause, which is
@@ -51,7 +52,10 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
 
   def apply(s: Sort): LogicalPlan = {
     val resolvedBasic = s.order.map(resolveExpressionByPlanOutput(_, s.child))
-    val resolvedWithAgg = resolvedBasic.map(resolveColWithAgg(_, s.child))
+    val resolvedWithAgg = s.child match {
+      case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
+      case _ => resolvedBasic.map(resolveColWithAgg(_, s.child))
+    }
     val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
       s.global, newChild, missingAttrResolved.map(_.asInstanceOf[SortOrder]))
