@@ -235,7 +235,7 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-46383: Accumulables of TaskInfo objects held by TaskSetManager must not be " +
-    "accessed once the task has completed") { conf =>
+    "accessed once the task has completed") {
     sc = new SparkContext("local", "test", conf)
     sched = FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -258,7 +258,7 @@ class TaskSetManagerSuite
     assert(e.getMessage.contains("Accumulables for the TaskInfo have been cleared"))
   }
 
-  test("SPARK-46383: TaskInfo accumulables are cleared upon task completion") { conf =>
+  test("SPARK-46383: TaskInfo accumulables are cleared upon task completion") {
     sc = new SparkContext("local", "test", conf)
     sched = FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(2)
