@@ -60,20 +60,8 @@ private[spark] object ResourceAmountUtils {
 
   def toInternalResource(amount: Double): Long = (amount * ONE_ENTIRE_RESOURCE).toLong
 
-  private[spark] def toInternalResource(resources: Map[String, Double]): Map[String, Long] = {
-    resources.map { case (k, v) => k -> toInternalResource(v) }
-  }
-
   def toFractionalResource(amount: Long): Double = amount.toDouble / ONE_ENTIRE_RESOURCE
 
-  private[spark] def toFractionalResource(resources: Map[String, Long]): Map[String, Double] = {
-    resources.map { case (k, v) => k -> toFractionalResource(v) }
-  }
-
-  private[spark] def toInternalResourceMapMap(resources: Map[String, Map[String, Double]]):
-      Map[String, Map[String, Long]] = {
-    resources.map { case (k, v) => k -> toInternalResource(v) }
-  }
 }
 
 /**

@@ -27,14 +27,17 @@ import org.apache.spark.resource.ResourceUtils.GPU
 class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
   implicit def toFractionalResource(resources: Map[String, Long]): Map[String, Double] =
-    ResourceAmountUtils.toFractionalResource(resources)
+    resources.map { case (k, v) => k -> ResourceAmountUtils.toFractionalResource(v) }
 
   implicit def toInternalResource(resources: Map[String, Double]): Map[String, Long] =
-    ResourceAmountUtils.toInternalResource(resources)
+    resources.map { case (k, v) => k -> ResourceAmountUtils.toInternalResource(v) }
 
   implicit def toInternalResourceMap(resources: Map[String, Map[String, Double]]):
-      Map[String, Map[String, Long]] = ResourceAmountUtils.toInternalResourceMapMap(resources)
-
+      Map[String, Map[String, Long]] =
+    resources.map { case (resName, addressesAmountMap) =>
+      resName -> addressesAmountMap.map { case (k, v) =>
+        k -> ResourceAmountUtils.toInternalResource(v) }
+  }
 
   def compareMaps(lhs: Map[String, Double], rhs: Map[String, Double],
                   eps: Double = 0.00000001): Boolean = {

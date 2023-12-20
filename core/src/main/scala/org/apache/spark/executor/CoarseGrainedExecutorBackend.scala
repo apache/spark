@@ -181,9 +181,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        // Convert resources amounts into ResourceInformation
-        val resources = taskDesc.resources.map { case (rName, addressesAmounts) =>
-          rName -> new ResourceInformation(rName, addressesAmounts.keys.toSeq.sorted.toArray)}
         executor.launchTask(this, taskDesc)
       }
 

@@ -2296,7 +2296,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   }
 
   private implicit def toInternalResource(resources: Map[String, Double]): Map[String, Long] =
-    ResourceAmountUtils.toInternalResource(resources)
+    resources.map { case (k, v) => k -> ResourceAmountUtils.toInternalResource(v) }
 
   // 1 executor with 4 GPUS
   Seq(true, false).foreach { barrierMode =>
