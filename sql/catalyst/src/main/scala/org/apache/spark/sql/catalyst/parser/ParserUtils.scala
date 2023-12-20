@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util
 import java.util.Locale
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.{ParserRuleContext, Token, VocabularyImpl}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 
@@ -129,4 +129,9 @@ object ParserUtils extends SparkParserUtils {
     concatTerms(ctx)
     sb.toString()
   }
+
+  private val keywords = SqlBaseLexer.VOCABULARY.asInstanceOf[VocabularyImpl].
+    getSymbolicNames.toSet
+
+  def isKeyword(name: String): Boolean = keywords.contains(name.toUpperCase(Locale.ROOT))
 }

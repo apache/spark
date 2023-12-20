@@ -2301,6 +2301,11 @@
       "Invalid SQL syntax:"
     ],
     "subClass" : {
+      "ALIAS_IS_KEYWORD" : {
+        "message" : [
+          "Alias <alias> is sql keyword."
+        ]
+      },
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."

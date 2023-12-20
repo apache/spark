@@ -691,4 +691,15 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         start = 32,
         stop = 58))
   }
+
+  test("ALIAS_IS_KEYWORD: alias must not sql keyword") {
+    checkError(
+      exception = parseException("select word from from words where 1 = 1"),
+      errorClass = "INVALID_SQL_SYNTAX.ALIAS_IS_KEYWORD",
+      parameters = Map("alias" -> "FROM"),
+      context = ExpectedContext(
+        fragment = "select word from from words where 1 = 1",
+        start = 0,
+        stop = 38))
+  }
 }

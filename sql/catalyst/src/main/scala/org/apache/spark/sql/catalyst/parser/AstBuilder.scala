@@ -798,7 +798,15 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx: NamedExpressionSeqContext): Seq[(Expression, Option[Expression => String])] = {
     Option(ctx).toSeq
       .flatMap(_.namedExpression.asScala)
-      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(ctx)))
+      .map(ctx => {
+        val expr = typedVisit[Expression](ctx)
+        expr match {
+          case Alias(_, name) if ParserUtils.isKeyword(name) =>
+            throw QueryParsingErrors.aliasIsKeyword(name, ctx)
+          case _ =>
+        }
+        (expr, getAliasFunc(ctx))
+      })
   }
 
   override def visitExpressionSeq(

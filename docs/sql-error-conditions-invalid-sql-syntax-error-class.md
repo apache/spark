@@ -25,6 +25,10 @@ Invalid SQL syntax:
 
 This error class has the following derived error classes:
 
+## ALIAS_IS_KEYWORD
+
+Alias `<alias>` is sql keyword.
+
 ## ANALYZE_TABLE_UNEXPECTED_NOSCAN
 
 ANALYZE TABLE(S) ... COMPUTE STATISTICS ... `<ctx>` must be either NOSCAN or empty.

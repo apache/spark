@@ -700,4 +700,11 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def clusterByWithBucketing(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
   }
+
+  def aliasIsKeyword(alias: String, ctx: NamedExpressionContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.ALIAS_IS_KEYWORD",
+      messageParameters = Map("alias" -> toSQLStmt(alias)),
+      ctx)
+  }
 }
