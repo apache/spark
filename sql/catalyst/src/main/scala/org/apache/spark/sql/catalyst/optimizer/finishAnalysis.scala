@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreePatternBits}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
@@ -81,11 +81,11 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
  * at this point.
  */
 object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithSubqueriesAndPruning(
-    AlwaysProcess.fn, ruleId) {
-    case table: ResolvedInlineTable =>
-      val newRows: Seq[InternalRow] =
-        table.rows.map { row => InternalRow.fromSeq(
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
+      case table: ResolvedInlineTable =>
+        val newRows: Seq[InternalRow] =
+          table.rows.map { row => InternalRow.fromSeq(
             row.map { e =>
               try {
                 prepareForEval(e).eval()
@@ -96,9 +96,10 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
                     messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
                     cause = ex)
               }})
-        }
+          }
 
-      LocalRelation(table.output, newRows)
+        LocalRelation(table.output, newRows)
+    }
   }
 }
 

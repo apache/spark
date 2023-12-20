@@ -130,8 +130,7 @@ object ResolveInlineTables extends Rule[LogicalPlan]
    * This is package visible for unit testing.
    */
   private[analysis] def earlyEvalIfPossible(table: ResolvedInlineTable): LogicalPlan = {
-      def earlyEvalPossible =
-        table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
+      val earlyEvalPossible = table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
       if (earlyEvalPossible) EvalInlineTables(table) else table
   }
 }

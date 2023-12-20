@@ -250,3 +250,9 @@ Project [col1#x]
 select count(distinct ct) from values now(), now(), now() as data(ct)
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

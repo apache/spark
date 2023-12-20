@@ -138,7 +138,10 @@ case class UnresolvedInlineTable(
  * @param output list of column attributes
  * @param rows expressions for the data rows
  */
-case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute]) extends LeafNode
+case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute])
+  extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
+}
 
 /**
  * A table-valued function, e.g.
