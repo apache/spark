@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.jdk.CollectionConverters._
+import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -558,6 +559,64 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
+   * Returns the parameters for [[ExecuteImmediateQuery]] logical plan.
+   * Expected format:
+   * {{{
+   *   EXECUTE IMMEDIATE {query_string|string_literal}
+   *   [INTO target1, target2] [USING param1, param2, ...]
+   * }}}
+   */
+  override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
+    // Because of how parsing rules are written, we know that either
+    // queryParam or targetVariable is non null - hence use Either to represent this.
+    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(string(visitStringLit(sl))))
+    val queryVariable = Option(ctx.queryParam.multipartIdentifier)
+      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+
+    val targetVars = Option(ctx.targetVariable).toSeq
+      .flatMap(v => visitMultipartIdentifierList(v))
+    val exprs = Option(ctx.executeImmediateUsing).map {
+      visitExecuteImmediateUsing(_)
+    }.getOrElse{ Seq.empty }
+
+
+    ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
+  }
+
+  override def visitExecuteImmediateUsing(
+      ctx: ExecuteImmediateUsingContext): Seq[Expression] = withOrigin(ctx) {
+    val expressions = Option(ctx).toSeq
+      .flatMap(ctx => visitNamedExpressionSeq(ctx.params))
+    val resultExpr = expressions.map(e => e._1)
+
+    validateExecImmediateArguments(resultExpr, ctx)
+    resultExpr
+  }
+
+  /**
+   * Performs validation on the arguments to EXECUTE IMMEDIATE.
+   */
+  private def validateExecImmediateArguments(
+    expressions: Seq[Expression],
+    ctx : ExecuteImmediateUsingContext) : Unit = {
+    val duplicateAliases = expressions
+      .filter(_.isInstanceOf[Alias])
+      .groupBy {
+        case Alias(arg, name) => name
+      }.filter(group => group._2.size > 1)
+
+    if (duplicateAliases.nonEmpty) {
+      throw QueryParsingErrors.duplicateArgumentNamesError(duplicateAliases.keys.toSeq, ctx)
+    }
+  }
+
+  override def visitMultipartIdentifierList(
+      ctx: MultipartIdentifierListContext): Seq[UnresolvedAttribute] = withOrigin(ctx) {
+    ctx.multipartIdentifier.asScala.map(typedVisit[Seq[String]]).map(new UnresolvedAttribute(_))
+      .toSeq
+  }
+
+/**
    * Create a partition specification map.
    */
   override def visitPartitionSpec(

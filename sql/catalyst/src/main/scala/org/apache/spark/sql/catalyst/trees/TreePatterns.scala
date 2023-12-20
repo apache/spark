@@ -113,6 +113,7 @@ object TreePattern extends Enumeration  {
   val EVAL_PYTHON_UDTF: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
+  val EXECUTE_IMMEDIATE: Value = Value
   val FILTER: Value = Value
   val INNER_LIKE_JOIN: Value = Value
   val JOIN: Value = Value
