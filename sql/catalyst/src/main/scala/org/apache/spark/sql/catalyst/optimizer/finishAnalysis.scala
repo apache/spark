@@ -85,8 +85,7 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
     plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
       case table: ResolvedInlineTable =>
         val newRows: Seq[InternalRow] =
-          table.rows.map { row => InternalRow.fromSeq(
-            row.map { e =>
+          table.rows.map { row => InternalRow.fromSeq(row.map { e =>
               try {
                 prepareForEval(e).eval()
               } catch {
