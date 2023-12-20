@@ -1310,7 +1310,7 @@ trait ComplexTypeMergingExpression extends Expression {
       errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
       messageParameters = Map(
         "expression" -> toSQLExpr(this),
-        "inputTypes" -> inputTypesForMerging.map(toSQLType).mkString(", ")))
+        "inputTypes" -> inputTypesForMerging.map(toSQLType).mkString("[", ", ", "]")))
   }
 
   private lazy val internalDataType: DataType = {
