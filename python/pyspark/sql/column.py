@@ -1161,7 +1161,8 @@ class Column:
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name='Tom', height=80.0), Row(name='Alice', height=float('nan'))])
+    >>> df = spark.createDataFrame(
+    ...     [Row(name='Tom', height=80.0), Row(name='Alice', height=float('nan'))])
     >>> df.filter(df.height.isNaN()).collect()
     [Row(name='Alice', height=nan)]
     """
