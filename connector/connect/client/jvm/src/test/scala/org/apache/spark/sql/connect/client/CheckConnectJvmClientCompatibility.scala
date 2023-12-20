@@ -432,7 +432,6 @@ object CheckConnectJvmClientCompatibility {
       // Encoders are in the wrong JAR
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
 
       // MergeIntoWriter
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.MergeIntoWriter"),

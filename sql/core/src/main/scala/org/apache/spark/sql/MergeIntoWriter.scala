@@ -53,11 +53,14 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   /**
    * Initialize a `WhenMatched` action without any condition.
    *
+   * This `WhenMatched` action will be executed when a source row matches a target table row based
+   * on the merge condition.
+   *
    * This `WhenMatched` can be followed by one of the following merge actions:
-   *   - `updateAll`: Update all the target table fields with source dataset fields.
-   *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
-   *   - `delete`: Delete all the target table records.
+   *   - `updateAll`: Update all the matched target table rows with source dataset rows.
+   *   - `update(Map)`: Update all the matched target table rows while changing only
+   *     a subset of columns based on the provided assignment.
+   *   - `delete`: Delete all target rows that have a match in the source table.
    *
    * @return a new `WhenMatched` object.
    */
@@ -68,14 +71,14 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   /**
    * Initialize a `WhenMatched` action with a condition.
    *
-   * This `WhenMatched` action will be executed if and only if the specified `condition`
-   * is satisfied.
+   * This `WhenMatched` action will be executed when a source row matches a target table row based
+   * on the merge condition and the specified `condition` is satisfied.
    *
    * This `WhenMatched` can be followed by one of the following merge actions:
-   *   - `updateAll`: Update all the target table fields with source dataset fields.
-   *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
-   *   - `delete`: Delete all the target table records.
+   *   - `updateAll`: Update all the matched target table rows with source dataset rows.
+   *   - `update(Map)`: Update all the matched target table rows while changing only
+   *     a subset of columns based on the provided assignment.
+   *   - `delete`: Delete all target rows that have a match in the source table.
    *
    * @param condition a `Column` representing the condition to be evaluated for the action.
    * @return a new `WhenMatched` object configured with the specified condition.
@@ -87,10 +90,13 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   /**
    * Initialize a `WhenNotMatched` action without any condition.
    *
+   * This `WhenNotMatched` action will be executed when a source row does not match any target row
+   * based on the merge condition.
+   *
    * This `WhenNotMatched` can be followed by one of the following merge actions:
-   *   - `insertAll`: Insert all the target table with source dataset records.
-   *   - `insert(Map)`: Insert all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
+   *   - `insertAll`: Insert all rows from the source that are not already in the target table.
+   *   - `insert(Map)`: Insert all rows from the source that are not already in the target table,
+   *      with the specified columns based on the provided assignment.
    *
    * @return a new `WhenNotMatched` object.
    */
@@ -101,13 +107,13 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   /**
    * Initialize a `WhenNotMatched` action with a condition.
    *
-   * This `WhenNotMatched` action will be executed if and only if the specified `condition`
-   * is satisfied.
+   * This `WhenNotMatched` action will be executed when a source row does not match any target row
+   * based on the merge condition and the specified `condition` is satisfied.
    *
    * This `WhenNotMatched` can be followed by one of the following merge actions:
-   *   - `insertAll`: Insert all the target table with source dataset records.
-   *   - `insert(Map)`: Insert all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
+   *   - `insertAll`: Insert all rows from the source that are not already in the target table.
+   *   - `insert(Map)`: Insert all rows from the source that are not already in the target table,
+   *     with the specified columns based on the provided assignment.
    *
    * @param condition a `Column` representing the condition to be evaluated for the action.
    * @return a new `WhenNotMatched` object configured with the specified condition.
@@ -119,11 +125,14 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   /**
    * Initialize a `WhenNotMatchedBySource` action without any condition.
    *
+   * This `WhenNotMatchedBySource` action will be executed when a target row does not match any
+   * rows in the source table based on the merge condition.
+   *
    * This `WhenNotMatchedBySource` can be followed by one of the following merge actions:
-   *   - `updateAll`: Update all the target table fields with source dataset fields.
-   *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
-   *   - `delete`: Delete all the target table records.
+   *   - `updateAll`: Update all the not matched target table rows with source dataset rows.
+   *   - `update(Map)`: Update all the not matched target table rows while changing only
+   *     the specified columns based on the provided assignment.
+   *   - `delete`: Delete all target rows that have no matches in the source table.
    *
    * @return a new `WhenNotMatchedBySource` object.
    */
@@ -134,14 +143,15 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   /**
    * Initialize a `WhenNotMatchedBySource` action with a condition.
    *
-   * This `WhenNotMatchedBySource` action will be executed if and only if the specified `condition`
+   * This `WhenNotMatchedBySource` action will be executed when a target row does not match any
+   * rows in the source table based on the merge condition and the specified `condition`
    * is satisfied.
    *
    * This `WhenNotMatchedBySource` can be followed by one of the following merge actions:
-   *   - `updateAll`: Update all the target table fields with source dataset fields.
-   *   - `update(Map)`: Update all the target table records while changing only
-   *     a subset of fields based on the provided assignment.
-   *   - `delete`: Delete all the target table records.
+   *   - `updateAll`: Update all the not matched target table rows with source dataset rows.
+   *   - `update(Map)`: Update all the not matched target table rows while changing only
+   *     the specified columns based on the provided assignment.
+   *   - `delete`: Delete all target rows that have no matches in the source table.
    *
    * @param condition a `Column` representing the condition to be evaluated for the action.
    * @return a new `WhenNotMatchedBySource` object configured with the specified condition.
@@ -171,52 +181,18 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
     qe.assertCommandExecuted()
   }
 
-  def withNewMatchedUpdateAction(condition: Option[Expression]): MergeIntoWriter[T] = {
-    this.matchedActions = this.matchedActions :+ UpdateStarAction(condition)
+  private[sql] def withNewMatchedAction(action: MergeAction): MergeIntoWriter[T] = {
+    this.matchedActions = this.matchedActions :+ action
     this
   }
 
-  def withNewMatchedUpdateAction(
-      condition: Option[Expression],
-      map: Map[String, Column]): MergeIntoWriter[T] = {
-    this.matchedActions = this.matchedActions :+
-      UpdateAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
+  private[sql] def withNewNotMatchedAction(action: MergeAction): MergeIntoWriter[T] = {
+    this.notMatchedActions = this.notMatchedActions :+ action
     this
   }
 
-  def withNewMatchedDeleteAction(condition: Option[Expression]): MergeIntoWriter[T] = {
-    this.matchedActions = this.matchedActions :+ DeleteAction(condition)
-    this
-  }
-
-  def withNewNotMatchedInsertAction(condition: Option[Expression]): MergeIntoWriter[T] = {
-    this.notMatchedActions = this.notMatchedActions :+ InsertStarAction(condition)
-    this
-  }
-
-  def withNewNotMatchedInsertAction(
-      condition: Option[Expression],
-      map: Map[String, Column]): MergeIntoWriter[T] = {
-    this.notMatchedActions = this.notMatchedActions :+
-      InsertAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this
-  }
-
-  def withNewNotMatchedBySourceUpdateAction(condition: Option[Expression]): MergeIntoWriter[T] = {
-    this.notMatchedBySourceActions = this.notMatchedBySourceActions :+ UpdateStarAction(condition)
-    this
-  }
-
-  def withNewNotMatchedBySourceUpdateAction(
-      condition: Option[Expression],
-      map: Map[String, Column]): MergeIntoWriter[T] = {
-    this.notMatchedBySourceActions = this.notMatchedBySourceActions :+
-      UpdateAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq)
-    this
-  }
-
-  def withNewNotMatchedBySourceDeleteAction(condition: Option[Expression]): MergeIntoWriter[T] = {
-    this.notMatchedBySourceActions = this.notMatchedBySourceActions :+ DeleteAction(condition)
+  private[sql] def withNewNotMatchedBySourceAction(action: MergeAction): MergeIntoWriter[T] = {
+    this.notMatchedBySourceActions = this.notMatchedBySourceActions :+ action
     this
   }
 }
@@ -243,7 +219,7 @@ case class WhenMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the update all action configured.
    */
   def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedUpdateAction(condition)
+    mergeIntoWriter.withNewMatchedAction(UpdateStarAction(condition))
   }
 
   /**
@@ -254,7 +230,8 @@ case class WhenMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the update action configured.
    */
   def update(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedUpdateAction(condition, map)
+    mergeIntoWriter.withNewMatchedAction(
+      UpdateAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq))
   }
 
   /**
@@ -263,7 +240,7 @@ case class WhenMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the delete action configured.
    */
   def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewMatchedDeleteAction(condition)
+    mergeIntoWriter.withNewMatchedAction(DeleteAction(condition))
   }
 }
 
@@ -289,7 +266,7 @@ case class WhenNotMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the insert all action configured.
    */
   def insertAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedInsertAction(condition)
+    mergeIntoWriter.withNewNotMatchedAction(InsertStarAction(condition))
   }
 
   /**
@@ -300,7 +277,8 @@ case class WhenNotMatched[T] private[sql](
    * @return The MergeIntoWriter instance with the insert action configured.
    */
   def insert(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedInsertAction(condition, map)
+    mergeIntoWriter.withNewNotMatchedAction(
+      InsertAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq))
   }
 }
 
@@ -324,7 +302,7 @@ case class WhenNotMatchedBySource[T] private[sql](
    * @return The MergeIntoWriter instance with the update all action configured.
    */
   def updateAll(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceUpdateAction(condition)
+    mergeIntoWriter.withNewNotMatchedBySourceAction(UpdateStarAction(condition))
   }
 
   /**
@@ -335,7 +313,8 @@ case class WhenNotMatchedBySource[T] private[sql](
    * @return The MergeIntoWriter instance with the update action configured.
    */
   def update(map: Map[String, Column]): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceUpdateAction(condition, map)
+    mergeIntoWriter.withNewNotMatchedBySourceAction(
+      UpdateAction(condition, map.map(x => Assignment(expr(x._1).expr, x._2.expr)).toSeq))
   }
 
   /**
@@ -345,6 +324,6 @@ case class WhenNotMatchedBySource[T] private[sql](
    * @return The MergeIntoWriter instance with the delete action configured.
    */
   def delete(): MergeIntoWriter[T] = {
-    mergeIntoWriter.withNewNotMatchedBySourceDeleteAction(condition)
+    mergeIntoWriter.withNewNotMatchedBySourceAction(DeleteAction(condition))
   }
 }

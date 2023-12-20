@@ -2730,7 +2730,7 @@
     "message" : [
       "df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource."
     ],
-    "sqlState" : "23K02"
+    "sqlState" : "42K0E"
   },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [

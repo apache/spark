@@ -1592,7 +1592,7 @@ No handler for UDAF '`<functionName>`'. Use sparkSession.udf.register(...) inste
 
 ### NO_MERGE_ACTION_SPECIFIED
 
-[SQLSTATE: 23K02](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource.
 

@@ -4130,7 +4130,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Create a [[MergeIntoWriter]] for MergeInto action.
+   * Merges a set of updates, insertions, and deletions based on a source table into
+   * a target table.
    *
    * Scala Examples:
    * {{{
@@ -4147,6 +4148,7 @@ class Dataset[T] private[sql](
    *     .merge()
    * }}}
    *
+   * @group basic
    * @since 4.0.0
    */
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
