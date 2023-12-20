@@ -53,7 +53,7 @@ private[sql] object EarlyCollapseProject {
             case _ => Seq.empty[(Attribute, Expression)]
           }))
 
-        if (tinkeredOrNewNamedExprs.exists(_.collectFirst {
+        if ((tinkeredOrNewNamedExprs ++ p.projectList).exists(_.collectFirst {
           // we will not flatten if expressions contain windows or aggregate as if they
           // are collapsed it can cause recalculation of functions and inefficiency with
           // separate group by clauses
@@ -105,6 +105,7 @@ private[sql] object EarlyCollapseProject {
               val prevDroppedColsFinal = prevDroppedColsPart2.filterNot(x =>
                 droppedNamedExprs.exists(y => y == x || y.name == x.name))
               val newDroppedList = droppedNamedExprs ++ prevDroppedColsFinal
+              newProject.copyTagsFrom(p)
               if (newDroppedList.nonEmpty) {
                 newProject.setTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS, newDroppedList)
               }
@@ -129,8 +130,7 @@ private[sql] object EarlyCollapseProject {
         case al: Alias =>
           val newMdBuilder = new MetadataBuilder().withMetadata(from.metadata)
           val newMd = newMdBuilder.build()
-
-          al.copy()(exprId = al.exprId, qualifier = al.qualifier,
+          al.copy()(exprId = al.exprId, qualifier = from.qualifier,
           nonInheritableMetadataKeys = al.nonInheritableMetadataKeys,
           explicitMetadata = Option(newMd))
 
