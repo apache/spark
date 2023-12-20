@@ -39,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests
+import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS, Tests}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
@@ -5045,6 +5045,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, metricPeaks, taskInfo)
   }
+}
+
+class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
+  override def conf: SparkConf = super.conf.set(LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS, false)
 }
 
 object DAGSchedulerSuite {
