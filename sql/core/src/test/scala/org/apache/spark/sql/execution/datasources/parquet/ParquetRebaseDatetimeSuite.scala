@@ -173,9 +173,9 @@ abstract class ParquetRebaseDatetimeSuite
       assert(e.getCause.isInstanceOf[SparkUpgradeException])
     }
     Seq(
-      // By default we should fail to read ancient datetime values when parquet files don't
+      // By default we should not fail to read ancient datetime values when parquet files don't
       // contain Spark version.
-      "2_4_5" -> failInRead _,
+      "2_4_5" -> successInRead _,
       "2_4_6" -> successInRead _,
       "3_2_0" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
@@ -201,7 +201,7 @@ abstract class ParquetRebaseDatetimeSuite
       }
     }
     Seq(
-      "2_4_5" -> failInRead _,
+      "2_4_5" -> successInRead _,
       "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
         Seq("plain", "dict").foreach { enc =>
