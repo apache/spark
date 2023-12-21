@@ -127,12 +127,12 @@ public class ParquetVectorUpdaterFactory {
           }
         } else if (sparkType == DataTypes.TimestampNTZType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
-          validateTimestampNTZType(sparkType);
+          validateTimestampNTZType();
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongUpdater();
         } else if (sparkType == DataTypes.TimestampNTZType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
-          validateTimestampNTZType(sparkType);
+          validateTimestampNTZType();
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongAsMicrosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
@@ -203,7 +203,7 @@ public class ParquetVectorUpdaterFactory {
       annotation.getUnit() == unit;
   }
 
-  void validateTimestampNTZType(DataType sparkType) {
+  private void validateTimestampNTZType() {
     assert(logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation);
     // Throw an exception if the Parquet type is TimestampLTZ as the Catalyst type is TimestampNTZ.
     // This is to avoid mistakes in reading the timestamp values.
