@@ -1774,7 +1774,7 @@ private[spark] object Utils
   /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
+  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.valueOf("JAVA_21"))
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
