@@ -2492,7 +2492,8 @@ class XmlSuite
             .option("compression", "gzip")
             .option("rowTag", "row")
             .load(corruptedDir.getCanonicalPath)
-          dfCorrupted.equals(dfCorruptedWSchema)
+          assert(dfCorrupted.dtypes === dfCorruptedWSchema.dtypes)
+          checkAnswer(dfCorrupted, dfCorruptedWSchema)
         }
       }
     }
