@@ -24,6 +24,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -88,6 +89,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
   }
 
+  override val defaultMetadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
+    .build()
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -131,12 +137,17 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  test("SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle JDBC") {
+  test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(c1 string)")
-      sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
-      assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 256)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "255")
+      )
     }
   }
 }
