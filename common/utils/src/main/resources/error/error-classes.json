@@ -1183,6 +1183,11 @@
         "message" : [
           "Check that the table <tableName> exists."
         ]
+      },
+      "UNCLASSIFIED" : {
+        "message" : [
+          "<msg>"
+        ]
       }
     },
     "sqlState" : "HV000"
