@@ -255,7 +255,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("write and read TimestampNTZ with legacy rebase mode") {
+  test("SPARK-46466: write and read TimestampNTZ with legacy rebase mode") {
     withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
       withTable("ts") {
         sql("create table ts (c1 timestamp_ntz) using parquet")
