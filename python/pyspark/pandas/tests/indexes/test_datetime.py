@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 
-import datetime
-
-import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
@@ -73,20 +70,6 @@ class DatetimeIndexTestsMixin(DatetimeIndexTestingFuncMixin):
         ):
             ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"]).all()
 
-    def test_floor(self):
-        for psidx, pidx in self.idx_pairs:
-            for freq in self.fixed_freqs:
-                self.assert_eq(psidx.floor(freq), pidx.floor(freq))
-
-        self._disallow_nanoseconds(self.psidxs[0].floor)
-
-    def test_round(self):
-        for psidx, pidx in self.idx_pairs:
-            for freq in self.fixed_freqs:
-                self.assert_eq(psidx.round(freq), pidx.round(freq))
-
-        self._disallow_nanoseconds(self.psidxs[0].round)
-
     def test_day_name(self):
         for psidx, pidx in self.idx_pairs:
             self.assert_eq(psidx.day_name(), pidx.day_name())
@@ -137,30 +120,6 @@ class DatetimeIndexTestsMixin(DatetimeIndexTestingFuncMixin):
 
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx - other)
             self.assertRaises(NotImplementedError, lambda: py_datetime - psidx)
-
-    def test_map(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.map(lambda x: x.normalize()), pidx.map(lambda x: x.normalize()))
-            self.assert_eq(
-                psidx.map(lambda x: x.strftime("%B %d, %Y, %r")),
-                pidx.map(lambda x: x.strftime("%B %d, %Y, %r")),
-            )
-
-        pidx = pd.date_range(start="2020-08-08", end="2020-08-10")
-        psidx = ps.from_pandas(pidx)
-        mapper_dict = {
-            datetime.datetime(2020, 8, 8): datetime.datetime(2021, 8, 8),
-            datetime.datetime(2020, 8, 9): datetime.datetime(2021, 8, 9),
-        }
-        self.assert_eq(psidx.map(mapper_dict), pidx.map(mapper_dict))
-
-        mapper_pser = pd.Series([1, 2, 3], index=pidx)
-        self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
-
-    def test_isocalendar(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.isocalendar().astype(int), pidx.isocalendar().astype(int))
-            self.assert_eq(psidx.isocalendar().week, pidx.isocalendar().week.astype(np.int64))
 
 
 class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):

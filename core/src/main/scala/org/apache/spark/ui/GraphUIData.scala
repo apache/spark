@@ -19,11 +19,14 @@ package org.apache.spark.ui
 
 import java.{util => ju}
 import java.lang.{Long => JLong}
+import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.xml.{Node, Unparsed}
+
+import org.apache.spark.ui.UIUtils.formatImportJavaScript
 
 /**
  * A helper class to generate JavaScript and HTML for both timeline and histogram graphs.
@@ -61,9 +64,9 @@ private[spark] class GraphUIData(
   }
 
   def generateTimelineHtml(jsCollector: JsCollector): Seq[Node] = {
-    jsCollector.addImports("import {registerTimeline} from '/static/streaming-page.js';")
+    jsCollector.addImports("/static/streaming-page.js", "registerTimeline")
     jsCollector.addPreparedStatement(s"registerTimeline($minY, $maxY);")
-    jsCollector.addImports("import {drawTimeline} from '/static/streaming-page.js';")
+    jsCollector.addImports("/static/streaming-page.js", "drawTimeline")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawTimeline(" +
@@ -80,9 +83,9 @@ private[spark] class GraphUIData(
 
   def generateHistogramHtml(jsCollector: JsCollector): Seq[Node] = {
     val histogramData = s"$dataJavaScriptName.map(function(d) { return d.y; })"
-    jsCollector.addImports("import {registerHistogram} from '/static/streaming-page.js';")
+    jsCollector.addImports("/static/streaming-page.js", "registerHistogram")
     jsCollector.addPreparedStatement(s"registerHistogram($histogramData, $minY, $maxY);")
-    jsCollector.addImports("import {drawHistogram} from '/static/streaming-page.js';")
+    jsCollector.addImports("/static/streaming-page.js", "drawHistogram")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
         "drawHistogram(" +
@@ -110,7 +113,7 @@ private[spark] class GraphUIData(
     jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
     val labels = jsCollector.nextVariableName
     jsCollector.addPreparedStatement(s"var $labels = $jsForLabels;")
-    jsCollector.addImports("import {drawAreaStack} from '/static/structured-streaming-page.js';")
+    jsCollector.addImports("/static/structured-streaming-page.js", "drawAreaStack")
     jsCollector.addStatement(
       s"drawAreaStack('#$timelineDivId', $labels, $dataJavaScriptName)")
     <div id={timelineDivId}></div>
@@ -121,7 +124,7 @@ private[spark] class GraphUIData(
  * A helper class that allows the user to add JavaScript statements which will be executed when the
  * DOM has finished loading.
  */
-private[spark] class JsCollector {
+private[spark] class JsCollector(req: HttpServletRequest) {
 
   private var variableId = 0
 
@@ -153,6 +156,9 @@ private[spark] class JsCollector {
     statements += js
   }
 
+  def addImports(sourceFile: String, functions: String*): Unit = {
+    imports.add(formatImportJavaScript(req, sourceFile, functions: _*))
+  }
   def addImports(js: String): Unit = {
     imports.add(js)
   }

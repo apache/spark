@@ -16,22 +16,24 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_dataframe_spark_io import DataFrameSparkIOTestsMixin
+from pyspark.pandas.tests.diff_frames_ops.test_groupby_apply import GroupByApplyMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class DataFrameSparkIOParityTests(
-    DataFrameSparkIOTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase, TestUtils
+class GroupByApplyParityTests(
+    GroupByApplyMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_dataframe_spark_io import *  # noqa: F401
+    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_apply import *  # noqa
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

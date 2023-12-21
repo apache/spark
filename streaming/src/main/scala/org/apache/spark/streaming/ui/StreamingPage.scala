@@ -82,12 +82,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val resources = generateLoadResources(request)
-    val onClickTimelineFunc = generateOnClickTimelineFunction()
+    val onClickTimelineFunc = generateOnClickTimelineFunction(request)
     val basicInfo = generateBasicInfo()
     val content = resources ++
       onClickTimelineFunc ++ basicInfo ++
       listener.synchronized {
-        generateStatTable() ++
+        generateStatTable(request) ++
           generateBatchListTables(request)
       }
     SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
@@ -105,10 +105,14 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 
   /** Generate html that will set onClickTimeline declared in streaming-page.js */
-  private def generateOnClickTimelineFunction(): Seq[Node] = {
+  private def generateOnClickTimelineFunction(request: HttpServletRequest): Seq[Node] = {
+    val imported = SparkUIUtils.formatImportJavaScript(
+      request,
+      "/static/streaming-page.js",
+      "getOnClickTimelineFunction")
     val js =
       s"""
-         |import {getOnClickTimelineFunction} from '/static/streaming-page.js';
+         |$imported
          |
          |onClickTimeline = getOnClickTimelineFunction();
          |""".stripMargin
@@ -164,7 +168,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     <script>{Unparsed(js)}</script>
   }
 
-  private def generateStatTable(): Seq[Node] = {
+  private def generateStatTable(request: HttpServletRequest): Seq[Node] = {
     val batches = listener.retainedBatches
 
     val batchTimes = batches.map(_.batchTime.milliseconds)
@@ -202,7 +206,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
-    val jsCollector = new JsCollector
+    val jsCollector = new JsCollector(request)
 
     val graphUIDataForRecordRateOfAllStreams =
       new GraphUIData(

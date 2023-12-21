@@ -106,14 +106,13 @@ case class DataSource(
     // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
     // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
     // instead of `providingClass`.
-    DataSource.newDataSourceInstance(className, cls) match {
+    cls.getDeclaredConstructor().newInstance() match {
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
   }
 
-  private[sql] def providingInstance(): Any =
-    DataSource.newDataSourceInstance(className, providingClass)
+  private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
 
   private def newHadoopConfiguration(): Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(options)
@@ -624,15 +623,6 @@ object DataSource extends Logging {
     "org.apache.spark.sql.sources.HadoopFsRelationProvider",
     "org.apache.spark.Logging")
 
-  /** Create the instance of the datasource */
-  def newDataSourceInstance(provider: String, providingClass: Class[_]): Any = {
-    providingClass match {
-      case cls if classOf[PythonTableProvider].isAssignableFrom(cls) =>
-        cls.getDeclaredConstructor(classOf[String]).newInstance(provider)
-      case cls => cls.getDeclaredConstructor().newInstance()
-    }
-  }
-
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
@@ -732,9 +722,9 @@ object DataSource extends Logging {
   def lookupDataSourceV2(provider: String, conf: SQLConf): Option[TableProvider] = {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
-    val providingClass = lookupDataSource(provider, conf)
+    val cls = lookupDataSource(provider, conf)
     val instance = try {
-      newDataSourceInstance(provider, providingClass)
+      cls.getDeclaredConstructor().newInstance()
     } catch {
       // Throw the original error from the data source implementation.
       case e: java.lang.reflect.InvocationTargetException => throw e.getCause
@@ -742,8 +732,11 @@ object DataSource extends Logging {
     instance match {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
-          if !useV1Sources.contains(
-            providingClass.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+          if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        t match {
+          case p: PythonTableProvider => p.setShortName(provider)
+          case _ =>
+        }
         Some(t)
       case _ => None
     }

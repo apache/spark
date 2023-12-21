@@ -34,8 +34,10 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -44,7 +46,16 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Data Source V2 wrapper for Python Data Source.
  */
-class PythonTableProvider(shortName: String) extends TableProvider {
+class PythonTableProvider extends TableProvider {
+  private var name: String = _
+  def setShortName(str: String): Unit = {
+    assert(name == null)
+    name = str
+  }
+  private def shortName: String = {
+    assert(name != null)
+    name
+  }
   private var dataSourceInPython: PythonDataSourceCreationResult = _
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private lazy val source: UserDefinedPythonDataSource =
@@ -92,6 +103,10 @@ class PythonTableProvider(shortName: String) extends TableProvider {
             new PythonPartitionReaderFactory(
               source, readerFunc, outputSchema, jobArtifactUUID)
           }
+          override def description: String = "(Python)"
+
+          override def supportedCustomMetrics(): Array[CustomMetric] =
+            source.createPythonMetrics()
         }
       }
 
@@ -113,10 +128,22 @@ class PythonPartitionReaderFactory(
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     new PartitionReader[InternalRow] {
+      // Dummy SQLMetrics. The result is manually reported via DSv2 interface
+      // via passing the value to `CustomTaskMetric`. Note that `pythonOtherMetricsDesc`
+      // is not used when it is reported. It is to reuse existing Python runner.
+      // See also `UserDefinedPythonDataSource.createPythonMetrics`.
+      private[this] val metrics: Map[String, SQLMetric] = {
+        PythonSQLMetrics.pythonSizeMetricsDesc.keys
+          .map(_ -> new SQLMetric("size", -1)).toMap ++
+        PythonSQLMetrics.pythonOtherMetricsDesc.keys
+          .map(_ -> new SQLMetric("sum", -1)).toMap
+      }
+
       private val outputIter = source.createPartitionReadIteratorInPython(
         partition.asInstanceOf[PythonInputPartition],
         pickledReadFunc,
         outputSchema,
+        metrics,
         jobArtifactUUID)
 
       override def next(): Boolean = outputIter.hasNext
@@ -124,9 +151,28 @@ class PythonPartitionReaderFactory(
       override def get(): InternalRow = outputIter.next()
 
       override def close(): Unit = {}
+
+      override def currentMetricsValues(): Array[CustomTaskMetric] = {
+        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value})
+      }
     }
   }
 }
+
+class PythonCustomMetric(
+    override val name: String,
+    override val description: String) extends CustomMetric {
+  // To allow the aggregation can be called. See `SQLAppStatusListener.aggregateMetrics`
+  def this() = this(null, null)
+
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    SQLMetrics.stringValue("size", taskMetrics, Array.empty[Long])
+  }
+}
+
+class PythonCustomTaskMetric(
+    override val name: String,
+    override val value: Long) extends CustomTaskMetric
 
 /**
  * A user-defined Python data source. This is used by the Python API.
@@ -172,6 +218,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       partition: PythonInputPartition,
       pickledReadFunc: Array[Byte],
       outputSchema: StructType,
+      metrics: Map[String, SQLMetric],
       jobArtifactUUID: Option[String]): Iterator[InternalRow] = {
     val readerFunc = createPythonFunction(pickledReadFunc)
 
@@ -197,11 +244,23 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
       pythonRunnerConf,
-      None,
+      metrics,
       jobArtifactUUID)
 
+    val part = partition
     evaluatorFactory.createEvaluator().eval(
-      partition.index, Iterator.single(InternalRow(partition.pickedPartition)))
+      part.index, Iterator.single(InternalRow(part.pickedPartition)))
+  }
+
+  def createPythonMetrics(): Array[CustomMetric] = {
+    // Do not add other metrics such as number of rows,
+    // that is already included via DSv2.
+    PythonSQLMetrics.pythonSizeMetricsDesc
+      .map { case (k, v) => new PythonCustomMetric(k, v)}.toArray
+  }
+
+  def createPythonTaskMetrics(taskMetrics: Map[String, Long]): Array[CustomTaskMetric] = {
+    taskMetrics.map { case (k, v) => new PythonCustomTaskMetric(k, v)}.toArray
   }
 
   private def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {

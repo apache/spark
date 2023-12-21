@@ -14,22 +14,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.pandas.tests.test_csv import CsvTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.indexes.test_datetime import DatetimeIndexTestingFuncMixin
 
 
-class CsvParityTests(CsvTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase):
+class DatetimeIndexFloorMixin(DatetimeIndexTestingFuncMixin):
+    def test_floor(self):
+        for psidx, pidx in self.idx_pairs:
+            for freq in self.fixed_freqs:
+                self.assert_eq(psidx.floor(freq), pidx.floor(freq))
+
+        self._disallow_nanoseconds(self.psidxs[0].floor)
+
+
+class DatetimeIndexFloorTests(
+    DatetimeIndexFloorMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_csv import *  # noqa: F401
+    import unittest
+    from pyspark.pandas.tests.indexes.test_datetime_floor import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

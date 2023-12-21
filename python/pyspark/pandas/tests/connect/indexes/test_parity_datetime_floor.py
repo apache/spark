@@ -16,19 +16,21 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_series_conversion import SeriesConversionTestsMixin
+from pyspark.pandas.tests.indexes.test_datetime_floor import DatetimeIndexFloorMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesConversionParityTests(
-    SeriesConversionTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class DatetimeIndexFloorParityTests(
+    DatetimeIndexFloorMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_series_conversion import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_datetime_floor import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

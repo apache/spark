@@ -14,24 +14,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.pandas.tests.test_window import ExpandingRollingTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.indexes.test_datetime import DatetimeIndexTestingFuncMixin
 
 
-class ExpandingRollingParityTests(
-    ExpandingRollingTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+class DatetimeIndexRoundMixin(DatetimeIndexTestingFuncMixin):
+    def test_round(self):
+        for psidx, pidx in self.idx_pairs:
+            for freq in self.fixed_freqs:
+                self.assert_eq(psidx.round(freq), pidx.round(freq))
+
+        self._disallow_nanoseconds(self.psidxs[0].round)
+
+
+class DatetimeIndexRoundTests(
+    DatetimeIndexRoundMixin,
+    PandasOnSparkTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_window import *  # noqa: F401
+    import unittest
+    from pyspark.pandas.tests.indexes.test_datetime_round import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
