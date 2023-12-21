@@ -136,12 +136,13 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
   }
 
   def infer(xml: String, xsdSchema: Option[Schema] = None): Option[DataType] = {
+    var parser: XMLEventReader = null
     try {
       val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
-      val parser = StaxXmlParserUtils.filteredReader(xml)
+      parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
       val schema = Some(inferObject(parser, rootAttributes))
       parser.close()
@@ -169,6 +170,10 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         Some(StructType(Nil))
       case NonFatal(e) =>
         handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+    } finally {
+      if (parser != null) {
+        parser.close()
+      }
     }
   }
 
