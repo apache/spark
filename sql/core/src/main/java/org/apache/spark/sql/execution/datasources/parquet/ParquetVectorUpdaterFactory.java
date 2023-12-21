@@ -1156,10 +1156,6 @@ public class ParquetVectorUpdaterFactory {
     return false;
   }
 
-  private static boolean isTimestamp(DataType dt) {
-    return dt == DataTypes.TimestampType || dt == DataTypes.TimestampNTZType;
-  }
-
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {
     DecimalType d = (DecimalType) dt;
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
