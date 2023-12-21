@@ -33,7 +33,6 @@ from pyspark.sql.datasource import DataSource, WriterCommitMessage
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
-    StructField,
     BinaryType,
     _create_row,
 )
