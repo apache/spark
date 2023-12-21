@@ -645,7 +645,7 @@ case class FileSourceScanExec(
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.map(f => PartitionedFileUtil.getPartitionedFile(f, p.values))
+        p.files.map(f => PartitionedFileUtil.getPartitionedFile(f, p.values, 0, f.getLen))
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(f.toPath.getName)
