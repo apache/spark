@@ -913,16 +913,16 @@ object TypeCoercion extends TypeCoercionBase {
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  def findCommonTypeForBinaryComparison(
-      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
+  def findCommonTypeForBinaryComparison(expL: Expression,
+      expR: Expression, conf: SQLConf): Option[DataType] = (expL.dataType, expR.dataType) match {
     case (StringType, DateType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
     case (DateType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
     case (StringType, TimestampType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
     case (TimestampType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
 
@@ -934,11 +934,21 @@ object TypeCoercion extends TypeCoercionBase {
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
     // See SPARK-22469 for details.
-    case (DecimalType.Fixed(_, s), _: StringType) if s > 0 => Some(DoubleType)
-    case (_: StringType, DecimalType.Fixed(_, s)) if s > 0 => Some(DoubleType)
+    case (n: DecimalType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: DecimalType) => Some(DoubleType)
 
-    case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
-    case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
+    case (l: StringType, r: AtomicType) =>
+      expR match {
+        case Literal(_, _) => Some(l)
+        case _ if canPromoteAsInBinaryComparison(r) => Some(r)
+        case _ => None
+      }
+    case (l: AtomicType, r: StringType) =>
+      expL match {
+        case Literal(_, _) => Some(r)
+        case _ if canPromoteAsInBinaryComparison(l) => Some(l)
+        case _ => None
+      }
     case (l, r) => None
   }
 
@@ -1121,8 +1131,8 @@ object TypeCoercion extends TypeCoercionBase {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
+          if findCommonTypeForBinaryComparison(left, right, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left, right, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
     }
   }
