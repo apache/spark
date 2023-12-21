@@ -1,3 +1,4 @@
+--ONLY_IF spark
 drop table if exists x;
 drop table if exists y;
 
