@@ -28,10 +28,10 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkThrowable, TaskContext}
+import org.apache.spark.{SparkException, SparkThrowable, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -1193,7 +1193,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case e: Throwable if SQLConf.get.classifyJDBCExceptionInDialect =>
         throw dialect.classifyException(legacyMessage, e)
       case e: Throwable =>
-        throw new AnalysisException(errorClass, messageParameters, cause = Some(e))
+        throw new SparkException(errorClass, messageParameters, cause = e)
     }
   }
 

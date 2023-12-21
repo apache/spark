@@ -21,7 +21,7 @@ import java.util.Properties
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -135,7 +135,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         }
         withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
           checkError(
-            exception = intercept[AnalysisException] {
+            exception = intercept[SparkException] {
               sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
             },
             errorClass = "FAILED_JDBC.RENAME_TABLE",
@@ -174,7 +174,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
     withTable("h2.test.new_table") {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
-      val e = intercept[AnalysisException] {
+      val e = intercept[TableAlreadyExistsException] {
         sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       }
       checkErrorTableAlreadyExists(e, "`test`.`new_table`")
@@ -188,7 +188,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         parameters = Map("schemaName" -> "`bad_test`"))
     }
     withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
-      val exp = intercept[AnalysisException] {
+      val exp = intercept[SparkException] {
         sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
       }
       checkError(exp,
@@ -580,7 +580,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("CREATE TABLE with table property") {
     withTable("h2.test.new_table") {
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[SparkException] {
           sql("CREATE TABLE h2.test.new_table(i INT, j STRING)" +
             " TBLPROPERTIES('ENGINE'='tableEngineName')")
         },
@@ -600,7 +600,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-42904: CREATE TABLE with char/varchar with invalid char length") {
     checkError(
-      exception = intercept[AnalysisException]{
+      exception = intercept[SparkException]{
         sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
       },
       errorClass = "FAILED_JDBC.CREATE_TABLE",

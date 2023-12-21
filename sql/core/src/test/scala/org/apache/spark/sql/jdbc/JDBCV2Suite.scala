@@ -2932,7 +2932,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[SparkException] {
           sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
         },
         errorClass = "FAILED_JDBC.CREATE_INDEX",
@@ -2962,7 +2962,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[SparkException] {
           sql(s"DROP INDEX people_index ON TABLE h2.test.people")
         },
         errorClass = "FAILED_JDBC.DROP_INDEX",
