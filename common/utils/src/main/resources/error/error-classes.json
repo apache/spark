@@ -5,6 +5,12 @@
     ],
     "sqlState" : "42845"
   },
+  "ALL_PARAMETERS_MUST_BE_NAMED" : {
+    "message" : [
+      "Using name parameterized queries requires all parameters to be named. Parameters missing names: <exprs>."
+    ],
+    "sqlState" : "07001"
+  },
   "ALL_PARTITION_COLUMNS_NOT_ALLOWED" : {
     "message" : [
       "Cannot use all columns for partition columns."
@@ -887,6 +893,12 @@
     ],
     "sqlState" : "42K02"
   },
+  "DATA_SOURCE_TABLE_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The schema of the data source table <tableSchema> does not match the actual schema <actualSchema>. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema."
+    ],
+    "sqlState" : "42K03"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -1023,6 +1035,12 @@
       "Columns in an EXCEPT list must be distinct and non-overlapping, but got (<columns>)."
     ],
     "sqlState" : "42702"
+  },
+  "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES" : {
+    "message" : [
+      "The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (<aliases>), which is invalid; please update the command to specify unique aliases and then try it again."
+    ],
+    "sqlState" : "42701"
   },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
@@ -2230,6 +2248,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_QUERY_MIXED_QUERY_PARAMETERS" : {
+    "message" : [
+      "Parameterized query must either use positional, or named parameters, but not both."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
@@ -2381,6 +2405,12 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_STATEMENT_FOR_EXECUTE_INTO" : {
+    "message" : [
+      "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: <sqlString>."
+    ],
+    "sqlState" : "07501"
+  },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
       "Invalid subquery:"
@@ -2457,6 +2487,12 @@
       "Invalid usage of <elem> in <prettyName>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Variable type must be string type but got <varType>."
+    ],
+    "sqlState" : "42K09"
   },
   "INVALID_VIEW_TEXT" : {
     "message" : [
@@ -2643,6 +2679,12 @@
     ],
     "sqlState" : "42607"
   },
+  "NESTED_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
+    ],
+    "sqlState" : "07501"
+  },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
       "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
@@ -2803,6 +2845,12 @@
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
     ],
     "sqlState" : "42000"
+  },
+  "NO_MERGE_ACTION_SPECIFIED" : {
+    "message" : [
+      "df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource."
+    ],
+    "sqlState" : "42K0E"
   },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [
@@ -3596,6 +3644,14 @@
       "A query operator contains one or more unsupported expressions.",
       "Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
       "Invalid expressions: [<invalidExprSqls>]"
+    ],
+    "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_EXPR_FOR_PARAMETER" : {
+    "message" : [
+      "A query parameter contains unsupported expression.",
+      "Parameters can either be variables or literals.",
+      "Invalid expression: [<invalidExprSql>]"
     ],
     "sqlState" : "42K0E"
   },
