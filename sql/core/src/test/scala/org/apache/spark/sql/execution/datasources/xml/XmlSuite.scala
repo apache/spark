@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.xml
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
-import java.time.Instant
+import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
 import scala.collection.mutable
@@ -2177,5 +2177,198 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         "this is a simple string.")
     )
     testWriteReadRoundTrip(df, Map("nullValue" -> "null", "prefersDecimal" -> "true"))
+  }
+
+  test("Write and infer TIMESTAMP_NTZ values with a non-default pattern") {
+    withTempPath { path =>
+      val exp = spark.sql(
+        """
+      select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
+      select timestamp_ntz'2020-12-12 12:12:12.123456' as col0
+      """)
+      exp.write
+        .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .option("rowTag", "ROW")
+        .xml(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        val res = spark.read
+          .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+          .option("rowTag", "ROW")
+          .xml(path.getAbsolutePath)
+
+        assert(res.dtypes === exp.dtypes)
+        checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("Write and infer TIMESTAMP_LTZ values with a non-default pattern") {
+    withTempPath { path =>
+      val exp = spark.sql(
+        """
+      select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
+      select timestamp_ltz'2020-12-12 12:12:12.123456' as col0
+      """)
+      exp.write
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .option("rowTag", "ROW")
+        .xml(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+        val res = spark.read
+          .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+          .option("rowTag", "ROW")
+          .xml(path.getAbsolutePath)
+
+        assert(res.dtypes === exp.dtypes)
+        checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("Roundtrip in reading and writing TIMESTAMP_NTZ values with custom schema") {
+    withTempPath { path =>
+      val exp = spark.sql(
+        """
+      select
+        timestamp_ntz'2020-12-12 12:12:12' as col1,
+        timestamp_ltz'2020-12-12 12:12:12' as col2
+      """)
+
+      exp.write.option("rowTag", "ROW").xml(path.getAbsolutePath)
+
+      val res = spark.read
+        .schema("col1 TIMESTAMP_NTZ, col2 TIMESTAMP_LTZ")
+        .option("rowTag", "ROW")
+        .xml(path.getAbsolutePath)
+
+      checkAnswer(res, exp)
+    }
+  }
+
+  test("Timestamp type inference for a column with TIMESTAMP_NTZ values") {
+    withTempPath { path =>
+      val exp = spark.sql(
+        """
+      select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
+      select timestamp_ntz'2020-12-12 12:12:12' as col0
+      """)
+
+      exp.write.option("rowTag", "ROW").xml(path.getAbsolutePath)
+
+      val timestampTypes = Seq(
+        SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+        SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+      timestampTypes.foreach { timestampType =>
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+          val res = spark.read.option("rowTag", "ROW").xml(path.getAbsolutePath)
+
+          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+            checkAnswer(res, exp)
+          } else {
+            checkAnswer(
+              res,
+              spark.sql(
+                """
+              select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
+              select timestamp_ltz'2020-12-12 12:12:12' as col0
+              """)
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
+    withTempPath { path =>
+      Seq(
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "<ROW><col0>2020-12-12T17:12:12.000Z</col0></ROW>",
+        "<ROW><col0>2020-12-12T17:12:12.000+05:00</col0></ROW>",
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+      ).toDF("data")
+        .coalesce(1)
+        .write.text(path.getAbsolutePath)
+
+      // TODO: enable "legacy" policy when the backward compatible parsing is implemented.
+      for (policy <- Seq("exception", "corrected")) {
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          val res = spark.read.option("rowTag", "ROW").xml(path.getAbsolutePath)
+
+          // NOTE:
+          // Every value is tested for all types in XML schema inference so the sequence of
+          // ["timestamp_ntz", "timestamp_ltz", "timestamp_ntz"] results in "timestamp_ltz".
+          // This is different from CSV where inference starts from the last inferred type.
+          //
+          // This is why the similar test in CSV has a different result in "legacy" mode.
+
+          val exp = spark.sql("""
+            select timestamp_ltz'2020-12-12T12:12:12.000' as col0 union all
+            select timestamp_ltz'2020-12-12T17:12:12.000Z' as col0 union all
+            select timestamp_ltz'2020-12-12T17:12:12.000+05:00' as col0 union all
+            select timestamp_ltz'2020-12-12T12:12:12.000' as col0
+            """)
+          checkAnswer(res, exp)
+        }
+      }
+    }
+  }
+
+  test("Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
+    withTempPath { path =>
+      Seq(
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "<ROW><col0>2020-12-12T12:12:12.000Z</col0></ROW>",
+        "<ROW><col0>2020-12-12T12:12:12.000+05:00</col0></ROW>",
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+      ).toDF("data")
+        .coalesce(1)
+        .write.text(path.getAbsolutePath)
+
+      for (timestampNTZFormat <- Seq(None, Some("yyyy-MM-dd'T'HH:mm:ss[.SSS]"))) {
+        val reader = spark.read.schema("col0 TIMESTAMP_NTZ")
+        val res = timestampNTZFormat match {
+          case Some(format) =>
+            reader.option("timestampNTZFormat", format)
+              .option("rowTag", "ROW").xml(path.getAbsolutePath)
+          case None =>
+            reader.option("rowTag", "ROW").xml(path.getAbsolutePath)
+        }
+
+        checkAnswer(
+          res,
+          Seq(
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
+            Row(null),
+            Row(null),
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
+          )
+        )
+      }
+    }
+  }
+
+  test("Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
+    val patterns = Seq(
+      "yyyy-MM-dd HH:mm:ss XXX",
+      "yyyy-MM-dd HH:mm:ss Z",
+      "yyyy-MM-dd HH:mm:ss z")
+
+    val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
+    for (pattern <- patterns) {
+      withTempPath { path =>
+        val err = intercept[SparkException] {
+          exp.write.option("timestampNTZFormat", pattern)
+            .option("rowTag", "ROW").xml(path.getAbsolutePath)
+        }
+        assert(
+          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
+            err.getMessage.contains("Unable to extract value") ||
+            err.getMessage.contains("Unable to extract ZoneId"))
+      }
+    }
   }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.protobuf.utils
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+import com.google.protobuf.WireFormat
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
@@ -67,9 +68,22 @@ object SchemaConverters extends Logging {
       existingRecordNames: Map[String, Int],
       protobufOptions: ProtobufOptions): Option[StructField] = {
     import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+
     val dataType = fd.getJavaType match {
-      case INT => Some(IntegerType)
-      case LONG => Some(LongType)
+      // When the protobuf type is unsigned and upcastUnsignedIntegers has been set,
+      // use a larger type (LongType and Decimal(20,0) for uint32 and uint64).
+      case INT =>
+        if (fd.getLiteType == WireFormat.FieldType.UINT32 && protobufOptions.upcastUnsignedInts) {
+          Some(LongType)
+        } else {
+          Some(IntegerType)
+        }
+      case LONG => if (fd.getLiteType == WireFormat.FieldType.UINT64
+          && protobufOptions.upcastUnsignedInts) {
+        Some(DecimalType.LongDecimal)
+      } else {
+        Some(LongType)
+      }
       case FLOAT => Some(FloatType)
       case DOUBLE => Some(DoubleType)
       case BOOLEAN => Some(BooleanType)

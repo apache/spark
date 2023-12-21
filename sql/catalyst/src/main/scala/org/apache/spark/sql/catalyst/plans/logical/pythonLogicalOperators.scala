@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -91,7 +89,7 @@ case class MapInPandas(
  * Map partitions using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
  * This is used by DataFrame.mapInArrow() in PySpark
  */
-case class PythonMapInArrow(
+case class MapInArrow(
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan,
@@ -99,44 +97,8 @@ case class PythonMapInArrow(
 
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapInArrow =
     copy(child = newChild)
-}
-
-/**
- * Represents a Python data source.
- */
-case class PythonDataSource(
-    dataSource: PythonFunction,
-    outputSchema: StructType,
-    override val output: Seq[Attribute]) extends LeafNode {
-  require(output.forall(_.resolved),
-    "Unresolved attributes found when constructing PythonDataSource.")
-  override protected def stringArgs: Iterator[Any] = {
-    Iterator(output)
-  }
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_DATA_SOURCE)
-}
-
-/**
- * Represents a list of Python data source partitions.
- */
-case class PythonDataSourcePartitions(
-    output: Seq[Attribute],
-    partitions: Seq[Array[Byte]]) extends LeafNode {
-  override protected def stringArgs: Iterator[Any] = {
-    if (partitions.isEmpty) {
-      Iterator("<empty>", output)
-    } else {
-      Iterator(output)
-    }
-  }
-}
-
-object PythonDataSourcePartitions {
-  def getOutputAttrs: Seq[Attribute] = {
-    toAttributes(new StructType().add("partition", BinaryType))
-  }
 }
 
 /**

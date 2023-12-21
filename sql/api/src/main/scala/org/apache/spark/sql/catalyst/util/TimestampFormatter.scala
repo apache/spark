@@ -415,10 +415,14 @@ class LegacyFastTimestampFormatter(
 
   override def parseOptional(s: String): Option[Long] = {
     cal.clear() // Clear the calendar because it can be re-used many times
-    if (fastDateFormat.parse(s, new ParsePosition(0), cal)) {
-      Some(extractMicros(cal))
-    } else {
-      None
+    try {
+      if (fastDateFormat.parse(s, new ParsePosition(0), cal)) {
+        Some(extractMicros(cal))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
     }
   }
 
