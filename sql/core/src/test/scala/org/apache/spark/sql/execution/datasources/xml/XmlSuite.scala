@@ -2424,19 +2424,12 @@ class XmlSuite
         assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        spark.read
-          .option("rowTag", "ROW")
-          .option("multiLine", false)
-          .xml(inputFile.toURI.toString)
-          .collect()
-        assert(
-          spark.read
-            .option("rowTag", "ROW")
-            .option("multiLine", true)
-            .xml(inputFile.toURI.toString)
-            .collect()
-            .isEmpty
-        )
+        val result = spark.read
+           .option("rowTag", "ROW")
+           .option("multiLine", false)
+           .xml(inputFile.toURI.toString)
+           .collect()
+        assert(result.isEmpty)
       }
     })
     withTempPath { dir =>
