@@ -143,25 +143,27 @@ public class VectorizedColumnReader {
     this.writerVersion = writerVersion;
   }
 
-  private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName,
-                                          DataType sparkType) {
+  private boolean isLazyDecodingSupported(
+      PrimitiveType.PrimitiveTypeName typeName,
+      DataType sparkType) {
     boolean isSupported = false;
     // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date
     // rebasing.
     switch (typeName) {
       case INT32: {
-        boolean needsUpcast = sparkType == LongType || sparkType == TimestampNTZType ||
-                !DecimalType.is32BitDecimalType(sparkType);
+        boolean isDate = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation;
+        boolean needsUpcast = sparkType == LongType || (isDate && sparkType == TimestampNTZType) ||
+          !DecimalType.is32BitDecimalType(sparkType);
         boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
-                !"CORRECTED".equals(datetimeRebaseMode);
+          !"CORRECTED".equals(datetimeRebaseMode);
         isSupported = !needsUpcast && !needsRebase;
         break;
       }
       case INT64: {
         boolean needsUpcast = !DecimalType.is64BitDecimalType(sparkType) ||
-                updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
+          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
-                !"CORRECTED".equals(datetimeRebaseMode);
+          !"CORRECTED".equals(datetimeRebaseMode);
         isSupported = !needsUpcast && !needsRebase;
         break;
       }
