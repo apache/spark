@@ -279,7 +279,6 @@ StreamingQuery query = output
 Currently Spark supports reading [protobuf scalar types](https://developers.google.com/protocol-buffers/docs/proto3#scalar), [enum types](https://developers.google.com/protocol-buffers/docs/proto3#enum), [nested type](https://developers.google.com/protocol-buffers/docs/proto3#nested), and [maps type](https://developers.google.com/protocol-buffers/docs/proto3#maps) under messages of Protobuf.
 In addition to the these types, `spark-protobuf` also introduces support for Protobuf `OneOf` fields. which allows you to handle messages that can have multiple possible sets of fields, but only one set can be present at a time. This is useful for situations where the data you are working with is not always in the same format, and you need to be able to handle messages with different sets of fields without encountering errors.
 
-<div class="table-wrapper">
 <table>
   <thead><tr><th><b>Protobuf type</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
@@ -331,11 +330,9 @@ In addition to the these types, `spark-protobuf` also introduces support for Pro
     <td>Struct</td>
   </tr>
 </table>
-</div>
 
 It also supports reading the following Protobuf types [Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#timestamp) and [Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#duration)
 
-<div class="table-wrapper">
 <table>
   <thead><tr><th><b>Protobuf logical type</b></th><th><b>Protobuf schema</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
@@ -349,13 +346,11 @@ It also supports reading the following Protobuf types [Timestamp](https://develo
     <td>TimestampType</td>
   </tr>
 </table>
-</div>
 
 ## Supported types for Spark SQL -> Protobuf conversion
 
 Spark supports the writing of all Spark SQL types into Protobuf. For most types, the mapping from Spark types to Protobuf types is straightforward (e.g. IntegerType gets converted to int);
 
-<div class="table-wrapper">
 <table>
   <thead><tr><th><b>Spark SQL type</b></th><th><b>Protobuf type</b></th></tr></thead>
   <tr>
@@ -403,7 +398,6 @@ Spark supports the writing of all Spark SQL types into Protobuf. For most types,
     <td>map</td>
   </tr>
 </table>
-</div>
 
 ## Handling circular references protobuf fields
 

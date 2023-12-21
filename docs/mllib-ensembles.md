@@ -191,7 +191,6 @@ Note that each loss is applicable to one of classification or regression, not bo
 
 Notation: $N$ = number of instances. $y_i$ = label of instance $i$.  $x_i$ = features of instance $i$.  $F(x_i)$ = model's predicted label for instance $i$.
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr><th>Loss</th><th>Task</th><th>Formula</th><th>Description</th></tr>
@@ -214,7 +213,6 @@ Notation: $N$ = number of instances. $y_i$ = label of instance $i$.  $x_i$ = fea
     </tr>
   </tbody>
 </table>
-</div>
 
 ### Usage tips
 

@@ -76,7 +76,6 @@ plots (recall, false positive rate) points.
 
 **Available metrics**
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
@@ -109,7 +108,6 @@ plots (recall, false positive rate) points.
     </tr>
   </tbody>
 </table>
-</div>
 
 
 **Examples**
@@ -181,7 +179,6 @@ For this section, a modified delta function $\hat{\delta}(x)$ will prove useful
 
 $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
@@ -239,7 +236,6 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
     </tr>
   </tbody>
 </table>
-</div>
 
 **Examples**
 
@@ -300,7 +296,6 @@ The following definition of indicator function $I_A(x)$ on a set $A$ will be nec
 
 $$I_A(x) = \begin{cases}1 & \text{if $x \in A$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
@@ -369,7 +364,6 @@ $$I_A(x) = \begin{cases}1 & \text{if $x \in A$}, \\ 0 & \text{otherwise}.\end{ca
     </tr>
   </tbody>
 </table>
-</div>
 
 **Examples**
 
@@ -453,7 +447,6 @@ documents, returns a relevance score for the recommended document.
 
 $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr><th>Metric</th><th>Definition</th><th>Notes</th></tr>
@@ -501,7 +494,6 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
     </tr>
   </tbody>
 </table>
-</div>
 
 **Examples**
 
@@ -561,7 +553,6 @@ variable from a number of independent variables.
 
 **Available metrics**
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
@@ -590,4 +581,3 @@ variable from a number of independent variables.
     </tr>
   </tbody>
 </table>
-</div>

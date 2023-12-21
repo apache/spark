@@ -224,7 +224,6 @@ present. It is important to realize that these save modes do not utilize any loc
 atomic. Additionally, when performing an `Overwrite`, the data will be deleted before writing out the
 new data.
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr></thead>
 <tr>
@@ -262,7 +261,6 @@ new data.
   </td>
 </tr>
 </table>
-</div>
 
 ### Saving to Persistent Tables
 

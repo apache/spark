@@ -378,7 +378,6 @@ resulting Java objects using [pickle](https://github.com/irmen/pickle/). When sa
 PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Writable Type</th><th>Python Type</th></tr></thead>
 <tr><td>Text</td><td>str</td></tr>
@@ -390,7 +389,6 @@ Writables are automatically converted:
 <tr><td>NullWritable</td><td>None</td></tr>
 <tr><td>MapWritable</td><td>dict</td></tr>
 </table>
-</div>
 
 Arrays are not handled out-of-the-box. Users need to specify custom `ArrayWritable` subtypes when reading or writing. When writing,
 users also need to specify custom converters that convert arrays to custom `ArrayWritable` subtypes. When reading, the default
@@ -956,7 +954,6 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
@@ -1057,7 +1054,6 @@ for details.
   each partition because it can push the sorting down into the shuffle machinery. </td>
 </tr>
 </table>
-</div>
 
 ### Actions
 
@@ -1073,7 +1069,6 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Action</th><th>Meaning</th></tr></thead>
 <tr>
@@ -1128,7 +1123,6 @@ for details.
   <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures-a-nameclosureslinka">Understanding closures </a> for more details.</td>
 </tr>
 </table>
-</div>
 
 The Spark RDD API also exposes asynchronous versions of some actions, like `foreachAsync` for `foreach`, which immediately return a `FutureAction` to the caller instead of blocking on completion of the action. This can be used to manage or wait for the asynchronous execution of the action.
 
@@ -1220,7 +1214,6 @@ to `persist()`. The `cache()` method is a shorthand for using the default storag
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th style="width:23%">Storage Level</th><th>Meaning</th></tr></thead>
 <tr>
@@ -1259,7 +1252,6 @@ storage levels is:
     <a href="configuration.html#memory-management">off-heap memory</a>. This requires off-heap memory to be enabled. </td>
 </tr>
 </table>
-</div>
 
 **Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/3/library/pickle.html) library,
 so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`,

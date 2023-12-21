@@ -89,7 +89,6 @@ The [job scheduling overview](job-scheduling.html) describes this in more detail
 
 The following table summarizes terms you'll see used to refer to cluster concepts:
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr><th style="width: 130px;">Term</th><th>Meaning</th></tr>
@@ -146,4 +145,3 @@ The following table summarizes terms you'll see used to refer to cluster concept
     </tr>
   </tbody>
 </table>
-</div>

@@ -135,7 +135,6 @@ of the most common options to set are:
 
 ### Application Properties
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -545,13 +544,11 @@ of the most common options to set are:
   <td>3.5.0</td>
 </tr>
 </table>
-</div>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
 
 ### Runtime Environment
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -936,11 +933,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.1.0</td>
 </tr>
 </table>
-</div>
 
 ### Shuffle Behavior
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -1313,11 +1308,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.4.0</td>
 </tr>
 </table>
-</div>
 
 ### Spark UI
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -1707,11 +1700,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.4.0</td>
 </tr>
 </table>
-</div>
 
 ### Compression and Serialization
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -1926,11 +1917,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 </table>
-</div>
 
 ### Memory Management
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -2053,11 +2042,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.4.0</td>
 </tr>
 </table>
-</div>
 
 ### Execution Behavior
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -2300,11 +2287,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.0</td>
 </tr>
 </table>
-</div>
 
 ### Executor Metrics
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -2370,11 +2355,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.1.0</td>
 </tr>
 </table>
-</div>
 
 ### Networking
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -2535,11 +2518,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.2.0</td>
 </tr>
 </table>
-</div>
 
 ### Scheduling
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3018,11 +2999,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.4.0</td>
 </tr>
 </table>
-</div>
 
 ### Barrier Execution Mode
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3067,11 +3046,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.4.0</td>
 </tr>
 </table>
-</div>
 
 ### Dynamic Allocation
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3204,7 +3181,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 </table>
-</div>
 
 ### Thread Configurations
 
@@ -3215,7 +3191,6 @@ finer granularity starting from driver and executor. Take RPC module as example 
 like shuffle, just replace "rpc" with "shuffle" in the property names except
 <code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code>, which is only for RPC module.
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3243,7 +3218,6 @@ like shuffle, just replace "rpc" with "shuffle" in the property names except
   <td>3.0.0</td>
 </tr>
 </table>
-</div>
 
 The default value for number of thread-related config keys is the minimum of the number of cores requested for
 the driver or executor, or, in the absence of that value, the number of cores available for the JVM (with a hardcoded upper limit of 8).
@@ -3255,7 +3229,6 @@ the driver or executor, or, in the absence of that value, the number of cores av
 Server configurations are set in Spark Connect server, for example, when you start the Spark Connect server with `./sbin/start-connect-server.sh`.
 They are typically set via the config file and command-lineoptions with `--conf/-c`.
 
-<div class="table-wrapper">
 <table class="table">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3320,7 +3293,6 @@ Command types in proto.</td>
   <td>3.4.0</td>
 </tr>
 </table>
-</div>
 
 ### Security
 
@@ -3362,7 +3334,6 @@ External users can query the static sql config values via `SparkSession.conf` or
 
 ### Spark Streaming
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3492,11 +3463,9 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>1.6.0</td>
 </tr>
 </table>
-</div>
 
 ### SparkR
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3550,11 +3519,9 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 
 </table>
-</div>
 
 ### GraphX
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3567,7 +3534,6 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>2.2.0</td>
 </tr>
 </table>
-</div>
 
 ### Cluster Managers
 
@@ -3593,7 +3559,6 @@ copy `conf/spark-env.sh.template` to create it. Make sure you make the copy exec
 The following variables can be set in `spark-env.sh`:
 
 
-<div class="table-wrapper">
 <table>
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
@@ -3624,7 +3589,6 @@ The following variables can be set in `spark-env.sh`:
     <td>Hostname your Spark program will advertise to other machines.</td>
   </tr>
 </table>
-</div>
 
 In addition to the above, there are also options for setting up the Spark
 [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
@@ -3732,7 +3696,6 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
 
 ### External Shuffle service(server) side configuration options
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3764,11 +3727,9 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
   <td>3.2.0</td>
 </tr>
 </table>
-</div>
 
 ### Client side configuration options
 
-<div class="table-wrapper">
 <table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
@@ -3864,4 +3825,3 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
   <td>3.3.0</td>
 </tr>
 </table>
-</div>

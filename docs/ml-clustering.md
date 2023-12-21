@@ -40,7 +40,6 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 ### Input Columns
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -59,11 +58,9 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
     </tr>
   </tbody>
 </table>
-</div>
 
 ### Output Columns
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -82,7 +79,6 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
     </tr>
   </tbody>
 </table>
-</div>
 
 **Examples**
 
@@ -208,7 +204,6 @@ model.
 
 ### Input Columns
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -227,11 +222,9 @@ model.
     </tr>
   </tbody>
 </table>
-</div>
 
 ### Output Columns
 
-<div class="table-wrapper">
 <table>
   <thead>
     <tr>
@@ -256,7 +249,6 @@ model.
     </tr>
   </tbody>
 </table>
-</div>
 
 **Examples**
 
