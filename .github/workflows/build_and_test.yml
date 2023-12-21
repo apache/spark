@@ -379,6 +379,7 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
+      SPARK_ANSI_SQL_MODE: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
