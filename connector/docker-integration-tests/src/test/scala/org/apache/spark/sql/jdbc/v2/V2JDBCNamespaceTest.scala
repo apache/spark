@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange}
@@ -118,7 +119,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
     assert(catalog.namespaceExists(Array("foo")) === true)
     catalog.createTable(ident1, schema, Array.empty[Transform], emptyProps)
     if (supportsDropSchemaRestrict) {
-      intercept[NonEmptyNamespaceException] {
+      intercept[SparkException] {
         catalog.dropNamespace(Array("foo"), cascade = false)
       }
     }
