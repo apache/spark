@@ -2690,6 +2690,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           }
           s.copy(order = newSortOrder, child = newChild)
         })
+
+      case s @ Sort(_, _, f @ Filter(cond, agg: Aggregate))
+          if agg.resolved && cond.resolved && s.order.forall(_.resolved) =>
+        resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
+          val newSortOrder = s.order.zip(newExprs).map {
+            case (sortOrder, expr) => sortOrder.copy(child = expr)
+          }
+          s.copy(order = newSortOrder, child = f.copy(child = newChild))
+        })
     }
 
     /**

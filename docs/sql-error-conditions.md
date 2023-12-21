@@ -492,6 +492,12 @@ Data source '`<provider>`' not found. Please make sure the data source is regist
 
 Failed to find the data source: `<provider>`. Please find packages at `https://spark.apache.org/third-party-projects.html`.
 
+### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The schema of the data source table `<tableSchema>` does not match the actual schema `<actualSchema>`. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+
 ### DATETIME_OVERFLOW
 
 [SQLSTATE: 22008](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1633,6 +1639,12 @@ Can't determine the default value for `<colName>` since it is not nullable and i
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 No handler for UDAF '`<functionName>`'. Use sparkSession.udf.register(...) instead.
+
+### NO_MERGE_ACTION_SPECIFIED
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource.
 
 ### NO_SQL_TYPE_IN_PROTOBUF_SCHEMA
 

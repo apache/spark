@@ -893,6 +893,12 @@
     ],
     "sqlState" : "42K02"
   },
+  "DATA_SOURCE_TABLE_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The schema of the data source table <tableSchema> does not match the actual schema <actualSchema>. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema."
+    ],
+    "sqlState" : "42K03"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -2839,6 +2845,12 @@
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
     ],
     "sqlState" : "42000"
+  },
+  "NO_MERGE_ACTION_SPECIFIED" : {
+    "message" : [
+      "df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource."
+    ],
+    "sqlState" : "42K0E"
   },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [
