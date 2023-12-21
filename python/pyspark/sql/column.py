@@ -1153,9 +1153,23 @@ class Column:
     >>> df.filter(df.height.isNotNull()).collect()
     [Row(name='Tom', height=80)]
     """
+    _isNaN_doc = """
+    True if the current expression is NaN.
+
+    .. versionadded:: 4.0.0
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [Row(name='Tom', height=80.0), Row(name='Alice', height=float('nan'))])
+    >>> df.filter(df.height.isNaN()).collect()
+    [Row(name='Alice', height=nan)]
+    """
 
     isNull = _unary_op("isNull", _isNull_doc)
     isNotNull = _unary_op("isNotNull", _isNotNull_doc)
+    isNaN = _unary_op("isNaN", _isNaN_doc)
 
     def alias(self, *alias: str, **kwargs: Any) -> "Column":
         """

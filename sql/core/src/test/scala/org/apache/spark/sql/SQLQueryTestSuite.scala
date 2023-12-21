@@ -632,7 +632,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /**
    * Returns the desired file path for results, given the input file. This is implemented as a
-   * function because different Suites extending this class may want their results files with
+   * function because differente Suites extending this class may want their results files with
    * different names or in different locations.
    */
   protected def resultFileForInputFile(file: File): String = {
@@ -652,7 +652,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
 
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
@@ -970,5 +969,75 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         output
     }
     override def numSegments: Int = 2
+  }
+
+  test("test splitCommentsAndCodes") {
+    {
+      // Correctly split comments and codes
+      val input =
+        """-- Comment 1
+          |SELECT * FROM table1;
+          |-- Comment 2
+          |SELECT * FROM table2;
+          |""".stripMargin
+
+      val (comments, codes) = splitCommentsAndCodes(input)
+      assert(comments.toSet == Set("-- Comment 1", "-- Comment 2"))
+      assert(codes.toSet == Set("SELECT * FROM table1;", "SELECT * FROM table2;"))
+    }
+
+    {
+      // Handle input with no comments
+      val input = "SELECT * FROM table;"
+      val (comments, codes) = splitCommentsAndCodes(input)
+      assert(comments.isEmpty)
+      assert(codes.toSet == Set("SELECT * FROM table;"))
+    }
+
+    {
+      // Handle input with no codes
+      val input =
+        """-- Comment 1
+          |-- Comment 2
+          |""".stripMargin
+
+      val (comments, codes) = splitCommentsAndCodes(input)
+      assert(comments.toSet == Set("-- Comment 1", "-- Comment 2"))
+      assert(codes.isEmpty)
+    }
+  }
+
+  test("Test logic for determining whether a query is semantically sorted") {
+    withTable("t1", "t2") {
+      spark.sql("CREATE TABLE t1(a int, b int) USING parquet")
+      spark.sql("CREATE TABLE t2(a int, b int) USING parquet")
+
+      val unsortedSelectQuery = "select * from t1"
+      val sortedSelectQuery = "select * from t1 order by a, b"
+
+      val unsortedJoinQuery = "select * from t1 join t2 on t1.a = t2.a"
+      val sortedJoinQuery = "select * from t1 join t2 on t1.a = t2.a order by t1.a"
+
+      val unsortedAggQuery = "select a, max(b) from t1 group by a"
+      val sortedAggQuery = "select a, max(b) from t1 group by a order by a"
+
+      val unsortedDistinctQuery = "select distinct a from t1"
+      val sortedDistinctQuery = "select distinct a from t1 order by a"
+
+      val unsortedWindowQuery = "SELECT a, b, SUM(b) OVER (ORDER BY a) AS cumulative_sum FROM t1;"
+      val sortedWindowQuery = "SELECT a, b, SUM(b) OVER (ORDER BY a) AS cumulative_sum FROM " +
+        "t1 ORDER BY a, b;"
+
+      assert(!isSemanticallySorted(spark.sql(unsortedSelectQuery).logicalPlan))
+      assert(!isSemanticallySorted(spark.sql(unsortedJoinQuery).logicalPlan))
+      assert(!isSemanticallySorted(spark.sql(unsortedDistinctQuery).logicalPlan))
+      assert(!isSemanticallySorted(spark.sql(unsortedWindowQuery).logicalPlan))
+      assert(!isSemanticallySorted(spark.sql(unsortedAggQuery).logicalPlan))
+      assert(isSemanticallySorted(spark.sql(sortedSelectQuery).logicalPlan))
+      assert(isSemanticallySorted(spark.sql(sortedJoinQuery).logicalPlan))
+      assert(isSemanticallySorted(spark.sql(sortedAggQuery).logicalPlan))
+      assert(isSemanticallySorted(spark.sql(sortedWindowQuery).logicalPlan))
+      assert(isSemanticallySorted(spark.sql(sortedDistinctQuery).logicalPlan))
+    }
   }
 }

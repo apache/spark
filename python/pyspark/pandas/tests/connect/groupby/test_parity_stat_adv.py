@@ -16,19 +16,21 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_ops_on_diff_frames_groupby import OpsOnDiffFramesGroupByTestsMixin
+from pyspark.pandas.tests.groupby.test_stat_adv import GroupbyStatAdvMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class OpsOnDiffFramesGroupByParityTests(
-    OpsOnDiffFramesGroupByTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class GroupbyStatAdvParityTests(
+    GroupbyStatAdvMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby import *  # noqa: F401
+    from pyspark.pandas.tests.connect.groupby.test_parity_stat_adv import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

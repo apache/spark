@@ -29,6 +29,12 @@ Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
 
 Non-deterministic expression `<sqlExpr>` should not appear in the arguments of an aggregate function.
 
+### ALL_PARAMETERS_MUST_BE_NAMED
+
+SQLSTATE: 07001
+
+Using name parameterized queries requires all parameters to be named. Parameters missing names: `<exprs>`.
+
 ### ALL_PARTITION_COLUMNS_NOT_ALLOWED
 
 SQLSTATE: KD005
@@ -486,6 +492,12 @@ Data source '`<provider>`' not found. Please make sure the data source is regist
 
 Failed to find the data source: `<provider>`. Please find packages at `https://spark.apache.org/third-party-projects.html`.
 
+### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The schema of the data source table `<tableSchema>` does not match the actual schema `<actualSchema>`. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+
 ### DATETIME_OVERFLOW
 
 [SQLSTATE: 22008](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -612,6 +624,12 @@ EXCEPT column `<columnName>` was resolved and expected to be StructType, but fou
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
+
+### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
+
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (`<aliases>`), which is invalid; please update the command to specify unique aliases and then try it again.
 
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
@@ -1257,6 +1275,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 `<value>` is an invalid property value, please use quotes, e.g. SET `<key>`=`<value>`
 
+### INVALID_QUERY_MIXED_QUERY_PARAMETERS
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Parameterized query must either use positional, or named parameters, but not both.
+
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
 [SQLSTATE: 42K07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1290,6 +1314,12 @@ The argument `<name>` of `sql()` is invalid. Consider to replace it either by a 
 Invalid SQL syntax:
 
 For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
+
+### INVALID_STATEMENT_FOR_EXECUTE_INTO
+
+SQLSTATE: 07501
+
+The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1342,6 +1372,12 @@ The url is invalid: `<url>`. If necessary set `<ansiConfig>` to "false" to bypas
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Invalid usage of `<elem>` in `<prettyName>`.
+
+### INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Variable type must be string type but got `<varType>`.
 
 ### INVALID_VIEW_TEXT
 
@@ -1487,6 +1523,12 @@ Set "spark.sql.allowNamedFunctionArguments" to "true" to turn on feature.
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
 
+### NESTED_EXECUTE_IMMEDIATE
+
+SQLSTATE: 07501
+
+Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
+
 ### NON_FOLDABLE_ARGUMENT
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1597,6 +1639,12 @@ Can't determine the default value for `<colName>` since it is not nullable and i
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 No handler for UDAF '`<functionName>`'. Use sparkSession.udf.register(...) instead.
+
+### NO_MERGE_ACTION_SPECIFIED
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource.
 
 ### NO_SQL_TYPE_IN_PROTOBUF_SCHEMA
 
@@ -2317,6 +2365,14 @@ Cannot create generated column `<fieldName>` with generation expression `<expres
 A query operator contains one or more unsupported expressions.
 Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.
 Invalid expressions: [`<invalidExprSqls>`]
+
+### UNSUPPORTED_EXPR_FOR_PARAMETER
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A query parameter contains unsupported expression.
+Parameters can either be variables or literals.
+Invalid expression: [`<invalidExprSql>`]
 
 ### UNSUPPORTED_EXPR_FOR_WINDOW
 

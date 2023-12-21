@@ -102,12 +102,11 @@ Project [udf(b)#x, udf(c)#x]
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(b) = 3 ORDER BY udf(b), udf(c)
 -- !query analysis
-Project [udf(b)#x, udf(c)#x]
-+- Sort [cast(udf(cast(b#x as string)) as int) ASC NULLS FIRST, cast(udf(cast(c#x as string)) as string) ASC NULLS FIRST], true
-   +- Filter (udf(b)#x = 3)
-      +- Aggregate [b#x, c#x], [cast(udf(cast(b#x as string)) as int) AS udf(b)#x, cast(udf(cast(c#x as string)) as string) AS udf(c)#x, b#x, c#x]
-         +- SubqueryAlias spark_catalog.default.test_having
-            +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet
+Sort [udf(b)#x ASC NULLS FIRST, udf(c)#x ASC NULLS FIRST], true
++- Filter (udf(b)#x = 3)
+   +- Aggregate [b#x, c#x], [cast(udf(cast(b#x as string)) as int) AS udf(b)#x, cast(udf(cast(c#x as string)) as string) AS udf(c)#x]
+      +- SubqueryAlias spark_catalog.default.test_having
+         +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet
 
 
 -- !query
