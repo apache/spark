@@ -270,28 +270,26 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     indexMap.values.toArray
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String]): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
-          case 1061 =>
-            // The message is: Failed to create index indexName in tableName
-            val regex = "(?s)Failed to create index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
-            throw new IndexAlreadyExistsException(
-              indexName = indexName, tableName = tableName, cause = Some(e))
-          case 1091 =>
-            // The message is: Failed to drop index indexName in tableName
-            val regex = "(?s)Failed to drop index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
+          case 1061 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
+            val indexName = messageParameters("indexName")
+            val tableName = messageParameters("tableName")
+            throw new IndexAlreadyExistsException(indexName, tableName, cause = Some(e))
+          case 1091 if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+            val indexName = messageParameters("indexName")
+            val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case _ => super.classifyException(e, errorClass, messageParameters)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, errorClass, messageParameters)
     }
   }
 

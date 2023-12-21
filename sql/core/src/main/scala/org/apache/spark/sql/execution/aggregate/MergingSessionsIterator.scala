@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, MutableProjection, NamedExpression, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -155,7 +156,7 @@ class MergingSessionsIterator(
       if (currentGroupingKey == groupingKey) {
         if (sessionStart < getSessionStart(currentSession)) {
           errorOnIterator = true
-          throw new IllegalStateException("Input iterator is not sorted based on session!")
+          throw SparkException.internalError("Input iterator is not sorted based on session!")
         } else if (sessionStart <= getSessionEnd(currentSession)) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
@@ -208,7 +209,7 @@ class MergingSessionsIterator(
 
   override final def hasNext: Boolean = {
     if (errorOnIterator) {
-      throw new IllegalStateException("The iterator is already corrupted.")
+      throw SparkException.internalError("The iterator is already corrupted.")
     }
     sortedInputHasNewGroup
   }
