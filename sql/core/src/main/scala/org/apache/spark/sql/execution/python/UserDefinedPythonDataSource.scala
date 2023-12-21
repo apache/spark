@@ -17,18 +17,18 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{DataInputStream, DataOutputStream, File}
+import java.io.{DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkException}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
 import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{PythonUDF, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
@@ -43,7 +43,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 /**
  * Data Source V2 wrapper for Python Data Source.
@@ -128,7 +127,7 @@ class PythonTableProvider extends TableProvider {
                   shortName,
                   info.schema(),
                   info.options(),
-                  SaveMode.Append) // TODO: this can only support append mode.
+                  SaveMode.Append)
                 PythonBatchWriterFactory(source, writeInfo.func, info.schema(), jobArtifactUUID)
               }
 
@@ -159,20 +158,12 @@ class PythonPartitionReaderFactory(
     pickledReadFunc: Array[Byte],
     outputSchema: StructType,
     jobArtifactUUID: Option[String])
-  extends PartitionReaderFactory {
+  extends PartitionReaderFactory with PythonDataSourceSQLMetrics {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     new PartitionReader[InternalRow] {
-      // Dummy SQLMetrics. The result is manually reported via DSv2 interface
-      // via passing the value to `CustomTaskMetric`. Note that `pythonOtherMetricsDesc`
-      // is not used when it is reported. It is to reuse existing Python runner.
-      // See also `UserDefinedPythonDataSource.createPythonMetrics`.
-      private[this] val metrics: Map[String, SQLMetric] = {
-        PythonSQLMetrics.pythonSizeMetricsDesc.keys
-          .map(_ -> new SQLMetric("size", -1)).toMap ++
-        PythonSQLMetrics.pythonOtherMetricsDesc.keys
-          .map(_ -> new SQLMetric("sum", -1)).toMap
-      }
+
+      private[this] val metrics: Map[String, SQLMetric] = pythonMetrics
 
       private val outputIter = {
         val evaluatorFactory = source.createMapInBatchEvaluatorFactory(
@@ -207,48 +198,15 @@ private case class PythonBatchWriterFactory(
     source: UserDefinedPythonDataSource,
     pickledWriteFunc: Array[Byte],
     inputSchema: StructType,
-    jobArtifactUUID: Option[String]) extends DataWriterFactory {
+    jobArtifactUUID: Option[String]) extends DataWriterFactory with PythonDataSourceSQLMetrics {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new DataWriter[InternalRow] {
 
-      private var numRows = 0L
+      private[this] val metrics: Map[String, SQLMetric] = pythonMetrics
 
-      private val rowQueue = {
-        val context = TaskContext.get()
-        val queue = HybridRowQueue(
-          context.taskMemoryManager(),
-          new File(Utils.getLocalDir(SparkEnv.get.conf)),
-          inputSchema.length)
-        context.addTaskCompletionListener[Unit] { _ =>
-          queue.close()
-        }
-        queue
-      }
+      private var commitMessage: PythonWriterCommitMessage = _
 
-      private val inputIter = new Iterator[InternalRow] {
-        override def hasNext: Boolean = numRows > 0
-
-        override def next(): InternalRow = {
-          val row = rowQueue.remove()
-          assert(row != null)
-          numRows -= 1
-          row
-        }
-      }
-
-      private[this] val metrics: Map[String, SQLMetric] = {
-        PythonSQLMetrics.pythonSizeMetricsDesc.keys
-          .map(_ -> new SQLMetric("size", -1)).toMap ++
-          PythonSQLMetrics.pythonOtherMetricsDesc.keys
-            .map(_ -> new SQLMetric("sum", -1)).toMap
-      }
-
-      override def write(record: InternalRow): Unit = {
-        rowQueue.add(record.asInstanceOf[UnsafeRow])
-        numRows += 1
-      }
-
-      override def commit(): WriterCommitMessage = {
+      override def writeAll(records: java.util.Iterator[InternalRow]): Unit = {
         val evaluatorFactory = source.createMapInBatchEvaluatorFactory(
           pickledWriteFunc,
           "write_to_data_source",
@@ -256,10 +214,7 @@ private case class PythonBatchWriterFactory(
           UserDefinedPythonDataSource.writeOutputSchema,
           metrics,
           jobArtifactUUID)
-
-        val outputIter = evaluatorFactory.createEvaluator().eval(partitionId, inputIter)
-
-        var commitMessage: PythonWriterCommitMessage = null
+        val outputIter = evaluatorFactory.createEvaluator().eval(partitionId, records.asScala)
         outputIter.foreach { row =>
           if (commitMessage == null) {
             commitMessage = PythonWriterCommitMessage(row.getBinary(0))
@@ -270,6 +225,12 @@ private case class PythonBatchWriterFactory(
         if (commitMessage == null) {
           throw QueryExecutionErrors.invalidWriterCommitMessageError(details = "zero")
         }
+      }
+
+      override def write(record: InternalRow): Unit =
+        SparkException.internalError("write method for Python data source should not be called.")
+
+      override def commit(): WriterCommitMessage = {
         commitMessage.asInstanceOf[WriterCommitMessage]
       }
 
@@ -281,6 +242,19 @@ private case class PythonBatchWriterFactory(
         source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value })
       }
     }
+  }
+}
+
+trait PythonDataSourceSQLMetrics {
+  // Dummy SQLMetrics. The result is manually reported via DSv2 interface
+  // via passing the value to `CustomTaskMetric`. Note that `pythonOtherMetricsDesc`
+  // is not used when it is reported. It is to reuse existing Python runner.
+  // See also `UserDefinedPythonDataSource.createPythonMetrics`.
+  protected lazy val pythonMetrics: Map[String, SQLMetric] = {
+    PythonSQLMetrics.pythonSizeMetricsDesc.keys
+      .map(_ -> new SQLMetric("size", -1)).toMap ++
+      PythonSQLMetrics.pythonOtherMetricsDesc.keys
+        .map(_ -> new SQLMetric("sum", -1)).toMap
   }
 }
 

@@ -504,7 +504,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("data source write with error") {
+  test("data source write - error cases") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
@@ -524,9 +524,28 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin
     spark.dataSource.registerPython(dataSourceName,
       createUserDefinedPythonDataSource(dataSourceName, dataSourceScript))
-    val error = intercept[SparkException]{
-      spark.range(10).write.format(dataSourceName).mode("append").save()
+
+    withClue("user error") {
+      val error = intercept[SparkException] {
+        spark.range(10).write.format(dataSourceName).mode("append").save()
+      }
+      assert(error.getMessage.contains("something is wrong"))
     }
-    assert(error.getMessage.contains("something is wrong"))
+
+    withClue("no commit message") {
+      val error = intercept[SparkException] {
+        spark.range(1).write.format(dataSourceName).mode("append").save()
+      }
+      assert(error.getMessage.contains("PYTHON_DATA_SOURCE_WRITE_ERROR"))
+    }
+
+    withClue("without mode") {
+      val error = intercept[AnalysisException] {
+        spark.range(1).write.format(dataSourceName).save()
+      }
+      // TODO: improve this error message.
+      assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
+        "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
+    }
   }
 }
