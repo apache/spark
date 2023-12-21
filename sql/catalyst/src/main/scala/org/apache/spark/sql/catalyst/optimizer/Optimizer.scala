@@ -774,6 +774,17 @@ object LimitPushDown extends Rule[LogicalPlan] {
       Limit(le, project)
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
+    // Push down limit 1 though Union and Aggregate
+    case Limit(le @ IntegerLiteral(1), union: Union) =>
+      val newUnionChildren = union.children.map {
+        case a: Aggregate if a.groupOnly =>
+          Project(a.aggregateExpressions, LocalLimit(le, a.child))
+        case p @ Project(_, a: Aggregate) if a.groupOnly =>
+          p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child)))
+        case u: Union => Limit(le, u)
+        case other => other
+      }
+      Limit(le, union.copy(children = newUnionChildren))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
