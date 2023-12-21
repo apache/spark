@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, UnaryNode, Window}
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
@@ -31,7 +32,7 @@ private[sql] object EarlyCollapseProject {
     logicalPlan match {
       case newP @ Project(newProjList, p @ Project(projList, child))
         if checkEarlyCollapsePossible(p, newP, child) =>
-        collapseProjectEarly(newProjList, p, projList, child)
+        collapseProjectEarly(newP, newProjList, p, projList, child)
 
       case newP @ Project(newProjList, f @ Filter(_, filterChild: UnaryNode)) =>
         // check if its case of nested filters followed by project
@@ -57,7 +58,7 @@ private[sql] object EarlyCollapseProject {
           val p = projectAtEnd.get
           val child = p.child
           if (checkEarlyCollapsePossible(p, newP, child)) {
-            val newProjOpt = collapseProjectEarly(newProjList, p, p.projectList, child)
+            val newProjOpt = collapseProjectEarly(newP, newProjList, p, p.projectList, child)
             newProjOpt.map(collapsedProj => {
               val lastFilterMod = filterNodes.last.copy(child = collapsedProj)
               filterNodes.dropRight(1).foldRight(lastFilterMod)((f, c) => f.copy(child = c))
@@ -95,6 +96,7 @@ private[sql] object EarlyCollapseProject {
   }
 
   def collapseProjectEarly(
+      newP: Project,
       newProjList: Seq[NamedExpression],
       p: Project,
       projList: Seq[NamedExpression],
@@ -174,6 +176,12 @@ private[sql] object EarlyCollapseProject {
             droppedNamedExprs.exists(y => y == x || y.name == x.name))
           val newDroppedList = droppedNamedExprs ++ prevDroppedColsFinal
           newProject.copyTagsFrom(p)
+          // remove the datasetId copied from current P due to above copy
+          newProject.unsetTagValue(Dataset.DATASET_ID_TAG)
+          // use the dataset id of the incoming new project
+          newP.getTagValue(Dataset.DATASET_ID_TAG).foreach(map =>
+            newProject.setTagValue(Dataset.DATASET_ID_TAG, map.clone()))
+          newProject.unsetTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS)
           if (newDroppedList.nonEmpty) {
             newProject.setTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS, newDroppedList)
           }
