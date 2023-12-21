@@ -13089,12 +13089,13 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql.types import StringType
     >>> df = spark.createDataFrame([(['a', 'b', 'c'],)], ['data'])
-    >>> df.select(sf.array_insert(df.data, 2, sf.lit(None).cast(StringType()))).show()
-    +---------------------------+
-    |array_insert(data, 2, NULL)|
-    +---------------------------+
-    |            [a, NULL, b, c]|
-    +---------------------------+
+    >>> df.select(sf.array_insert(df.data, 2, sf.lit(None).cast(StringType()))
+    ...   .alias("result")).show()
+    +---------------+
+    |         result|
+    +---------------+
+    |[a, NULL, b, c]|
+    +---------------+
 
     Example 5: Inserting a value into a NULL array
 
