@@ -68,7 +68,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val content =
       resources ++
         basicInfo ++
-        generateStatTable(query)
+        generateStatTable(query, request)
     SparkUIUtils.headerSparkPage(request, "Streaming Query Statistics", content, parent)
   }
 
@@ -386,7 +386,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     result
   }
 
-  def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
+  def generateStatTable(query: StreamingQueryUIData, request: HttpServletRequest): Seq[Node] = {
     val batchToTimestamps = withNoProgress(query,
       query.recentProgress.map(p => (p.batchId, parseProgressTimestamp(p.timestamp))),
       Array.empty[(Long, Long)])
@@ -429,7 +429,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       },
       Array.empty[(Long, ju.Map[String, JLong])])
 
-    val jsCollector = new JsCollector
+    val jsCollector = new JsCollector(request)
     val graphUIDataForInputRate =
       new GraphUIData(
         "input-rate-timeline",

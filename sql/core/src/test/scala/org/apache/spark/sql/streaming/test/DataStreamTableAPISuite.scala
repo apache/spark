@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
+import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -204,7 +204,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("write: write to table with default session catalog") {
-    val v2Source = classOf[FakeV2Provider].getName
+    val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
     spark.conf.set(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
       classOf[InMemoryTableSessionCatalog].getName)
 

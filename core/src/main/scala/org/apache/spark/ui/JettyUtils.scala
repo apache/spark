@@ -246,6 +246,7 @@ private[spark] object JettyUtils extends Logging {
       serverName: String = "",
       poolSize: Int = 200): ServerInfo = {
 
+    val stopTimeout = conf.get(UI_JETTY_STOP_TIMEOUT)
     logInfo(s"Start Jetty $hostName:$port for $serverName")
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool(poolSize)
@@ -276,6 +277,7 @@ private[spark] object JettyUtils extends Logging {
     val serverExecutor = new ScheduledExecutorScheduler(s"$serverName-JettyScheduler", true)
 
     try {
+      server.setStopTimeout(stopTimeout)
       server.start()
 
       // As each acceptor and each selector will use one thread, the number of threads should at
@@ -298,6 +300,7 @@ private[spark] object JettyUtils extends Logging {
         connector.setReuseAddress(!Utils.isWindows)
          // spark-45248: set the idle timeout to prevent slow DoS
         connector.setIdleTimeout(8000)
+        connector.setStopTimeout(stopTimeout)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
