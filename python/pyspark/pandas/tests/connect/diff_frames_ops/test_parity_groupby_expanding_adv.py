@@ -16,22 +16,24 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_series_datetime import SeriesDateTimeTestsMixin
+from pyspark.pandas.tests.diff_frames_ops.test_groupby_expanding_adv import GroupByExpandingAdvMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesDateTimeParityTests(
-    SeriesDateTimeTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class GroupByExpandingAdvParityTests(
+    GroupByExpandingAdvMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_series_datetime import *  # noqa: F401
+    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_expanding_adv import *  # noqa
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

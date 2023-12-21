@@ -16,24 +16,21 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling import (
-    OpsOnDiffFramesGroupByRollingTestsMixin,
-)
+from pyspark.pandas.tests.diff_frames_ops.test_arithmetic_ext import ArithmeticExtMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class OpsOnDiffFramesGroupByRollingParityTests(
-    OpsOnDiffFramesGroupByRollingTestsMixin,
+class ArithmeticExtParityTests(
+    ArithmeticExtMixin,
     PandasOnSparkTestUtils,
-    TestUtils,
     ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby_rolling import *
+    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic_ext import *  # noqa
 
     try:
         import xmlrunner  # type: ignore[import]

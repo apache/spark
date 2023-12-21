@@ -19,10 +19,11 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class OpsOnDiffFramesGroupByRollingTestsMixin:
+class GroupByRollingCountMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -32,36 +33,6 @@ class OpsOnDiffFramesGroupByRollingTestsMixin:
     def tearDownClass(cls):
         reset_option("compute.ops_on_diff_frames")
         super().tearDownClass()
-
-    def _test_groupby_rolling_func(self, f):
-        pser = pd.Series([1, 2, 3], name="a")
-        pkey = pd.Series([1, 2, 3], name="a")
-        psser = ps.from_pandas(pser)
-        kkey = ps.from_pandas(pkey)
-
-        self.assert_eq(
-            getattr(psser.groupby(kkey).rolling(2), f)().sort_index(),
-            getattr(pser.groupby(pkey).rolling(2), f)().sort_index(),
-        )
-
-        pdf = pd.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
-        pkey = pd.Series([1, 2, 3, 2], name="a")
-        psdf = ps.from_pandas(pdf)
-        kkey = ps.from_pandas(pkey)
-
-        self.assert_eq(
-            getattr(psdf.groupby(kkey).rolling(2), f)().sort_index(),
-            getattr(pdf.groupby(pkey).rolling(2), f)().sort_index(),
-        )
-
-        self.assert_eq(
-            getattr(psdf.groupby(kkey)["b"].rolling(2), f)().sort_index(),
-            getattr(pdf.groupby(pkey)["b"].rolling(2), f)().sort_index(),
-        )
-        self.assert_eq(
-            getattr(psdf.groupby(kkey)[["b"]].rolling(2), f)().sort_index(),
-            getattr(pdf.groupby(pkey)[["b"]].rolling(2), f)().sort_index(),
-        )
 
     def test_groupby_rolling_count(self):
         pser = pd.Series([1, 2, 3], name="a")
@@ -93,35 +64,18 @@ class OpsOnDiffFramesGroupByRollingTestsMixin:
             pdf.groupby(pkey)[["b"]].rolling(2, min_periods=1).count().sort_index(),
         )
 
-    def test_groupby_rolling_min(self):
-        self._test_groupby_rolling_func("min")
 
-    def test_groupby_rolling_max(self):
-        self._test_groupby_rolling_func("max")
-
-    def test_groupby_rolling_mean(self):
-        self._test_groupby_rolling_func("mean")
-
-    def test_groupby_rolling_sum(self):
-        self._test_groupby_rolling_func("sum")
-
-    def test_groupby_rolling_std(self):
-        # TODO: `std` now raise error in pandas 1.0.0
-        self._test_groupby_rolling_func("std")
-
-    def test_groupby_rolling_var(self):
-        self._test_groupby_rolling_func("var")
-
-
-class OpsOnDiffFramesGroupByRollingTests(
-    OpsOnDiffFramesGroupByRollingTestsMixin, PandasOnSparkTestCase, TestUtils
+class GroupByRollingCountTests(
+    GroupByRollingCountMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling import *  # noqa: F401
+    from pyspark.pandas.tests.diff_frames_ops.test_groupby_rolling_count import *  # noqa
 
     try:
         import xmlrunner
