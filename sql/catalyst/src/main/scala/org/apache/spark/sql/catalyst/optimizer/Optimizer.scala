@@ -2466,3 +2466,37 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       }
   }
 }
+
+object EliminateCast extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
+      case bc @ BinaryComparison(left @ Cast(child, dt, tz, ae), right @ Literal(_, _)) =>
+        if (canEliminate(child.dataType, dt)) {
+          val value = Cast(right, child.dataType, tz, ae).eval(EmptyRow)
+          val clazz = bc.getClass
+          val mainCons = clazz.getConstructor(classOf[Expression], classOf[Expression])
+          mainCons.setAccessible(true)
+          mainCons.newInstance(child, Literal.create(value, child.dataType))
+            .asInstanceOf[bc.type]
+        } else {
+          bc
+        }
+
+      case bc @ BinaryComparison(left @ Literal(_, _), right @ Cast(child, dt, tz, ae)) =>
+        if (canEliminate(child.dataType, dt)) {
+          val value = Cast(left, child.dataType, tz, ae).eval(EmptyRow)
+          val clazz = bc.getClass
+          val mainCons = clazz.getConstructor(classOf[Expression], classOf[Expression])
+          mainCons.setAccessible(true)
+          mainCons.newInstance(Literal.create(value, child.dataType), child)
+          mainCons.newInstance(child, Literal.create(value, child.dataType))
+            .asInstanceOf[bc.type]
+        } else {
+          bc
+        }
+    }
+  def canEliminate(row: DataType, target: DataType): Boolean = {
+    ((row.isInstanceOf[StringType] && target.isInstanceOf[DateType]) ||
+      (target.isInstanceOf[DateType] && row.isInstanceOf[StringType]))
+  }
+}

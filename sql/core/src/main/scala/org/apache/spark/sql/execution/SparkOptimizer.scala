@@ -42,6 +42,7 @@ class SparkOptimizer(
       V2ScanRelationPushDown :+
       V2ScanPartitioningAndOrdering :+
       V2Writes :+
+      EliminateCast :+
       PruneFileSourcePartitions
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
