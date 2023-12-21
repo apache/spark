@@ -280,12 +280,16 @@ class SeriesDateTimeTestsMixin:
         )
 
 
-class SeriesDateTimeTests(SeriesDateTimeTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SeriesDateTimeTests(
+    SeriesDateTimeTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_series_datetime import *  # noqa: F401
+    from pyspark.pandas.tests.series.test_datetime import *  # noqa: F401
 
     try:
         import xmlrunner
