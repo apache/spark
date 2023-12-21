@@ -19,7 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.time.{Instant, LocalDateTime}
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -27,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -68,6 +74,33 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
           plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), exists.plan)),
           exprId = exists.exprId,
           hint = exists.hint))
+  }
+}
+
+/**
+ * Computes expressions in inline tables. This rule is supposed to be called at the very end
+ * of the analysis phase, given that all the expressions need to be fully resolved/replaced
+ * at this point.
+ */
+object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
+      case table: ResolvedInlineTable =>
+        val newRows: Seq[InternalRow] =
+          table.rows.map { row => InternalRow.fromSeq(row.map { e =>
+              try {
+                prepareForEval(e).eval()
+              } catch {
+                case NonFatal(ex) =>
+                  table.failAnalysis(
+                    errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                    messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+                    cause = ex)
+              }})
+          }
+
+        LocalRelation(table.output, newRows)
+    }
   }
 }
 

@@ -166,6 +166,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionals" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
+      "org.apache.spark.sql.catalyst.optimizer.EvalInlineTables" ::
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
   }
 

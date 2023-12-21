@@ -1661,7 +1661,7 @@ select * from tt7a left join tt8a using (x), tt8a tt8ax, false, false, Persisted
       :- Project [a#x, b#x, c#x, d#x, e#x]
       :  +- SubqueryAlias v
       :     +- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x, col5#x AS e#x]
-      :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
+      :        +- ResolvedInlineTable [[now(), 2, 3, now(), 5]], [col1#x, col2#x, col3#x, col4#x, col5#x]
       +- Project [cast(x#x as timestamp) AS x#x, y#x, z#x, x#x, z#x]
          +- Project [x#x, y#x, z#x, x#x, z#x]
             +- Join Inner

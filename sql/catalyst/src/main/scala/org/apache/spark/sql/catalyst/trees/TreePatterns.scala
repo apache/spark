@@ -53,6 +53,7 @@ object TreePattern extends Enumeration  {
   val IF: Value = Value
   val IN: Value = Value
   val IN_SUBQUERY: Value = Value
+  val INLINE_TABLE_EVAL: Value = Value
   val INSET: Value = Value
   val INTERSECT: Value = Value
   val INVOKE: Value = Value
