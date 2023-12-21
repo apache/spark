@@ -5907,12 +5907,12 @@ def greatest(*cols: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        columns to check for gratest value.
+        columns to check for greatest value.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        gratest value.
+        greatest value.
 
     Examples
     --------
