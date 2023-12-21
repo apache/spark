@@ -23,7 +23,7 @@ package org.apache.spark.sql.catalyst.expressions
   examples = """
     Examples:
       > SELECT 0.5 _FUNC_ 0.1 AND 1.0;
-        TRUE
+        true
   """,
   arguments = """
     Arguments:
