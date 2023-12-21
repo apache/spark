@@ -108,9 +108,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, defaultMetadata)
     assert(t.schema === expectedSchema)
-    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
+    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -130,13 +130,4 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
-
-  test("SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle JDBC") {
-    val tableName = catalogName + ".t1"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName(c1 string)")
-      sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
-      assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 256)
-    }
-  }
 }
