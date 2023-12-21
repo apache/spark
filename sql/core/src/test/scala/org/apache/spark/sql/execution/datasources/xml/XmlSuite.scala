@@ -2484,7 +2484,9 @@ class XmlSuite
             .option("compression", "gzip")
             .option("rowTag", "row")
             .load(corruptedDir.getCanonicalPath)
-          assert(dfCorrupted.collect().length > 100)
+          val results = dfCorrupted.collect()
+          assert(results(1) === Row(1, 2))
+          assert(results.length > 100)
           val dfCorruptedWSchema = spark.read
             .format(format)
             .schema(schema)
