@@ -765,7 +765,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
-      case p @ Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
+      case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
           throw QueryCompilationErrors.unorderablePivotColError(pivotColumn)
         }
@@ -829,9 +829,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               Alias(ExtractValue(pivotAtt, Literal(i), resolver), outputName(value, aggregate))()
             }
           }
-          val newProject = Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
-          newProject.copyTagsFrom(p)
-          newProject
+          Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
             def ifExpr(e: Expression) = {
@@ -3264,9 +3262,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagsFrom(f)
-        newProject
+        Project(finalProjectList, withWindow)
 
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -3284,9 +3280,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagsFrom(a)
-        newProject
+        Project(finalProjectList, withWindow)
 
       // We only extract Window Expressions after all expressions of the Project
       // have been resolved, and lateral column aliases are properly handled first.
@@ -3303,9 +3297,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map(_.toAttribute)
-        val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagsFrom(p)
-        newProject
+        Project(finalProjectList, withWindow)
     }
   }
 
