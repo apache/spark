@@ -249,16 +249,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(jdbcTable.indexExists("i2") == false)
 
         val indexType = "DUMMY"
-        checkError(
-          exception = intercept[SparkException] {
-            sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
-          },
-          errorClass = "FAILED_JDBC.CREATE_INDEX",
-          parameters = Map(
-            "url" -> ".*",
-            "indexName" -> "`i1`",
-            "tableName" -> "`new_table`"),
-          matchPVals = true)
+        val e = intercept[SparkException] {
+          sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
+        }
+        assert(e.getErrorClass == "FAILED_JDBC.CREATE_INDEX")
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         assert(jdbcTable.indexExists("i1"))

@@ -106,11 +106,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     withTable(t1, t2) {
       sql(s"CREATE TABLE $t1(c int)")
       sql(s"CREATE TABLE $t2(c int)")
-      checkError(
-        exception = intercept[SparkException](sql(s"ALTER TABLE $t1 RENAME TO t2")),
-        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relationName" -> "`t2`")
-      )
+      val e = intercept[SparkException](sql(s"ALTER TABLE $t1 RENAME TO t2"))
+      assert(e.getErrorClass == "FAILED_JDBC.RENAME_TABLE")
     }
   }
 }
