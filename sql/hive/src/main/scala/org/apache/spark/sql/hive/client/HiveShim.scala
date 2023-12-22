@@ -765,6 +765,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
           case attr: Attribute => Some(attr)
           case Cast(child @ IntegralTypeExpression(), dt: IntegralType, _, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
+          case Cast(child: Attribute, dt: DateType, _, _) => unapply(child)
           case _ => None
         }
       }
