@@ -22,7 +22,7 @@ import java.util.Locale
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -112,11 +112,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, defaultMetadata)
+    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, super.defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, super.defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -142,7 +142,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(c1 string)")
       checkError(
-        exception = intercept[AnalysisException] {
+        exception = intercept[SparkRuntimeException] {
           sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
         },
         errorClass = "EXCEED_LIMIT_LENGTH",
