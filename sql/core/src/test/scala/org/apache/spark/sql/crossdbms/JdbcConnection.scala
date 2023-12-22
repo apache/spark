@@ -50,7 +50,7 @@ private[crossdbms] trait JdbcConnection {
 
   /**
    * Loads data from the given Spark DataFrame into the table with the specified name.
-   * @param df        The Spark DataFrame containing the data to be loaded.
+   * @param df The Spark DataFrame containing the data to be loaded.
    */
   def loadData(df: DataFrame, tableName: String): Unit
 
