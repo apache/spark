@@ -165,7 +165,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
     if (!analyzed && cond.apply(self) && !isRuleIneffective(ruleId)) {
-      AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      val newPlan = AnalysisHelper.allowInvokingTransformsInAnalyzer {
         val afterRule = CurrentOrigin.withOrigin(origin) {
           rule.applyOrElse(self, identity[LogicalPlan])
         }
@@ -183,6 +183,9 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
           afterRule.mapChildren(_.resolveOperatorsDownWithPruning(cond, ruleId)(rule))
         }
       }
+      self.getTagValue(LogicalPlan.PLAN_ID_TAG)
+        .foreach(id => newPlan.setTagValue(LogicalPlan.PLAN_ID_TAG, id))
+      newPlan
     } else {
       self
     }
