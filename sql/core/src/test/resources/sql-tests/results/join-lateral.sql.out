@@ -759,6 +759,7 @@ SELECT * FROM t1, LATERAL (SELECT SUM(cnt) FROM (SELECT COUNT(*) cnt FROM t2 WHE
 struct<c1:int,c2:int,sum(cnt):bigint>
 -- !query output
 0	1	2
+1	2	NULL
 
 
 -- !query
