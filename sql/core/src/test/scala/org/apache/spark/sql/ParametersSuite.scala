@@ -18,34 +18,28 @@
 package org.apache.spark.sql
 
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
-
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ParametersSuite extends QueryTest with SharedSparkSession {
+class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
 
   test("SPARK-46481: Test variable folding") {
-    sql("DECLARE a INT = 1").collect()
-    sql("SET VAR a = 1").collect()
-    val expected = sql("SELECT 42 WHERE 1 = 1").queryExecution.executedPlan
-    val variableDirectly = sql("SELECT 42 WHERE 1 = a").queryExecution.executedPlan
+    sql("DECLARE a INT = 1")
+    sql("SET VAR a = 1")
+    val expected = sql("SELECT 42 WHERE 1 = 1").queryExecution.optimizedPlan
+    val variableDirectly = sql("SELECT 42 WHERE 1 = a").queryExecution.optimizedPlan
     val parameterizedSpark =
-      spark.sql("SELECT 42 WHERE 1 = ?", Array(1)).queryExecution.executedPlan
+      spark.sql("SELECT 42 WHERE 1 = ?", Array(1)).queryExecution.optimizedPlan
     val parameterizedSql =
-      spark.sql("EXECUTE IMMEDIATE 'SELECT 42 WHERE 1 = ?' USING a").queryExecution.executedPlan
+      spark.sql("EXECUTE IMMEDIATE 'SELECT 42 WHERE 1 = ?' USING a").queryExecution.optimizedPlan
 
-    assert(
-      expected.semanticHash() == variableDirectly.semanticHash(),
-      "Select with variable directly query failed")
-    assert(
-      expected.semanticHash() == parameterizedSpark.semanticHash(),
-      "Parameterized select scala failed")
-    assert(
-      expected.semanticHash() == parameterizedSql.semanticHash(),
-      "Parameterized select SQL failed")
+    comparePlans(expected, variableDirectly)
+    comparePlans(expected, parameterizedSpark)
+    comparePlans(expected, parameterizedSql)
   }
 
   test("bind named parameters") {
