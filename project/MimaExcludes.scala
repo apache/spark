@@ -72,7 +72,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapGroupsWithStateFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SaveMode"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
+    // [SPARK-46480][CORE][SQL] Fix NPE when table cache task attempt
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.isFailed")
   )
 
   // Default exclude rules

@@ -669,6 +669,16 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(invocationOrder === Seq("C", "B", "A", "D"))
   }
 
+  test("SPARK-46480: Add isFailed in TaskContext") {
+    val context = TaskContext.empty()
+    var isFailed = false
+    context.addTaskCompletionListener[Unit] { context =>
+      isFailed = context.isFailed()
+    }
+    context.markTaskFailed(new RuntimeException())
+    context.markTaskCompleted(None)
+    assert(isFailed)
+  }
 }
 
 private object TaskContextSuite {
