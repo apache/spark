@@ -315,18 +315,10 @@ trait SparkDateTimeUtils {
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
     val bytes = s.getBytes
-    var j = 0
-    var strEndTrimmed = bytes.length
+    var (j, strEndTrimmed) = getTrimmedStartEnd(bytes)
 
-    while (j < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(j))) {
-      j += 1;
-    }
-    if (j == bytes.length) {
-      return None;
-    }
-
-    while (strEndTrimmed > j && UTF8String.isWhitespaceOrISOControl(bytes(strEndTrimmed - 1))) {
-      strEndTrimmed -= 1;
+    if (j == strEndTrimmed) {
+      return None
     }
 
     if (bytes(j) == '-' || bytes(j) == '+') {
@@ -371,8 +363,8 @@ trait SparkDateTimeUtils {
   }
 
   def stringToDateAnsi(
-      s: UTF8String,
-      context: QueryContext = null): Int = {
+                        s: UTF8String,
+                        context: QueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
     }
@@ -418,7 +410,7 @@ trait SparkDateTimeUtils {
         (segment == 7 && digits <= 2) ||
         (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
     }
-    if (s == null || s.trimAll().numBytes() == 0) {
+    if (s == null) {
       return (Array.empty, None, false)
     }
     var tz: Option[String] = None
@@ -426,8 +418,13 @@ trait SparkDateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
-    val bytes = s.trimAll().getBytes
-    var j = 0
+    val bytes = s.getBytes
+    var (j, strEndTrimmed) = getTrimmedStartEnd(bytes)
+
+    if (j == strEndTrimmed) {
+      return (Array.empty, None, false)
+    }
+
     var digitsMilli = 0
     var justTime = false
     var yearSign: Option[Int] = None
@@ -435,7 +432,7 @@ trait SparkDateTimeUtils {
       yearSign = if (bytes(j) == '-') Some(-1) else Some(1)
       j += 1
     }
-    while (j < bytes.length) {
+    while (j < strEndTrimmed) {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
       if (parsedValue < 0 || parsedValue > 9) {
@@ -504,8 +501,8 @@ trait SparkDateTimeUtils {
             currentSegmentValue = 0
             currentSegmentDigits = 0
             i += 1
-            tz = Some(new String(bytes, j, bytes.length - j))
-            j = bytes.length - 1
+            tz = Some(new String(bytes, j, strEndTrimmed - j))
+            j = strEndTrimmed - 1
           }
           if (i == 6  && b != '.') {
             i += 1
@@ -582,9 +579,9 @@ trait SparkDateTimeUtils {
   }
 
   def stringToTimestampAnsi(
-      s: UTF8String,
-      timeZoneId: ZoneId,
-      context: QueryContext = null): Long = {
+                             s: UTF8String,
+                             timeZoneId: ZoneId,
+                             context: QueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampType, context)
     }
@@ -618,6 +615,29 @@ trait SparkDateTimeUtils {
     } catch {
       case NonFatal(_) => None
     }
+  }
+
+  /**
+   * This method retrieves the start and end indices of a byte array after trimming
+   * any whitespace or ISO control characters.
+   * This way we can avoid allocating a new string with trimAll method
+   * and just operate between the trimmed indices.
+   *
+   * @param bytes The byte array to be trimmed.
+   * @return A tuple of two integers; first being the start and second the end trimmed index.
+   */
+  private def getTrimmedStartEnd(bytes: Array[Byte]): (Int, Int) = {
+    var (start, end) = (0, bytes.length - 1)
+
+    while (start < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(start))) {
+      start += 1
+    }
+
+    while (end > start && UTF8String.isWhitespaceOrISOControl(bytes(end))) {
+      end -= 1
+    }
+
+    (start, end + 1)
   }
 }
 
