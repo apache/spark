@@ -212,9 +212,7 @@ private[client] object GrpcExceptionConverter {
       }
     }),
     errorConstructor(params =>
-      new NamespaceAlreadyExistsException(
-        params.errorClass.orNull,
-        params.messageParameters)),
+      new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
         params.errorClass.orNull,
@@ -231,10 +229,7 @@ private[client] object GrpcExceptionConverter {
         params.messageParameters,
         params.cause)),
     errorConstructor(params =>
-      new NoSuchTableException(
-        params.errorClass.orNull,
-        params.messageParameters,
-        params.cause)),
+      new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         params.errorClass.orNull,
@@ -252,9 +247,7 @@ private[client] object GrpcExceptionConverter {
         params.messageParameters,
         params.queryContext)),
     errorConstructor[UnsupportedOperationException](params =>
-      new SparkUnsupportedOperationException(
-        params.errorClass.orNull,
-        params.messageParameters)),
+      new SparkUnsupportedOperationException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
       new SparkArrayIndexOutOfBoundsException(
         params.errorClass.orNull,
