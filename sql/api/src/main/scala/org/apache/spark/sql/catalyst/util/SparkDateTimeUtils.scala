@@ -363,8 +363,8 @@ trait SparkDateTimeUtils {
   }
 
   def stringToDateAnsi(
-                        s: UTF8String,
-                        context: QueryContext = null): Int = {
+      s: UTF8String,
+      context: QueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
     }
@@ -579,9 +579,9 @@ trait SparkDateTimeUtils {
   }
 
   def stringToTimestampAnsi(
-                             s: UTF8String,
-                             timeZoneId: ZoneId,
-                             context: QueryContext = null): Long = {
+      s: UTF8String,
+      timeZoneId: ZoneId,
+      context: QueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampType, context)
     }
