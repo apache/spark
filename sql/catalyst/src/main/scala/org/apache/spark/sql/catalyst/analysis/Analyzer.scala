@@ -912,7 +912,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
-      case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
+      case up @ Unpivot(Some(ids), Some(values), aliases,
+      variableColumnName, valueColumnNames, child) =>
 
         def toString(values: Seq[NamedExpression]): String =
           values.map(v => v.name).mkString("_")
@@ -938,7 +939,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val output = (ids.map(_.toAttribute) :+ variableAttr) ++ valueAttrs
 
         // expand the unpivot expressions
-        Expand(exprs, output, child)
+        val expand = Expand(exprs, output, child)
+        expand.copyTagsFrom(up)
+        expand
     }
   }
 

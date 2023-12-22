@@ -223,7 +223,9 @@ abstract class TypeCoercionBase {
           }
         )
 
-        up.copy(values = Some(values))
+        val newUnpivot = up.copy(values = Some(values))
+        newUnpivot.copyTagsFrom(up)
+        newUnpivot
     }
   }
 
