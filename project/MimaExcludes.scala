@@ -57,7 +57,9 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
     // [SPARK-45762][CORE] Support shuffle managers defined in user jars by changing startup order
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.this"),
+    // [SPARK-46480][CORE][SQL] Fix NPE when table cache task attempt
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.isFailed")
   )
 
   // Default exclude rules
