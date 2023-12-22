@@ -350,7 +350,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
 
       permuteWithWhitespaceAndControl(
-        "INVALID_INPUT", " ", "2015-03-18\u000312:03:17", "2015-03-18 12:", "2015-03-18 123"
+        "INVALID_INPUT", "\t", "", "2015-03-18\u000312:03:17", "2015-03-18 12:", "2015-03-18 123"
       ).foreach { s =>
         checkStringToTimestamp(s, None)
       }
