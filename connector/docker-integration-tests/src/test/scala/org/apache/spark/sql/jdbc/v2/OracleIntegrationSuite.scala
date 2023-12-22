@@ -89,7 +89,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
   }
 
-  override val defaultMetadata = new MetadataBuilder()
+  override val defaultMetadata: Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
     .build()
