@@ -897,13 +897,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         ids.forall(_.isInstanceOf[AttributeReference]) =>
         val idAttrs = AttributeSet(up.ids.get)
         val values = up.child.output.filterNot(idAttrs.contains)
-        up.copy(values = Some(values.map(Seq(_))))
+        val newUnpivot = up.copy(values = Some(values.map(Seq(_))))
+        newUnpivot.copyTagsFrom(up)
+        newUnpivot
+
       case up @ Unpivot(None, Some(values), _, _, _, _) if up.childrenResolved &&
         values.forall(_.forall(_.resolved)) &&
         values.forall(_.forall(_.isInstanceOf[AttributeReference])) =>
         val valueAttrs = AttributeSet(up.values.get.flatten)
         val ids = up.child.output.filterNot(valueAttrs.contains)
-        up.copy(ids = Some(ids))
+        val newUnpivot = up.copy(ids = Some(ids))
+        newUnpivot.copyTagsFrom(up)
+        newUnpivot
 
       case up: Unpivot if !up.childrenResolved || !up.ids.exists(_.forall(_.resolved)) ||
         !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.forall(_.resolved))) ||
