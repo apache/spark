@@ -222,7 +222,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
-      val e = intercept[AnalysisException] {
+      val e = intercept[SparkException] {
         sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
       }
       assert(e.getErrorClass == "FAILED_JDBC.CREATE_TABLE")
@@ -254,7 +254,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
             sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
           },
           errorClass = "FAILED_JDBC.CREATE_INDEX",
-          parameters = Map.empty)
+          parameters = Map(
+            "url" -> ".*",
+            "indexName" -> "`i1`",
+            "tableName" -> "`new_table`"),
+          matchPVals = true)
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         assert(jdbcTable.indexExists("i1"))
