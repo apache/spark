@@ -963,13 +963,13 @@ class DataFrameTestsMixin:
             ):
                 df.unpivot("id", ["int", "str"], "var", "val").collect()
 
-    def test_unpivot_groupby(self):
+    def test_melt_groupby(self):
         df = self.spark.createDataFrame(
-            [(1, 11, 1.1), (2, 12, 1.2)],
-            ["id", "int", "double"],
+            [(1, 2, 3, 4, 5, 6)],
+            ["f1", "f2", "label", "pred", "model_version", "ts"],
         )
         self.assertEqual(
-            df.unpivot("id", ["int", "double"], "var", "val").groupBy("id").count().count(),
+            df.melt("model_version", ["label", "f2"], "f1", "f2").groupby("f1").count().count(),
             2,
         )
 
