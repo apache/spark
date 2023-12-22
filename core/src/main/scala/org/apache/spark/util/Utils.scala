@@ -769,7 +769,6 @@ private[spark] object Utils
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
-    val shuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -1886,17 +1885,6 @@ private[spark] object Utils
     }
   }
 
-  /** Check whether a path is an absolute URI. */
-  def isAbsoluteURI(path: String): Boolean = {
-    try {
-      val uri = new URI(path: String)
-      uri.isAbsolute
-    } catch {
-      case _: URISyntaxException =>
-        false
-    }
-  }
-
   /** Return all non-local paths from a comma-separated list of paths. */
   def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     val windows = isWindows || testWindows
@@ -1931,20 +1919,6 @@ private[spark] object Utils
       }
     }
     path
-  }
-
-  /**
-   * Updates Spark config with properties from a set of Properties.
-   * Provided properties have the highest priority.
-   */
-  def updateSparkConfigFromProperties(
-      conf: SparkConf,
-      properties: Map[String, String]) : Unit = {
-    properties.filter { case (k, v) =>
-      k.startsWith("spark.")
-    }.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
   }
 
   /**
