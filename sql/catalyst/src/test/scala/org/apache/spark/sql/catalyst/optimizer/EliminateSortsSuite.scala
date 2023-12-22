@@ -39,7 +39,8 @@ class EliminateSortsSuite extends AnalysisTest {
         FoldablePropagation,
         LimitPushDown) ::
       Batch("Eliminate Sorts", Once,
-        EliminateSorts) ::
+        EliminateSorts,
+        RemoveRedundantSorts) ::
       Batch("Collapse Project", Once,
         CollapseProject) :: Nil
   }

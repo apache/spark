@@ -109,24 +109,32 @@ public class ParquetVectorUpdaterFactory {
           // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary
           // fallbacks. We read them as decimal values.
           return new UnsignedLongUpdater();
-        } else if (isTimestamp(sparkType) &&
+        } else if (sparkType == DataTypes.TimestampType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
-          validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongUpdater();
           } else {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new LongWithRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
-        } else if (isTimestamp(sparkType) &&
+        } else if (sparkType == DataTypes.TimestampType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
-          validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongAsMicrosUpdater();
           } else {
             final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new LongAsMicrosRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
+        } else if (sparkType == DataTypes.TimestampNTZType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
+          validateTimestampNTZType();
+          // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
+          return new LongUpdater();
+        } else if (sparkType == DataTypes.TimestampNTZType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
+          validateTimestampNTZType();
+          // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
+          return new LongAsMicrosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
         }
@@ -195,12 +203,11 @@ public class ParquetVectorUpdaterFactory {
       annotation.getUnit() == unit;
   }
 
-  void validateTimestampType(DataType sparkType) {
+  private void validateTimestampNTZType() {
     assert(logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation);
-    // Throw an exception if the Parquet type is TimestampLTZ and the Catalyst type is TimestampNTZ.
+    // Throw an exception if the Parquet type is TimestampLTZ as the Catalyst type is TimestampNTZ.
     // This is to avoid mistakes in reading the timestamp values.
-    if (((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC() &&
-      sparkType == DataTypes.TimestampNTZType) {
+    if (((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC()) {
       convertErrorForTimestampNTZ("int64 time(" + logicalTypeAnnotation + ")");
     }
   }
@@ -1147,10 +1154,6 @@ public class ParquetVectorUpdaterFactory {
       return d.precision() == 20 && d.scale() == 0;
     }
     return false;
-  }
-
-  private static boolean isTimestamp(DataType dt) {
-    return dt == DataTypes.TimestampType || dt == DataTypes.TimestampNTZType;
   }
 
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -24,6 +25,8 @@ import org.apache.spark.sql.types.StructType
 
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   import IntegratedUDFTestUtils._
+
+  setupTestData()
 
   private def dataSourceName = "SimpleDataSource"
   private def simpleDataSourceReaderScript: String =
@@ -452,5 +455,97 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(metrics(pythonDataSent.id).asInstanceOf[String].endsWith("B"))
     assert(metrics.contains(pythonDataReceived.id))
     assert(metrics(pythonDataReceived.id).asInstanceOf[String].endsWith("B"))
+  }
+
+  test("simple data source write") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |import json
+         |from pyspark import TaskContext
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def write(self, iterator):
+         |        context = TaskContext.get()
+         |        partition_id = context.partitionId()
+         |        path = self.options.get("path")
+         |        assert path is not None
+         |        output_path = f"{path}/{partition_id}.json"
+         |        cnt = 0
+         |        with open(output_path, "w") as file:
+         |            for row in iterator:
+         |                file.write(json.dumps(row.asDict()) + "\\n")
+         |                cnt += 1
+         |        return WriterCommitMessage()
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, saveMode):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    Seq(
+      "SELECT * FROM range(0, 5, 1, 3)",
+      "SELECT * FROM testData LIMIT 5",
+      "SELECT * FROM testData3",
+      "SELECT * FROM arrayData"
+    ).foreach { query =>
+      withTempDir { dir =>
+        val df = sql(query)
+        val path = dir.getAbsolutePath
+        df.write.format(dataSourceName).mode("append").save(path)
+        val df2 = spark.read.json(path)
+        checkAnswer(df, df2)
+      }
+    }
+  }
+
+  test("data source write - error cases") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def write(self, iterator):
+         |        num_rows = 0
+         |        for row in iterator:
+         |            num_rows += 1
+         |            if num_rows > 2:
+         |                raise Exception("something is wrong")
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, saveMode):
+         |        return SimpleDataSourceWriter()
+         |""".stripMargin
+    spark.dataSource.registerPython(dataSourceName,
+      createUserDefinedPythonDataSource(dataSourceName, dataSourceScript))
+
+    withClue("user error") {
+      val error = intercept[SparkException] {
+        spark.range(10).write.format(dataSourceName).mode("append").save()
+      }
+      assert(error.getMessage.contains("something is wrong"))
+    }
+
+    withClue("no commit message") {
+      val error = intercept[SparkException] {
+        spark.range(1).write.format(dataSourceName).mode("append").save()
+      }
+      assert(error.getMessage.contains("PYTHON_DATA_SOURCE_WRITE_ERROR"))
+    }
+
+    withClue("without mode") {
+      val error = intercept[AnalysisException] {
+        spark.range(1).write.format(dataSourceName).save()
+      }
+      // TODO: improve this error message.
+      assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
+        "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
+    }
   }
 }
