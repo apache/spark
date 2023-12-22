@@ -1713,8 +1713,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
     case filter @ Filter(condition, aggregate: Aggregate)
-      if aggregate.aggregateExpressions.forall(_.deterministic)
-        && aggregate.groupingExpressions.nonEmpty =>
+      if aggregate.groupingExpressions.nonEmpty =>
       val aliasMap = getAliasMap(aggregate)
 
       // For each filter, expand the alias and check if the filter can be evaluated using
@@ -1724,7 +1723,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
       val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.references.nonEmpty && replaced.deterministic &&
+          replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       val stayUp = rest ++ nonDeterministic

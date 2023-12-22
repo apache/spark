@@ -191,15 +191,21 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
-  test("nondeterministic: can't push down filter through aggregate with nondeterministic field") {
+  test("nondeterministic: push down part of filter through aggregate" +
+    " with nondeterministic field") {
     val originalQuery = testRelation
       .groupBy($"a")($"a", Rand(10).as("rand"))
-      .where($"a" > 5)
+      .where($"a" > 5 && $"rand" > 5)
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
+    val correctAnswer = testRelation
+      .where($"a" > 5)
+      .groupBy($"a")($"a", Rand(10).as("rand"))
+      .where($"rand" > 5)
+      .analyze
 
-    comparePlans(optimized, originalQuery)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("nondeterministic: push down part of filter through aggregate with deterministic field") {
