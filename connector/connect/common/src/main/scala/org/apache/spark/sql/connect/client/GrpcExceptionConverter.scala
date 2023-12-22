@@ -212,7 +212,9 @@ private[client] object GrpcExceptionConverter {
       }
     }),
     errorConstructor(params =>
-      new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
+      new NamespaceAlreadyExistsException(
+        params.errorClass.orNull,
+        params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
         params.errorClass.orNull,
@@ -229,56 +231,51 @@ private[client] object GrpcExceptionConverter {
         params.messageParameters,
         params.cause)),
     errorConstructor(params =>
-      new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
+      new NoSuchTableException(
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
-        params.message,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters,
         params.queryContext)),
     errorConstructor[IllegalArgumentException](params =>
       new SparkIllegalArgumentException(
-        params.message,
-        params.cause,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters,
-        params.queryContext)),
+        params.queryContext,
+        cause = params.cause.orNull)),
     errorConstructor[ArithmeticException](params =>
       new SparkArithmeticException(
-        params.message,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters,
         params.queryContext)),
     errorConstructor[UnsupportedOperationException](params =>
       new SparkUnsupportedOperationException(
-        params.message,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters)),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
       new SparkArrayIndexOutOfBoundsException(
-        params.message,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters,
         params.queryContext)),
     errorConstructor[DateTimeException](params =>
       new SparkDateTimeException(
-        params.message,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters,
         params.queryContext)),
     errorConstructor(params =>
       new SparkRuntimeException(
-        params.message,
-        params.cause,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters,
+        params.cause.orNull,
         params.queryContext)),
     errorConstructor(params =>
       new SparkUpgradeException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause.orNull)),
     errorConstructor(params =>
       new SparkException(
         message = params.message,
