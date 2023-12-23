@@ -12875,9 +12875,8 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 @_try_remote_functions
 def array_prepend(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: Returns an array containing element as
-    well as all elements from array. The new element is positioned
-    at the beginning of the array.
+    Array function: Returns an array containing the given element as
+    the first element and the rest of the elements from the original array.
 
     .. versionadded:: 3.5.0
 
@@ -12891,13 +12890,72 @@ def array_prepend(col: "ColumnOrName", value: Any) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array excluding given value.
+        an array with the given value prepended.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([2, 3, 4],), ([],)], ['data'])
-    >>> df.select(array_prepend(df.data, 1)).collect()
-    [Row(array_prepend(data, 1)=[1, 2, 3, 4]), Row(array_prepend(data, 1)=[1])]
+    Example 1: Prepending a column value to an array column
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
+    >>> df.select(sf.array_prepend(df.c1, df.c2)).show()
+    +---------------------+
+    |array_prepend(c1, c2)|
+    +---------------------+
+    |         [c, b, a, c]|
+    +---------------------+
+
+    Example 2: Prepending a numeric value to an array column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_prepend(df.data, 4)).show()
+    +----------------------+
+    |array_prepend(data, 4)|
+    +----------------------+
+    |          [4, 1, 2, 3]|
+    +----------------------+
+
+    Example 3: Prepending a null value to an array column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_prepend(df.data, None)).show()
+    +-------------------------+
+    |array_prepend(data, NULL)|
+    +-------------------------+
+    |          [NULL, 1, 2, 3]|
+    +-------------------------+
+
+    Example 4: Prepending a value to a NULL array column
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([(None,)], schema=schema)
+    >>> df.select(sf.array_prepend(df.data, 4)).show()
+    +----------------------+
+    |array_prepend(data, 4)|
+    +----------------------+
+    |                  NULL|
+    +----------------------+
+
+    Example 5: Prepending a value to an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.array_prepend(df.data, 1)).show()
+    +----------------------+
+    |array_prepend(data, 1)|
+    +----------------------+
+    |                   [1]|
+    +----------------------+
     """
     return _invoke_function_over_columns("array_prepend", col, lit(value))
 
@@ -12965,7 +13023,7 @@ def array_distinct(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
     """
-    Collection function: adds an item into a given array at a specified array index.
+    Array function: Inserts an item into a given array at a specified array index.
     Array indices start at 1, or start from the end if index is negative.
     Index above array size appends the array, or prepends the array if index is negative,
     with 'null' elements.
@@ -12993,14 +13051,66 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
 
     Examples
     --------
-    >>> df = spark.createDataFrame(
-    ...     [(['a', 'b', 'c'], 2, 'd'), (['c', 'b', 'a'], -2, 'd')],
-    ...     ['data', 'pos', 'val']
-    ... )
-    >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val).alias('data')).collect()
-    [Row(data=['a', 'd', 'b', 'c']), Row(data=['c', 'b', 'd', 'a'])]
-    >>> df.select(array_insert(df.data, 5, 'hello').alias('data')).collect()
-    [Row(data=['a', 'b', 'c', None, 'hello']), Row(data=['c', 'b', 'a', None, 'hello'])]
+    Example 1: Inserting a value at a specific position
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['a', 'b', 'c'],)], ['data'])
+    >>> df.select(sf.array_insert(df.data, 2, 'd')).show()
+    +------------------------+
+    |array_insert(data, 2, d)|
+    +------------------------+
+    |            [a, d, b, c]|
+    +------------------------+
+
+    Example 2: Inserting a value at a negative position
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['a', 'b', 'c'],)], ['data'])
+    >>> df.select(sf.array_insert(df.data, -2, 'd')).show()
+    +-------------------------+
+    |array_insert(data, -2, d)|
+    +-------------------------+
+    |             [a, b, d, c]|
+    +-------------------------+
+
+    Example 3: Inserting a value at a position greater than the array size
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['a', 'b', 'c'],)], ['data'])
+    >>> df.select(sf.array_insert(df.data, 5, 'e')).show()
+    +------------------------+
+    |array_insert(data, 5, e)|
+    +------------------------+
+    |      [a, b, c, NULL, e]|
+    +------------------------+
+
+    Example 4: Inserting a NULL value
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StringType
+    >>> df = spark.createDataFrame([(['a', 'b', 'c'],)], ['data'])
+    >>> df.select(sf.array_insert(df.data, 2, sf.lit(None).cast(StringType()))
+    ...   .alias("result")).show()
+    +---------------+
+    |         result|
+    +---------------+
+    |[a, NULL, b, c]|
+    +---------------+
+
+    Example 5: Inserting a value into a NULL array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([(None,)], schema=schema)
+    >>> df.select(sf.array_insert(df.data, 1, 5)).show()
+    +------------------------+
+    |array_insert(data, 1, 5)|
+    +------------------------+
+    |                    NULL|
+    +------------------------+
     """
     pos = lit(pos) if isinstance(pos, int) else pos
 
@@ -13139,22 +13249,21 @@ def array_compact(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_append(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: returns an array of the elements in col1 along
-    with the added element in col2 at the last of the array.
+    Array function: returns a new array column by appending `value` to the existing array `col`.
 
     .. versionadded:: 3.4.0
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        The name of the column containing the array.
     value :
-        a literal value, or a :class:`~pyspark.sql.Column` expression.
+        A literal value, or a :class:`~pyspark.sql.Column` expression to be appended to the array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of values from first array along with the element.
+        A new array column with `value` appended to the original array.
 
     Notes
     -----
@@ -13162,12 +13271,68 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Row
+    Example 1: Appending a column value to an array column
+
+    >>> from pyspark.sql import Row, functions as sf
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
-    >>> df.select(array_append(df.c1, df.c2)).collect()
-    [Row(array_append(c1, c2)=['b', 'a', 'c', 'c'])]
-    >>> df.select(array_append(df.c1, 'x')).collect()
-    [Row(array_append(c1, x)=['b', 'a', 'c', 'x'])]
+    >>> df.select(sf.array_append(df.c1, df.c2)).show()
+    +--------------------+
+    |array_append(c1, c2)|
+    +--------------------+
+    |        [b, a, c, c]|
+    +--------------------+
+
+    Example 2: Appending a numeric value to an array column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_append(df.data, 4)).show()
+    +---------------------+
+    |array_append(data, 4)|
+    +---------------------+
+    |         [1, 2, 3, 4]|
+    +---------------------+
+
+    Example 3: Appending a null value to an array column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_append(df.data, None)).show()
+    +------------------------+
+    |array_append(data, NULL)|
+    +------------------------+
+    |         [1, 2, 3, NULL]|
+    +------------------------+
+
+    Example 4: Appending a value to a NULL array column
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([(None,)], schema=schema)
+    >>> df.select(sf.array_append(df.data, 4)).show()
+    +---------------------+
+    |array_append(data, 4)|
+    +---------------------+
+    |                 NULL|
+    +---------------------+
+
+    Example 5: Appending a value to an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.array_append(df.data, 1)).show()
+    +---------------------+
+    |array_append(data, 1)|
+    +---------------------+
+    |                  [1]|
+    +---------------------+
     """
     return _invoke_function_over_columns("array_append", col, lit(value))
 
