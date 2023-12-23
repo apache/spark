@@ -223,24 +223,15 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           }
 
           // assert the outer most sort in the executed plan
-          val sort = plan.collectFirst { case s: SortExec => s }
-          if (enabled) {
-            // With planned write, optimizer is more efficient and can eliminate the `SORT BY`.
-            assert(sort.exists {
-              case SortExec(Seq(
-                SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _)
-              ), false, _, _) => true
-              case _ => false
-            }, plan)
-          } else {
-            assert(sort.exists {
-              case SortExec(Seq(
-                SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
-                SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
-              ), false, _, _) => true
-              case _ => false
-            }, plan)
-          }
+          assert(plan.collectFirst {
+            case s: SortExec => s
+          }.exists {
+            case SortExec(Seq(
+              SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
+              SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
+            ), false, _, _) => true
+            case _ => false
+          }, plan)
         }
       }
     }
@@ -279,24 +270,15 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
         }
 
         // assert the outer most sort in the executed plan
-        val sort = plan.collectFirst { case s: SortExec => s }
-        if (enabled) {
-          // With planned write, optimizer is more efficient and can eliminate the `SORT BY`.
-          assert(sort.exists {
-            case SortExec(Seq(
-              SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
-            ), false, _, _) => true
-            case _ => false
-          }, plan)
-        } else {
-          assert(sort.exists {
-            case SortExec(Seq(
-              SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
-              SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _)
-            ), false, _, _) => true
-            case _ => false
-          }, plan)
-        }
+        assert(plan.collectFirst {
+          case s: SortExec => s
+        }.exists {
+          case SortExec(Seq(
+            SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
+            SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _)
+          ), false, _, _) => true
+          case _ => false
+        }, plan)
       }
     }
   }
