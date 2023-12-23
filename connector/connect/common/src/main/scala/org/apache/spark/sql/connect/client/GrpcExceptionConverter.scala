@@ -230,33 +230,63 @@ private[client] object GrpcExceptionConverter {
         params.cause)),
     errorConstructor(params =>
       new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
-    errorConstructor[NumberFormatException](params =>
+    errorConstructor(params =>
       new SparkNumberFormatException(
         params.errorClass.orNull,
         params.messageParameters,
         params.queryContext)),
-    errorConstructor[IllegalArgumentException](params =>
+    errorConstructor[NumberFormatException](params =>
+      new SparkNumberFormatException(
+        errorClass = "_LEGACY_ERROR_TEMP_3100",
+        messageParameters = Map("message" -> params.message),
+        params.queryContext)),
+    errorConstructor(params =>
       new SparkIllegalArgumentException(
         params.errorClass.orNull,
         params.messageParameters,
         params.queryContext,
         cause = params.cause.orNull)),
-    errorConstructor[ArithmeticException](params =>
+    errorConstructor[IllegalArgumentException](params =>
+      new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3100",
+        messageParameters = Map("message" -> params.message),
+        params.queryContext,
+        cause = params.cause.orNull)),
+    errorConstructor(params =>
       new SparkArithmeticException(
         params.errorClass.orNull,
         params.messageParameters,
         params.queryContext)),
-    errorConstructor[UnsupportedOperationException](params =>
+    errorConstructor[ArithmeticException](params =>
+      new SparkArithmeticException(
+        errorClass = "_LEGACY_ERROR_TEMP_3100",
+        messageParameters = Map("message" -> params.message),
+        params.queryContext)),
+    errorConstructor(params =>
       new SparkUnsupportedOperationException(params.errorClass.orNull, params.messageParameters)),
+    errorConstructor[UnsupportedOperationException](params =>
+      new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3100",
+        messageParameters = Map("message" -> params.message))),
+    errorConstructor(params =>
+      new SparkArrayIndexOutOfBoundsException(
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.queryContext)),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
       new SparkArrayIndexOutOfBoundsException(
+        errorClass = "_LEGACY_ERROR_TEMP_3100",
+        messageParameters = Map("message" -> params.message),
+        params.queryContext)),
+    errorConstructor(params =>
+      new SparkDateTimeException(
         params.errorClass.orNull,
         params.messageParameters,
         params.queryContext)),
     errorConstructor[DateTimeException](params =>
       new SparkDateTimeException(
-        params.errorClass.orNull,
-        params.messageParameters,
+        errorClass = "_LEGACY_ERROR_TEMP_3100",
+        messageParameters = Map("message" -> params.message),
         params.queryContext)),
     errorConstructor(params =>
       new SparkRuntimeException(

@@ -370,8 +370,7 @@ private[spark] class SparkRuntimeException private(
     errorClass: Option[String],
     messageParameters: Map[String, String],
     context: Array[QueryContext])
-  extends RuntimeException(message, cause.orNull)
-    with SparkThrowable {
+  extends RuntimeException(message, cause.orNull) with SparkThrowable {
 
   def this(
     errorClass: String,
