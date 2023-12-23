@@ -72,6 +72,10 @@ private[sql] object PythonSQLUtils extends Logging {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
   }
 
+  /**
+   * Export all SQL configurations for display in our documentation. Py4J does not seem to
+   * support Seq, so we convert to Array.
+   */
   def listAllSQLConfigsWithTags():
     Array[(String, String, String, String, Array[String])] = {
     val conf = new SQLConf()
@@ -86,7 +90,6 @@ private[sql] object PythonSQLUtils extends Logging {
   }
 
   def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
-    // Py4J doesn't seem to translate Seq well, so we convert to an Array.
     listAllSQLConfigs().filterNot(p => SQLConf.isStaticConfigKey(p._1)).toArray
   }
 
