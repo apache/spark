@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2224,30 +2223,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
     CreateStruct.create(ctx.argument.asScala.map(expression).toSeq)
-  }
-
-  /**
-   * Create a [[First]] expression.
-   */
-  override def visitFirst(ctx: FirstContext): Expression = withOrigin(ctx) {
-    val ignoreNullsExpr = ctx.IGNORE != null
-    First(expression(ctx.expression), ignoreNullsExpr).toAggregateExpression()
-  }
-
-  /**
-   * Create an [[AnyValue]] expression.
-   */
-  override def visitAny_value(ctx: Any_valueContext): Expression = withOrigin(ctx) {
-    val ignoreNullsExpr = ctx.IGNORE != null
-    AnyValue(expression(ctx.expression), ignoreNullsExpr).toAggregateExpression()
-  }
-
-  /**
-   * Create a [[Last]] expression.
-   */
-  override def visitLast(ctx: LastContext): Expression = withOrigin(ctx) {
-    val ignoreNullsExpr = ctx.IGNORE != null
-    Last(expression(ctx.expression), ignoreNullsExpr).toAggregateExpression()
   }
 
   /**
