@@ -28,7 +28,8 @@ import org.apache.spark.sql.types._
 
 object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
-  private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+  // visible for testing
+  private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a

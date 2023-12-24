@@ -173,8 +173,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
 
-  // SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle jdbc-am""
-  test("SPARK-12941: String datatypes to be mapped to CLOB in Oracle") {
+  test("SPARK-12941: String datatypes to be mapped to VARCHAR(255) in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
