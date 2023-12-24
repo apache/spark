@@ -564,7 +564,7 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      Seq("2020-01-01"),
+      dateStrValue,
       timestampStrValue)
   }
 
