@@ -104,7 +104,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         }
 
         val left = num - results.size
-        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts))
 
         val buf = new Array[Array[T]](p.size)
         self.context.setCallSite(callSite)

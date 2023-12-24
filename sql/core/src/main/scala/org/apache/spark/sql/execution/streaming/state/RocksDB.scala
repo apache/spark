@@ -547,13 +547,13 @@ class RocksDB(
       readerMemUsage + memTableMemUsage + blockCacheUsage,
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
-      nativeOpsLatencyMicros.toMap,
+      nativeOpsLatencyMicros,
       commitLatencyMs,
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
-      nativeOpsMetrics = nativeOpsMetrics.toMap)
+      nativeOpsMetrics = nativeOpsMetrics)
   }
 
   /**
@@ -861,7 +861,7 @@ object RocksDBConf {
     }
 
     def getStringConf(conf: ConfEntry): String = {
-      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toString } getOrElse {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default) } getOrElse {
         throw new IllegalArgumentException(
           s"Invalid value for '${conf.fullName}', must be a string"
         )
