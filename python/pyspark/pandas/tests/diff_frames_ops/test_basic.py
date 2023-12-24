@@ -26,7 +26,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class OpsOnDiffFramesEnabledTestsMixin:
+class BasicMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -66,53 +66,6 @@ class OpsOnDiffFramesEnabledTestsMixin:
         )
 
     @property
-    def pdf5(self):
-        return pd.DataFrame(
-            {
-                "a": [1, 2, 3, 4, 5, 6, 7, 8, 9],
-                "b": [4, 5, 6, 3, 2, 1, 0, 0, 0],
-                "c": [4, 5, 6, 3, 2, 1, 0, 0, 0],
-            },
-            index=[0, 1, 3, 5, 6, 8, 9, 10, 11],
-        ).set_index(["a", "b"])
-
-    @property
-    def pdf6(self):
-        return pd.DataFrame(
-            {
-                "a": [9, 8, 7, 6, 5, 4, 3, 2, 1],
-                "b": [0, 0, 0, 4, 5, 6, 1, 2, 3],
-                "c": [9, 8, 7, 6, 5, 4, 3, 2, 1],
-                "e": [4, 5, 6, 3, 2, 1, 0, 0, 0],
-            },
-            index=list(range(9)),
-        ).set_index(["a", "b"])
-
-    @property
-    def pser1(self):
-        midx = pd.MultiIndex(
-            [["lama", "cow", "falcon", "koala"], ["speed", "weight", "length", "power"]],
-            [[0, 3, 1, 1, 1, 2, 2, 2], [0, 2, 0, 3, 2, 0, 1, 3]],
-        )
-        return pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1], index=midx)
-
-    @property
-    def pser2(self):
-        midx = pd.MultiIndex(
-            [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
-            [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
-        )
-        return pd.Series([-45, 200, -1.2, 30, -250, 1.5, 320, 1, -0.3], index=midx)
-
-    @property
-    def pser3(self):
-        midx = pd.MultiIndex(
-            [["koalas", "cow", "falcon"], ["speed", "weight", "length"]],
-            [[0, 0, 0, 1, 1, 1, 2, 2, 2], [1, 1, 2, 0, 0, 2, 2, 2, 1]],
-        )
-        return pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-
-    @property
     def psdf1(self):
         return ps.from_pandas(self.pdf1)
 
@@ -127,26 +80,6 @@ class OpsOnDiffFramesEnabledTestsMixin:
     @property
     def psdf4(self):
         return ps.from_pandas(self.pdf4)
-
-    @property
-    def psdf5(self):
-        return ps.from_pandas(self.pdf5)
-
-    @property
-    def psdf6(self):
-        return ps.from_pandas(self.pdf6)
-
-    @property
-    def psser1(self):
-        return ps.from_pandas(self.pser1)
-
-    @property
-    def psser2(self):
-        return ps.from_pandas(self.pser2)
-
-    @property
-    def psser3(self):
-        return ps.from_pandas(self.pser3)
 
     def test_ranges(self):
         self.assert_eq(
@@ -286,29 +219,17 @@ class OpsOnDiffFramesEnabledTestsMixin:
 
         self.assert_eq((psdf1 + psdf4).sort_index(), (pdf1 + pdf4).sort_index(), almost=True)
 
-    def test_multi_index_arithmetic(self):
-        psdf5 = self.psdf5
-        psdf6 = self.psdf6
-        pdf5 = self.pdf5
-        pdf6 = self.pdf6
 
-        # Series
-        self.assert_eq((psdf5.c - psdf6.e).sort_index(), (pdf5.c - pdf6.e).sort_index())
-
-        self.assert_eq((psdf5["c"] / psdf6["e"]).sort_index(), (pdf5["c"] / pdf6["e"]).sort_index())
-
-        # DataFrame
-        self.assert_eq((psdf5 + psdf6).sort_index(), (pdf5 + pdf6).sort_index(), almost=True)
-
-
-class OpsOnDiffFramesEnabledTests(
-    OpsOnDiffFramesEnabledTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+class BasicTests(
+    BasicMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_ops_on_diff_frames import *  # noqa: F401
+    from pyspark.pandas.tests.diff_frames_ops.test_basic import *  # noqa: F401
 
     try:
         import xmlrunner
