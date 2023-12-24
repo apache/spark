@@ -780,14 +780,8 @@ class HivePartitionFilteringSuite(version: String)
     val expectedPartitionCount = expectedPartitionCubes.map {
       case (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr,
             expectedTimestampStr) =>
-        if (filterExpr.isInstanceOf[EqualTo] &&
-          filterExpr.asInstanceOf[EqualTo].left.dataType.isInstanceOf[DateType]) {
-          expectedDs.size * expectedH.size * expectedChunks.size *
-            expectedD.size * 1 * expectedTimestampStr.size
-        } else {
-          expectedDs.size * expectedH.size * expectedChunks.size *
-            expectedD.size * expectedDatestr.size * expectedTimestampStr.size
-        }
+        expectedDs.size * expectedH.size * expectedChunks.size *
+          expectedD.size * expectedDatestr.size * expectedTimestampStr.size
     }.sum
 
     val expectedPartitions = expectedPartitionCubes.map {
