@@ -631,6 +631,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION", ctx)
   }
 
+  def duplicateArgumentNamesError(
+      arguments: Seq[String],
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+      messageParameters = Map("aliases" -> arguments.map(toSQLId).mkString(", ")),
+      ctx)
+  }
+
   def duplicateTableColumnDescriptor(
       ctx: ParserRuleContext,
       columnName: String,

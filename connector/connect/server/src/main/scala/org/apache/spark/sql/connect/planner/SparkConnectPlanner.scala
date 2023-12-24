@@ -551,7 +551,7 @@ class SparkConnectPlanner(
               baseRel,
               isBarrier)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
-            logical.PythonMapInArrow(
+            logical.MapInArrow(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,

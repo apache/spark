@@ -712,6 +712,11 @@ ERROR_CLASSES_JSON = """
       "No active Spark session found. Please create a new Spark session before running the code."
     ]
   },
+  "NO_OBSERVE_BEFORE_GET" : {
+    "message" : [
+      "Should observe by calling `DataFrame.observe` before `get`."
+    ]
+  },
   "NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME" : {
     "message" : [
       "Only allows <arg_name> to be a path without scheme, and Spark Driver should use the default scheme to determine the destination file system."
@@ -765,6 +770,11 @@ ERROR_CLASSES_JSON = """
   "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
     "message" : [
       "Expected <expected>, but got <actual>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_WRITE_ERROR" : {
+    "message" : [
+      "Unable to write to the Python data source: <error>."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET" : {
@@ -826,6 +836,11 @@ ERROR_CLASSES_JSON = """
   "RETRIES_EXCEEDED" : {
     "message" : [
       "The maximum number of retries has been exceeded."
+    ]
+  },
+  "REUSE_OBSERVATION" : {
+    "message" : [
+      "An Observation can be used with a DataFrame only once."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
