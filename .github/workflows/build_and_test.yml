@@ -346,11 +346,9 @@ jobs:
           - ${{ inputs.java }}
         modules:
           - >-
-            pyspark-errors
-          - >-
             pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-core, pyspark-streaming
+            pyspark-core, pyspark-errors, pyspark-streaming
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
@@ -436,7 +434,7 @@ jobs:
         python3.9 -m pip list
         pypy3 -m pip list
     - name: Install Conda for pip packaging test
-      if: ${{ matrix.modules == 'pyspark-errors' }}
+      if: contains(matrix.modules, 'pyspark-errors')
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
@@ -446,7 +444,7 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "$MODULES_TO_TEST" == "pyspark-errors" ]]; then
+        if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
           export PATH=$PATH:$HOME/miniconda/bin
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
