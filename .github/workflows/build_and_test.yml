@@ -261,6 +261,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         ls -al /home/runner/work/_temp/*
+        find /home/runner/work/_temp/ -name "*" -type file -depth 1 | xargs cat *
         # Fix for TTY related issues when launching the Ammonite REPL in tests.
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
