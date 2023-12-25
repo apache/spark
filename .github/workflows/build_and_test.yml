@@ -434,7 +434,7 @@ jobs:
       run: |
         for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
         do
-          py -m pip list
+          $py -m pip list
         done
     - name: Install Conda for pip packaging test
       if: contains(matrix.modules, 'pyspark-errors')
