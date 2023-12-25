@@ -18,14 +18,12 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import scala.sys.process._
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.Span
@@ -33,7 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
-import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
+import org.apache.spark.internal.config.{JAR_IVY_REPO_PATH, MASTER_REST_SERVER_ENABLED}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
@@ -207,15 +205,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       }
     }
 
+    val ivyTestDir = new File(sparkTestingDir, "ivy2")
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
-
-      Files.deleteIfExists(Paths.get(sparkHome.getCanonicalPath, "jars", "ivy-2.5.1.jar"))
-      val ivyUrl = new URL("https://repo1.maven.org/maven2/org/apache/ivy/ivy/2.5.2/ivy-2.5.2.jar")
-      IOUtils.copy(ivyUrl, new File(s"${sparkHome.getCanonicalPath}/jars", "ivy-2.5.2.jar"))
 
       // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
       val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
@@ -226,6 +221,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
         "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+        "--conf", s"${JAR_IVY_REPO_PATH.key}=${ivyTestDir.getCanonicalPath}",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
