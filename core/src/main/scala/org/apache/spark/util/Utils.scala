@@ -50,7 +50,7 @@ import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
@@ -1773,8 +1773,7 @@ private[spark] object Utils
   /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 =
-    System.getProperty("java.version").split("[+.\\-]+", 3)(0).toInt >= 21
+  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
