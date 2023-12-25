@@ -95,30 +95,24 @@ object ResolveInlineTables extends Rule[LogicalPlan]
   private[analysis] def findCommonTypesAndCast(table: UnresolvedInlineTable):
     ResolvedInlineTable = {
     // For each column, traverse all the values and find a common data type and nullability.
-    val fields = table.rows.transpose.zip(table.names).map { case (column, name) =>
+    val (fields, columns) = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
       val tpe = TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
         table.failAnalysis(
           errorClass = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
           messageParameters = Map("colName" -> toSQLId(name)))
       }
-      StructField(name, tpe, nullable = column.exists(_.nullable))
-    }
-    val attributes = DataTypeUtils.toAttributes(StructType(fields))
-    assert(fields.size == table.names.size)
-
-    val castedRows: Seq[Seq[Expression]] = table.rows.map { row =>
-      row.zipWithIndex.map {
-        case (e, ci) =>
-          val targetType = fields(ci).dataType
-          val castedExpr = if (DataTypeUtils.sameType(e.dataType, targetType)) {
-            e
-          } else {
-            cast(e, targetType)
-          }
-          castedExpr
+      val newColumn = column.map {
+        case expr if DataTypeUtils.sameType(expr.dataType, tpe) =>
+          expr
+        case expr =>
+          cast(expr, tpe)
       }
-    }
+      (StructField(name, tpe, nullable = column.exists(_.nullable)), newColumn)
+    }.unzip
+    assert(fields.size == table.names.size)
+    val attributes = DataTypeUtils.toAttributes(StructType(fields))
+    val castedRows: Seq[Seq[Expression]] = columns.transpose
 
     ResolvedInlineTable(castedRows, attributes)
   }

@@ -158,7 +158,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       Long.MaxValue
     } else {
       val confSize =
-        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION).toLong
+        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION)
       if (confSize > 0) System.currentTimeMillis() + confSize else Long.MaxValue
     }
 
@@ -167,7 +167,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       Long.MaxValue
     } else {
       val confSize =
-        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE).toLong
+        SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE)
       if (confSize > 0) confSize else Long.MaxValue
     }
     var sentResponsesSize: Long = 0

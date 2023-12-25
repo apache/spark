@@ -144,6 +144,23 @@ Project [c1#x, c2#x]
 
 
 -- !query
+select * from t1 where exists (select count(*) from t2 where t1.c1 = 100)
+-- !query analysis
+Project [c1#x, c2#x]
++- Filter exists#x [c1#x]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- Filter (outer(c1#x) = 100)
+   :        +- SubqueryAlias t2
+   :           +- View (`t2`, [c1#x,c2#x])
+   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                 +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias t1
+      +- View (`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 set spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled = true
 -- !query analysis
 SetCommand (spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled,Some(true))
@@ -230,6 +247,23 @@ Project [c1#x, c2#x]
    :  :              +- LocalRelation [col1#x, col2#x]
    :  +- Aggregate [(count(1) - cast(1 as bigint)) AS (count(1) - 1)#xL]
    :     +- Filter (c1#x = outer(c1#x))
+   :        +- SubqueryAlias t2
+   :           +- View (`t2`, [c1#x,c2#x])
+   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                 +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias t1
+      +- View (`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from t1 where exists (select count(*) from t2 where t1.c1 = 100)
+-- !query analysis
+Project [c1#x, c2#x]
++- Filter exists#x [c1#x]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- Filter (outer(c1#x) = 100)
    :        +- SubqueryAlias t2
    :           +- View (`t2`, [c1#x,c2#x])
    :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
