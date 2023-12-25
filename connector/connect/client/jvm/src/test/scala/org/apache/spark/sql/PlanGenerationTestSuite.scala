@@ -2121,6 +2121,10 @@ class PlanGenerationTestSuite
     fn.months_between(fn.current_date(), fn.col("d"), roundOff = true)
   }
 
+  temporalFunctionTest("monthname") {
+    fn.monthname(fn.col("d"))
+  }
+
   temporalFunctionTest("next_day") {
     fn.next_day(fn.col("d"), "Mon")
   }

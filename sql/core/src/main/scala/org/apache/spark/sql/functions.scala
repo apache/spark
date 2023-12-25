@@ -5738,6 +5738,16 @@ object functions {
   def to_unix_timestamp(timeExp: Column): Column =
     Column.fn("to_unix_timestamp", timeExp)
 
+  /**
+   * Extracts the three-letter abbreviated month name from a given date/timestamp/string.
+   *
+   * @return A three-letter string representing the month name.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def monthname(timeExp: Column): Column =
+    Column.fn("monthname", timeExp)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////

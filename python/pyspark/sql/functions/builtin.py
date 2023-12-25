@@ -7272,6 +7272,34 @@ def weekday(col: "ColumnOrName") -> Column:
     """
     return _invoke_function_over_columns("weekday", col)
 
+@_try_remote_functions
+def monthname(col: "ColumnOrName") -> Column:
+    """
+    Returns the three-letter abbreviated month name from the given date.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the three-letter abbreviation of month name for date/timestamp (Jan, Feb, Mar...)
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(monthname('dt').alias('month')).show()
+    +-----+
+    |month|
+    +-----+
+    |  Apr|
+    +-----+
+    """
+    return _invoke_function_over_columns("monthname", col)
 
 @_try_remote_functions
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:

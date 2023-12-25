@@ -719,4 +719,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
       throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
     }
   }
+
+  /**
+   * Returns the three-letter abbreviated month name for the given number of days 1970-01-01.
+   */
+  def getMonthName(days: Int): UTF8String = getMonth(days) match {
+    case 1 => UTF8String.fromString("Jan")
+    case 2 => UTF8String.fromString("Feb")
+    case 3 => UTF8String.fromString("Mar")
+    case 4 => UTF8String.fromString("Apr")
+    case 5 => UTF8String.fromString("May")
+    case 6 => UTF8String.fromString("Jun")
+    case 7 => UTF8String.fromString("Jul")
+    case 8 => UTF8String.fromString("Aug")
+    case 9 => UTF8String.fromString("Sep")
+    case 10 => UTF8String.fromString("Oct")
+    case 11 => UTF8String.fromString("Nov")
+    case _ => UTF8String.fromString("Dec")
+  }
 }
