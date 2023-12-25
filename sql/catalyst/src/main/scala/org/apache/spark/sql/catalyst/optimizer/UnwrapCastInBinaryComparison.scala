@@ -41,7 +41,7 @@ import org.apache.spark.sql.types._
  *
  * Currently this only handles cases where:
  *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
- *     decimal, etc), boolean type or datetime type
+ *     decimal, etc), boolean type or datetime type, or timestamp types
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
  *     int to long, but not long to int, nor int to boolean)
  *
@@ -143,6 +143,15 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if fromExp.dataType == DateType && AnyTimestampType.acceptsType(ts.dataType) &&
           value != null =>
       Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode))
+
+    // Timestamp/Timestamp_NTZ -> Timestamp_NTZ/Timestamp
+    case be @ BinaryComparison(
+      Cast(fromExp, _, timeZoneId, evalMode), Literal(value, literalType))
+        if AnyTimestampType.acceptsType(fromExp.dataType) &&
+          AnyTimestampType.acceptsType(literalType) && value != null =>
+      val newExpr = be.withNewChildren(Seq(fromExp, Cast(Literal(value, literalType),
+        fromExp.dataType, timeZoneId, evalMode)))
+      Some(newExpr)
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
