@@ -429,7 +429,7 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
-    - name: List Python packages ${{ env.PYTHON_TO_TEST }}
+    - name: List Python packages (${{ env.PYTHON_TO_TEST }})
       shell: 'script -q -e -c "bash {0}"'
       run: |
         for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
