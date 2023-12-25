@@ -5947,7 +5947,6 @@ object functions {
   /**
    * Extracts the three-letter abbreviated month name from a given date/timestamp/string.
    *
-   * @return A three-letter string representing the month name.
    * @group datetime_funcs
    * @since 3.5.0
    */
