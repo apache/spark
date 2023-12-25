@@ -260,18 +260,11 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        echo "1"
-        ls -al /home/runner/work/_temp
-        echo "2"
-        find /home/runner/work/_temp/ -maxdepth 1 -type f -size -5k -name "*"
-        echo "3"
-        find /home/runner/work/_temp/ -maxdepth 1 -type f -size -5k -name "*-*-*-*-*" | xargs cat
-        echo "4"
         # Fix for TTY related issues when launching the Ammonite REPL in tests.
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
-        // SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
+        # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
         if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
         fi
