@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
+
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -26,21 +27,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
-
-  test("SPARK-46481: Test variable folding") {
-    sql("DECLARE a INT = 1")
-    sql("SET VAR a = 1")
-    val expected = sql("SELECT 42 WHERE 1 = 1").queryExecution.optimizedPlan
-    val variableDirectly = sql("SELECT 42 WHERE 1 = a").queryExecution.optimizedPlan
-    val parameterizedSpark =
-      spark.sql("SELECT 42 WHERE 1 = ?", Array(1)).queryExecution.optimizedPlan
-    val parameterizedSql =
-      spark.sql("EXECUTE IMMEDIATE 'SELECT 42 WHERE 1 = ?' USING a").queryExecution.optimizedPlan
-
-    comparePlans(expected, variableDirectly)
-    comparePlans(expected, parameterizedSpark)
-    comparePlans(expected, parameterizedSql)
-  }
 
   test("bind named parameters") {
     val sqlText =
@@ -621,5 +607,20 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
         fragment = "map_from_arrays",
         callSitePattern = getCurrentClassCallSitePattern)
     )
+  }
+
+  test("SPARK-46481: Test variable folding") {
+    sql("DECLARE a INT = 1")
+    sql("SET VAR a = 1")
+    val expected = sql("SELECT 42 WHERE 1 = 1").queryExecution.optimizedPlan
+    val variableDirectly = sql("SELECT 42 WHERE 1 = a").queryExecution.optimizedPlan
+    val parameterizedSpark =
+      spark.sql("SELECT 42 WHERE 1 = ?", Array(1)).queryExecution.optimizedPlan
+    val parameterizedSql =
+      spark.sql("EXECUTE IMMEDIATE 'SELECT 42 WHERE 1 = ?' USING a").queryExecution.optimizedPlan
+
+    comparePlans(expected, variableDirectly)
+    comparePlans(expected, parameterizedSpark)
+    comparePlans(expected, parameterizedSql)
   }
 }
