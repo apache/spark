@@ -166,17 +166,11 @@ class ParquetTypeWideningSuite
       (Seq("1", "2", Int.MinValue.toString), LongType, IntegerType),
       (Seq("1.23", "10.34"), DoubleType, FloatType),
       (Seq("1.23", "10.34"), FloatType, LongType),
+      (Seq("1", "10"), LongType, DateType),
+      (Seq("1", "10"), IntegerType, TimestampType),
+      (Seq("1", "10"), IntegerType, TimestampNTZType),
       (Seq("2020-01-01", "2020-01-02", "1312-02-27"), DateType, TimestampType)
-    ) ++ {
-      if (SQLConf.get.ansiEnabled) Nil
-      else {
-        Seq(
-          (Seq("1.23", "10.34"), LongType, DateType),
-          (Seq("1.23", "10.34"), IntegerType, TimestampType),
-          (Seq("1.23", "10.34"), IntegerType, TimestampNTZType)
-        )
-      }
-    }
+    )
   }
     test(s"unsupported parquet conversion $fromType -> $toType") {
       checkAllParquetReaders(values, fromType, toType, expectError = true)
