@@ -315,7 +315,8 @@ trait SparkDateTimeUtils {
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
     val bytes = s.getBytes
-    var (j, strEndTrimmed) = getTrimmedStartEnd(bytes)
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
 
     if (j == strEndTrimmed) {
       return None
@@ -419,7 +420,8 @@ trait SparkDateTimeUtils {
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
     val bytes = s.getBytes
-    var (j, strEndTrimmed) = getTrimmedStartEnd(bytes)
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
 
     if (j == strEndTrimmed) {
       return (Array.empty, None, false)
@@ -618,26 +620,36 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * This method retrieves the start and end indices of a byte array after trimming
-   * any whitespace or ISO control characters.
-   * This way we can avoid allocating a new string with trimAll method
-   * and just operate between the trimmed indices.
+   * Returns the index of the first non-whitespace and non-ISO control character in the byte array.
    *
-   * @param bytes The byte array to be trimmed.
-   * @return A tuple of two integers; first being the start and second the end trimmed index.
+   * @param bytes The byte array to be processed.
+   * @return The start index after trimming.
    */
-  private def getTrimmedStartEnd(bytes: Array[Byte]): (Int, Int) = {
-    var (start, end) = (0, bytes.length - 1)
+  @inline private def getTrimmedStart(bytes: Array[Byte]) = {
+    var start = 0
 
     while (start < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(start))) {
       start += 1
     }
 
+    start
+  }
+
+  /**
+   * Returns the index of the last non-whitespace and non-ISO control character in the byte array.
+   *
+   * @param start The starting index for the search.
+   * @param bytes The byte array to be processed.
+   * @return The end index after trimming.
+   */
+  @inline private def getTrimmedEnd(start: Int, bytes: Array[Byte]) = {
+    var end = bytes.length - 1
+
     while (end > start && UTF8String.isWhitespaceOrISOControl(bytes(end))) {
       end -= 1
     }
 
-    (start, end + 1)
+    end + 1
   }
 }
 
