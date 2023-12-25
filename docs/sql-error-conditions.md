@@ -1398,6 +1398,12 @@ Rewrite the query to avoid window functions, aggregate functions, and generator 
 
 Cannot specify ORDER BY or a window frame for `<aggFunc>`.
 
+### INVALID_WRITER_COMMIT_MESSAGE
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The data source writer has generated an invalid number of commit messages. Expected exactly one writer commit message from each task, but received `<detail>`.
+
 ### [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-write-distribution-error-class.html)
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
