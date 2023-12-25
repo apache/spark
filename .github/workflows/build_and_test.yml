@@ -260,8 +260,13 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        ls -al /home/runner/work/_temp/*
-        find /home/runner/work/_temp/ -maxdepth 1 -type f -size -1k -name "*-*-*-*-*" | xargs cat *
+        echo "1"
+        ls -al /home/runner/work/_temp
+        echo "2"
+        find /home/runner/work/_temp/ -maxdepth 1 -type f -size -5k -name "*"
+        echo "3"
+        find /home/runner/work/_temp/ -maxdepth 1 -type f -size -5k -name "*-*-*-*-*" | xargs cat
+        echo "4"
         # Fix for TTY related issues when launching the Ammonite REPL in tests.
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
