@@ -118,4 +118,31 @@ class AbbreviateSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("truncate bytes with threshold: simple python udf") {
+    val bytes = Array.ofDim[Byte](1024)
+    val message = proto.PythonUDF
+      .newBuilder()
+      .setEvalType(1)
+      .setOutputType(ProtoDataTypes.BinaryType)
+      .setCommand(ByteString.copyFrom(bytes))
+      .setPythonVer("3.12")
+      .build()
+
+    Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
+      val truncated = ProtoUtils.abbreviate(message, Map("BYTES" -> threshold))
+      assert(truncated.isInstanceOf[proto.PythonUDF])
+
+      val truncatedUDF = truncated.asInstanceOf[proto.PythonUDF]
+      assert(truncatedUDF.getEvalType === 1)
+      assert(truncatedUDF.getOutputType === ProtoDataTypes.BinaryType)
+      assert(truncatedUDF.getPythonVer === "3.12")
+
+      if (threshold <= 1024) {
+        assert(truncatedUDF.getCommand.size() === threshold)
+      } else {
+        assert(truncatedUDF.getCommand.size() === 1024)
+      }
+    }
+  }
 }
