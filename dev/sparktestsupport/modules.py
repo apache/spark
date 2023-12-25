@@ -824,6 +824,10 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.computation.test_melt",
         "pyspark.pandas.tests.computation.test_missing_data",
         "pyspark.pandas.tests.computation.test_pivot",
+        "pyspark.pandas.tests.computation.test_pivot_table",
+        "pyspark.pandas.tests.computation.test_pivot_table_adv",
+        "pyspark.pandas.tests.computation.test_pivot_table_multi_idx",
+        "pyspark.pandas.tests.computation.test_pivot_table_multi_idx_adv",
         "pyspark.pandas.tests.computation.test_stats",
         "pyspark.pandas.tests.frame.test_attrs",
         "pyspark.pandas.tests.frame.test_axis",
@@ -1162,6 +1166,10 @@ pyspark_pandas_connect_part2 = Module(
     python_test_goals=[
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.computation.test_parity_pivot",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_adv",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_multi_idx",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_multi_idx_adv",
         "pyspark.pandas.tests.connect.computation.test_parity_stats",
         "pyspark.pandas.tests.connect.indexes.test_parity_base_slow",
         "pyspark.pandas.tests.connect.frame.test_parity_interpolate",
