@@ -7272,6 +7272,7 @@ def weekday(col: "ColumnOrName") -> Column:
     """
     return _invoke_function_over_columns("weekday", col)
 
+
 @_try_remote_functions
 def monthname(col: "ColumnOrName") -> Column:
     """
@@ -7300,6 +7301,7 @@ def monthname(col: "ColumnOrName") -> Column:
     +-----+
     """
     return _invoke_function_over_columns("monthname", col)
+
 
 @_try_remote_functions
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
