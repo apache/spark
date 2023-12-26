@@ -291,8 +291,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MonthName(Cast(Literal(date), DateType, UTC_OPT)), "Apr")
     checkEvaluation(MonthName(Cast(Literal(ts), DateType, UTC_OPT)), "Nov")
     checkEvaluation(MonthName(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), "May")
-    checkEvaluation(MonthName(Literal(new Date(toMillis("2017-05-27 13:10:15")))), "May")
-    checkEvaluation(MonthName(Literal(new Date(toMillis("1582-10-15 13:10:15")))), "Oct")
+    checkEvaluation(MonthName(Literal(new Date(toMillis("2017-01-27 13:10:15")))), "Jan")
+    checkEvaluation(MonthName(Literal(new Date(toMillis("1582-12-15 13:10:15")))), "Dec")
     checkConsistencyBetweenInterpretedAndCodegen(MonthName, DateType)
   }
 

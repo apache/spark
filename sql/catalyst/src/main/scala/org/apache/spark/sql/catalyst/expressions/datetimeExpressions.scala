@@ -920,7 +920,7 @@ case class WeekOfYear(child: Expression) extends GetDateField {
        Feb
   """,
   group = "datetime_funcs",
-  since = "3.5.0")
+  since = "4.0.0")
 // scalastyle:on line.size.limit
 case class MonthName(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getMonthName

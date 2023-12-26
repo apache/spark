@@ -1097,7 +1097,7 @@ setMethod("dayofyear",
 #'
 #' @rdname column_datetime_functions
 #' @aliases monthname monthname,Column-method
-#' @note monthname since 3.5.0
+#' @note monthname since 4.0.0
 setMethod("monthname",
           signature(x = "Column"),
           function(x) {

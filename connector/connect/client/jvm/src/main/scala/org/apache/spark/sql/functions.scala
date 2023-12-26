@@ -5948,7 +5948,7 @@ object functions {
    * Extracts the three-letter abbreviated month name from a given date/timestamp/string.
    *
    * @group datetime_funcs
-   * @since 3.5.0
+   * @since 4.0.0
    */
   def monthname(timeExp: Column): Column =
     Column.fn("monthname", timeExp)

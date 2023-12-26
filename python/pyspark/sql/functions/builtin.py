@@ -7278,7 +7278,7 @@ def monthname(col: "ColumnOrName") -> Column:
     """
     Returns the three-letter abbreviated month name from the given date.
 
-    .. versionadded:: 3.5.0
+    .. versionadded:: 4.0.0
 
     Parameters
     ----------
