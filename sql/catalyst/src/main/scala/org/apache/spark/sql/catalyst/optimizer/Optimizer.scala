@@ -1711,7 +1711,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val aliasMap = getAliasMap(project)
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
-    // Push [[Filter]] operators through [[Aggregate]] operators. Parts of the predicates that can
+    // Push `Filter` operators through `Aggregate` operators. Parts of the predicates that can
     // be beneath must satisfy the following conditions:
     // 1. Grouping expressions are not empty.
     // 2. Predicate expression is deterministic.
