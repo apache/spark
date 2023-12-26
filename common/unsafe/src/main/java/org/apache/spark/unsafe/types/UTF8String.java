@@ -46,14 +46,14 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable,
+public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable,
   Cloneable {
 
   // These are only updated by readExternal() or read()
   @Nonnull
-  private Object base;
-  private long offset;
-  private int numBytes;
+  protected Object base;
+  protected long offset;
+  protected int numBytes;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -156,7 +156,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
   }
 
-  private UTF8String(Object base, long offset, int numBytes) {
+  protected UTF8String(Object base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;

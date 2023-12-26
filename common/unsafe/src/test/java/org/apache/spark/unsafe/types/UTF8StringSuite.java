@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.text.Collator;
 import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
@@ -877,6 +878,44 @@ public class UTF8StringSuite {
     for (int wrongFirstByte : wrongFirstBytes) {
       c[0] = (byte) wrongFirstByte;
       assertEquals(1, fromBytes(c).numChars());
+    }
+  }
+
+  @Test
+  public void collatedStringComparison()
+  {
+    Collator collator = Collator.getInstance(java.util.Locale.forLanguageTag("sr"));
+
+    // Case-insensitive and accent insensitive.
+    {
+      collator.setStrength(Collator.PRIMARY);
+      CollatedUTF8String collatedUTF8String = CollatedUTF8String.fromString("ćčc", collator);
+      assertEquals(0, collatedUTF8String.compareTo(CollatedUTF8String.fromString("ĆČC", collator)));
+      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ćčc", collator));
+      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ccc", collator));
+      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("CCC", collator));
+
+      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("cba", collator));
+    }
+
+    // Move to secondary strength (ignore case, respect accents).
+    {
+      collator.setStrength(Collator.SECONDARY);
+      CollatedUTF8String collatedUTF8String = CollatedUTF8String.fromString("ćčc", collator);
+      assertEquals(0, collatedUTF8String.compareTo(CollatedUTF8String.fromString("ĆČC", collator)));
+      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ĆČC", collator));
+      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("ccc", collator));
+    }
+
+    // Tertiary strength (respect both)
+    {
+      collator.setStrength(Collator.TERTIARY);
+      CollatedUTF8String collatedUTF8String = CollatedUTF8String.fromString("ćčc", collator);
+      assertNotEquals(0, collatedUTF8String.compareTo(CollatedUTF8String.fromString("ĆČC", collator)));
+      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("ĆČC", collator));
+      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("ccc", collator));
+
+      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ćčc", collator));
     }
   }
 }
