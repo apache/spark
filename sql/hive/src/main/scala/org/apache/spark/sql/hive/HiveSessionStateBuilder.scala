@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
-import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.execution.analysis.{DetectAmbiguousSelfJoin, EarlyCollapseProject}
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
@@ -97,7 +97,8 @@ class HiveSessionStateBuilder(
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      DetectAmbiguousSelfJoin +:
+      EarlyCollapseProject +:
+        DetectAmbiguousSelfJoin +:
         RelationConversions(catalog) +:
         QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:

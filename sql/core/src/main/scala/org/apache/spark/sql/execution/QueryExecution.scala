@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
-import org.apache.spark.sql.internal.{EarlyCollapseProject, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -85,11 +85,7 @@ class QueryExecution(
   lazy val analyzed: LogicalPlan = {
     val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
       // We can't clone `logical` here, which will reset the `_analyzed` flag.
-      val analyzedPlan = sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
-      analyzedPlan match {
-        case EarlyCollapseProject(collapsedPlan) => collapsedPlan
-        case _ => analyzedPlan
-      }
+      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
     }
     tracker.setAnalyzed(plan)
     plan

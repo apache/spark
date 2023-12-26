@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
-import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.execution.analysis.{DetectAmbiguousSelfJoin, EarlyCollapseProject}
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
@@ -208,7 +208,8 @@ abstract class BaseSessionStateBuilder(
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      DetectAmbiguousSelfJoin +:
+      EarlyCollapseProject +:
+        DetectAmbiguousSelfJoin +:
         QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:
         PreprocessTableInsertion +:

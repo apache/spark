@@ -15,36 +15,38 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.execution.analysis
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, UnaryNode, Window}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 import org.apache.spark.util.Utils
 
 
-private[sql] object EarlyCollapseProject {
-  def unapply(logicalPlan: LogicalPlan): Option[LogicalPlan] =
-    logicalPlan match {
-      case newP @ Project(newProjList, p @ Project(projList, child))
-        if checkEarlyCollapsePossible(p, newP, child) =>
-        collapseProjectEarly(newP, newProjList, p, projList, child)
+private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
 
-      case newP @ Project(newProjList, f @ Filter(_, filterChild: UnaryNode)) =>
+  def apply(logicalPlan: LogicalPlan): LogicalPlan =
+    logicalPlan match {
+      case newP@Project(newProjList, p@Project(projList, child))
+        if checkEarlyCollapsePossible(p, newP, child) =>
+        collapseProjectEarly(newP, newProjList, p, projList, child) getOrElse newP
+
+      case newP@Project(newProjList, f@Filter(_, filterChild: UnaryNode)) =>
         // check if its case of nested filters followed by project
         val filterNodes = mutable.ListBuffer(f)
         var projectAtEnd: Option[Project] = None
         var keepGoing = true
         var currentChild = filterChild
-        while(keepGoing) {
+        while (keepGoing) {
           currentChild match {
             case p: Project => projectAtEnd = Option(p)
               keepGoing = false
-            case filter @ Filter(_, u: UnaryNode) =>
+            case filter@Filter(_, u: UnaryNode) =>
               filterNodes += filter
               currentChild = u
             case _ => keepGoing = false
@@ -62,15 +64,17 @@ private[sql] object EarlyCollapseProject {
             newProjOpt.map(collapsedProj => {
               val lastFilterMod = filterNodes.last.copy(child = collapsedProj)
               filterNodes.dropRight(1).foldRight(lastFilterMod)((f, c) => f.copy(child = c))
-            })
+            }).getOrElse {
+              newP
+            }
           } else {
-            None
+            newP
           }
         } else {
-          None
+          newP
         }
 
-      case _ => None
+      case _ => logicalPlan
     }
 
   private def checkEarlyCollapsePossible(p: Project, newP: Project, child: LogicalPlan): Boolean =
@@ -87,20 +91,20 @@ private[sql] object EarlyCollapseProject {
           val newMdBuilder = new MetadataBuilder().withMetadata(from.metadata)
           val newMd = newMdBuilder.build()
           al.copy()(exprId = al.exprId, qualifier = from.qualifier,
-          nonInheritableMetadataKeys = al.nonInheritableMetadataKeys,
-          explicitMetadata = Option(newMd))
+            nonInheritableMetadataKeys = al.nonInheritableMetadataKeys,
+            explicitMetadata = Option(newMd))
 
-      case attr: AttributeReference => attr.copy(metadata = from.metadata)(
-        exprId = attr.exprId, qualifier = from.qualifier)
+        case attr: AttributeReference => attr.copy(metadata = from.metadata)(
+          exprId = attr.exprId, qualifier = from.qualifier)
+      }
     }
-  }
 
   def collapseProjectEarly(
-      newP: Project,
-      newProjList: Seq[NamedExpression],
-      p: Project,
-      projList: Seq[NamedExpression],
-      child: LogicalPlan): Option[Project] = {
+                            newP: Project,
+                            newProjList: Seq[NamedExpression],
+                            p: Project,
+                            projList: Seq[NamedExpression],
+                            child: LogicalPlan): Option[Project] = {
     // In the new column list identify those Named Expressions which are just attributes and
     // hence pass thru
     val (_, tinkeredOrNewNamedExprs) = newProjList.partition {
