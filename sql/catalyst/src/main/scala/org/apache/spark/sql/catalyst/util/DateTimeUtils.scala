@@ -198,6 +198,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the three-letter abbreviated month name for the given number of days 1970-01-01.
+   */
+  def getMonthName(days: Int): UTF8String = {
+    val monthName = Month
+      .of(getMonth(days))
+      .getDisplayName(TextStyle.SHORT, Locale.US)
+
+    UTF8String.fromString(monthName)
+  }
+
+  /**
    * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
    * timestamp at the given time zone, adds months, and converts the resulted local timestamp
    * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -719,16 +730,5 @@ object DateTimeUtils extends SparkDateTimeUtils {
     } else {
       throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
     }
-  }
-
-  /**
-   * Returns the three-letter abbreviated month name for the given number of days 1970-01-01.
-   */
-  def getMonthName(days: Int): UTF8String = {
-    val monthName = Month
-      .of(getMonth(days))
-      .getDisplayName(TextStyle.SHORT, Locale.US)
-
-    UTF8String.fromString(monthName)
   }
 }
