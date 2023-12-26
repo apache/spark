@@ -47,7 +47,9 @@ trait SQLConfHelper {
     }
     keys.lazyZip(values).foreach { (k, v) =>
       if (SQLConf.isStaticConfigKey(k)) {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3050",
+          messageParameters = Map("k" -> k))
       }
       conf.setConfString(k, v)
     }

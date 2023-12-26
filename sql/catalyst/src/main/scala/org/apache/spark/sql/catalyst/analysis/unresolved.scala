@@ -37,7 +37,10 @@ import org.apache.spark.util.ArrayImplicits._
  * resolved.
  */
 class UnresolvedException(function: String)
-  extends AnalysisException(s"Invalid call to $function on unresolved object")
+  extends SparkException(
+    errorClass = "INTERNAL_ERROR",
+    messageParameters = Map("message" -> s"Invalid call to $function on unresolved object"),
+    cause = null)
 
 /** Parent trait for unresolved node types */
 trait UnresolvedNode extends LogicalPlan {
@@ -126,6 +129,21 @@ case class UnresolvedInlineTable(
   extends UnresolvedLeafNode {
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
+}
+
+/**
+ * An resolved inline table that holds all the expressions that were checked for
+ * the right shape and common data types.
+ * This is a preparation step for [[org.apache.spark.sql.catalyst.optimizer.EvalInlineTables]] which
+ * will produce a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]]
+ * for this inline table.
+ *
+ * @param output list of column attributes
+ * @param rows expressions for the data rows
+ */
+case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute])
+  extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
 }
 
 /**

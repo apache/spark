@@ -925,7 +925,7 @@ message FetchErrorDetailsResponse {
     string fragment = 5;
 
     // The user code (call site of the API) that caused throwing the exception.
-    string callSite = 6;
+    string call_site = 6;
 
     // Summary of the exception cause.
     string summary = 7;

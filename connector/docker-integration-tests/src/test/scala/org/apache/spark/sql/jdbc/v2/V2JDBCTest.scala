@@ -49,7 +49,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def notSupportsTableComment: Boolean = false
 
-  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+  def defaultMetadata: Metadata = new MetadataBuilder().putLong("scale", 0).build()
 
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
@@ -221,10 +221,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
-      val m = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
-      }.message
-      assert(m.contains("Failed table creation"))
+      }
+      assert(e.getErrorClass == "FAILED_JDBC.CREATE_TABLE")
       testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
@@ -279,7 +279,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
             sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
           },
           errorClass = "INDEX_ALREADY_EXISTS",
-          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+          parameters = Map("indexName" -> "`i1`", "tableName" -> "`new_table`")
         )
 
         sql(s"DROP index i1 ON $catalogName.new_table")
@@ -304,7 +304,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
             sql(s"DROP index i1 ON $catalogName.new_table")
           },
           errorClass = "INDEX_NOT_FOUND",
-          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+          parameters = Map("indexName" -> "`i1`", "tableName" -> "`new_table`")
         )
       }
     }

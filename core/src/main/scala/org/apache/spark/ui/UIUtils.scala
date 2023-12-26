@@ -734,4 +734,13 @@ private[spark] object UIUtils extends Logging {
     val details = detailsUINode(isMultiline, errorMessage)
     <td>{summary}{details}</td>
   }
+
+  def formatImportJavaScript(
+      request: HttpServletRequest,
+      sourceFile: String,
+      methods: String*): String = {
+    val methodsStr = methods.mkString("{", ", ", "}")
+    val sourceFileStr = prependBaseUri(request, sourceFile)
+    s"""import $methodsStr from "$sourceFileStr";"""
+  }
 }

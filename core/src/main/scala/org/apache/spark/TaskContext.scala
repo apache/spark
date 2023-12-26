@@ -95,6 +95,11 @@ abstract class TaskContext extends Serializable {
   def isCompleted(): Boolean
 
   /**
+   * Returns true if the task has failed.
+   */
+  def isFailed(): Boolean
+
+  /**
    * Returns true if the task has been killed.
    */
   def isInterrupted(): Boolean
