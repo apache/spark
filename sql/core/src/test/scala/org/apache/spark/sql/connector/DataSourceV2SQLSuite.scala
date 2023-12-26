@@ -3486,19 +3486,19 @@ class DataSourceV2SQLSuiteV1Filter
 
         // Test CTAS
         withTable(tbl) {
-          // assertPrivilegeError(sql(s"CREATE TABLE $tbl AS SELECT 1 i"), "INSERT")
+          assertPrivilegeError(sql(s"CREATE TABLE $tbl AS SELECT 1 i"), "INSERT")
         }
         withTable(tbl) {
-          // assertPrivilegeError(sql(s"CREATE OR REPLACE TABLE $tbl AS SELECT 1 i"), "INSERT")
+          assertPrivilegeError(sql(s"CREATE OR REPLACE TABLE $tbl AS SELECT 1 i"), "INSERT")
         }
         withTable(tbl) {
-          // assertPrivilegeError(input.write.saveAsTable(tbl), "INSERT")
+          assertPrivilegeError(input.write.saveAsTable(tbl), "INSERT")
         }
         withTable(tbl) {
-          // assertPrivilegeError(input.writeTo(tbl).create(), "INSERT")
+          assertPrivilegeError(input.writeTo(tbl).create(), "INSERT")
         }
         withTable(tbl) {
-          // assertPrivilegeError(input.writeTo(tbl).createOrReplace(), "INSERT")
+          assertPrivilegeError(input.writeTo(tbl).createOrReplace(), "INSERT")
         }
       }
     }
@@ -3560,7 +3560,7 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       partitions: Array[Transform],
       properties: jutil.Map[String, String]): Table = {
     super.createTable(ident, columns, partitions, properties)
-    loadTable(ident)
+    null
   }
 
   override def loadTable(ident: Identifier): Table = {
@@ -3591,6 +3591,7 @@ class ReadOnlyCatalog extends InMemoryCatalog {
       partitions: Array[Transform],
       properties: jutil.Map[String, String]): Table = {
     super.createTable(ident, columns, partitions, properties)
+    null
   }
 
   override def loadTable(
