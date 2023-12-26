@@ -148,7 +148,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
 
-    loadTable(ident)
+    null // Return null to save the `loadTable` call for CREATE TABLE without AS SELECT.
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
@@ -189,7 +189,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
-    loadTable(ident)
+    null // Return null to save the `loadTable` call for ALTER TABLE.
   }
 
   override def purgeTable(ident: Identifier): Boolean = {
@@ -233,8 +233,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       throw QueryCompilationErrors.tableAlreadyExistsError(newIdent)
     }
 
-    // Load table to make sure the table exists
-    loadTable(oldIdent)
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
   }
 
