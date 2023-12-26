@@ -650,7 +650,6 @@ object DataSource extends Logging {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
-                // TODO(SPARK-45600): should be session-based.
                 val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
                   _.sessionState.dataSourceManager.dataSourceExists(provider))
                 if (provider1.startsWith("org.apache.spark.sql.hive.orc")) {
@@ -679,7 +678,6 @@ object DataSource extends Logging {
           }
         case head :: Nil =>
           // there is exactly one registered alias
-          // TODO(SPARK-45600): should be session-based.
           val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
             _.sessionState.dataSourceManager.dataSourceExists(provider))
           // The source can be successfully loaded as either a V1 or a V2 data source.
