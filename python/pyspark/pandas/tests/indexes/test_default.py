@@ -91,13 +91,16 @@ class DefaultIndexTestsMixin:
                     )
 
 
-class DefaultIndexTests(DefaultIndexTestsMixin, PandasOnSparkTestCase):
+class DefaultIndexTests(
+    DefaultIndexTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_default_index import *  # noqa: F401
+    from pyspark.pandas.tests.indexes.test_default import *  # noqa: F401
 
     try:
         import xmlrunner
