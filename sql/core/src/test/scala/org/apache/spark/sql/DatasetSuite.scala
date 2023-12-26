@@ -2304,7 +2304,7 @@ class DatasetSuite extends QueryTest
           parameters = Map(
             "objectName" -> s"`${colName.replace(".", "`.`")}`",
             "proposal" -> "`field.1`, `field 2`"),
-          context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
+          context = ExpectedContext(fragment = "anonfun$select$4", getCurrentClassCallSitePattern))
       }
     }
   }
@@ -2319,7 +2319,7 @@ class DatasetSuite extends QueryTest
       parameters = Map(
         "objectName" -> "`the`.`id`",
         "proposal" -> "`the.id`"),
-      context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "anonfun$select$4", getCurrentClassCallSitePattern))
   }
 
   test("SPARK-39783: backticks in error message for map candidate key with dots") {

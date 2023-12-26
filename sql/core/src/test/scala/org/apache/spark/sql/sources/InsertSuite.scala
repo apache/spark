@@ -1919,8 +1919,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"),
-        context =
-          ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
+        context = ExpectedContext(
+          fragment = "anonfun$select$4",
+          callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 
