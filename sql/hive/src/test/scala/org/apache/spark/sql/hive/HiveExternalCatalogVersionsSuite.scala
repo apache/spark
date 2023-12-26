@@ -18,14 +18,12 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import scala.sys.process._
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.Span
@@ -207,15 +205,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       }
     }
 
+    val ivyTestDir = new File(sparkTestingDir, "ivy2")
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
-
-      Files.deleteIfExists(Paths.get(sparkHome.getCanonicalPath, "jars", "ivy-2.5.1.jar"))
-      val ivyUrl = new URL("https://repo1.maven.org/maven2/org/apache/ivy/ivy/2.5.2/ivy-2.5.2.jar")
-      IOUtils.copy(ivyUrl, new File(s"${sparkHome.getCanonicalPath}/jars", "ivy-2.5.2.jar"))
 
       // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
       val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
@@ -228,7 +223,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
-        "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
+        "--driver-java-options", s"-Divy.cache.dir=${ivyTestDir.getCanonicalPath} " +
+          s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
           JavaModuleOptions.defaultModuleOptions(),
         tempPyFile.getCanonicalPath)
       runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
