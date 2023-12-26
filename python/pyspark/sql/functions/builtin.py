@@ -13120,7 +13120,7 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
 @_try_remote_functions
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
-    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    Array function: returns a new array containing the intersection of elements in col1 and col2,
     without duplicates.
 
     .. versionadded:: 2.4.0
@@ -13131,21 +13131,81 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        Name of column containing the first array.
     col2 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        Name of column containing the second array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of values in the intersection of two arrays.
+        A new array containing the intersection of elements in col1 and col2.
+
+    Notes
+    -----
+    This function does not preserve the order of the elements in the input arrays.
 
     Examples
     --------
-    >>> from pyspark.sql import Row
+    Example 1: Basic usage
+
+    >>> from pyspark.sql import Row, functions as sf
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
-    >>> df.select(array_intersect(df.c1, df.c2)).collect()
-    [Row(array_intersect(c1, c2)=['a', 'c'])]
+    >>> df.select(sf.sort_array(sf.array_intersect(df.c1, df.c2))).show()
+    +-----------------------------------------+
+    |sort_array(array_intersect(c1, c2), true)|
+    +-----------------------------------------+
+    |                                   [a, c]|
+    +-----------------------------------------+
+
+    Example 2: Intersection with no common elements
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["d", "e", "f"])])
+    >>> df.select(sf.array_intersect(df.c1, df.c2)).show()
+    +-----------------------------------------+
+    |sort_array(array_intersect(c1, c2), true)|
+    +-----------------------------------------+
+    |                                       []|
+    +-----------------------------------------+
+
+    Example 3: Intersection with all common elements
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["a", "b", "c"], c2=["a", "b", "c"])])
+    >>> df.select(sf.sort_array(sf.array_intersect(df.c1, df.c2))).show()
+    +-----------------------------------------+
+    |sort_array(array_intersect(c1, c2), true)|
+    +-----------------------------------------+
+    |                                [a, b, c]|
+    +-----------------------------------------+
+
+    Example 4: Intersection with null values
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["a", "b", None], c2=["a", None, "c"])])
+    >>> df.select(sf.sort_array(sf.array_intersect(df.c1, df.c2))).show()
+    +-----------------------------------------+
+    |sort_array(array_intersect(c1, c2), true)|
+    +-----------------------------------------+
+    |                                [NULL, a]|
+    +-----------------------------------------+
+
+    Example 5: Intersection with empty arrays
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> data = [Row(c1=[], c2=["a", "b", "c"])]
+    >>> schema = StructType([
+    ...   StructField("c1", ArrayType(StringType()), True),
+    ...   StructField("c2", ArrayType(StringType()), True)
+    ... ])
+    >>> df = spark.createDataFrame(data, schema)
+    >>> df.select(sf.array_intersect(df.c1, df.c2)).show()
+    +-----------------------+
+    |array_intersect(c1, c2)|
+    +-----------------------+
+    |                     []|
+    +-----------------------+
     """
     return _invoke_function_over_columns("array_intersect", col1, col2)
 
@@ -13153,7 +13213,7 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
-    Collection function: returns an array of the elements in the union of col1 and col2,
+    Array function: returns a new array containing the union of elements in col1 and col2,
     without duplicates.
 
     .. versionadded:: 2.4.0
@@ -13164,21 +13224,81 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        Name of column containing the first array.
     col2 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        Name of column containing the second array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of values in union of two arrays.
+        A new array containing the union of elements in col1 and col2.
+
+    Notes
+    -----
+    This function does not preserve the order of the elements in the input arrays.
 
     Examples
     --------
-    >>> from pyspark.sql import Row
+    Example 1: Basic usage
+
+    >>> from pyspark.sql import Row, functions as sf
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
-    >>> df.select(array_union(df.c1, df.c2)).collect()
-    [Row(array_union(c1, c2)=['b', 'a', 'c', 'd', 'f'])]
+    >>> df.select(sf.sort_array(sf.array_union(df.c1, df.c2))).show()
+    +-------------------------------------+
+    |sort_array(array_union(c1, c2), true)|
+    +-------------------------------------+
+    |                      [a, b, c, d, f]|
+    +-------------------------------------+
+
+    Example 2: Union with no common elements
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["d", "e", "f"])])
+    >>> df.select(sf.sort_array(sf.array_union(df.c1, df.c2))).show()
+    +-------------------------------------+
+    |sort_array(array_union(c1, c2), true)|
+    +-------------------------------------+
+    |                   [a, b, c, d, e, f]|
+    +-------------------------------------+
+
+    Example 3: Union with all common elements
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["a", "b", "c"], c2=["a", "b", "c"])])
+    >>> df.select(sf.sort_array(sf.array_union(df.c1, df.c2))).show()
+    +-------------------------------------+
+    |sort_array(array_union(c1, c2), true)|
+    +-------------------------------------+
+    |                            [a, b, c]|
+    +-------------------------------------+
+
+    Example 4: Union with null values
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["a", "b", None], c2=["a", None, "c"])])
+    >>> df.select(sf.sort_array(sf.array_union(df.c1, df.c2))).show()
+    +-------------------------------------+
+    |sort_array(array_union(c1, c2), true)|
+    +-------------------------------------+
+    |                      [NULL, a, b, c]|
+    +-------------------------------------+
+
+    Example 5: Union with empty arrays
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> data = [Row(c1=[], c2=["a", "b", "c"])]
+    >>> schema = StructType([
+    ...   StructField("c1", ArrayType(StringType()), True),
+    ...   StructField("c2", ArrayType(StringType()), True)
+    ... ])
+    >>> df = spark.createDataFrame(data, schema)
+    >>> df.select(sf.sort_array(sf.array_union(df.c1, df.c2))).show()
+    +-------------------------------------+
+    |sort_array(array_union(c1, c2), true)|
+    +-------------------------------------+
+    |                            [a, b, c]|
+    +-------------------------------------+
     """
     return _invoke_function_over_columns("array_union", col1, col2)
 
@@ -13186,7 +13306,7 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
-    Collection function: returns an array of the elements in col1 but not in col2,
+    Array function: returns a new array containing the elements present in col1 but not in col2,
     without duplicates.
 
     .. versionadded:: 2.4.0
@@ -13197,21 +13317,81 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        Name of column containing the first array.
     col2 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        Name of column containing the second array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of values from first array that are not in the second.
+        A new array containing the elements present in col1 but not in col2.
+
+    Notes
+    -----
+    This function does not preserve the order of the elements in the input arrays.
 
     Examples
     --------
-    >>> from pyspark.sql import Row
+    Example 1: Basic usage
+
+    >>> from pyspark.sql import Row, functions as sf
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
-    >>> df.select(array_except(df.c1, df.c2)).collect()
-    [Row(array_except(c1, c2)=['b'])]
+    >>> df.select(sf.array_except(df.c1, df.c2)).show()
+    +--------------------+
+    |array_except(c1, c2)|
+    +--------------------+
+    |                 [b]|
+    +--------------------+
+
+    Example 2: Except with no common elements
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["d", "e", "f"])])
+    >>> df.select(sf.sort_array(sf.array_except(df.c1, df.c2))).show()
+    +--------------------------------------+
+    |sort_array(array_except(c1, c2), true)|
+    +--------------------------------------+
+    |                             [a, b, c]|
+    +--------------------------------------+
+
+    Example 3: Except with all common elements
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["a", "b", "c"], c2=["a", "b", "c"])])
+    >>> df.select(sf.array_except(df.c1, df.c2)).show()
+    +--------------------+
+    |array_except(c1, c2)|
+    +--------------------+
+    |                  []|
+    +--------------------+
+
+    Example 4: Except with null values
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> df = spark.createDataFrame([Row(c1=["a", "b", None], c2=["a", None, "c"])])
+    >>> df.select(sf.array_except(df.c1, df.c2)).show()
+    +--------------------+
+    |array_except(c1, c2)|
+    +--------------------+
+    |                 [b]|
+    +--------------------+
+
+    Example 5: Except with empty arrays
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> data = [Row(c1=[], c2=["a", "b", "c"])]
+    >>> schema = StructType([
+    ...   StructField("c1", ArrayType(StringType()), True),
+    ...   StructField("c2", ArrayType(StringType()), True)
+    ... ])
+    >>> df = spark.createDataFrame(data, schema)
+    >>> df.select(sf.array_except(df.c1, df.c2)).show()
+    +--------------------+
+    |array_except(c1, c2)|
+    +--------------------+
+    |                  []|
+    +--------------------+
     """
     return _invoke_function_over_columns("array_except", col1, col2)
 
