@@ -212,7 +212,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     AnalysisHelper.markInAnalyzer {
       val analyzed = executeAndTrack(plan, tracker)
       checkAnalysis(analyzed)
-      analyzed
+      postAnalysisEarlyOptimizationRules.foldLeft(analyzed) {
+        case(rs, rule) => rule(rs)
+      }
     }
   }
 
@@ -247,6 +249,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * execute its rules in one pass.
    */
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  val postAnalysisEarlyOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 
   private def typeCoercionRules(): List[Rule[LogicalPlan]] = if (conf.ansiEnabled) {
     AnsiTypeCoercion.typeCoercionRules

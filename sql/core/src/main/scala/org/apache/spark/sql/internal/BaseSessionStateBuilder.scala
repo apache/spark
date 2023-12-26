@@ -208,8 +208,7 @@ abstract class BaseSessionStateBuilder(
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      EarlyCollapseProject +:
-        DetectAmbiguousSelfJoin +:
+      DetectAmbiguousSelfJoin +:
         QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:
         PreprocessTableInsertion +:
@@ -218,6 +217,9 @@ abstract class BaseSessionStateBuilder(
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
 
+    override val postAnalysisEarlyOptimizationRules: Seq[Rule[LogicalPlan]] =
+      EarlyCollapseProject +: Nil
+
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
         PreReadCheck +:
@@ -225,6 +227,8 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         customCheckRules
+
+
   }
 
   /**

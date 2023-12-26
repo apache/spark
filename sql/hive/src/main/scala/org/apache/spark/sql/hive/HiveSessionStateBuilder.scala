@@ -97,8 +97,7 @@ class HiveSessionStateBuilder(
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      EarlyCollapseProject +:
-        DetectAmbiguousSelfJoin +:
+      DetectAmbiguousSelfJoin +:
         RelationConversions(catalog) +:
         QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:
@@ -108,6 +107,9 @@ class HiveSessionStateBuilder(
         HiveAnalysis +:
         ReplaceCharWithVarchar +:
         customPostHocResolutionRules
+
+    override val postAnalysisEarlyOptimizationRules: Seq[Rule[LogicalPlan]] =
+      EarlyCollapseProject +: Nil
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
