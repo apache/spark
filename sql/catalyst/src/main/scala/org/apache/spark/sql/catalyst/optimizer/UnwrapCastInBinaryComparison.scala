@@ -452,9 +452,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       fromExp: Expression,
       toType: DataType,
       literalType: DataType): Boolean = {
-    DataTypeUtils.sameType(toType, literalType) &&
-      !fromExp.foldable &&
-      toType.isInstanceOf[NumericType] &&
+    DataTypeUtils.sameType(toType, literalType) && !fromExp.foldable &&
       canUnwrapCast(fromExp.dataType, toType)
   }
 
