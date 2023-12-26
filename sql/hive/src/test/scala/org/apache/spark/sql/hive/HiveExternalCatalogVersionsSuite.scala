@@ -205,12 +205,13 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       }
     }
 
-    val ivyTestDir = new File(sparkTestingDir, "ivy2")
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
+
+      val ivyTestDir = new File(sparkTestingDir, s"ivy2-$index")
 
       // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
       val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
