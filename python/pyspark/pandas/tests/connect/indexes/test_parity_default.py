@@ -16,21 +16,23 @@
 #
 import unittest
 
-from pyspark.pandas.tests.computation.test_pivot import FramePivotMixin
+from pyspark.pandas.tests.indexes.test_default import DefaultIndexTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameParityPivotTests(
-    FramePivotMixin,
+class DefaultIndexParityTests(
+    DefaultIndexTestsMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
-    pass
+    @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
+    def test_index_distributed_sequence_cleanup(self):
+        super().test_index_distributed_sequence_cleanup()
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.computation.test_parity_pivot import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_default import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

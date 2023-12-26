@@ -16,13 +16,15 @@
 #
 import unittest
 
-from pyspark.pandas.tests.computation.test_pivot import FramePivotMixin
+from pyspark.pandas.tests.computation.test_pivot_table_multi_idx_adv import (
+    PivotTableMultiIdxAdvMixin,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameParityPivotTests(
-    FramePivotMixin,
+class PivotTableMultiIdxAdvParityTests(
+    PivotTableMultiIdxAdvMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
@@ -30,7 +32,7 @@ class FrameParityPivotTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.computation.test_parity_pivot import *  # noqa: F401
+    from pyspark.pandas.tests.connect.computation.test_parity_pivot_table_multi_idx_adv import *  # noqa
 
     try:
         import xmlrunner  # type: ignore[import]

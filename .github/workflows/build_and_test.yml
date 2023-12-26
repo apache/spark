@@ -264,7 +264,7 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
-        // SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
+        # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
         if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
         fi
@@ -429,10 +429,14 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
-    - name: List Python packages (Python 3.9, PyPy3)
+    - name: List Python packages (${{ env.PYTHON_TO_TEST }})
+      shell: 'script -q -e -c "bash {0}"'
       run: |
-        python3.9 -m pip list
-        pypy3 -m pip list
+        for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
+        do
+          echo $py
+          $py -m pip list
+        done
     - name: Install Conda for pip packaging test
       if: contains(matrix.modules, 'pyspark-errors')
       run: |
