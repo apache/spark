@@ -479,8 +479,10 @@ abstract class TypeCoercionBase {
         findWiderCommonType(types) match {
           case Some(finalDataType) =>
             Coalesce(es.map(castIfNotSameType(_, finalDataType)))
-          case None => c
+          case None =>
+            c
         }
+
       // When finding wider type for `Greatest` and `Least`, we should handle decimal types even if
       // we need to truncate, but we should not promote one side to string if the other side is
       // string.g

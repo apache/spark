@@ -33,16 +33,14 @@ package org.apache.spark.sql.catalyst.expressions
   """,
   since = "4.0.0",
   group = "conditional_funcs")
-case class Between(proj: Expression, lower: Expression, upper: Expression, replacement: Expression)
+case class Between private(proj: Expression, lower: Expression, upper: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules  {
   def this(proj: Expression, lower: Expression, upper: Expression) = {
     this(proj, lower, upper, {
-        val commonExpr = CommonExpressionDef(proj)
-        val ref = new CommonExpressionRef(commonExpr)
-        With(And(
-            GreaterThanOrEqual(ref, lower),
-            LessThanOrEqual(ref, upper)),
-            Seq(commonExpr))
+      val commonExpr = CommonExpressionDef(proj)
+      val ref = new CommonExpressionRef(commonExpr)
+      val replacement = And(GreaterThanOrEqual(ref, lower), LessThanOrEqual(ref, upper))
+      With(replacement, Seq(commonExpr))
     })
   };
 

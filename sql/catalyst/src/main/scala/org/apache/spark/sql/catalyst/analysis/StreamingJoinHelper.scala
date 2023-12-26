@@ -96,22 +96,20 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
       // Now when the canonicalized join condition solves to leftTime >= W, we don't want to clean
       // up leftTime <= W. Rather we should clean up leftTime <= W - 1. Hence the -1 below.
-      val stateWatermarks = (predicate match {
-        case LessThan(l, r) => Seq(getStateWatermarkSafely(l, r))
-        case LessThanOrEqual(l, r) => Seq(getStateWatermarkSafely(l, r).map(_ - 1))
-        case GreaterThan(l, r) => Seq(getStateWatermarkSafely(r, l))
-        case GreaterThanOrEqual(l, r) => Seq(getStateWatermarkSafely(r, l).map(_ - 1))
+      val stateWatermark = predicate match {
+        case LessThan(l, r) => getStateWatermarkSafely(l, r)
+        case LessThanOrEqual(l, r) => getStateWatermarkSafely(l, r).map(_ - 1)
+        case GreaterThan(l, r) => getStateWatermarkSafely(r, l)
+        case GreaterThanOrEqual(l, r) => getStateWatermarkSafely(r, l).map(_ - 1)
         case Between(p, lower, upper, _) =>
-          Seq(getStateWatermarkSafely(lower, p).map(_ - 1),
-              getStateWatermarkSafely(p, upper).map(_ - 1))
-        case _ => Seq.empty
-      }).flatten
-
-      stateWatermarks.foreach(mark => {
-        logInfo(s"Condition $joinCondition generated watermark " +
-          s"constraint = $mark")
-      })
-      stateWatermarks
+          getStateWatermarkSafely(lower, p).map(_ - 1)
+            .orElse(getStateWatermarkSafely(p, upper).map(_ - 1))
+        case _ => None
+      }
+      if (stateWatermark.nonEmpty) {
+        logInfo(s"Condition $joinCondition generated watermark constraint = ${stateWatermark.get}")
+      }
+      stateWatermark
     }
     allStateWatermarks.reduceOption((x, y) => Math.min(x, y))
   }
