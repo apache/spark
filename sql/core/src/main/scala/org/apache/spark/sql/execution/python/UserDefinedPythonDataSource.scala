@@ -128,6 +128,9 @@ class PythonTableProvider extends TableProvider {
 
             override def toBatch: BatchWrite = new BatchWrite {
 
+              // Store the pickled data source writer instance.
+              private var pythonDataSourceWriter: Array[Byte] = _
+
               override def createBatchWriterFactory(
                 physicalInfo: PhysicalWriteInfo): DataWriterFactory = {
 
@@ -136,14 +139,21 @@ class PythonTableProvider extends TableProvider {
                   info.schema(),
                   info.options(),
                   isTruncate)
+
+                pythonDataSourceWriter = writeInfo.writer
+
                 PythonBatchWriterFactory(source, writeInfo.func, info.schema(), jobArtifactUUID)
               }
 
-              // TODO(SPARK-45914): Support commit protocol
-              override def commit(messages: Array[WriterCommitMessage]): Unit = {}
+              override def commit(messages: Array[WriterCommitMessage]): Unit = {
+                source.commitWriteInPython(pythonDataSourceWriter, messages)
+              }
 
-              // TODO(SPARK-45914): Support commit protocol
-              override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+              override def abort(messages: Array[WriterCommitMessage]): Unit = {
+                source.commitWriteInPython(pythonDataSourceWriter, messages, abort = true)
+              }
+
+              override def toString: String = shortName
             }
 
             override def description: String = "(Python)"
@@ -331,6 +341,17 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       inputSchema,
       options.asCaseSensitiveMap().asScala.toMap,
       overwrite).runInPython()
+  }
+
+  /**
+   * (Driver-side) Run Python process to either commit or abort a write operation.
+   */
+  def commitWriteInPython(
+      writer: Array[Byte],
+      messages: Array[WriterCommitMessage],
+      abort: Boolean = false): Unit = {
+    new UserDefinedPythonDataSourceCommitRunner(
+      dataSourceCls, writer, messages, abort).runInPython()
   }
 
   /**
@@ -590,7 +611,7 @@ class UserDefinedPythonDataSourceReadRunner(
 /**
  * Hold the results of running [[UserDefinedPythonDataSourceWriteRunner]].
  */
-case class PythonDataSourceWriteInfo(func: Array[Byte])
+case class PythonDataSourceWriteInfo(func: Array[Byte], writer: Array[Byte])
 
 /**
  * A runner that creates a Python data source writer instance and returns a Python function
@@ -640,9 +661,55 @@ class UserDefinedPythonDataSourceWriteRunner(
         action = "plan", tpe = "write", msg = msg)
     }
 
-    // Receive the pickled data source.
+    // Receive the pickled data source write function.
     val writeUdf: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
 
-    PythonDataSourceWriteInfo(func = writeUdf)
+    // Receive the pickled instance of the data source writer.
+    val writer: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
+
+    PythonDataSourceWriteInfo(func = writeUdf, writer = writer)
+  }
+}
+
+/**
+ * A runner that takes a Python data source writer and a list of commit messages,
+ * and invokes the `commit` or `abort` method of the writer in Python.
+ */
+class UserDefinedPythonDataSourceCommitRunner(
+    dataSourceCls: PythonFunction,
+    writer: Array[Byte],
+    messages: Array[WriterCommitMessage],
+    abort: Boolean) extends PythonPlannerRunner[Unit](dataSourceCls) {
+  override val workerModule: String = "pyspark.sql.worker.commit_data_source_write"
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send the Python data source writer.
+    PythonWorkerUtils.writeBytes(writer, dataOut)
+
+    // Send the commit messages.
+    dataOut.writeInt(messages.length)
+    messages.foreach { message =>
+      // Commit messages can be null if there are task failures.
+      if (message == null) {
+        dataOut.writeInt(SpecialLengths.NULL)
+      } else {
+        PythonWorkerUtils.writeBytes(
+          message.asInstanceOf[PythonWriterCommitMessage].pickledMessage, dataOut)
+      }
+    }
+
+    // Send whether to invoke `abort` instead of `commit`.
+    dataOut.writeBoolean(abort)
+  }
+
+  override protected def receiveFromPython(dataIn: DataInputStream): Unit = {
+    // Receive any exceptions thrown in the Python worker.
+    val code = dataIn.readInt()
+    if (code == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.failToPlanDataSourceError(
+        action = "commit or abort", tpe = "write", msg = msg)
+    }
+    assert(code == 0, s"Python commit job should run successfully, but got exit code: $code")
   }
 }
