@@ -3926,11 +3926,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def dataSourceTableSchemaMismatchError(
-      tableSchema: StructType, actualSchema: StructType): Throwable = {
+      dsSchema: StructType, expectedSchema: StructType): Throwable = {
     new AnalysisException(
       errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
       messageParameters = Map(
-        "tableSchema" -> toSQLType(tableSchema),
-        "actualSchema" -> toSQLType(actualSchema)))
+        "dsSchema" -> toSQLType(dsSchema),
+        "expectedSchema" -> toSQLType(expectedSchema)))
   }
 }

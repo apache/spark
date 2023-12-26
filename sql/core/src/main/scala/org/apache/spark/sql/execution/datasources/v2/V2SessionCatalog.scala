@@ -198,10 +198,21 @@ class V2SessionCatalog(catalog: SessionCatalog)
             s"Partitions should be empty when the schema is empty: ${partitions.mkString(", ")}")
           // Infer the schema and partitions and store them in the catalog.
           (tableProvider.inferSchema(dsOptions), tableProvider.inferPartitioning(dsOptions))
-        } else if (partitions.isEmpty) {
-          (schema, tableProvider.inferPartitioning(dsOptions))
         } else {
-          (schema, partitions)
+          val partitioning = if (partitions.isEmpty) {
+            tableProvider.inferPartitioning(dsOptions)
+          } else {
+            partitions
+          }
+          val table = tableProvider.getTable(schema, partitions, dsOptions)
+          // Check if the schema of the created table matches the given schema.
+          val tableSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+            table.columns().asSchema)
+          if (!DataType.equalsIgnoreNullability(tableSchema, schema)) {
+            throw QueryCompilationErrors.dataSourceTableSchemaMismatchError(
+              tableSchema, schema)
+          }
+          (schema, partitioning)
         }
 
       case _ =>
@@ -233,21 +244,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
 
-    val table = loadTable(ident)
-
-    // Check if the schema of the created table matches the given schema.
-    // TODO: move this check in loadTable to match the behavior with
-    // existing file data sources.
-    if (schema.nonEmpty) {
-      val tableSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-        table.columns().asSchema)
-      if (!DataType.equalsIgnoreNullability(tableSchema, schema)) {
-        throw QueryCompilationErrors.dataSourceTableSchemaMismatchError(
-          table.columns().asSchema, schema)
-      }
-    }
-
-    table
+    null // Return null to save the `loadTable` call for CREATE TABLE without AS SELECT.
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
@@ -288,7 +285,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
-    loadTable(ident)
+    null // Return null to save the `loadTable` call for ALTER TABLE.
   }
 
   override def purgeTable(ident: Identifier): Boolean = {
@@ -332,8 +329,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       throw QueryCompilationErrors.tableAlreadyExistsError(newIdent)
     }
 
-    // Load table to make sure the table exists
-    loadTable(oldIdent)
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
   }
 

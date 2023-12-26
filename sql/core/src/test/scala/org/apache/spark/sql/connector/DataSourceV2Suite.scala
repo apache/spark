@@ -734,8 +734,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         },
         errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
-          "tableSchema" -> "\"STRUCT<i: INT, j: INT>\"",
-          "actualSchema" -> "\"STRUCT<x: INT, y: INT>\""))
+          "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
+          "expectedSchema" -> "\"STRUCT<x: INT, y: INT>\""))
     }
   }
 
@@ -772,8 +772,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         },
         errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
-          "tableSchema" -> "\"STRUCT<i: INT, j: INT>\"",
-          "actualSchema" -> "\"STRUCT<col1: INT, col2: INT>\""))
+          "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
+          "expectedSchema" -> "\"STRUCT<col1: INT, col2: INT>\""))
     }
   }
 
@@ -790,8 +790,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         },
         errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
-          "tableSchema" -> "\"STRUCT<i: INT, j: INT>\"",
-          "actualSchema" -> "\"STRUCT<i: STRING, j: STRING>\""))
+          "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
+          "expectedSchema" -> "\"STRUCT<i: STRING, j: STRING>\""))
     }
   }
 
