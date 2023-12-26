@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, Timesta
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.instantToMicros
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -47,6 +48,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private val PST_OPT = Option(PST.getId)
   private val JST_OPT = Option(JST.getId)
+
+  private val CurrentTimestamp = Literal.create(instantToMicros(Instant.now()), TimestampType)
 
   def toMillis(timestamp: String): Long = {
     val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC, isParsing = true)
@@ -952,9 +955,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
             val t1 = UnixTimestamp(
-              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+              CurrentTimestamp, Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
             val t2 = UnixTimestamp(
-              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+              CurrentTimestamp, Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
             assert(t2 - t1 <= 1)
             checkEvaluation(
               UnixTimestamp(
@@ -1023,9 +1026,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), zid)))
             val t1 = ToUnixTimestamp(
-              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
+              CurrentTimestamp, Literal(fmt1)).eval().asInstanceOf[Long]
             val t2 = ToUnixTimestamp(
-              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
+              CurrentTimestamp, Literal(fmt1)).eval().asInstanceOf[Long]
             assert(t2 - t1 <= 1)
             checkEvaluation(ToUnixTimestamp(
               Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId), null)
@@ -1497,7 +1500,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[T](ToUnixTimestamp(Literal("1"), Literal(c)), c)
       checkExceptionInExpression[T](UnixTimestamp(Literal("1"), Literal(c)), c)
       if (!Set("E", "F", "q", "Q").contains(c)) {
-        checkExceptionInExpression[T](DateFormatClass(CurrentTimestamp(), Literal(c)), c)
+        checkExceptionInExpression[T](DateFormatClass(CurrentTimestamp, Literal(c)), c)
         checkExceptionInExpression[T](FromUnixTime(Literal(0L), Literal(c)), c)
       }
     }

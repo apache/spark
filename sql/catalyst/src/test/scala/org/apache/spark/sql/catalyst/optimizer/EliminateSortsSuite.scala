@@ -33,6 +33,10 @@ import org.apache.spark.sql.types.IntegerType
 class EliminateSortsSuite extends AnalysisTest {
   val analyzer = getAnalyzer
 
+  object FinishAnalysis extends RuleExecutor[LogicalPlan] {
+    val batches = Batch("FinishAnalysis", Once, ComputeCurrentTime) :: Nil
+  }
+
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Default", FixedPoint(10),
@@ -100,10 +104,10 @@ class EliminateSortsSuite extends AnalysisTest {
 
     val query = x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
-    val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = analyzer.execute(
+    val optimized = Optimize.execute(FinishAnalysis.execute(analyzer.execute(query)))
+    val correctAnswer = FinishAnalysis.execute(analyzer.execute(
       x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-        .orderBy($"x".asc, $"b".desc))
+        .orderBy($"x".asc, $"b".desc)))
 
     comparePlans(optimized, correctAnswer)
   }
