@@ -33,7 +33,7 @@ private[connect] object ProtoUtils {
     abbreviate(message, Map(STRING -> maxStringSize))
   }
 
-  def abbreviate(message: Message, thresholds: Map[String, Int] = Map.empty): Message = {
+  def abbreviate(message: Message, thresholds: Map[String, Int]): Message = {
     val builder = message.toBuilder
 
     message.getAllFields.asScala.iterator.foreach {

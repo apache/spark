@@ -138,8 +138,11 @@ class AbbreviateSuite extends SparkFunSuite {
       assert(truncatedUDF.getOutputType === ProtoDataTypes.BinaryType)
       assert(truncatedUDF.getPythonVer === "3.12")
 
-      if (threshold <= 1024) {
-        assert(truncatedUDF.getCommand.size() === threshold)
+      if (threshold < 1024) {
+        // with suffix: [truncated(size=...)]
+        assert(
+          threshold < truncatedUDF.getCommand.size() &&
+            truncatedUDF.getCommand.size() < threshold + 64)
       } else {
         assert(truncatedUDF.getCommand.size() === 1024)
       }
