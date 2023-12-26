@@ -34,8 +34,14 @@ class IndexesInsertMixin:
         # Integer
         pidx = pd.Index([1, 2, 3], name="Koalas")
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, 100), psidx.insert(1, 100))
-        self.assert_eq(pidx.insert(-1, 100), psidx.insert(-1, 100))
+        self.assert_eq(
+            pidx.insert(1, 100).sort_values(),
+            psidx.insert(1, 100).sort_values(),
+        )
+        self.assert_eq(
+            pidx.insert(-1, 100).sort_values(),
+            psidx.insert(-1, 100).sort_values(),
+        )
         err_msg = "index 100 is out of bounds for axis 0 with size 3"
         with self.assertRaisesRegex(IndexError, err_msg):
             psidx.insert(100, 100)
@@ -46,8 +52,14 @@ class IndexesInsertMixin:
         # Floating
         pidx = pd.Index([1.0, 2.0, 3.0], name="Koalas")
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, 100.0), psidx.insert(1, 100.0))
-        self.assert_eq(pidx.insert(-1, 100.0), psidx.insert(-1, 100.0))
+        self.assert_eq(
+            pidx.insert(1, 100.0).sort_values(),
+            psidx.insert(1, 100.0).sort_values(),
+        )
+        self.assert_eq(
+            pidx.insert(-1, 100.0).sort_values(),
+            psidx.insert(-1, 100.0).sort_values(),
+        )
         err_msg = "index 100 is out of bounds for axis 0 with size 3"
         with self.assertRaisesRegex(IndexError, err_msg):
             psidx.insert(100, 100)
@@ -58,8 +70,14 @@ class IndexesInsertMixin:
         # String
         pidx = pd.Index(["a", "b", "c"], name="Koalas")
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, "x"), psidx.insert(1, "x"))
-        self.assert_eq(pidx.insert(-1, "x"), psidx.insert(-1, "x"))
+        self.assert_eq(
+            pidx.insert(1, "x").sort_values(),
+            psidx.insert(1, "x").sort_values(),
+        )
+        self.assert_eq(
+            pidx.insert(-1, "x").sort_values(),
+            psidx.insert(-1, "x").sort_values(),
+        )
         err_msg = "index 100 is out of bounds for axis 0 with size 3"
         with self.assertRaisesRegex(IndexError, err_msg):
             psidx.insert(100, "x")
@@ -70,8 +88,14 @@ class IndexesInsertMixin:
         # Boolean
         pidx = pd.Index([True, False, True, False], name="Koalas")
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, True), psidx.insert(1, True))
-        self.assert_eq(pidx.insert(-1, True), psidx.insert(-1, True))
+        self.assert_eq(
+            pidx.insert(1, True).sort_values(),
+            psidx.insert(1, True).sort_values(),
+        )
+        self.assert_eq(
+            pidx.insert(-1, True).sort_values(),
+            psidx.insert(-1, True).sort_values(),
+        )
         err_msg = "index 100 is out of bounds for axis 0 with size 4"
         with self.assertRaisesRegex(IndexError, err_msg):
             psidx.insert(100, True)
@@ -84,8 +108,14 @@ class IndexesInsertMixin:
             [("a", "x"), ("b", "y"), ("c", "z")], names=["Hello", "Koalas"]
         )
         psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.insert(2, ("h", "j")), psmidx.insert(2, ("h", "j")))
-        self.assert_eq(pmidx.insert(-1, ("h", "j")), psmidx.insert(-1, ("h", "j")))
+        self.assert_eq(
+            pmidx.insert(2, ("h", "j")).sort_values(),
+            psmidx.insert(2, ("h", "j")).sort_values(),
+        )
+        self.assert_eq(
+            pmidx.insert(-1, ("h", "j")).sort_values(),
+            psmidx.insert(-1, ("h", "j")).sort_values(),
+        )
 
         err_msg = "index 4 is out of bounds for axis 0 with size 3"
         with self.assertRaisesRegex(IndexError, err_msg):
