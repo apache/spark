@@ -67,9 +67,6 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
     }
     env.put("SPARK_HOME", sparkHome)
 
-    // scalastyle:off println
-    println(env)
-
     def captureOutput(source: String)(line: String): Unit = {
       logInfo(s"$source> $line")
       history += line
