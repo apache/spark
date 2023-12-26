@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
-import org.apache.logging.log4j.core.appender.ConsoleAppender
+import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
@@ -169,8 +169,8 @@ trait Logging {
           }
           Logging.sparkShellThresholdLevel = replLevel
           rootLogger.getAppenders().asScala.foreach {
-            case (_, ca: ConsoleAppender) =>
-              ca.addFilter(new SparkShellLoggingFilter())
+            case (_, appender: AbstractAppender) =>
+              appender.addFilter(new SparkShellLoggingFilter())
             case _ => // no-op
           }
         }
