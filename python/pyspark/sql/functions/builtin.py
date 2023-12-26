@@ -13150,7 +13150,7 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import Row, functions as sf
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
-    >>> df.select(sf.sort_array(sf.array_intersect(df.c1, df.c2))).show()
+    >>> df.select(sf.sort_array(sf.array_intersect(df.c1, df.c2)).alias("array_intersect")).show()
     +-----------------------------------------+
     |sort_array(array_intersect(c1, c2), true)|
     +-----------------------------------------+
@@ -13162,11 +13162,11 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     >>> from pyspark.sql import Row, functions as sf
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["d", "e", "f"])])
     >>> df.select(sf.array_intersect(df.c1, df.c2)).show()
-    +-----------------------------------------+
-    |sort_array(array_intersect(c1, c2), true)|
-    +-----------------------------------------+
-    |                                       []|
-    +-----------------------------------------+
+    +-----------------------+
+    |array_intersect(c1, c2)|
+    +-----------------------+
+    |                     []|
+    +-----------------------+
 
     Example 3: Intersection with all common elements
 
