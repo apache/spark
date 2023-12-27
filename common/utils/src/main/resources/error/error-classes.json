@@ -2256,6 +2256,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_SAVE_MODE" : {
+    "message" : [
+      "The specified save mode '<mode>' is invalid. Valid save modes include 'append', 'overwrite', 'ignore', 'error', 'errorifexists', and 'default'."
+    ],
+    "sqlState" : "42K10"
+  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
