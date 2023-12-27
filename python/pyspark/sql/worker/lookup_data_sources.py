@@ -23,7 +23,6 @@ from typing import IO
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
-    read_bool,
     read_int,
     write_int,
     write_with_length,
@@ -32,17 +31,25 @@ from pyspark.serializers import (
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
     check_python_version,
-    read_command,
     pickleSer,
     send_accumulator_updates,
     setup_broadcasts,
     setup_memory_limits,
     setup_spark_files,
-    utf8_deserializer,
 )
 
 
 def main(infile: IO, outfile: IO) -> None:
+    """
+    Main method for looking up the available Python Data Sources in Python path.
+
+    This process is invoked from the `UserDefinedPythonDataSourceLookupRunner.runInPython`
+    method in `UserDefinedPythonDataSource.lookupAllDataSourcesInPython` when the first
+    call related to Python Data Source happens via `DataSourceManager`.
+
+    This is responsible for searching the available Python Data Sources so they can be
+    statically registered automatically.
+    """
     try:
         check_python_version(infile)
 
@@ -61,10 +68,12 @@ def main(infile: IO, outfile: IO) -> None:
                 if hasattr(mod, "DefaultSource"):
                     infos[mod.DefaultSource.name()] = mod.DefaultSource
 
+        # Writes name -> pickled data source to JVM side to be registered
+        # as a Data Source.
         write_int(len(infos), outfile)
-        for name, mod in infos:
+        for name, dataSource in infos.items():
             write_with_length(name.encode("utf-8"), outfile)
-            pickleSer._write_with_length(mod.DefaultSource, outfile)
+            pickleSer._write_with_length(dataSource, outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

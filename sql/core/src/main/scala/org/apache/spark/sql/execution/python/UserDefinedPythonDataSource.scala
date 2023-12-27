@@ -26,7 +26,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkException}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonUtils, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -288,6 +288,7 @@ class PythonCustomTaskMetric(
  * @param dataSourceCls The Python data source class.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
+
   /**
    * (Driver-side) Run Python process, and get the pickled Python Data Source
    * instance and its schema.
@@ -427,7 +428,7 @@ case class PythonDataSourceCreationResult(
     schema: StructType)
 
 /**
- * A runner used to create a Python data source in a Python process and return the result.
+ * A runner used to look up Python Data Sources available in Python path.
  */
 class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
     extends PythonPlannerRunner[PythonAllDataSourcesCreationResult](lookupSources) {

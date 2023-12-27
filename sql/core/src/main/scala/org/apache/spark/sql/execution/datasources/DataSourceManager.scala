@@ -27,11 +27,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
 
+
 /**
  * A manager for user-defined data sources. It is used to register and lookup data sources by
  * their short names or fully qualified names.
  */
 class DataSourceManager extends Logging {
+  // Lazy to avoid being invoked during Session initialization.
+  // Otherwise, it goes infinite loop, session -> Python runner -> SQLConf -> session.
   private lazy val dataSourceBuilders = {
     val builders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
     builders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
@@ -80,7 +83,6 @@ class DataSourceManager extends Logging {
 
 
 object DataSourceManager {
-  // Load when it's actually referred. Spark Session must be available when this is referred.
   private lazy val initialDataSourceBuilders = {
     val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
     result.names.zip(result.dataSources).map { case (name, dataSource) =>

@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.file.Paths
 import java.util.{List => JList}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
@@ -30,7 +31,6 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.Utils
-
 
 private[spark] object PythonUtils extends Logging {
   val PY4J_ZIP_NAME = "py4j-0.10.9.7-src.zip"
@@ -150,13 +150,16 @@ private[spark] object PythonUtils extends Logging {
     }
   }
 
+  // Only for testing.
+  private[spark] var additionalTestingPath: Option[String] = None
+
   private[spark] def createPythonFunction(command: Array[Byte]): SimplePythonFunction = {
     val pythonExec: String = sys.env.getOrElse(
       "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
 
     val sourcePython = if (Utils.isTesting) {
-      // Put source code  so we don't need to build PySpark every
-      // time during development.
+      // Put PySpark source code instead of the build zip archive so we don't need
+      // to build PySpark every time during development.
       val sparkHome: String = {
         require(
           sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"),
@@ -164,7 +167,11 @@ private[spark] object PythonUtils extends Logging {
         sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
       }
       val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
-      sourcePath.toString
+      val py4jPath = Paths.get(
+        sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
+      val merged = mergePythonPaths(sourcePath.toString, py4jPath.toString)
+      // Adds a additional path to search Python packages for testing.
+      additionalTestingPath.map(mergePythonPaths(_, merged)).getOrElse(merged)
     } else {
       PythonUtils.sparkPythonPath
     }
@@ -179,8 +186,8 @@ private[spark] object PythonUtils extends Logging {
 
     SimplePythonFunction(
       command = command.toImmutableArraySeq,
-      envVars = Map("PYTHONPATH" -> pythonPath).asJava,
-      pythonIncludes = List.empty[String].asJava,
+      envVars = mutable.Map("PYTHONPATH" -> pythonPath).asJava,
+      pythonIncludes = List.empty.asJava,
       pythonExec = pythonExec,
       pythonVer = pythonVer,
       broadcastVars = List.empty.asJava,
