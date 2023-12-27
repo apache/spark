@@ -38,10 +38,13 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BOOLEAN;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 /**
  * Decoder to return values from a single column.
@@ -140,21 +143,39 @@ public class VectorizedColumnReader {
     this.writerVersion = writerVersion;
   }
 
-  private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
-    return switch (typeName) {
-      case INT32 ->
-        !(logicalTypeAnnotation instanceof DateLogicalTypeAnnotation) ||
-          "CORRECTED".equals(datetimeRebaseMode);
-      case INT64 -> {
-        if (updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS)) {
-          yield "CORRECTED".equals(datetimeRebaseMode);
-        } else {
-          yield !updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
-        }
+  private boolean isLazyDecodingSupported(
+      PrimitiveType.PrimitiveTypeName typeName,
+      DataType sparkType) {
+    boolean isSupported = false;
+    // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date
+    // rebasing.
+    switch (typeName) {
+      case INT32: {
+        boolean isDate = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation;
+        boolean needsUpcast = sparkType == LongType || (isDate && sparkType == TimestampNTZType) ||
+          !DecimalType.is32BitDecimalType(sparkType);
+        boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
+          !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase;
+        break;
       }
-      case FLOAT, DOUBLE, BINARY -> true;
-      default -> false;
-    };
+      case INT64: {
+        boolean needsUpcast = !DecimalType.is64BitDecimalType(sparkType) ||
+          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
+        boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
+          !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase;
+        break;
+      }
+      case FLOAT:
+        isSupported = sparkType == FloatType;
+        break;
+      case DOUBLE:
+      case BINARY:
+        isSupported = true;
+        break;
+    }
+    return isSupported;
   }
 
   /**
@@ -205,7 +226,7 @@ public class VectorizedColumnReader {
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
         if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
-            isLazyDecodingSupported(typeName))) {
+            isLazyDecodingSupported(typeName, column.dataType()))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if startRowId is not the first row index in the page AND the column
           // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been

@@ -1486,7 +1486,7 @@ abstract class RDD[T: ClassTag](
           }
         }
 
-        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts))
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))

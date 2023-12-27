@@ -125,3 +125,12 @@ FROM BONUS
 WHERE EXISTS(SELECT RANK() OVER (PARTITION BY hiredate ORDER BY salary) AS s
                     FROM EMP, DEPT where EMP.dept_id = DEPT.dept_id
                         AND DEPT.dept_name < BONUS.emp_name);
+
+-- SPARK-46468: Aggregate always returns 1 row, so EXISTS is always true.
+SELECT tt1.emp_name
+FROM EMP as tt1
+WHERE EXISTS (
+  select max(tt2.id)
+  from EMP as tt2
+  where tt1.emp_name is null
+);

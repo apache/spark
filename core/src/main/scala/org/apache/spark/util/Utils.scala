@@ -50,7 +50,7 @@ import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
@@ -67,7 +67,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -769,7 +769,6 @@ private[spark] object Utils
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
-    val shuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -1774,8 +1773,7 @@ private[spark] object Utils
   /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 =
-    System.getProperty("java.version").split("[+.\\-]+", 3)(0).toInt >= 21
+  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.

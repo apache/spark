@@ -16,20 +16,21 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_ops_on_diff_frames import OpsOnDiffFramesEnabledTestsMixin
-
+from pyspark.pandas.tests.indexes.test_map import IndexesMapMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class OpsOnDiffFramesEnabledParityTests(
-    OpsOnDiffFramesEnabledTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class IndexesMapParityTests(
+    IndexesMapMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_map import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

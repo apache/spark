@@ -16,21 +16,21 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_default_index import DefaultIndexTestsMixin
+from pyspark.pandas.tests.diff_frames_ops.test_assign_series import AssignSeriesMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class DefaultIndexParityTests(
-    DefaultIndexTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class AssignSeriesParityTests(
+    AssignSeriesMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
-    @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
-    def test_index_distributed_sequence_cleanup(self):
-        super().test_index_distributed_sequence_cleanup()
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_default_index import *  # noqa: F401
+    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_assign_series import *  # noqa
 
     try:
         import xmlrunner  # type: ignore[import]

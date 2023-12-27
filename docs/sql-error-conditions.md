@@ -496,7 +496,9 @@ Failed to find the data source: `<provider>`. Please find packages at `https://s
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The schema of the data source table `<tableSchema>` does not match the actual schema `<actualSchema>`. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+The schema of the data source table does not match the expected schema. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+Data Source schema: `<dsSchema>`
+Expected schema: `<expectedSchema>`
 
 ### DATETIME_OVERFLOW
 
@@ -1397,6 +1399,12 @@ Rewrite the query to avoid window functions, aggregate functions, and generator 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot specify ORDER BY or a window frame for `<aggFunc>`.
+
+### INVALID_WRITER_COMMIT_MESSAGE
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The data source writer has generated an invalid number of commit messages. Expected exactly one writer commit message from each task, but received `<detail>`.
 
 ### [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-write-distribution-error-class.html)
 
