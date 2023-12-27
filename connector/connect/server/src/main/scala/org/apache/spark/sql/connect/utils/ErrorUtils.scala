@@ -183,8 +183,8 @@ private[connect] object ErrorUtils extends Logging {
         }
         val errorClass = e.getErrorClass
         if (errorClass != null && errorClass.nonEmpty) {
-          val messageParameters = JsonMethods.compact(JsonMethods.render(
-            map2jvalue(e.getMessageParameters.asScala.toMap)))
+          val messageParameters = JsonMethods.compact(
+            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
           if (messageParameters.length <= MAX_METADATA_FIELD_SIZE) {
             errorInfo.putMetadata("errorClass", errorClass)
             errorInfo.putMetadata("messageParameters", messageParameters)
