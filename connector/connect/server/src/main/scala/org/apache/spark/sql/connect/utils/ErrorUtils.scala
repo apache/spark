@@ -66,8 +66,6 @@ private[connect] object ErrorUtils extends Logging {
   // The maximum length of the error chain.
   private[connect] val MAX_ERROR_CHAIN_LENGTH = 5
 
-  private val MAX_METADATA_FIELD_SIZE = 4 * 1024
-
   /**
    * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
    * @param st
