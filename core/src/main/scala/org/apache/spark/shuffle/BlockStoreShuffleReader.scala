@@ -111,31 +111,50 @@ private[spark] class BlockStoreShuffleReader[K, C](
     // An interruptible iterator must be used here in order to support task cancellation
     val interruptibleIter = new InterruptibleIterator[(Any, Any)](context, metricIter)
 
-    val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
+    // Sort the output if there is a sort ordering defined.
+    var aggregated = false
+    // The type of the value cannot be determined here, maybe the type of value
+    // or the type of combined value.
+    val sortedIter: Iterator[Product2[K, Nothing]] = dep.keyOrdering match {
+      case Some(keyOrd: Ordering[K]) =>
+        // Create an ExternalSorter to sort the data.
+        val sorter: ExternalSorter[K, _, C] = if (dep.aggregator.isDefined) {
+          aggregated = true
+          if (dep.mapSideCombine) {
+            new ExternalSorter[K, C, C](context,
+              Option(new Aggregator[K, C, C](identity,
+                dep.aggregator.get.mergeCombiners,
+                dep.aggregator.get.mergeCombiners)),
+              ordering = Some(keyOrd), serializer = dep.serializer)
+          } else {
+            new ExternalSorter[K, Nothing, C](context,
+              dep.aggregator.asInstanceOf[Option[Aggregator[K, Nothing, C]]],
+              ordering = Some(keyOrd), serializer = dep.serializer)
+          }
+        } else {
+          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd),
+            serializer = dep.serializer)
+        }
+        sorter.insertAllAndUpdateMetrics(interruptibleIter.asInstanceOf[Iterator[(K, Nothing)]]).
+          asInstanceOf[Iterator[(K, Nothing)]]
+      case None =>
+        interruptibleIter.asInstanceOf[Iterator[(K, Nothing)]]
+    }
+
+    val resultIter: Iterator[Product2[K, C]] = if (!aggregated && dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         // We are reading values that are already combined
-        val combinedKeyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, C)]]
+        val combinedKeyValuesIterator = sortedIter.asInstanceOf[Iterator[(K, C)]]
         dep.aggregator.get.combineCombinersByKey(combinedKeyValuesIterator, context)
       } else {
         // We don't know the value type, but also don't care -- the dependency *should*
         // have made sure its compatible w/ this aggregator, which will convert the value
         // type to the combined type C
-        val keyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, Nothing)]]
+        val keyValuesIterator = sortedIter.asInstanceOf[Iterator[(K, Nothing)]]
         dep.aggregator.get.combineValuesByKey(keyValuesIterator, context)
       }
     } else {
-      interruptibleIter.asInstanceOf[Iterator[Product2[K, C]]]
-    }
-
-    // Sort the output if there is a sort ordering defined.
-    val resultIter: Iterator[Product2[K, C]] = dep.keyOrdering match {
-      case Some(keyOrd: Ordering[K]) =>
-        // Create an ExternalSorter to sort the data.
-        val sorter =
-          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
-        sorter.insertAllAndUpdateMetrics(aggregatedIter)
-      case None =>
-        aggregatedIter
+      sortedIter
     }
 
     resultIter match {
