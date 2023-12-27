@@ -66,6 +66,8 @@ private[connect] object ErrorUtils extends Logging {
   // The maximum length of the error chain.
   private[connect] val MAX_ERROR_CHAIN_LENGTH = 5
 
+  private val MAX_METADATA_FIELD_SIZE = 4 * 1024
+
   /**
    * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
    * @param st
@@ -181,11 +183,12 @@ private[connect] object ErrorUtils extends Logging {
         }
         val errorClass = e.getErrorClass
         if (errorClass != null && errorClass.nonEmpty) {
-          errorInfo.putMetadata("errorClass", errorClass)
-          errorInfo.putMetadata(
-            "messageParameters",
-            JsonMethods.compact(
-              JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap))))
+          val messageParameters = JsonMethods.compact(JsonMethods.render(
+            map2jvalue(e.getMessageParameters.asScala.toMap)))
+          if (messageParameters.length <= MAX_METADATA_FIELD_SIZE) {
+            errorInfo.putMetadata("errorClass", errorClass)
+            errorInfo.putMetadata("messageParameters", messageParameters)
+          }
         }
       case _ =>
     }
