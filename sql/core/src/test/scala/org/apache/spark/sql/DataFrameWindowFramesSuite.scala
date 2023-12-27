@@ -549,18 +549,17 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Row(1) :: Row(1) :: Nil)
   }
 
-  test("SPARK-45352: Remove window partition if partition expression are foldable") {
-    val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
-    val sortOrder = SortOrder($"i".expr, Ascending)
-    val window1 = new WindowSpec(Seq(), Seq(sortOrder), UnspecifiedFrame)
-    val window2 = new WindowSpec(Seq(lit(1).expr), Seq(sortOrder), UnspecifiedFrame)
-    val df1 = ds.select(row_number().over(window1).alias("num"))
-    val df2 = ds.select(row_number().over(window2).alias("num"))
-    comparePlans(df1.queryExecution.optimizedPlan, df2.queryExecution.optimizedPlan)
-    val window3 = new WindowSpec(Seq($"n".expr), Seq(sortOrder), UnspecifiedFrame)
-    val window4 = new WindowSpec(Seq($"n".expr, lit(1).expr), Seq(sortOrder), UnspecifiedFrame)
-    val df3 = ds.select(row_number().over(window3).alias("num"))
-    val df4 = ds.select(row_number().over(window4).alias("num"))
-    comparePlans(df3.queryExecution.optimizedPlan, df4.queryExecution.optimizedPlan)
+  test("SPARK-45352: Eliminate foldable window partitions") {
+    val df = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("a", "b")
+
+    val window1 = Window.partitionBy(lit(1)).orderBy($"b")
+    checkAnswer(
+      df.select($"a", $"b", row_number().over(window1)),
+      Seq(Row(1, 1, 1), Row(1, 2, 3), Row(1, 3, 5), Row(2, 1, 2), Row(2, 2, 4)))
+
+    val window2 = Window.partitionBy($"a", lit(1)).orderBy($"b")
+    checkAnswer(
+      df.select($"a", $"b", row_number().over(window2)),
+      Seq(Row(1, 1, 1), Row(1, 2, 2), Row(1, 3, 3), Row(2, 1, 1), Row(2, 2, 2)))
   }
 }
