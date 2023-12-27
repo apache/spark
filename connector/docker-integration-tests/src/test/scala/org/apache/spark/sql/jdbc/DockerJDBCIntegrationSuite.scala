@@ -138,7 +138,7 @@ abstract class DockerJDBCIntegrationSuite
       }
       try {
         // Ensure that the Docker image is installed:
-        docker.inspectImageCmd("mariadb:10.5.12").exec()
+        docker.inspectImageCmd(db.imageName).exec()
       } catch {
         case e: NotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
