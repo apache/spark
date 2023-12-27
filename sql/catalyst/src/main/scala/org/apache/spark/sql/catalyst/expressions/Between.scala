@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - evaluate if `expr1` is [not] in between `expr2` and `expr3`",
+  usage = "Usage: input [NOT] BETWEEN lower AND upper - evaluate if `input` is [not] in between `lower` and `upper`",
   examples = """
     Examples:
       > SELECT 0.5 _FUNC_ 0.1 AND 1.0;
