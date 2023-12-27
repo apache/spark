@@ -911,7 +911,6 @@ case class WeekOfYear(child: Expression) extends GetDateField {
     copy(child = newChild)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the three-letter abbreviated month name from the given date.",
   examples = """
@@ -921,7 +920,6 @@ case class WeekOfYear(child: Expression) extends GetDateField {
   """,
   group = "datetime_funcs",
   since = "4.0.0")
-// scalastyle:on line.size.limit
 case class MonthName(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getMonthName
   override val funcName = "getMonthName"

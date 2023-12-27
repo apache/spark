@@ -198,12 +198,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Returns the three-letter abbreviated month name for the given number of days 1970-01-01.
+   * Returns the three-letter abbreviated month name for the given number of days since 1970-01-01.
    */
   def getMonthName(days: Int): UTF8String = {
     val monthName = Month
       .of(getMonth(days))
-      .getDisplayName(TextStyle.SHORT, Locale.US)
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
 
     UTF8String.fromString(monthName)
   }
