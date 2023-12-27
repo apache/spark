@@ -464,6 +464,14 @@ true
 
 
 -- !query
+select rand(123) between 0.1 AND 0.2
+-- !query schema
+struct<between(rand(123), 0.1, 0.2):boolean>
+-- !query output
+true
+
+
+-- !query
 select 1 not between 0 and 2
 -- !query schema
 struct<(NOT between(1, 0, 2)):boolean>
@@ -499,5 +507,13 @@ false
 select to_timestamp('2022-12-26 00:00:01') not between to_date('2022-03-01') and to_date('2022-12-31')
 -- !query schema
 struct<(NOT between(to_timestamp(2022-12-26 00:00:01), to_date(2022-03-01), to_date(2022-12-31))):boolean>
+-- !query output
+false
+
+
+-- !query
+select rand(123) not between 0.1 AND 0.2
+-- !query schema
+struct<(NOT between(rand(123), 0.1, 0.2)):boolean>
 -- !query output
 false

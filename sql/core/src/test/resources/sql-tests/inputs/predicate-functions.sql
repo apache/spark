@@ -73,6 +73,7 @@ select 0.5 between 0 and 1;
 select 2.0 between '1.0' and '3.0';
 select 'b' between 'a' and 'c';
 select to_timestamp('2022-12-26 00:00:01') between to_date('2022-03-01') and to_date('2022-12-31');
+select rand(123) between 0.1 AND 0.2;
 
 -- Not(Between)
 select 1 not between 0 and 2;
@@ -80,3 +81,4 @@ select 0.5 not between 0 and 1;
 select 2.0 not between '1.0' and '3.0';
 select 'b' not between 'a' and 'c';
 select to_timestamp('2022-12-26 00:00:01') not between to_date('2022-03-01') and to_date('2022-12-31');
+select rand(123) not between 0.1 AND 0.2;

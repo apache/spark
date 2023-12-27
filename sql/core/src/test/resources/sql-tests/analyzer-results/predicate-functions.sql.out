@@ -406,6 +406,12 @@ Project [between(to_timestamp(2022-12-26 00:00:01, None, TimestampType, Some(Ame
 
 
 -- !query
+select rand(123) between 0.1 AND 0.2
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 select 1 not between 0 and 2
 -- !query analysis
 Project [NOT between(1, 0, 2) AS (NOT between(1, 0, 2))#x]
@@ -438,3 +444,9 @@ select to_timestamp('2022-12-26 00:00:01') not between to_date('2022-03-01') and
 -- !query analysis
 Project [NOT between(to_timestamp(2022-12-26 00:00:01, None, TimestampType, Some(America/Los_Angeles), false), to_date(2022-03-01, None, Some(America/Los_Angeles), false), to_date(2022-12-31, None, Some(America/Los_Angeles), false)) AS (NOT between(to_timestamp(2022-12-26 00:00:01), to_date(2022-03-01), to_date(2022-12-31)))#x]
 +- OneRowRelation
+
+
+-- !query
+select rand(123) not between 0.1 AND 0.2
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
