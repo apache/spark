@@ -560,7 +560,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       valueTagType: DataType): DataType = {
     (objectType, valueTagType) match {
       case (st: StructType, _) =>
-        // TODO(shujing): case sensitive?
         val valueTagIndexOpt = st.getFieldIndex(options.valueTag)
 
         valueTagIndexOpt match {
