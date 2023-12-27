@@ -4612,6 +4612,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_EVAL_CURRENT_TIME = buildConf("spark.sql.legacy.earlyEvalCurrentTime")
+    .internal()
+    .doc("When set to true, evaluation and constant folding will happen for now() and " +
+      "current_timestamp() expressions before finish analysis phase. " +
+      "This flag will allow a bit more liberal syntax but it will sacrifice correctness - " +
+      "Results of now() and current_timestamp() can be different for different operations " +
+      "in a single query."
+    )
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5515,6 +5527,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
+
+  def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   /** ********************** SQLConf functionality methods ************ */
 

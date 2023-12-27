@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 
 /**
@@ -34,7 +36,15 @@ import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
  */
 object ResolveTableSpec extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsWithPruning(_.containsAnyPattern(COMMAND), ruleId) {
+    val preparedPlan = if (SQLConf.get.legacyEvalCurrentTime && plan.containsPattern(COMMAND)) {
+      AnalysisHelper.allowInvokingTransformsInAnalyzer {
+        ComputeCurrentTime(ResolveTimeZone(plan))
+      }
+    } else {
+      plan
+    }
+
+    preparedPlan.resolveOperatorsWithPruning(_.containsAnyPattern(COMMAND), ruleId) {
       case t: CreateTable =>
         resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
       case t: CreateTableAsSelect =>
