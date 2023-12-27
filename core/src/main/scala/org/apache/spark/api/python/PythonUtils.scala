@@ -22,10 +22,13 @@ import java.util.{List => JList}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.sys.process.Process
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
+
 
 private[spark] object PythonUtils extends Logging {
   val PY4J_ZIP_NAME = "py4j-0.10.9.7-src.zip"
@@ -113,11 +116,10 @@ private[spark] object PythonUtils extends Logging {
       }
 
       val pythonVersionCMD = Seq(pythonExec, "-VV")
-      val PYTHONPATH = "PYTHONPATH"
       val pythonPath = PythonUtils.mergePythonPaths(
         PythonUtils.sparkPythonPath,
-        sys.env.getOrElse(PYTHONPATH, ""))
-      val environment = Map(PYTHONPATH -> pythonPath)
+        sys.env.getOrElse("PYTHONPATH", ""))
+      val environment = Map("PYTHONPATH" -> pythonPath)
       logInfo(s"Python path $pythonPath")
 
       val processPythonVer = Process(pythonVersionCMD, None, environment.toSeq: _*)
@@ -144,5 +146,29 @@ private[spark] object PythonUtils extends Logging {
       }
       listOfPackages.foreach(x => logInfo(s"List of Python packages :- ${formatOutput(x)}"))
     }
+  }
+
+  private[spark] def createPythonFunction(command: Array[Byte]): SimplePythonFunction = {
+    val pythonExec: String = sys.env.getOrElse(
+      "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
+
+    val pythonPath = PythonUtils.mergePythonPaths(
+      PythonUtils.sparkPythonPath,
+      sys.env.getOrElse("PYTHONPATH", ""))
+
+    val pythonVer: String =
+      Process(
+        Seq(pythonExec, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"),
+        None,
+        "PYTHONPATH" -> pythonPath).!!.trim()
+
+    SimplePythonFunction(
+      command = command.toImmutableArraySeq,
+      envVars = Map("PYTHONPATH" -> pythonPath).asJava,
+      pythonIncludes = List.empty[String].asJava,
+      pythonExec = pythonExec,
+      pythonVer = pythonVer,
+      broadcastVars = List.empty.asJava,
+      accumulator = null)
   }
 }

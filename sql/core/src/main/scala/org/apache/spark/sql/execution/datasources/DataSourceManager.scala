@@ -20,19 +20,20 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
-
 
 /**
  * A manager for user-defined data sources. It is used to register and lookup data sources by
  * their short names or fully qualified names.
  */
 class DataSourceManager extends Logging {
-  // TODO(SPARK-45917): Statically load Python Data Source so idempotently Python
-  //   Data Sources can be loaded even when the Driver is restarted.
   private val dataSourceBuilders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
+  dataSourceBuilders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
@@ -71,5 +72,17 @@ class DataSourceManager extends Logging {
     val manager = new DataSourceManager
     dataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
     manager
+  }
+}
+
+
+object DataSourceManager {
+  // Load when it's actually referred. Spark Session must be available when this is referred.
+  private lazy val initialDataSourceBuilders = {
+    val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
+    result.names.zip(result.dataSources).map { case (name, dataSource) =>
+      name ->
+        UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
+    }.toMap
   }
 }
