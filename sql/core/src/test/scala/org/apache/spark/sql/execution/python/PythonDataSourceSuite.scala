@@ -462,6 +462,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val dataSourceScript =
       s"""
          |import json
+         |import os
          |from pyspark import TaskContext
          |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
          |
@@ -474,7 +475,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        partition_id = context.partitionId()
          |        path = self.options.get("path")
          |        assert path is not None
-         |        output_path = f"{path}/{partition_id}.json"
+         |        output_path = os.path.join(path, f"{partition_id}.json")
          |        cnt = 0
          |        with open(output_path, "w") as file:
          |            for row in iterator:
@@ -483,7 +484,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return WriterCommitMessage()
          |
          |class SimpleDataSource(DataSource):
-         |    def writer(self, schema, saveMode):
+         |    def writer(self, schema, overwrite):
          |        return SimpleDataSourceWriter(self.options)
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
@@ -546,6 +547,57 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       // TODO: improve this error message.
       assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
         "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
+    }
+  }
+
+  test("data source write - overwrite mode") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |import json
+         |import os
+         |from pyspark import TaskContext
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options, overwrite):
+         |        self.options = options
+         |        self.overwrite = overwrite
+         |
+         |    def write(self, iterator):
+         |        context = TaskContext.get()
+         |        partition_id = context.partitionId()
+         |        path = self.options.get("path")
+         |        assert path is not None
+         |        output_path = os.path.join(path, f"{partition_id}.json")
+         |        cnt = 0
+         |        mode = "w" if self.overwrite else "a"
+         |        with open(output_path, mode) as file:
+         |            for row in iterator:
+         |                file.write(json.dumps(row.asDict()) + "\\n")
+         |                cnt += 1
+         |        return WriterCommitMessage()
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, overwrite):
+         |        return SimpleDataSourceWriter(self.options, overwrite)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(1).write.format(dataSourceName).mode("append").save(path)
+      checkAnswer(
+        spark.read.json(path),
+        Seq(Row(0)))
+      spark.range(1).write.format(dataSourceName).mode("append").save(path)
+      checkAnswer(
+        spark.read.json(path),
+        Seq(Row(0), Row(0)))
+      spark.range(2, 3).write.format(dataSourceName).mode("overwrite").save(path)
+      checkAnswer(
+        spark.read.json(path),
+        Seq(Row(2)))
     }
   }
 }
