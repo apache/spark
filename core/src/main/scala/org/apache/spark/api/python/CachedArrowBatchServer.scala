@@ -21,16 +21,19 @@ import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets.UTF_8
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.security.SocketAuthHelper
-import org.apache.spark.storage.{ArrowBatchBlockId, BlockId}
+import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, BlockManager}
 
 
-class CachedArrowBatchServer extends Logging {
+class CachedArrowBatchServer(
+  val sparkConf: SparkConf,
+  val blockManager: BlockManager
+) extends Logging {
 
-  val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
+  val authHelper = new SocketAuthHelper(sparkConf)
 
   val serverSocket = new ServerSocket(
     0, 1, InetAddress.getLoopbackAddress()
@@ -55,8 +58,6 @@ class CachedArrowBatchServer extends Logging {
   private def handleConnection(sock: Socket): Unit = {
     val blockId = BlockId(readUtf8(sock))
     assert(blockId.isInstanceOf[ArrowBatchBlockId])
-
-    val blockManager = SparkEnv.get.blockManager
 
     var errMessage = "ok"
     var blockDataOpt: Option[Array[Byte]] = None
@@ -97,7 +98,7 @@ class CachedArrowBatchServer extends Logging {
     }.start()
   }
 
-  def start(): (Int, String) = {
+  def start(): Unit = {
     logTrace("Creating listening socket")
 
     new Thread(s"CachedArrowBatchServer-listener") {
@@ -128,7 +129,6 @@ class CachedArrowBatchServer extends Logging {
         }
       }
     }.start()
-    (serverSocket.getLocalPort, authHelper.secret)
   }
 
   def stop(): Unit = {

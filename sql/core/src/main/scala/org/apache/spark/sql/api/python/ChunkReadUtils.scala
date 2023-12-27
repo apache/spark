@@ -22,10 +22,10 @@ import java.io.ByteArrayOutputStream
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.execution.arrow.ArrowBatchStreamWriter
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
+import org.apache.spark.sql.types.{StructType}
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 
 
@@ -35,59 +35,108 @@ case class ChunkMeta(
   byteCount: Long
 )
 
+class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
+    schema: StructType,
+    timeZoneId: String,
+    errorOnDuplicatedFieldNames: Boolean
+) extends PartitionEvaluator[(Array[Byte], Long), ChunkMeta] {
+
+  def eval(partitionIndex: Int, inputs: Iterator[(Array[Byte], Long)]*): Iterator[ChunkMeta] = {
+    val blockManager = SparkEnv.get.blockManager
+    val chunkMetaList = new ArrayBuffer[ChunkMeta]()
+
+    try {
+      for ((arrowBatch, rowCount) <- inputs(0)) {
+        val uuid = java.util.UUID.randomUUID()
+        val blockId = ArrowBatchBlockId(uuid)
+
+        val out = new ByteArrayOutputStream(32 * 1024 * 1024)
+
+        val batchWriter =
+          new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
+
+        batchWriter.writeBatches(Iterator.single(arrowBatch))
+        batchWriter.end()
+
+        val blockData = out.toByteArray
+
+        blockManager.putSingle[Array[Byte]](
+          blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true
+        )
+        chunkMetaList.append(
+          ChunkMeta(blockId.toString, rowCount, blockData.length)
+        )
+      }
+    } catch {
+      case e: Exception =>
+        // Clean cached chunks
+        for (chunkMeta <- chunkMetaList) {
+          try {
+            blockManager.master.removeBlock(BlockId(chunkMeta.id))
+          } catch {
+            case _: Exception => ()
+          }
+        }
+        throw e
+    }
+
+    chunkMetaList.iterator
+  }
+}
+
+class PersistDataFrameAsArrowBatchChunksPartitionEvaluatorFactory(
+    schema: StructType,
+    timeZoneId: String,
+    errorOnDuplicatedFieldNames: Boolean
+) extends PartitionEvaluatorFactory[(Array[Byte], Long), ChunkMeta] {
+
+  def createEvaluator(): PartitionEvaluator[(Array[Byte], Long), ChunkMeta] = {
+    new PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
+      schema, timeZoneId, errorOnDuplicatedFieldNames
+    )
+  }
+}
+
 object ChunkReadUtils {
 
   def persistDataFrameAsArrowBatchChunks(
       dataFrame: DataFrame, maxRecordsPerBatch: Int
   ): Array[ChunkMeta] = {
     val sparkSession = SparkSession.getActiveSession.get
-    val rdd = dataFrame.toArrowBatchRddWithBatchRowCount(maxRecordsPerBatch)
-    val schemaJson = dataFrame.schema.json
+
+    val maxRecordsPerBatchVal = if (maxRecordsPerBatch == -1) {
+      sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
+    } else {
+      maxRecordsPerBatch
+    }
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
-    rdd.mapPartitions { iter: Iterator[(Array[Byte], Long)] =>
-      val blockManager = SparkEnv.get.blockManager
-      val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
-      val chunkMetaList = new ArrayBuffer[ChunkMeta]()
+    val schema = dataFrame.schema
 
-      try {
-        for ((arrowBatch, rowCount) <- iter) {
-          val uuid = java.util.UUID.randomUUID()
-          val blockId = ArrowBatchBlockId(uuid)
+    val rdd = dataFrame.queryExecution.toRdd.mapPartitionsInternal { iter =>
+      val context = TaskContext.get()
+      val arrowBatchIter = ArrowConverters.toBatchIterator(
+        iter, schema, maxRecordsPerBatchVal, timeZoneId,
+        errorOnDuplicatedFieldNames, context
+      )
+      new Iterator[(Array[Byte], Long)] {
+        override def hasNext: Boolean = arrowBatchIter.hasNext
 
-          val out = new ByteArrayOutputStream(32 * 1024 * 1024)
-
-          val batchWriter =
-            new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
-
-          batchWriter.writeBatches(Iterator.single(arrowBatch))
-          batchWriter.end()
-
-          val blockData = out.toByteArray
-
-          blockManager.putSingle[Array[Byte]](
-            blockId, blockData, StorageLevel.MEMORY_AND_DISK, tellMaster = true
-          )
-          chunkMetaList.append(
-            ChunkMeta(blockId.toString, rowCount, blockData.length)
-          )
+        override def next(): (Array[Byte], Long) = {
+          val batch = arrowBatchIter.next()
+          val rowCount = arrowBatchIter.lastBatchRowCount
+          (batch, rowCount)
         }
-      } catch {
-        case e: Exception =>
-          // Clean cached chunks
-          for (chunkMeta <- chunkMetaList) {
-            try {
-              blockManager.master.removeBlock(BlockId(chunkMeta.id))
-            } catch {
-              case _: Exception => ()
-            }
-          }
-          throw e
       }
-
-      chunkMetaList.iterator
-    }.collect()
+    }
+    rdd.mapPartitionsWithEvaluator(
+      new PersistDataFrameAsArrowBatchChunksPartitionEvaluatorFactory(
+        schema = dataFrame.schema,
+        timeZoneId = timeZoneId,
+        errorOnDuplicatedFieldNames = errorOnDuplicatedFieldNames
+      )
+    ).collect()
   }
 
   def unpersistChunks(chunkIds: java.util.List[String]): Unit = {

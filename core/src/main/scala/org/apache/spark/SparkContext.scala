@@ -380,11 +380,13 @@ class SparkContext(config: SparkConf) extends Logging {
     override protected def initialValue(): Properties = new Properties()
   }
 
-  private var _cachedArrowBatchServerPort: Option[Int] = None
-  private[spark] def cachedArrowBatchServerPort: Int = _cachedArrowBatchServerPort.get
+  private[spark] def cachedArrowBatchServerPort: Int = {
+    _cachedArrowBatchServer.get.serverSocket.getLocalPort
+  }
 
-  private var _cachedArrowBatchServerSecret: Option[String] = None
-  private[spark] def cachedArrowBatchServerSecret: String = _cachedArrowBatchServerSecret.get
+  private[spark] def cachedArrowBatchServerSecret: String = {
+    _cachedArrowBatchServer.get.authHelper.secret
+  }
 
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |
@@ -496,10 +498,8 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     if (SparkEnv.get.conf.get(Python.PYTHON_DATAFRAME_CHUNK_READ_ENABLED)) {
-      val server = new CachedArrowBatchServer()
-      val cachedArrowBatchServerInfo = server.start()
-      _cachedArrowBatchServerPort = Some(cachedArrowBatchServerInfo._1)
-      _cachedArrowBatchServerSecret = Some(cachedArrowBatchServerInfo._2)
+      val server = new CachedArrowBatchServer(SparkEnv.get.conf, SparkEnv.get.blockManager)
+      server.start()
       _cachedArrowBatchServer = Some(server)
     }
 

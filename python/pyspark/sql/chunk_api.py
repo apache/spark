@@ -41,7 +41,7 @@ def persist_dataframe_as_chunks(
     Return the list of tuple (chunk_id, chunk_row_count, chunk_byte_count).
     This function is only available when it is called from spark driver process.
     """
-    spark = SparkSession.getActiveSession()
+    spark = dataframe.sparkSession
     if spark is None:
         raise PySparkRuntimeError("Active spark session is required.")
 

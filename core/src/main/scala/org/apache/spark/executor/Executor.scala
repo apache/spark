@@ -351,13 +351,12 @@ private[spark] class Executor(
   val cachedArrowBatchServer: Option[CachedArrowBatchServer] = if (
     SparkEnv.get.conf.get(Python.PYTHON_DATAFRAME_CHUNK_READ_ENABLED)
   ) {
-    val server = new CachedArrowBatchServer()
+    val server = new CachedArrowBatchServer(env.conf, env.blockManager)
 
-    val (cachedArrowBatchServerPort: Int, cachedArrowBatchServerSecret: String) =
-      server.start()
+    server.start()
 
-    env.cachedArrowBatchServerPort = Some(cachedArrowBatchServerPort)
-    env.cachedArrowBatchServerSecret = Some(cachedArrowBatchServerSecret)
+    env.cachedArrowBatchServerPort = Some(server.serverSocket.getLocalPort)
+    env.cachedArrowBatchServerSecret = Some(server.authHelper.secret)
 
     Some(server)
   } else {

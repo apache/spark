@@ -4499,7 +4499,6 @@ class Dataset[T] private[sql](
   private[sql] def toArrowBatchRddWithBatchRowCount(
       maxRecordsPerBatch: Int
   ): RDD[(Array[Byte], Long)] = {
-    val plan = queryExecution.executedPlan
     val schemaCaptured = this.schema
     val maxRecordsPerBatchVal = if (maxRecordsPerBatch == -1) {
       sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
@@ -4509,7 +4508,7 @@ class Dataset[T] private[sql](
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
-    plan.execute().mapPartitionsInternal { iter =>
+    queryExecution.toRdd.mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       val arrowBatchIter = ArrowConverters.toBatchIterator(
         iter, schemaCaptured, maxRecordsPerBatchVal, timeZoneId,
