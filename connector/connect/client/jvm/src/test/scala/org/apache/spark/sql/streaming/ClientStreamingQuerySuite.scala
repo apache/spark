@@ -178,7 +178,9 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
   test("throw exception in streaming") {
     // Disable spark.sql.pyspark.jvmStacktrace.enabled to avoid hitting the
     // netty header limit.
-    withSQLConf("spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+    withSQLConf(
+      "spark.sql.pyspark.jvmStacktrace.enabled" -> "false",
+      "spark.connect.grpc.maxMetadataSize" -> "0") {
       val session = spark
       import session.implicits._
 
