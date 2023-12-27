@@ -32,8 +32,11 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
  * their short names or fully qualified names.
  */
 class DataSourceManager extends Logging {
-  private val dataSourceBuilders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
-  dataSourceBuilders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
+  private lazy val dataSourceBuilders = {
+    val builders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
+    builders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
+    builders
+  }
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 

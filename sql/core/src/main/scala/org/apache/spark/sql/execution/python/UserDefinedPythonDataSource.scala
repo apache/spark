@@ -450,7 +450,7 @@ class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
 
     val shortNames = ArrayBuffer.empty[String]
     val pickledDataSources = ArrayBuffer.empty[Array[Byte]]
-    val numDataSources = dataIn.readInt()
+    val numDataSources = length
 
     for (_ <- 0 until numDataSources) {
       val shortName = PythonWorkerUtils.readUTF(dataIn)

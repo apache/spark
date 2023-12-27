@@ -18,6 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.File
+import java.nio.file.Paths
 import java.util.{List => JList}
 
 import scala.collection.mutable.ArrayBuffer
@@ -28,6 +29,7 @@ import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
+import org.apache.spark.util.Utils
 
 
 private[spark] object PythonUtils extends Logging {
@@ -152,9 +154,22 @@ private[spark] object PythonUtils extends Logging {
     val pythonExec: String = sys.env.getOrElse(
       "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
 
+    val sourcePython = if (Utils.isTesting) {
+      // Put source code  so we don't need to build PySpark every
+      // time during development.
+      val sparkHome: String = {
+        require(
+          sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"),
+          "spark.test.home or SPARK_HOME is not set.")
+        sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+      }
+      val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
+      sourcePath.toString
+    } else {
+      PythonUtils.sparkPythonPath
+    }
     val pythonPath = PythonUtils.mergePythonPaths(
-      PythonUtils.sparkPythonPath,
-      sys.env.getOrElse("PYTHONPATH", ""))
+      sourcePython, sys.env.getOrElse("PYTHONPATH", ""))
 
     val pythonVer: String =
       Process(
