@@ -293,7 +293,7 @@ case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     StringType,
-    "GetSparkVersion",
+    "getSparkVersion",
     returnNullable = false)
 }
 
