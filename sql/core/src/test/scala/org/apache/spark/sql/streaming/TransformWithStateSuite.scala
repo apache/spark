@@ -84,7 +84,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessorWithError(),
-          TimeoutMode.noTimeouts(),
+          TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -104,7 +104,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor(),
-          TimeoutMode.noTimeouts(),
+          TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -133,7 +133,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
       val df = Seq("a", "a", "b").toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessor,
-          TimeoutMode.noTimeouts(),
+          TimeoutMode.NoTimeouts(),
           OutputMode.Append())
         .write
         .format("noop")
@@ -149,7 +149,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val result = inputData.toDS()
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
-        TimeoutMode.noTimeouts(),
+        TimeoutMode.NoTimeouts(),
         OutputMode.Update())
 
     testStream(result, OutputMode.Update())(

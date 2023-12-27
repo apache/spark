@@ -40,4 +40,17 @@ trait StatefulProcessorHandle extends Serializable {
 
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo
+
+  /**
+   * Function to register a processing time timer for given implicit key
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  def registerProcessingTimeTimer(expiryTimestampMs: Long): Unit
+
+  /**
+   * Function to delete a processing time timer for implicit key and given
+   * timestamp
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  def deleteProcessingTimeTimer(expiryTimestampMs: Long): Unit
 }

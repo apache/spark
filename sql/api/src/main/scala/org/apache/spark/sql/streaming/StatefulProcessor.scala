@@ -56,6 +56,21 @@ trait StatefulProcessor[K, I, O] extends Serializable {
       timerValues: TimerValues): Iterator[O]
 
   /**
+   * Function that will allow users to handle processing time timers for a given grouping key.
+   * @param key - grouping key
+   * @param expiryTimestampMs - registered expiry timestamp for the timer
+   * @param timerValues - instance of TimerValues that provides access to current processing/event
+   *                    time if available
+   * @return - Zero or more output rows
+   */
+  def handleProcessingTimeTimers(
+      key: K,
+      expiryTimestampMs: Long,
+      timerValues: TimerValues): Iterator[O] = {
+    Iterator.empty
+  }
+
+  /**
    * Function called as the last method that allows for users to perform
    * any cleanup or teardown operations.
    */

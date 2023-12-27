@@ -21,6 +21,8 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.logical._
+// import org.apache.spark.sql.catalyst.plans.logical.processingTime
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.state._
@@ -63,7 +65,15 @@ case class TransformWithStateExec(
   override def shortName: String = "transformWithStateExec"
 
   // TODO: update this to run no-data batches when timer support is added
-  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = false
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
+    timeoutMode match {
+      case ProcessingTime =>
+        true
+
+      case _ =>
+        false
+    }
+  }
 
   override protected def withNewChildInternal(
     newChild: SparkPlan): TransformWithStateExec = copy(child = newChild)
@@ -152,6 +162,13 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+    timeoutMode match {
+      case ProcessingTime =>
+        require(batchTimestampMs.nonEmpty)
+
+      case _ =>
+    }
+
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateInfo,
       schemaForKeyRow,
@@ -162,7 +179,8 @@ case class TransformWithStateExec(
       useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId)
+        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
+          timeoutMode)
         assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
         statefulProcessor.init(processorHandle, outputMode)
         processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)

@@ -20,8 +20,9 @@ import java.util.UUID
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -74,7 +75,10 @@ class QueryInfoImpl(
  * track of valid transitions as various functions are invoked to track object lifecycle.
  * @param store - instance of state store
  */
-class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
+class StatefulProcessorHandleImpl(
+    store: StateStore,
+    runId: UUID,
+    timeoutMode: TimeoutMode)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -124,4 +128,13 @@ class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
+
+  override def registerProcessingTimeTimer(expiryTimestampMs: Long): Unit = {
+    verify(timeoutMode == ProcessingTime, s"Cannot register processing time " +
+      "timers with incorrect TimeoutMode")
+  }
+
+  override def deleteProcessingTimeTimer(expiryTimestampMs: Long): Unit = {
+
+  }
 }

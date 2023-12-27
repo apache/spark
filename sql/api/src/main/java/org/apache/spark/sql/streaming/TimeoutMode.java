@@ -29,7 +29,12 @@ import org.apache.spark.sql.catalyst.plans.logical.*;
 @Evolving
 public class TimeoutMode {
   /**
+   * Stateful processor that only registers processing time timers
+   */
+  public static TimeoutMode ProcessingTime() { return ProcessingTime$.MODULE$; }
+
+  /**
    * Stateful processor that does not register timers
    */
-  public static TimeoutMode noTimeouts() { return noTimeouts$.MODULE$; }
+  public static TimeoutMode NoTimeouts() { return NoTimeouts$.MODULE$; }
 }
