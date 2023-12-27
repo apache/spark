@@ -209,9 +209,36 @@ class ParquetTypeWideningSuite
         toType = DecimalType(toPrecision, 2),
         expectError = fromPrecision > toPrecision &&
           // parquet-mr allows reading decimals into a smaller precision decimal type without
-          // checking for overflows. See test below.
+          // checking for overflows. See test below checking for the overflow case in parquet-mr.
           spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean)
     }
+
+  for {
+    ((fromPrecision, fromScale), (toPrecision, toScale)) <-
+      // Test widening and narrowing precision and scale by the same amount between the same and
+      // different decimal physical parquet types:
+      // - INT32: precisions 5, 7
+      // - INT64: precisions 10, 12
+      // - FIXED_LEN_BYTE_ARRAY: precisions 20, 22
+      Seq((5, 2) -> (7, 4), (5, 2) -> (10, 7), (5, 2) -> (20, 17), (10, 2) -> (12, 4),
+        (10, 2) -> (20, 12), (20, 2) -> (22, 4)) ++
+      Seq((7, 4) -> (5, 2), (10, 7) -> (5, 2), (20, 17) -> (5, 2), (12, 4) -> (10, 2),
+        (20, 17) -> (10, 2), (22, 4) -> (20, 2))
+  }
+  test(s"parquet decimal precision and scale change Decimal($fromPrecision, $fromScale) -> " +
+    s"Decimal($toPrecision, $toScale)"
+  ) {
+    checkAllParquetReaders(
+      values = Seq("1.23", "10.34"),
+      fromType = DecimalType(fromPrecision, fromScale),
+      toType = DecimalType(toPrecision, toScale),
+      expectError =
+        // parquet-mr allows reading decimals into a smaller precision/scale decimal type without
+        // checking for overflows. See test below checking for the overflow case in parquet-mr.
+        fromPrecision > toPrecision &&
+          spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
+    )
+  }
 
   test("parquet decimal type change Decimal(5, 2) -> Decimal(3, 2) overflows with parquet-mr") {
     withTempDir { dir =>
