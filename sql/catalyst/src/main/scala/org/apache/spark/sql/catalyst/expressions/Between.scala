@@ -27,24 +27,24 @@ package org.apache.spark.sql.catalyst.expressions
   """,
   arguments = """
     Arguments:
-      * projection - An expression that is being compared with lower and upper bound.
+      * input - An expression that is being compared with lower and upper bound.
       * lower - Lower bound of the between check.
       * upper - Upper bound of the between check.
   """,
   since = "4.0.0",
   group = "conditional_funcs")
-case class Between private(proj: Expression, lower: Expression, upper: Expression, replacement: Expression)
+case class Between private(input: Expression, lower: Expression, upper: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules  {
-  def this(proj: Expression, lower: Expression, upper: Expression) = {
-    this(proj, lower, upper, {
-      val commonExpr = CommonExpressionDef(proj)
+  def this(input: Expression, lower: Expression, upper: Expression) = {
+    this(input, lower, upper, {
+      val commonExpr = CommonExpressionDef(input)
       val ref = new CommonExpressionRef(commonExpr)
       val replacement = And(GreaterThanOrEqual(ref, lower), LessThanOrEqual(ref, upper))
       With(replacement, Seq(commonExpr))
     })
   };
 
-  override def parameters: Seq[Expression] = Seq(proj, lower, upper)
+  override def parameters: Seq[Expression] = Seq(input, lower, upper)
 
   override protected def withNewChildInternal(newChild: Expression): Between = {
     copy(replacement = newChild)
@@ -52,7 +52,7 @@ case class Between private(proj: Expression, lower: Expression, upper: Expressio
 }
 
 object Between {
-  def apply(proj: Expression, lower: Expression, upper: Expression): Between = {
-    new Between(proj, lower, upper)
+  def apply(input: Expression, lower: Expression, upper: Expression): Between = {
+    new Between(input, lower, upper)
   }
 }
