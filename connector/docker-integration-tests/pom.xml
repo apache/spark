@@ -130,5 +130,10 @@
       <artifactId>docker-java</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.github.docker-java</groupId>
+      <artifactId>docker-java-transport-zerodep</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

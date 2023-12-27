@@ -30,7 +30,8 @@ import com.github.dockerjava.api.async.{ResultCallback, ResultCallbackTemplate}
 import com.github.dockerjava.api.command.CreateContainerResponse
 import com.github.dockerjava.api.exception.NotFoundException
 import com.github.dockerjava.api.model._
-import com.github.dockerjava.core.DockerClientBuilder
+import com.github.dockerjava.core.{DefaultDockerClientConfig, DockerClientImpl}
+import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
@@ -121,7 +122,12 @@ abstract class DockerJDBCIntegrationSuite
   override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
     super.beforeAll()
     try {
-      docker = DockerClientBuilder.getInstance().build()
+      val config = DefaultDockerClientConfig.createDefaultConfigBuilder.build
+      val httpClient = new ZerodepDockerHttpClient.Builder()
+        .dockerHost(config.getDockerHost)
+        .sslConfig(config.getSSLConfig)
+        .build()
+      docker = DockerClientImpl.getInstance(config, httpClient)
       // Check that Docker is actually up
       try {
         docker.pingCmd().exec()
