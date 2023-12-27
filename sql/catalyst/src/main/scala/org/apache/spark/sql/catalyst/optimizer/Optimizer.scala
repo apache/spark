@@ -211,7 +211,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
     Batch("Eliminate Sorts", Once,
-      EliminateSorts) :+
+      EliminateSorts,
+      RemoveRedundantSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     // This batch must run after "Decimal Optimizations", as that one may change the
@@ -293,7 +294,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
-      RewriteAsOfJoin)
+      RewriteAsOfJoin,
+      EvalInlineTables
+    )
 
     override def apply(plan: LogicalPlan): LogicalPlan = {
       rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
@@ -769,11 +772,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      val project = Project(a.aggregateExpressions, LocalLimit(le, a.child))
-      project.setTagValue(Project.dataOrderIrrelevantTag, ())
-      Limit(le, project)
+      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
+      Limit(le, Project(newAgg.aggregateExpressions, newAgg.child))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
-      Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
+      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
+      Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
@@ -1555,38 +1558,30 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
  * 1) if the sort order is empty or the sort order does not have any reference
- * 2) if the Sort operator is a local sort and the child is already sorted
- * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ * 2) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators
- * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ * 3) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the Join condition is deterministic
- * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ * 4) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(SORT))(applyLocally)
-
-  private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(_.containsPattern(SORT)) {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
-        applyLocally.lift(child).getOrElse(child)
+        child
       } else {
         s.copy(order = newOrders)
       }
-    case Sort(orders, false, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
-      applyLocally.lift(child).getOrElse(child)
     case s @ Sort(_, global, child) => s.copy(child = recursiveRemoveSort(child, global))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft, true),
         right = recursiveRemoveSort(originRight, true))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
       g.copy(child = recursiveRemoveSort(originChild, true))
-    case p: Project if p.getTagValue(Project.dataOrderIrrelevantTag).isDefined =>
-      p.copy(child = recursiveRemoveSort(p.child, true))
   }
 
   /**
@@ -1602,12 +1597,6 @@ object EliminateSorts extends Rule[LogicalPlan] {
     plan match {
       case Sort(_, global, child) if canRemoveGlobalSort || !global =>
         recursiveRemoveSort(child, canRemoveGlobalSort)
-      case Sort(sortOrder, true, child) =>
-        // For this case, the upper sort is local so the ordering of present sort is unnecessary,
-        // so here we only preserve its output partitioning using `RepartitionByExpression`.
-        // We should use `None` as the optNumPartitions so AQE can coalesce shuffle partitions.
-        // This behavior is same with original global sort.
-        RepartitionByExpression(sortOrder, recursiveRemoveSort(child, true), None)
       case other if canEliminateSort(other) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
       case other if canEliminateGlobalSort(other) =>

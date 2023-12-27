@@ -639,6 +639,8 @@ object DataSource extends Logging {
     val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
+    lazy val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+      _.sessionState.dataSourceManager.dataSourceExists(provider))
 
     try {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
@@ -650,9 +652,6 @@ object DataSource extends Logging {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
-                // TODO(SPARK-45600): should be session-based.
-                val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
-                  _.sessionState.dataSourceManager.dataSourceExists(provider))
                 if (provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw QueryCompilationErrors.orcNotUsedWithHiveEnabledError()
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
@@ -677,16 +676,11 @@ object DataSource extends Logging {
                 throw e
               }
           }
+        case _ :: Nil if isUserDefinedDataSource =>
+          // There was DSv1 or DSv2 loaded, but the same name source was found
+          // in user defined data source.
+          throw QueryCompilationErrors.foundMultipleDataSources(provider)
         case head :: Nil =>
-          // there is exactly one registered alias
-          // TODO(SPARK-45600): should be session-based.
-          val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
-            _.sessionState.dataSourceManager.dataSourceExists(provider))
-          // The source can be successfully loaded as either a V1 or a V2 data source.
-          // Check if it is also a user-defined data source.
-          if (isUserDefinedDataSource) {
-            throw QueryCompilationErrors.foundMultipleDataSources(provider)
-          }
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
