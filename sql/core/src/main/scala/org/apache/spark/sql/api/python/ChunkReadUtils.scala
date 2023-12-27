@@ -24,8 +24,9 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
-import org.apache.spark.sql.types.{StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, StorageLevel}
 
 
@@ -38,15 +39,25 @@ case class ChunkMeta(
 class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
     schema: StructType,
     timeZoneId: String,
-    errorOnDuplicatedFieldNames: Boolean
-) extends PartitionEvaluator[(Array[Byte], Long), ChunkMeta] {
+    errorOnDuplicatedFieldNames: Boolean,
+    maxRecordsPerBatch: Long,
+) extends PartitionEvaluator[InternalRow, ChunkMeta] {
 
-  def eval(partitionIndex: Int, inputs: Iterator[(Array[Byte], Long)]*): Iterator[ChunkMeta] = {
+  def eval(partitionIndex: Int, inputs: Iterator[InternalRow]*): Iterator[ChunkMeta] = {
     val blockManager = SparkEnv.get.blockManager
     val chunkMetaList = new ArrayBuffer[ChunkMeta]()
 
+    val context = TaskContext.get()
+    val arrowBatchIter = ArrowConverters.toBatchIterator(
+      inputs(0), schema, maxRecordsPerBatch, timeZoneId,
+      errorOnDuplicatedFieldNames, context
+    )
+
     try {
-      for ((arrowBatch, rowCount) <- inputs(0)) {
+      while (arrowBatchIter.hasNext) {
+        val arrowBatch = arrowBatchIter.next()
+        val rowCount = arrowBatchIter.lastBatchRowCount
+
         val uuid = java.util.UUID.randomUUID()
         val blockId = ArrowBatchBlockId(uuid)
 
@@ -87,12 +98,13 @@ class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
 class PersistDataFrameAsArrowBatchChunksPartitionEvaluatorFactory(
     schema: StructType,
     timeZoneId: String,
-    errorOnDuplicatedFieldNames: Boolean
-) extends PartitionEvaluatorFactory[(Array[Byte], Long), ChunkMeta] {
+    errorOnDuplicatedFieldNames: Boolean,
+    maxRecordsPerBatch: Long
+) extends PartitionEvaluatorFactory[InternalRow, ChunkMeta] {
 
-  def createEvaluator(): PartitionEvaluator[(Array[Byte], Long), ChunkMeta] = {
+  def createEvaluator(): PartitionEvaluator[InternalRow, ChunkMeta] = {
     new PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
-      schema, timeZoneId, errorOnDuplicatedFieldNames
+      schema, timeZoneId, errorOnDuplicatedFieldNames, maxRecordsPerBatch
     )
   }
 }
@@ -112,29 +124,13 @@ object ChunkReadUtils {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
-    val schema = dataFrame.schema
 
-    val rdd = dataFrame.queryExecution.toRdd.mapPartitionsInternal { iter =>
-      val context = TaskContext.get()
-      val arrowBatchIter = ArrowConverters.toBatchIterator(
-        iter, schema, maxRecordsPerBatchVal, timeZoneId,
-        errorOnDuplicatedFieldNames, context
-      )
-      new Iterator[(Array[Byte], Long)] {
-        override def hasNext: Boolean = arrowBatchIter.hasNext
-
-        override def next(): (Array[Byte], Long) = {
-          val batch = arrowBatchIter.next()
-          val rowCount = arrowBatchIter.lastBatchRowCount
-          (batch, rowCount)
-        }
-      }
-    }
-    rdd.mapPartitionsWithEvaluator(
+    dataFrame.queryExecution.toRdd.mapPartitionsWithEvaluator(
       new PersistDataFrameAsArrowBatchChunksPartitionEvaluatorFactory(
         schema = dataFrame.schema,
         timeZoneId = timeZoneId,
-        errorOnDuplicatedFieldNames = errorOnDuplicatedFieldNames
+        errorOnDuplicatedFieldNames = errorOnDuplicatedFieldNames,
+        maxRecordsPerBatch = maxRecordsPerBatchVal
       )
     ).collect()
   }

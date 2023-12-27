@@ -4526,35 +4526,4 @@ class Dataset[T] private[sql](
   private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
     toArrowBatchRdd(queryExecution.executedPlan)
   }
-
-  /** Convert to an RDD of serialized ArrowRecordBatches. */
-  private[sql] def toArrowBatchRddWithBatchRowCount(
-      maxRecordsPerBatch: Int
-  ): RDD[(Array[Byte], Long)] = {
-    val schemaCaptured = this.schema
-    val maxRecordsPerBatchVal = if (maxRecordsPerBatch == -1) {
-      sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
-    } else {
-      maxRecordsPerBatch
-    }
-    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val errorOnDuplicatedFieldNames =
-      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
-    queryExecution.toRdd.mapPartitionsInternal { iter =>
-      val context = TaskContext.get()
-      val arrowBatchIter = ArrowConverters.toBatchIterator(
-        iter, schemaCaptured, maxRecordsPerBatchVal, timeZoneId,
-        errorOnDuplicatedFieldNames, context
-      )
-      new Iterator[(Array[Byte], Long)] {
-        override def hasNext: Boolean = arrowBatchIter.hasNext
-
-        override def next(): (Array[Byte], Long) = {
-          val batch = arrowBatchIter.next()
-          val rowCount = arrowBatchIter.lastBatchRowCount
-          (batch, rowCount)
-        }
-      }
-    }
-  }
 }

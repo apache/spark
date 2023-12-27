@@ -380,12 +380,12 @@ class SparkContext(config: SparkConf) extends Logging {
     override protected def initialValue(): Properties = new Properties()
   }
 
-  private[spark] def cachedArrowBatchServerPort: Int = {
-    _cachedArrowBatchServer.get.serverSocket.getLocalPort
+  private[spark] def cachedArrowBatchServerPort: Option[Int] = {
+    _cachedArrowBatchServer.map(_.serverSocket.getLocalPort)
   }
 
-  private[spark] def cachedArrowBatchServerSecret: String = {
-    _cachedArrowBatchServer.get.authHelper.secret
+  private[spark] def cachedArrowBatchServerSecret: Option[String] = {
+    _cachedArrowBatchServer.map(_.authHelper.secret)
   }
 
   /* ------------------------------------------------------------------------------------- *
