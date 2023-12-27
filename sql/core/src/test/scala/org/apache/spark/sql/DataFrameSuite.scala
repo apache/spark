@@ -3721,8 +3721,7 @@ class DataFrameSuite extends QueryTest
 
       var result: Seq[Row] = Seq.empty
 
-      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName,
-        "spark.boson.enabled" -> "false") {
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
         withTable("table_timestamp") {
           sql(
             """
