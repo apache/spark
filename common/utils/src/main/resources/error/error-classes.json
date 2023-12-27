@@ -6898,6 +6898,11 @@
       "<clazz>: <msg>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3066" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
   "_LEGACY_ERROR_TEMP_3067" : {
     "message" : [
       "Streaming aggregation doesn't support group aggregate pandas UDF"
@@ -6951,6 +6956,11 @@
   "_LEGACY_ERROR_TEMP_3077" : {
     "message" : [
       "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3078" : {
+    "message" : [
+      "Can not match ParquetTable in the query."
     ]
   },
   "_LEGACY_ERROR_TEMP_3079" : {
