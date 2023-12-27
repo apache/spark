@@ -249,19 +249,15 @@ abstract class DockerJDBCIntegrationSuite
   }
 
   private def logContainerOutput(): Unit = {
-    try {
-      logInfo("\n\n===== CONTAINER LOGS FOR container Id: " + container + " =====")
-
-      docker.logContainerCmd(container.getId)
-        .withStdOut(true)
-        .withStdErr(true)
-        .withFollowStream(true)
-        .withSince(0)
-        .exec(new ResultCallbackTemplate[ResultCallback[Frame], Frame] {
-          override def onNext(f: Frame): Unit = logInfo(f.toString)
-        })
-      logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + container + " =====")
-    } finally {
-    }
+    logInfo("\n\n===== CONTAINER LOGS FOR container Id: " + container + " =====")
+    docker.logContainerCmd(container.getId)
+      .withStdOut(true)
+      .withStdErr(true)
+      .withFollowStream(true)
+      .withSince(0).exec(
+      new ResultCallbackTemplate[ResultCallback[Frame], Frame] {
+        override def onNext(f: Frame): Unit = logInfo(f.toString)
+      })
+    logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + container + " =====")
   }
 }
