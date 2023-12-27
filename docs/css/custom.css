@@ -7,7 +7,7 @@ body {
   font-style: normal;
   font-weight: 400;
   overflow-wrap: anywhere;
-  overflow-x: hidden;
+  overflow-x: auto;
   padding-top: 80px;
   padding-bottom: 20px;
 }

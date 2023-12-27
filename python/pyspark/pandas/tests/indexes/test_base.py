@@ -1029,48 +1029,6 @@ class IndexesTestsMixin:
 
         self.assert_eq(len(pidx), len(psidx))
 
-    def test_delete(self):
-        pidx = pd.Index([10, 9, 8, 7, 6, 7, 8, 9, 10])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.delete(8).sort_values(), psidx.delete(8).sort_values())
-        self.assert_eq(pidx.delete(-9).sort_values(), psidx.delete(-9).sort_values())
-        self.assert_eq(
-            pidx.delete([-9, 0, 8]).sort_values(), psidx.delete([-9, 0, 8]).sort_values()
-        )
-
-        with self.assertRaisesRegex(IndexError, "index 9 is out of bounds for axis 0 with size 9"):
-            psidx.delete([0, 9])
-        with self.assertRaisesRegex(
-            IndexError, "index -10 is out of bounds for axis 0 with size 9"
-        ):
-            psidx.delete([-10, 0])
-        with self.assertRaisesRegex(IndexError, "index 9 is out of bounds for axis 0 with size 9"):
-            psidx.delete(9)
-        with self.assertRaisesRegex(
-            IndexError, "index -10 is out of bounds for axis 0 with size 9"
-        ):
-            psidx.delete(-10)
-
-        # MultiIndex
-        pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-        psidx = ps.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-
-        self.assert_eq(pidx.delete(2).sort_values(), psidx.delete(2).sort_values())
-        self.assert_eq(pidx.delete(-3).sort_values(), psidx.delete(-3).sort_values())
-        self.assert_eq(
-            pidx.delete([-3, 0, 2]).sort_values(), psidx.delete([-3, 0, 2]).sort_values()
-        )
-
-        with self.assertRaisesRegex(IndexError, "index 3 is out of bounds for axis 0 with size 3"):
-            psidx.delete([0, 3])
-        with self.assertRaisesRegex(IndexError, "index -4 is out of bounds for axis 0 with size 3"):
-            psidx.delete([-4, 0])
-        with self.assertRaisesRegex(IndexError, "index 3 is out of bounds for axis 0 with size 3"):
-            psidx.delete(3)
-        with self.assertRaisesRegex(IndexError, "index -4 is out of bounds for axis 0 with size 3"):
-            psidx.delete(-4)
-
     def test_argmin(self):
         pidx = pd.Index([100, 50, 10, 20, 30, 60, 0, 50, 0, 100, 100, 100, 20, 0, 0])
         psidx = ps.from_pandas(pidx)
@@ -1131,86 +1089,6 @@ class IndexesTestsMixin:
 
         self.assert_eq(pidx.max(), psidx.max())
 
-    def test_difference(self):
-        # Index
-        pidx1 = pd.Index([1, 2, 3, 4], name="koalas")
-        pidx2 = pd.Index([3, 4, 5, 6], name="koalas")
-        psidx1 = ps.from_pandas(pidx1)
-        psidx2 = ps.from_pandas(pidx2)
-        # Series
-        pser = pd.Series([3, 4, 5, 6], name="koalas")
-        psser = ps.from_pandas(pser)
-
-        self.assert_eq(
-            psidx1.difference(psidx2).sort_values(), pidx1.difference(pidx2).sort_values()
-        )
-        self.assert_eq(psidx1.difference(psser).sort_values(), pidx1.difference(pser).sort_values())
-        self.assert_eq(
-            psidx1.difference([3, 4, 5, 6]).sort_values(),
-            pidx1.difference([3, 4, 5, 6]).sort_values(),
-        )
-        self.assert_eq(
-            psidx1.difference((3, 4, 5, 6)).sort_values(),
-            pidx1.difference((3, 4, 5, 6)).sort_values(),
-        )
-        self.assert_eq(
-            psidx1.difference({3, 4, 5, 6}).sort_values(),
-            pidx1.difference({3, 4, 5, 6}).sort_values(),
-        )
-        self.assert_eq(
-            psidx1.difference({3: 1, 4: 2, 5: 3, 6: 4}).sort_values(),
-            pidx1.difference({3: 1, 4: 2, 5: 3, 6: 4}).sort_values(),
-        )
-
-        # Exceptions for Index
-        with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
-            psidx1.difference("1234")
-        with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
-            psidx1.difference(1234)
-        with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
-            psidx1.difference(12.34)
-        with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
-            psidx1.difference(None)
-        with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
-            psidx1.difference(np.nan)
-        with self.assertRaisesRegex(
-            ValueError, "The 'sort' keyword only takes the values of None or True; 1 was passed."
-        ):
-            psidx1.difference(psidx2, sort=1)
-
-        # MultiIndex
-        pmidx1 = pd.MultiIndex.from_tuples(
-            [("a", "x", 1), ("b", "y", 2), ("c", "z", 3)], names=["hello", "koalas", "world"]
-        )
-        pmidx2 = pd.MultiIndex.from_tuples(
-            [("a", "x", 1), ("b", "z", 2), ("k", "z", 3)], names=["hello", "koalas", "world"]
-        )
-        psmidx1 = ps.from_pandas(pmidx1)
-        psmidx2 = ps.from_pandas(pmidx2)
-
-        self.assert_eq(
-            psmidx1.difference(psmidx2).sort_values(), pmidx1.difference(pmidx2).sort_values()
-        )
-        self.assert_eq(
-            psmidx1.difference(psidx1).sort_values(), pmidx1.difference(pidx1).sort_values()
-        )
-        self.assert_eq(
-            psidx1.difference(psmidx1).sort_values(), pidx1.difference(pmidx1).sort_values()
-        )
-        self.assert_eq(psidx1.difference(psser).sort_values(), pidx1.difference(pser).sort_values())
-        self.assert_eq(
-            psmidx1.difference({("a", "x", 1)}).sort_values(),
-            pmidx1.difference({("a", "x", 1)}).sort_values(),
-        )
-        self.assert_eq(
-            psmidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
-            pmidx1.difference({("a", "x", 1): [1, 2, 3]}).sort_values(),
-        )
-
-        # Exceptions for MultiIndex
-        with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
-            psmidx1.difference(["b", "z", "2"])
-
     def test_repeat(self):
         pidx = pd.Index(["a", "b", "c"])
         psidx = ps.from_pandas(pidx)
@@ -1248,51 +1126,6 @@ class IndexesTestsMixin:
             IndexError, "Too many levels: Index has only 1 level, -2 is not a valid level number"
         ):
             psidx.unique(level=-2)
-
-    def test_asof(self):
-        # Increasing values
-        pidx = pd.Index(["2013-12-31", "2014-01-02", "2014-01-03"])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
-        self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
-        self.assert_eq(repr(psidx.asof("1999-01-02")), repr(pidx.asof("1999-01-02")))
-        self.assert_eq(psidx.asof("2014-01-04"), pidx.asof("2014-01-04"))
-
-        pidx = pd.DatetimeIndex(["2013-12-31", "2014-01-02", "2014-01-03"])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
-        self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
-        self.assert_eq(repr(psidx.asof("1999-01-02")), repr(pidx.asof("1999-01-02")))
-
-        # Decreasing values
-        pidx = pd.Index(["2014-01-03", "2014-01-02", "2013-12-31"])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
-        self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
-        self.assert_eq(psidx.asof("1999-01-02"), pidx.asof("1999-01-02"))
-        self.assert_eq(repr(psidx.asof("2015-01-02")), repr(pidx.asof("2015-01-02")))
-
-        pidx = pd.DatetimeIndex(["2014-01-03", "2014-01-02", "2013-12-31"])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(psidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
-        self.assert_eq(psidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
-        self.assert_eq(psidx.asof("1999-01-02"), pidx.asof("1999-01-02"))
-        self.assert_eq(repr(psidx.asof("2015-01-02")), repr(pidx.asof("2015-01-02")))
-        self.assert_eq(psidx.asof("2014-01-01"), pd.Timestamp("2014-01-02 00:00:00"))
-        self.assert_eq(psidx.asof("2014-01-02"), pd.Timestamp("2014-01-02 00:00:00"))
-        self.assert_eq(psidx.asof("1999-01-02"), pd.Timestamp("2013-12-31 00:00:00"))
-        self.assert_eq(repr(psidx.asof("2015-01-02")), repr(pd.NaT))
-
-        # Not increasing, neither decreasing (ValueError)
-        psidx = ps.Index(["2013-12-31", "2015-01-02", "2014-01-03"])
-        self.assertRaises(ValueError, lambda: psidx.asof("2013-12-31"))
-
-        psmidx = ps.MultiIndex.from_tuples([("a", "a"), ("a", "b"), ("a", "c")])
-        self.assertRaises(NotImplementedError, lambda: psmidx.asof(("a", "b")))
 
     def test_take(self):
         # Index
@@ -1618,129 +1451,6 @@ class IndexesTestsMixin:
 
         self.assert_eq(pmidx.view(), psmidx.view())
 
-    def test_insert(self):
-        # Integer
-        pidx = pd.Index([1, 2, 3], name="Koalas")
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, 100), psidx.insert(1, 100))
-        self.assert_eq(pidx.insert(-1, 100), psidx.insert(-1, 100))
-        err_msg = "index 100 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(100, 100)
-        err_msg = "index -100 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(-100, 100)
-
-        # Floating
-        pidx = pd.Index([1.0, 2.0, 3.0], name="Koalas")
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, 100.0), psidx.insert(1, 100.0))
-        self.assert_eq(pidx.insert(-1, 100.0), psidx.insert(-1, 100.0))
-        err_msg = "index 100 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(100, 100)
-        err_msg = "index -100 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(-100, 100)
-
-        # String
-        pidx = pd.Index(["a", "b", "c"], name="Koalas")
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, "x"), psidx.insert(1, "x"))
-        self.assert_eq(pidx.insert(-1, "x"), psidx.insert(-1, "x"))
-        err_msg = "index 100 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(100, "x")
-        err_msg = "index -100 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(-100, "x")
-
-        # Boolean
-        pidx = pd.Index([True, False, True, False], name="Koalas")
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.insert(1, True), psidx.insert(1, True))
-        self.assert_eq(pidx.insert(-1, True), psidx.insert(-1, True))
-        err_msg = "index 100 is out of bounds for axis 0 with size 4"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(100, True)
-        err_msg = "index -100 is out of bounds for axis 0 with size 4"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psidx.insert(-100, True)
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples(
-            [("a", "x"), ("b", "y"), ("c", "z")], names=["Hello", "Koalas"]
-        )
-        psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.insert(2, ("h", "j")), psmidx.insert(2, ("h", "j")))
-        self.assert_eq(pmidx.insert(-1, ("h", "j")), psmidx.insert(-1, ("h", "j")))
-
-        err_msg = "index 4 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psmidx.insert(4, ("b", "y"))
-
-        err_msg = "index -4 is out of bounds for axis 0 with size 3"
-        with self.assertRaisesRegex(IndexError, err_msg):
-            psmidx.insert(-4, ("b", "y"))
-
-    def test_astype(self):
-        pidx = pd.Index([10, 20, 15, 30, 45], name="x")
-        psidx = ps.Index(pidx)
-
-        self.assert_eq(psidx.astype(int), pidx.astype(int))
-        self.assert_eq(psidx.astype(np.int8), pidx.astype(np.int8))
-        self.assert_eq(psidx.astype(np.int16), pidx.astype(np.int16))
-        self.assert_eq(psidx.astype(np.int32), pidx.astype(np.int32))
-        self.assert_eq(psidx.astype(np.int64), pidx.astype(np.int64))
-        self.assert_eq(psidx.astype(np.byte), pidx.astype(np.byte))
-        self.assert_eq(psidx.astype("int"), pidx.astype("int"))
-        self.assert_eq(psidx.astype("int8"), pidx.astype("int8"))
-        self.assert_eq(psidx.astype("int16"), pidx.astype("int16"))
-        self.assert_eq(psidx.astype("int32"), pidx.astype("int32"))
-        self.assert_eq(psidx.astype("int64"), pidx.astype("int64"))
-        self.assert_eq(psidx.astype("b"), pidx.astype("b"))
-        self.assert_eq(psidx.astype("byte"), pidx.astype("byte"))
-        self.assert_eq(psidx.astype("i"), pidx.astype("i"))
-        self.assert_eq(psidx.astype("long"), pidx.astype("long"))
-        self.assert_eq(psidx.astype("short"), pidx.astype("short"))
-        self.assert_eq(psidx.astype(np.float32), pidx.astype(np.float32))
-        self.assert_eq(psidx.astype(np.float64), pidx.astype(np.float64))
-        self.assert_eq(psidx.astype("float"), pidx.astype("float"))
-        self.assert_eq(psidx.astype("float32"), pidx.astype("float32"))
-        self.assert_eq(psidx.astype("float64"), pidx.astype("float64"))
-        self.assert_eq(psidx.astype("double"), pidx.astype("double"))
-        self.assert_eq(psidx.astype("f"), pidx.astype("f"))
-        self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-        self.assert_eq(psidx.astype("bool"), pidx.astype("bool"))
-        self.assert_eq(psidx.astype("?"), pidx.astype("?"))
-        self.assert_eq(psidx.astype(np.unicode_), pidx.astype(np.unicode_))
-        self.assert_eq(psidx.astype("str"), pidx.astype("str"))
-        self.assert_eq(psidx.astype("U"), pidx.astype("U"))
-
-        pidx = pd.Index([10, 20, 15, 30, 45, None], name="x")
-        psidx = ps.Index(pidx)
-        self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-        self.assert_eq(psidx.astype(str), pidx.astype(str))
-
-        pidx = pd.Index(["hi", "hi ", " ", " \t", "", None], name="x")
-        psidx = ps.Index(pidx)
-
-        self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-        self.assert_eq(psidx.astype(str), pidx.astype(str))
-
-        pidx = pd.Index([True, False, None], name="x")
-        psidx = ps.Index(pidx)
-
-        self.assert_eq(psidx.astype(bool), pidx.astype(bool))
-
-        pidx = pd.Index(["2020-10-27"], name="x")
-        psidx = ps.Index(pidx)
-
-        self.assert_eq(psidx.astype("datetime64[ns]"), pidx.astype("datetime64[ns]"))
-
-        with self.assertRaisesRegex(TypeError, "not understood"):
-            psidx.astype("int63")
-
     def test_to_list(self):
         # Index
         pidx = pd.Index([1, 2, 3, 4, 5])
@@ -1788,80 +1498,6 @@ class IndexesTestsMixin:
         psmidx = ps.from_pandas(pmidx)
 
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
-
-    def test_map(self):
-        pidx = pd.Index([1, 2, 3])
-        psidx = ps.from_pandas(pidx)
-
-        # Apply dict
-        self.assert_eq(
-            pidx.map({1: "one", 2: "two", 3: "three"}),
-            psidx.map({1: "one", 2: "two", 3: "three"}),
-        )
-        self.assert_eq(
-            pidx.map({1: "one", 2: "two"}),
-            psidx.map({1: "one", 2: "two"}),
-        )
-        self.assert_eq(
-            pidx.map({1: "one", 2: "two"}, na_action="ignore"),
-            psidx.map({1: "one", 2: "two"}, na_action="ignore"),
-        )
-        self.assert_eq(
-            pidx.map({1: 10, 2: 20}),
-            psidx.map({1: 10, 2: 20}),
-        )
-        self.assert_eq(
-            (pidx + 1).map({1: 10, 2: 20}),
-            (psidx + 1).map({1: 10, 2: 20}),
-        )
-
-        # Apply lambda
-        self.assert_eq(
-            pidx.map(lambda id: id + 1),
-            psidx.map(lambda id: id + 1),
-        )
-        self.assert_eq(
-            pidx.map(lambda id: id + 1.1),
-            psidx.map(lambda id: id + 1.1),
-        )
-        self.assert_eq(
-            pidx.map(lambda id: "{id} + 1".format(id=id)),
-            psidx.map(lambda id: "{id} + 1".format(id=id)),
-        )
-        self.assert_eq(
-            (pidx + 1).map(lambda id: "{id} + 1".format(id=id)),
-            (psidx + 1).map(lambda id: "{id} + 1".format(id=id)),
-        )
-
-        # Apply series
-        pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
-        self.assert_eq(
-            pidx.map(pser),
-            psidx.map(pser),
-        )
-        pser = pd.Series(["one", "two", "three"])
-        self.assert_eq(
-            pidx.map(pser),
-            psidx.map(pser),
-        )
-        self.assert_eq(
-            pidx.map(pser, na_action="ignore"),
-            psidx.map(pser, na_action="ignore"),
-        )
-        pser = pd.Series([1, 2, 3])
-        self.assert_eq(
-            pidx.map(pser),
-            psidx.map(pser),
-        )
-        self.assert_eq(
-            (pidx + 1).map(pser),
-            (psidx + 1).map(pser),
-        )
-
-        self.assertRaises(
-            TypeError,
-            lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
-        )
 
     def test_multiindex_equal_levels(self):
         pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
@@ -1923,7 +1559,11 @@ class IndexesTestsMixin:
             psmidx.nunique()
 
 
-class IndexesTests(IndexesTestsMixin, ComparisonTestBase, TestUtils):
+class IndexesTests(
+    IndexesTestsMixin,
+    ComparisonTestBase,
+    TestUtils,
+):
     pass
 
 

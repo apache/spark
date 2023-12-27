@@ -93,6 +93,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveOrderByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveRowLevelCommandAssignments" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
+      "org.apache.spark.sql.catalyst.analysis.SubstituteExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
@@ -167,6 +168,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionals" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
+      "org.apache.spark.sql.catalyst.optimizer.EvalInlineTables" ::
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
   }
 

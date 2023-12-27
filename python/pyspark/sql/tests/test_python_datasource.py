@@ -15,11 +15,18 @@
 # limitations under the License.
 #
 import os
+import tempfile
 import unittest
 from typing import Callable, Union
 
 from pyspark.errors import PythonException
-from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceReader,
+    InputPartition,
+    DataSourceWriter,
+    WriterCommitMessage,
+)
 from pyspark.sql.types import Row, StructType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -235,6 +242,17 @@ class BasePythonDataSourceTestsMixin:
                             data = json.loads(line)
                             yield data.get("name"), data.get("age")
 
+        class JsonDataSourceWriter(DataSourceWriter):
+            def __init__(self, options):
+                self.options = options
+
+            def write(self, iterator):
+                path = self.options.get("path")
+                with open(path, "w") as file:
+                    for row in iterator:
+                        file.write(json.dumps(row.asDict()) + "\n")
+                return WriterCommitMessage()
+
         class JsonDataSource(DataSource):
             @classmethod
             def name(cls):
@@ -246,7 +264,11 @@ class BasePythonDataSourceTestsMixin:
             def reader(self, schema) -> "DataSourceReader":
                 return JsonDataSourceReader(self.options)
 
+            def writer(self, schema, overwrite):
+                return JsonDataSourceWriter(self.options)
+
         self.spark.dataSource.register(JsonDataSource)
+        # Test data source read.
         path1 = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
         path2 = os.path.join(SPARK_HOME, "python/test_support/sql/people1.json")
         assertDataFrameEqual(
@@ -257,6 +279,18 @@ class BasePythonDataSourceTestsMixin:
             self.spark.read.format("my-json").load(path2),
             [Row(name="Jonathan", age=None)],
         )
+        # Test data source write.
+        df = self.spark.read.json(path1)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "res.json")
+            df.write.format("my-json").mode("append").save(path)
+            with open(path, "r") as file:
+                text = file.read()
+            assert text == (
+                '{"age": null, "name": "Michael"}\n'
+                '{"age": 30, "name": "Andy"}\n'
+                '{"age": 19, "name": "Justin"}\n'
+            )
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

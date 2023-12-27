@@ -1548,12 +1548,13 @@ class SparkSession(SparkConversionMixin):
         args : dict or list
             A dictionary of parameter names to Python objects or a list of Python objects
             that can be converted to SQL literal expressions. See
-            <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-            Supported Data Types</a> for supported value types in Python.
+            `Supported Data Types`_ for supported value types in Python.
             For example, dictionary keys: "rank", "name", "birthdate";
             dictionary or list values: 1, "Steven", datetime.date(2023, 4, 2).
             A value can be also a `Column` of a literal or collection constructor functions such
             as `map()`, `array()`, `struct()`, in that case it is taken as is.
+
+            .. _Supported Data Types: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
 
             .. versionadded:: 3.4.0
 
@@ -1631,7 +1632,7 @@ class SparkSession(SparkConversionMixin):
         |  3|  6|
         +---+---+
 
-        And substitude named parameters with the `:` prefix by SQL literals.
+        And substitute named parameters with the `:` prefix by SQL literals.
 
         >>> from pyspark.sql.functions import create_map
         >>> spark.sql(

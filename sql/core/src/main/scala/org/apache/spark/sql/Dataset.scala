@@ -1435,7 +1435,7 @@ class Dataset[T] private[sql](
         case s: Symbol => Column(s.name).expr
         case e: Expression => e
         case literal => Literal(literal)
-      }.toSeq
+      }
       UnresolvedHint(name, exprs, logicalPlan)
     }
   }
@@ -4127,6 +4127,38 @@ class Dataset[T] private[sql](
         messageParameters = Map("methodName" -> toSQLId("writeTo")))
     }
     new DataFrameWriterV2[T](table, this)
+  }
+
+  /**
+   * Merges a set of updates, insertions, and deletions based on a source table into
+   * a target table.
+   *
+   * Scala Examples:
+   * {{{
+   *   spark.table("source")
+   *     .mergeInto("target", $"source.id" === $"target.id")
+   *     .whenMatched($"salary" === 100)
+   *     .delete()
+   *     .whenNotMatched()
+   *     .insertAll()
+   *     .whenNotMatchedBySource($"salary" === 100)
+   *     .update(Map(
+   *       "salary" -> lit(200)
+   *     ))
+   *     .merge()
+   * }}}
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
+    if (isStreaming) {
+      logicalPlan.failAnalysis(
+        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+        messageParameters = Map("methodName" -> toSQLId("mergeInto")))
+    }
+
+    new MergeIntoWriter[T](table, this, condition)
   }
 
   /**
