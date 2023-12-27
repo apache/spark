@@ -307,6 +307,21 @@ GROUP  BY t1b
 ORDER BY t1b NULLS last
 OFFSET 1;
 
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table.
+SELECT COUNT(DISTINCT(t1a))
+FROM t1
+WHERE t1d IN (SELECT t2d
+              FROM   t2
+              WHERE t1a IS NOT NULL
+              LIMIT 10);
+
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table.
+SELECT COUNT(DISTINCT(t1a))
+FROM t1
+WHERE t1d IN (SELECT t2d
+              FROM   t2
+              WHERE t1a IS NOT NULL AND t2b < t1b
+              LIMIT 10);
 
 set spark.sql.optimizer.decorrelateExistsIn.enabled = false;
 -- LIMIT is not supported in correlated IN, unless the DECORRELATE_EXISTS_AND_IN_SUBQUERIES

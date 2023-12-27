@@ -203,6 +203,15 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                GROUP  BY state
                LIMIT  1);
 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               WHERE  dept.dept_id <> emp.dept_id
+                 AND emp.salary > 200
+               GROUP  BY state
+               LIMIT  1);
+
 -- limit and offset in the not exists subquery block.
 -- TC.03.03
 SELECT *
