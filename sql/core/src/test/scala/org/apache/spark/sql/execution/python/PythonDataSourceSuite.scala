@@ -284,6 +284,38 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("data source name conflicts") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |$simpleDataSourceReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT, partition INT"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    Seq(
+      "text", "json", "csv", "avro", "orc", "parquet", "jdbc",
+      "binaryFile", "xml", "kafka", "noop",
+      "org.apache.spark.sql.test",
+      "org.apache.spark.sql.hive.orc"
+    ).foreach { provider =>
+      withClue(s"Data source: $provider") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.dataSource.registerPython(provider, dataSource)
+          },
+          errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+          parameters = Map("provider" -> provider))
+      }
+    }
+  }
+
   test("reader not implemented") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
