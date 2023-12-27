@@ -661,6 +661,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val dataSourceScript =
       s"""
          |import json
+         |import os
          |from dataclasses import dataclass
          |from pyspark import TaskContext
          |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
@@ -679,7 +680,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |    def write(self, iterator):
          |        context = TaskContext.get()
          |        partition_id = context.partitionId()
-         |        output_path = f"{self.path}/{partition_id}.json"
+         |        output_path = os.path.join(self.path, f"{partition_id}.json")
          |        cnt = 0
          |        with open(output_path, "w") as file:
          |            for row in iterator:
@@ -692,12 +693,12 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |    def commit(self, messages) -> None:
          |        status = dict(num_files=len(messages), count=sum(m.count for m in messages))
          |
-         |        with open(f"{self.path}/success.json", "a") as file:
+         |        with open(os.path.join(self.path, "success.json"), "a") as file:
          |            file.write(json.dumps(status) + "\\n")
          |
          |    def abort(self, messages) -> None:
-         |        with open(f"{self.path}/failed.txt", "a") as file:
-         |            file.write("failed\\n")
+         |        with open(os.path.join(self.path, "failed.txt"), "a") as file:
+         |            file.write("failed")
          |
          |class SimpleDataSource(DataSource):
          |    def writer(self, schema, saveMode):
