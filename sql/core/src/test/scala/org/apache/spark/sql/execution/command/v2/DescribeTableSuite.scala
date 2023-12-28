@@ -176,7 +176,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
     }
   }
 
-  test("describe extended (formatted) a column without col stats") {
+  test("SPARK-39859: describe extended (formatted) a column without col stats") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(
         s"""
