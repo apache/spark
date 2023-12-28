@@ -103,45 +103,27 @@ class CollationSuite extends QueryTest
       Row(true))
   }
 
-  test("collation comparison literals") {
-    // Serbian case insensitive ordering
-    assert(sql("select collate('aaa', 'sr-pr') = collate('aaa', 'sr-pr')")
-      .collect().head.getBoolean(0))
-    assert(sql("select collate('aaa', 'sr-pr') = collate('AaA', 'sr-pr')")
-      .collect().head.getBoolean(0))
-    assert(!sql("select collate('aaa', 'sr-pr') = collate('zzz', 'sr-pr')")
-      .collect().head.getBoolean(0))
+  test("order by") {
+    // No collations
+    checkAnswer(sql("""
+      SELECT fruit FROM
+      VALUES ('äpfel'), ('Äpfel'), ('Apfel'), ('apfel'), ('Banane'), ('banane')
+       as data(fruit)
+      ORDER BY fruit
+      """), Seq(
+      Row("Apfel"), Row("Banane"), Row("apfel"), Row("banane"), Row("Äpfel"), Row("äpfel")))
 
-    assert(sql("select collate('љзшђ', 'sr-pr') = collate('ЉЗШЂ', 'sr-pr')")
-      .collect().head.getBoolean(0))
-
-    // switching to case sensitive Serbian.
-    assert(!sql("select collate('aaa', 'sr-tr') = collate('AAA', 'sr-tr')")
-      .collect().head.getBoolean(0))
-    assert(sql("select collate('aaa', 'sr-tr') = collate('aaa', 'sr-tr')")
-      .collect().head.getBoolean(0))
-    assert(!sql("select collate('aaa', 'sr-tr') = collate('AaA', 'sr-tr')")
-      .collect().head.getBoolean(0))
-    assert(!sql("select collate('aaa', 'sr-tr') = collate('zzz', 'sr-tr')")
-      .collect().head.getBoolean(0))
-    assert(!sql("select collate('љзшђ', 'sr-tr') = collate('ЉЗШЂ', 'sr-tr')")
-      .collect().head.getBoolean(0))
-    assert(sql("select collate('ЉЗШЂ', 'sr-tr') = collate('ЉЗШЂ', 'sr-tr')")
-      .collect().head.getBoolean(0))
-  }
-
-  test("collation comparison rows") {
-    // Case-insensitive
-    val ret = sql("""
-      SELECT collate(name, 'sr-pr') FROM
-      VALUES('Павле'), ('Зоја'), ('Ивона'), ('Александар'),
-      ('ПАВЛЕ'), ('ЗОЈА'), ('ИВОНА'), ('АЛЕКСАНДАР')
-       as data(name)
-      ORDER BY collate(name, 'sr-pr')
-      """).collect().map(r => r.getString(0))
-
-    assert(ret === Array(
-      "Александар", "АЛЕКСАНДАР", "Зоја", "ЗОЈА", "Ивона", "ИВОНА", "Павле", "ПАВЛЕ"))
+    // Case/accent-sensitive german
+    checkAnswer(sql("""
+      SELECT fruit FROM
+      VALUES ('äpfel'), ('Äpfel'), ('Apfel'), ('apfel'), ('Banane'), ('banane')
+       as data(fruit)
+      ORDER BY collate(fruit, 'de-tertiary')
+      """),
+      Seq(
+        Row("apfel"), Row("Apfel"),
+        Row("äpfel"), Row("Äpfel"),
+        Row("banane"), Row("Banane")))
   }
 
   test("agg simple") {
