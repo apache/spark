@@ -615,6 +615,7 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
+      SKIP_LOCAL_M2: true
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     steps:

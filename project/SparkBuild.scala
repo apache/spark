@@ -37,6 +37,8 @@ import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
 import sbtassembly.AssemblyPlugin.autoImport._
 
+import lmcoursier.definitions.CachePolicy
+
 import spray.revolver.RevolverPlugin._
 
 import sbtprotoc.ProtocPlugin.autoImport._
@@ -254,6 +256,12 @@ object SparkBuild extends PomBuild {
     }
   )
 
+  lazy val cachePolicies = if (sys.env.contains("SKIP_LOCAL_M2")) {
+    Vector(CachePolicy.Update)
+  } else {
+    Vector(CachePolicy.LocalUpdateChanging, CachePolicy.LocalOnly, CachePolicy.Update)
+  }
+
   lazy val sharedSettings = sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
@@ -264,6 +272,7 @@ object SparkBuild extends PomBuild {
       .map(file),
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.18",
+    csrConfiguration := csrConfiguration.value.withCachePolicies(cachePolicies),
 
     // Override SBT's default resolvers:
     resolvers := Seq(
