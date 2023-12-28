@@ -240,10 +240,18 @@ class RocksDB(
   /**
    * Create RocksDB column family, if not created already
    */
-  def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-    if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false): Unit = {
+    // Remove leading and trailing whitespaces
+    val cfName = colFamilyName.trim
+
+    if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
       throw new UnsupportedOperationException("Failed to create column family with reserved " +
         s"name=$colFamilyName")
+    }
+
+    if (!isInternal && cfName.charAt(0) == '_') {
+      throw new UnsupportedOperationException("Failed to create column family with unsupported " +
+        s"starting character. State variables starting with '_' are reserved for internal use.")
     }
 
     if (!checkColFamilyExists(colFamilyName)) {

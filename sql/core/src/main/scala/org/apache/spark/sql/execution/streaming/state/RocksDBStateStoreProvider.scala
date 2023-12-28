@@ -46,10 +46,12 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
-    override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+    override def createColFamilyIfAbsent(
+        colFamilyName: String,
+        isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
-      rocksDB.createColFamilyIfAbsent(colFamilyName)
+      rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {

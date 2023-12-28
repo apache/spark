@@ -129,12 +129,31 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
+  private def getTimerState[T](stateName: String): TimerStateImpl[T] = {
+    store.createColFamilyIfAbsent(stateName, true)
+    new TimerStateImpl[T](store, stateName)
+  }
+
+  private lazy val procTimers =
+    getTimerState[Boolean](TimerStateUtils.PROC_TIMERS_STATE_NAME)
+
   override def registerProcessingTimeTimer(expiryTimestampMs: Long): Unit = {
     verify(timeoutMode == ProcessingTime, s"Cannot register processing time " +
       "timers with incorrect TimeoutMode")
+    if (procTimers.exists(expiryTimestampMs)) {
+      logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
+    } else {
+      procTimers.add(expiryTimestampMs, true)
+    }
   }
 
   override def deleteProcessingTimeTimer(expiryTimestampMs: Long): Unit = {
-
+    verify(timeoutMode == ProcessingTime, s"Cannot delete processing time " +
+      "timers with incorrect TimeoutMode")
+    if (!procTimers.exists(expiryTimestampMs)) {
+      logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")
+    } else {
+      procTimers.remove(expiryTimestampMs)
+    }
   }
 }

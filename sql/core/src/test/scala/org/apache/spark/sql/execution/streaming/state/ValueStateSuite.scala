@@ -185,4 +185,19 @@ class ValueStateSuite extends SharedSparkSession
       assert(testState2.get() === null)
     }
   }
+
+  test("Value state operations for unsupported type name should fail") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), TimeoutMode.NoTimeouts())
+      assert(handle.getQueryInfo().getPartitionId === 0)
+
+      val ex = intercept[Exception] {
+        handle.getValueState[Long]("_testState")
+      }
+      assert(ex.isInstanceOf[UnsupportedOperationException])
+      assert(ex.getMessage.contains("reserved for internal use"))
+    }
+  }
 }
