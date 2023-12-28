@@ -27,12 +27,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 class EarlyCollapseProjectSuite extends QueryTest
   with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
-
+  val useCaching: Boolean = false
   test("withColumns: check no new project addition for simple columns addition") {
     val baseDf = spark.range(20).select($"id" as "a", $"id" as "b")
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.withColumns(Seq("newCol1", "newCol2"), Seq(col("a") + 1, col("b") + 2)),
-      checkWithBaseDfCache = false)
+      df => df.withColumns(Seq("newCol1", "newCol2"), Seq(col("a") + 1, col("b") + 2)))
   }
 
   test("withColumns: check no new project addition if redefined alias is not used in" +
@@ -41,7 +40,7 @@ class EarlyCollapseProjectSuite extends QueryTest
     $"b")
 
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.withColumns(Seq("newCol1"), Seq(col("b") + 2)), checkWithBaseDfCache = false)
+      df => df.withColumns(Seq("newCol1"), Seq(col("b") + 2)))
   }
 
   test("withColumns: no new project addition if redefined alias is used in new columns - 1") {
@@ -49,7 +48,7 @@ class EarlyCollapseProjectSuite extends QueryTest
       $"b")
 
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.withColumns(Seq("newCol1"), Seq(col("a") + 2)), checkWithBaseDfCache = false)
+      df => df.withColumns(Seq("newCol1"), Seq(col("a") + 2)))
   }
 
   test("withColumns: no new project addition if redefined alias is used in new columns - 2") {
@@ -57,31 +56,27 @@ class EarlyCollapseProjectSuite extends QueryTest
       select($"a" + 1 as "c", $"a", $"b").
       select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e")
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.withColumns(Seq("newCol1"), Seq(col("c") + 2 + col("a") * col("e"))),
-      checkWithBaseDfCache = false)
+      df => df.withColumns(Seq("newCol1"), Seq(col("c") + 2 + col("a") * col("e"))))
   }
 
   test("withColumnRenamed: remap of column should not result in new project if the source" +
     " of remap is not used in other cols") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" as "b")
-    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("a", "c"),
-      checkWithBaseDfCache = false)
+    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("a", "c"))
   }
 
   test("withColumnRenamed: remap of column should not result in new project if the source" +
     " of remap is an attribute used in other cols") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b")
-    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("a", "d"),
-      checkWithBaseDfCache = false)
+    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("a", "d"))
   }
 
   test("withColumnRenamed: remap of column should not result in new project if the remap" +
     " is on an alias") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d" )
-    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("d", "x"),
-      checkWithBaseDfCache = false)
+    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("d", "x"))
   }
 
   test("withColumnRenamed: remap of column should not  result in new project if the remap" +
@@ -89,16 +84,14 @@ class EarlyCollapseProjectSuite extends QueryTest
     val baseDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d").
       select($"c", $"a", $"b", $"d", $"d" as "k")
-    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("d", "x"),
-      checkWithBaseDfCache = false)
+    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnRenamed("d", "x"))
   }
 
   test("withColumnRenamed: test multi column remap") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.withColumnsRenamed(Map("d" -> "x", "c" -> "k", "a" -> "u")),
-      checkWithBaseDfCache = false)
+      df => df.withColumnsRenamed(Map("d" -> "x", "c" -> "k", "a" -> "u")))
   }
 
   test("withColumns: test multi column addition") {
@@ -107,8 +100,7 @@ class EarlyCollapseProjectSuite extends QueryTest
     checkProjectCollapseAndCacheUse(baseDf,
       df => df.withColumns(
         Seq("newCol1", "newCol2", "newCol3", "newCol4"),
-        Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))),
-      checkWithBaseDfCache = false)
+        Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))))
   }
 
   test("mix of column addition, rename and dropping") {
@@ -116,7 +108,7 @@ class EarlyCollapseProjectSuite extends QueryTest
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     checkProjectCollapseAndCacheUse(baseDf,
       df => df.select($"a" + $"d" as "newCol1", $"b" * $"a" as "newCol2",
-        $"a" as "renameCola", $"c" * $"d" as "c", $"a"), checkWithBaseDfCache = false)
+        $"a" as "renameCola", $"c" * $"d" as "c", $"a"))
   }
 
   test("reuse of cache on mix of column addition, rename and dropping - 1") {
@@ -124,15 +116,14 @@ class EarlyCollapseProjectSuite extends QueryTest
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     checkProjectCollapseAndCacheUse(baseDf,
       df => df.select($"c" * $"d" as "c", $"a" + $"d" as "newCol1", $"b" * $"a" as "newCol2",
-        $"a" as "renameCola", $"a"), checkWithBaseDfCache = true)
+        $"a" as "renameCola", $"a"))
   }
 
   test("reuse of cache on mix of column addition, rename and dropping - 2") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.select($"d", $"b" as "renameB", $"a" as "renameA", $"a" as "renameColA"),
-        checkWithBaseDfCache = true)
+      df => df.select($"d", $"b" as "renameB", $"a" as "renameA", $"a" as "renameColA"))
   }
 
   test("reuse of cache on mix of column addition, rename and dropping - 3") {
@@ -140,13 +131,13 @@ class EarlyCollapseProjectSuite extends QueryTest
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
     checkProjectCollapseAndCacheUse(baseDf,
       df => df.select($"d" * $"a" as "d", $"b" as "renameB", $"a" * $"d" as "renameA",
-      $"a" as "renameColA"), checkWithBaseDfCache = true)
+      $"a" as "renameColA"))
   }
 
   test("reuse of cache on mix of column addition, rename and dropping - 4") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
-    checkProjectCollapseAndCacheUse(baseDf, df => df.select($"c"), checkWithBaseDfCache = true)
+    checkProjectCollapseAndCacheUse(baseDf, df => df.select($"c"))
   }
 
   test("use of cached InMemoryRelation when new columns added do not result in new project -1") {
@@ -155,8 +146,7 @@ class EarlyCollapseProjectSuite extends QueryTest
     checkProjectCollapseAndCacheUse(baseDf,
       df => df.withColumns(
         Seq("newCol1", "newCol2", "newCol3", "newCol4"),
-        Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))
-      ), checkWithBaseDfCache = true)
+        Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))))
   }
 
   test("use of cached InMemoryRelation when new columns added do not result in new project -2") {
@@ -164,8 +154,7 @@ class EarlyCollapseProjectSuite extends QueryTest
       select($"a" + 1 as "c", $"a", $"b").
       select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e")
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.withColumns(Seq("newCol1"), Seq(col("c") + 2 + col("a") * col("e"))),
-        checkWithBaseDfCache = true)
+      df => df.withColumns(Seq("newCol1"), Seq(col("c") + 2 + col("a") * col("e"))))
   }
 
   test("use of cached InMemoryRelation when new columns added do not result in new project, with" +
@@ -174,8 +163,7 @@ class EarlyCollapseProjectSuite extends QueryTest
       select($"a" + 1 as "c", $"a", $"b").
       select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e")
     checkProjectCollapseAndCacheUse(baseDf,
-      df => df.select( $"e", $"a", $"c" + 2 + $"a" * $"e" as "newCol", $"c", $"d", $"b"),
-        checkWithBaseDfCache = true)
+      df => df.select( $"e", $"a", $"c" + 2 + $"a" * $"e" as "newCol", $"c", $"d", $"b"))
   }
 
   test("use of cached InMemoryRelation when renamed columns do not result in new project") {
@@ -183,14 +171,13 @@ class EarlyCollapseProjectSuite extends QueryTest
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
 
     checkProjectCollapseAndCacheUse(baseDf, df => df.withColumnsRenamed(
-      Map("c" -> "c1", "a" -> "a1", "b" -> "b1", "d" -> "d1")), checkWithBaseDfCache = true)
+      Map("c" -> "c1", "a" -> "a1", "b" -> "b1", "d" -> "d1")))
   }
 
   private def checkProjectCollapseAndCacheUse(
       baseDf: DataFrame,
-      testExec: DataFrame => DataFrame,
-      checkWithBaseDfCache: Boolean): Unit = {
-    if (checkWithBaseDfCache) {
+      testExec: DataFrame => DataFrame): Unit = {
+    if (useCaching) {
       baseDf.cache()
     }
     val initNodes = collectNodes(baseDf)
@@ -200,7 +187,7 @@ class EarlyCollapseProjectSuite extends QueryTest
     assert(initNodes.size === optDfNodes.size)
     assert(nonOptDfNodes.size === optDfNodes.size + 1)
     checkAnswer(newDfOpt, newDfUnopt)
-    if (checkWithBaseDfCache) {
+    if (useCaching) {
       assert(newDfOpt.queryExecution.optimizedPlan.collectLeaves().head.
         isInstanceOf[InMemoryRelation])
     }
