@@ -22,6 +22,7 @@ import java.io.{File, FileWriter}
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -75,14 +76,18 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     Utils.tryWithResource(
       new FileWriter(new File(packageDir, "__init__.py")))(_.write(dataSourceScript))
     // So Spark Session initialization can lookup this temporary directory.
+    DataSourceManager.dataSourceBuilders = None
     PythonUtils.additionalTestingPath = Some(tempDir.toString)
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
-    Utils.deleteRecursively(tempDir)
-    PythonUtils.additionalTestingPath = None
-    super.afterAll()
+    try {
+      Utils.deleteRecursively(tempDir)
+      PythonUtils.additionalTestingPath = None
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("SPARK-45917: automatic registration of Python Data Source") {

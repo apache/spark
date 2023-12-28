@@ -408,7 +408,7 @@ object UserDefinedPythonDataSource {
   /**
    * (Driver-side) Look up all available Python Data Sources.
    */
-  def lookupAllDataSourcesInPython(): PythonAllDataSourcesCreationResult = {
+  def lookupAllDataSourcesInPython(): PythonLookupAllDataSourcesResult = {
     new UserDefinedPythonDataSourceLookupRunner(
       PythonUtils.createPythonFunction(Array.empty[Byte])).runInPython()
   }
@@ -417,36 +417,29 @@ object UserDefinedPythonDataSource {
 /**
  * All Data Sources in Python
  */
-case class PythonAllDataSourcesCreationResult(
+case class PythonLookupAllDataSourcesResult(
     names: Array[String], dataSources: Array[Array[Byte]])
-
-/**
- * Used to store the result of creating a Python data source in the Python process.
- */
-case class PythonDataSourceCreationResult(
-    dataSource: Array[Byte],
-    schema: StructType)
 
 /**
  * A runner used to look up Python Data Sources available in Python path.
  */
 class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
-    extends PythonPlannerRunner[PythonAllDataSourcesCreationResult](lookupSources) {
+    extends PythonPlannerRunner[PythonLookupAllDataSourcesResult](lookupSources) {
 
   override val workerModule = "pyspark.sql.worker.lookup_data_sources"
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
-    PythonWorkerUtils.writePythonFunction(lookupSources, dataOut)
+    // No input needed.
   }
 
   override protected def receiveFromPython(
-      dataIn: DataInputStream): PythonAllDataSourcesCreationResult = {
+      dataIn: DataInputStream): PythonLookupAllDataSourcesResult = {
     // Receive the pickled data source or an exception raised in Python worker.
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.failToPlanDataSourceError(
-        action = "create", tpe = "instance", msg = msg)
+        action = "lookup", tpe = "instance", msg = msg)
     }
 
     val shortNames = ArrayBuffer.empty[String]
@@ -460,11 +453,18 @@ class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
       pickledDataSources.append(pickledDataSource)
     }
 
-    PythonAllDataSourcesCreationResult(
+    PythonLookupAllDataSourcesResult(
       names = shortNames.toArray,
       dataSources = pickledDataSources.toArray)
   }
 }
+
+/**
+ * Used to store the result of creating a Python data source in the Python process.
+ */
+case class PythonDataSourceCreationResult(
+    dataSource: Array[Byte],
+    schema: StructType)
 
 /**
  * A runner used to create a Python data source in a Python process and return the result.

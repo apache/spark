@@ -28,6 +28,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
+from pyspark.sql.datasource import DataSource
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
     check_python_version,
@@ -65,7 +66,7 @@ def main(infile: IO, outfile: IO) -> None:
         for info in iter_modules():
             if info.name.startswith("pyspark_"):
                 mod = import_module(info.name)
-                if hasattr(mod, "DefaultSource"):
+                if hasattr(mod, "DefaultSource") and isinstance(mod.DefaultSource, DataSource):
                     infos[mod.DefaultSource.name()] = mod.DefaultSource
 
         # Writes name -> pickled data source to JVM side to be registered

@@ -83,11 +83,17 @@ class DataSourceManager extends Logging {
 
 
 object DataSourceManager {
-  private lazy val initialDataSourceBuilders = {
-    val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
-    result.names.zip(result.dataSources).map { case (name, dataSource) =>
-      name ->
-        UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
-    }.toMap
+  // Visiable for testing
+  private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
+  private def initialDataSourceBuilders = this.synchronized {
+    if (dataSourceBuilders.isEmpty) {
+      val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
+      val builders = result.names.zip(result.dataSources).map { case (name, dataSource) =>
+        name ->
+          UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
+      }.toMap
+      dataSourceBuilders = Some(builders)
+    }
+    dataSourceBuilders.get
   }
 }
