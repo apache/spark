@@ -627,6 +627,7 @@ pyspark_ml = Module(
         "pyspark.ml.tuning",
         # unittests
         "pyspark.ml.tests.test_algorithms",
+        "pyspark.ml.tests.test_als",
         "pyspark.ml.tests.test_base",
         "pyspark.ml.tests.test_evaluation",
         "pyspark.ml.tests.test_feature",
