@@ -19,41 +19,92 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.CollatedStringType
 
 class CollationSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
+  // Collation pre-read - https://docs.oracle.com/javase/8/docs/api/java/text/Collator.html
+  // You can set a Collator's strength property to determine the level of difference considered
+  // significant in comparisons.
+  // Four strengths are provided:
+  // PRIMARY, SECONDARY, TERTIARY, and IDENTICAL.
+  // The exact assignment of strengths to language features is locale dependant.
+  // For example, in Czech, "e" and "f" are considered primary differences,
+  // while "e" and "ě" are secondary differences,
+  // "e" and "E" are tertiary differences and "e" and "e" are identical.
+
   test("collate keyword") {
-    // Serbian case insensitive ordering
-    assert(sql("select collate('aaa', 'sr-primary')").collect()(0).getString(0) == "aaa")
-    assert(sql("select collation(collate('aaa', 'sr-primary'))").collect()(0).getString(0)
-      == "sr-primary")
-    assert(sql("select collate('aaa', 'sr-primary') = collate('AAA', 'sr-primary')")
-      .collect()(0).getBoolean(0))
+    // Collated row is a simple string.
+    checkAnswer(sql("select collate('aaa', 'sr-primary')"), Row("aaa"))
+    assert(sql("select collate('aaa', 'sr-primary')").schema(0).dataType ==
+      CollatedStringType("sr-primary"))
+
+    // Serbian case + accent insensitive ordering
+    var collationName = "sr-primary"
+    checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
+    checkAnswer(
+      sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"), Row(true))
+    checkAnswer(
+      sql(s"select collate('aaa', '$collationName') = collate('aaa', '$collationName')"), Row(true))
+    checkAnswer(sql(s"select collate('aaa', '$collationName') = collate('zzz', '$collationName')"),
+      Row(false))
+    checkAnswer(
+      sql(s"select collate('љзшђ', '$collationName') = collate('ЉЗШЂ', '$collationName')"),
+      Row(true))
+    checkAnswer(sql(s"select collate('ććć', '$collationName') = collate('ĆĆĆ', '$collationName')"),
+      Row(true))
+    checkAnswer(sql(s"select collate('ččč', '$collationName') = collate('ĆĆĆ', '$collationName')"),
+      Row(true))
+
+    // Serbian case insensitive ordering but accent sensitive
+    collationName = "sr-secondary"
+    checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
+    checkAnswer(
+      sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"),
+      Row(true))
+    checkAnswer(
+      sql(s"select collate('aaa', '$collationName') = collate('aaa', '$collationName')"), Row(true))
+    checkAnswer(sql(s"select collate('aaa', '$collationName') = collate('zzz', '$collationName')"),
+      Row(false))
+    checkAnswer(
+      sql(s"select collate('љзшђ', '$collationName') = collate('ЉЗШЂ', '$collationName')"),
+      Row(true))
+    checkAnswer(sql(s"select collate('ććć', '$collationName') = collate('ĆĆĆ', '$collationName')"),
+      Row(true))
+    checkAnswer(sql(s"select collate('ččč', '$collationName') = collate('ĆĆĆ', '$collationName')"),
+      Row(false))
+    checkAnswer(sql(s"select collate('ččč', '$collationName') = collate('ććć', '$collationName')"),
+      Row(false))
+    checkAnswer(sql(s"select collate('ččč', '$collationName') = collate('ččč', '$collationName')"),
+      Row(true))
+
+    // Serbian case and accent sensitive ordering.
+    collationName = "sr-tertiary"
+    checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
+    checkAnswer(
+      sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"),
+      Row(false))
+    checkAnswer(
+      sql(s"select collate('aaa', '$collationName') = collate('aaa', '$collationName')"), Row(true))
+    checkAnswer(sql(s"select collate('aaa', '$collationName') = collate('zzz', '$collationName')"),
+      Row(false))
+    checkAnswer(
+      sql(s"select collate('љзшђ', '$collationName') = collate('ЉЗШЂ', '$collationName')"),
+      Row(false))
+    checkAnswer(sql(s"select collate('ććć', '$collationName') = collate('ĆĆĆ', '$collationName')"),
+      Row(false))
+    checkAnswer(sql(s"select collate('ččč', '$collationName') = collate('ĆĆĆ', '$collationName')"),
+      Row(false))
+    checkAnswer(sql(s"select collate('ččč', '$collationName') = collate('ććć', '$collationName')"),
+      Row(false))
+    checkAnswer(sql(s"select collate('ččč', '$collationName') = collate('ččč', '$collationName')"),
+      Row(true))
   }
 
   test("collation comparison literals") {
-    // Collation pre-read - https://docs.oracle.com/javase/8/docs/api/java/text/Collator.html
-    // You can set a Collator's strength property to determine the level of difference considered
-    // significant in comparisons.
-    // Four strengths are provided:
-    // PRIMARY, SECONDARY, TERTIARY, and IDENTICAL.
-    // The exact assignment of strengths to language features is locale dependant.
-    // For example, in Czech, "e" and "f" are considered primary differences,
-    // while "e" and "ě" are secondary differences,
-    // "e" and "E" are tertiary differences and "e" and "e" are identical.
-
-    // In spark implementation chose between PRIMARY, SECONDARY and TERTIARY through following map:
-    // case "pr" => Collator.PRIMARY
-    // case "se" => Collator.SECONDARY
-    // case "tr" => Collator.TERTIARY
-    // case "identical" => Collator.IDENTICAL
-
-
     // Serbian case insensitive ordering
-    assert(sql("select collate('aaa', 'sr-pr') = collate('AAA', 'sr-pr')")
-      .collect().head.getBoolean(0))
     assert(sql("select collate('aaa', 'sr-pr') = collate('aaa', 'sr-pr')")
       .collect().head.getBoolean(0))
     assert(sql("select collate('aaa', 'sr-pr') = collate('AaA', 'sr-pr')")

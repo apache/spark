@@ -47,6 +47,8 @@ public class CollatorFactory {
   public synchronized  static Integer installComparator(String collationName) {
     // TODO: Think about concurrency here.
     // What happens when ArrayList is resized?
+    // TODO: Propagate more information about collation (e.g. whether it is binary collation so
+    // we can still do binary comparisons.
 
     if (collationNameToId.containsKey(collationName)) {
       return collationNameToId.get(collationName);
