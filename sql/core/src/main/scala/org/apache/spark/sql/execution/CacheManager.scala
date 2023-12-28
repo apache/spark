@@ -438,13 +438,23 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
                   val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
                     case (ne, indx) =>
-                      if (directlyMappedincomingToCachedPlanIndx.exists(_._1 == indx)) {
-                        ne
-                      } else {
+                      directlyMappedincomingToCachedPlanIndx.find(_._1 == indx).map {
+                        case (_, cdIndex) =>
+                          ne match {
+                            case attr: Attribute => attr
+                            case al: Alias =>
+                              val cdAttr = cdPlanProject.projectList(cdIndex).toAttribute
+                              al.copy(child = cdAttribToCommonAttribForIncmngNe(cdAttr))(
+                                exprId = al.exprId, qualifier = al.qualifier,
+                                explicitMetadata = al.explicitMetadata,
+                                nonInheritableMetadataKeys = al.nonInheritableMetadataKeys
+                              )
+                          }
+                      }.getOrElse({
                         transformedIndirectlyMappableExpr(indx).transformUp {
                           case Replaceable(attribToUse) => attribToUse
                         }.asInstanceOf[NamedExpression]
-                      }
+                      })
                     }
                   val newPartialPlan = Project(modifiedInProj, cd.cachedRepresentation.toOption.
                       get.withOutput(projectionToForceOnCdPlan))
