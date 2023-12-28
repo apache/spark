@@ -12963,7 +12963,7 @@ def array_prepend(col: "ColumnOrName", value: Any) -> Column:
 @_try_remote_functions
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
     """
-    Collection function: Remove all elements that equal to element from the given array.
+    Array function: Remove all elements that equal to element from the given array.
 
     .. versionadded:: 2.4.0
 
@@ -12980,13 +12980,69 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array excluding given value.
+        A new column that is an array excluding the given value from the input column.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([1, 2, 3, 1, 1],), ([],)], ['data'])
-    >>> df.select(array_remove(df.data, 1)).collect()
-    [Row(array_remove(data, 1)=[2, 3]), Row(array_remove(data, 1)=[])]
+    Example 1: Removing a specific value from a simple array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 1, 1],)], ['data'])
+    >>> df.select(sf.array_remove(df.data, 1)).show()
+    +---------------------+
+    |array_remove(data, 1)|
+    +---------------------+
+    |               [2, 3]|
+    +---------------------+
+
+    Example 2: Removing a specific value from multiple arrays
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 1, 1],), ([4, 5, 5, 4],)], ['data'])
+    >>> df.select(sf.array_remove(df.data, 5)).show()
+    +---------------------+
+    |array_remove(data, 5)|
+    +---------------------+
+    |      [1, 2, 3, 1, 1]|
+    |               [4, 4]|
+    +---------------------+
+
+    Example 3: Removing a value that does not exist in the array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_remove(df.data, 4)).show()
+    +---------------------+
+    |array_remove(data, 4)|
+    +---------------------+
+    |            [1, 2, 3]|
+    +---------------------+
+
+    Example 4: Removing a value from an array with all identical values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 1, 1],)], ['data'])
+    >>> df.select(sf.array_remove(df.data, 1)).show()
+    +---------------------+
+    |array_remove(data, 1)|
+    +---------------------+
+    |                   []|
+    +---------------------+
+
+    Example 5: Removing a value from an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema)
+    >>> df.select(sf.array_remove(df.data, 1)).show()
+    +---------------------+
+    |array_remove(data, 1)|
+    +---------------------+
+    |                   []|
+    +---------------------+
     """
     return _invoke_function("array_remove", _to_java_column(col), element)
 
@@ -12994,7 +13050,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
 @_try_remote_functions
 def array_distinct(col: "ColumnOrName") -> Column:
     """
-    Collection function: removes duplicate values from the array.
+    Array function: removes duplicate values from the array.
 
     .. versionadded:: 2.4.0
 
@@ -13009,13 +13065,69 @@ def array_distinct(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of unique values.
+        A new column that is an array of unique values from the input column.
 
     Examples
     --------
+    Example 1: Removing duplicate values from a simple array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 2],)], ['data'])
+    >>> df.select(sf.array_distinct(df.data)).show()
+    +--------------------+
+    |array_distinct(data)|
+    +--------------------+
+    |           [1, 2, 3]|
+    +--------------------+
+
+    Example 2: Removing duplicate values from multiple arrays
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
-    >>> df.select(array_distinct(df.data)).collect()
-    [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
+    >>> df.select(sf.array_distinct(df.data)).show()
+    +--------------------+
+    |array_distinct(data)|
+    +--------------------+
+    |           [1, 2, 3]|
+    |              [4, 5]|
+    +--------------------+
+
+    Example 3: Removing duplicate values from an array with all identical values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 1, 1],)], ['data'])
+    >>> df.select(sf.array_distinct(df.data)).show()
+    +--------------------+
+    |array_distinct(data)|
+    +--------------------+
+    |                 [1]|
+    +--------------------+
+
+    Example 4: Removing duplicate values from an array with no duplicate values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_distinct(df.data)).show()
+    +--------------------+
+    |array_distinct(data)|
+    +--------------------+
+    |           [1, 2, 3]|
+    +--------------------+
+
+    Example 5: Removing duplicate values from an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema)
+    >>> df.select(sf.array_distinct(df.data)).show()
+    +--------------------+
+    |array_distinct(data)|
+    +--------------------+
+    |                  []|
+    +--------------------+
     """
     return _invoke_function_over_columns("array_distinct", col)
 
@@ -13399,7 +13511,7 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_compact(col: "ColumnOrName") -> Column:
     """
-    Collection function: removes null values from the array.
+    Array function: removes null values from the array.
 
     .. versionadded:: 3.4.0
 
@@ -13411,7 +13523,7 @@ def array_compact(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array by excluding the null values.
+        A new column that is an array excluding the null values from the input column.
 
     Notes
     -----
@@ -13419,9 +13531,69 @@ def array_compact(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Removing null values from a simple array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, None, 2, 3],)], ['data'])
+    >>> df.select(sf.array_compact(df.data)).show()
+    +-------------------+
+    |array_compact(data)|
+    +-------------------+
+    |          [1, 2, 3]|
+    +-------------------+
+
+    Example 2: Removing null values from multiple arrays
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, None, 2, 3],), ([4, 5, None, 4],)], ['data'])
-    >>> df.select(array_compact(df.data)).collect()
-    [Row(array_compact(data)=[1, 2, 3]), Row(array_compact(data)=[4, 5, 4])]
+    >>> df.select(sf.array_compact(df.data)).show()
+    +-------------------+
+    |array_compact(data)|
+    +-------------------+
+    |          [1, 2, 3]|
+    |          [4, 5, 4]|
+    +-------------------+
+
+    Example 3: Removing null values from an array with all null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(StringType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([None, None, None],)], schema)
+    >>> df.select(sf.array_compact(df.data)).show()
+    +-------------------+
+    |array_compact(data)|
+    +-------------------+
+    |                 []|
+    +-------------------+
+
+    Example 4: Removing null values from an array with no null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3],)], ['data'])
+    >>> df.select(sf.array_compact(df.data)).show()
+    +-------------------+
+    |array_compact(data)|
+    +-------------------+
+    |          [1, 2, 3]|
+    +-------------------+
+
+    Example 5: Removing null values from an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(StringType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema)
+    >>> df.select(sf.array_compact(df.data)).show()
+    +-------------------+
+    |array_compact(data)|
+    +-------------------+
+    |                 []|
+    +-------------------+
     """
     return _invoke_function_over_columns("array_compact", col)
 
