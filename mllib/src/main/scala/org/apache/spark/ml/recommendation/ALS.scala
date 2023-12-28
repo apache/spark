@@ -325,7 +325,7 @@ class ALSModel private[ml] (
     val validatedUsers = checkIntegers(dataset, $(userCol))
     val validatedItems = checkIntegers(dataset, $(itemCol))
 
-    val validatedInputAlias = Identifiable.randomUID(s"__als_validated_input")
+    val validatedInputAlias = Identifiable.randomUID("__als_validated_input")
     val itemFactorsAlias = Identifiable.randomUID("__als_item_factors")
     val userFactorsAlias = Identifiable.randomUID("__als_user_factors")
 
