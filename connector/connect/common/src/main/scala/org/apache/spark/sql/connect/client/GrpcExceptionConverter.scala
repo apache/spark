@@ -392,14 +392,10 @@ private[client] object GrpcExceptionConverter {
       .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
 
     if (errorClass != null) {
-      val messageParameters = JsonMethods
-        .parse(info.getMetadataOrDefault("messageParameters", "{}"))
-        .extract[Map[String, String]]
       builder.setSparkThrowable(
         FetchErrorDetailsResponse.SparkThrowable
           .newBuilder()
           .setErrorClass(errorClass)
-          .putAllMessageParameters(messageParameters.asJava)
           .build())
     }
 
