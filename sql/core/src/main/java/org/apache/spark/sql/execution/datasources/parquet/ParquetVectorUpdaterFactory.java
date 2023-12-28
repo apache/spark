@@ -1633,14 +1633,16 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
   }
 
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {
-    DecimalType d = (DecimalType) dt;
+    DecimalType requestedType = (DecimalType) dt;
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation decimalType) {
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+      DecimalLogicalTypeAnnotation parquetType = (DecimalLogicalTypeAnnotation) typeAnnotation;
       // If the required scale is larger than or equal to the physical decimal scale in the Parquet
       // metadata, we can upscale the value as long as the precision also increases by as much so
       // that there is no loss of precision.
-      return decimalType.getPrecision() <= d.precision() &&
-              (decimalType.getPrecision() - decimalType.getScale()) <= (d.precision() - d.scale());
+      int scaleIncrease = requestedType.scale() - parquetType.getScale();
+      int precisionIncrease = requestedType.precision() - parquetType.getPrecision();
+      return scaleIncrease >= 0 && precisionIncrease >= scaleIncrease;
     }
     return false;
   }

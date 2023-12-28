@@ -215,15 +215,22 @@ class ParquetTypeWideningSuite
 
   for {
     ((fromPrecision, fromScale), (toPrecision, toScale)) <-
-      // Test widening and narrowing precision and scale by the same amount between the same and
-      // different decimal physical parquet types:
+      // Test changing decimal types for decimals backed by different physical parquet types:
       // - INT32: precisions 5, 7
       // - INT64: precisions 10, 12
       // - FIXED_LEN_BYTE_ARRAY: precisions 20, 22
+      // Widening  precision and scale by the same amount.
       Seq((5, 2) -> (7, 4), (5, 2) -> (10, 7), (5, 2) -> (20, 17), (10, 2) -> (12, 4),
         (10, 2) -> (20, 12), (20, 2) -> (22, 4)) ++
+      // Narrowing precision and scale by the same amount.
       Seq((7, 4) -> (5, 2), (10, 7) -> (5, 2), (20, 17) -> (5, 2), (12, 4) -> (10, 2),
-        (20, 17) -> (10, 2), (22, 4) -> (20, 2))
+        (20, 17) -> (10, 2), (22, 4) -> (20, 2)) ++
+      // Increasing precision and decreasing scale.
+      Seq((5, 4) -> (7, 2), (10, 6) -> (12, 4), (20, 7) -> (22, 5)) ++
+      // Decreasing precision and increasing scale.
+      Seq((7, 2) -> (5, 4), (12, 4) -> (10, 6), (22, 5) -> (20, 7)) ++
+      // Increasing precision by a smaller amount than scale.
+      Seq((5, 2) -> (6, 4), (10, 4) -> (12, 7), (20, 5) -> (22, 8))
   }
   test(s"parquet decimal precision and scale change Decimal($fromPrecision, $fromScale) -> " +
     s"Decimal($toPrecision, $toScale)"
@@ -233,9 +240,9 @@ class ParquetTypeWideningSuite
       fromType = DecimalType(fromPrecision, fromScale),
       toType = DecimalType(toPrecision, toScale),
       expectError =
-        // parquet-mr allows reading decimals into a smaller precision/scale decimal type without
-        // checking for overflows. See test below checking for the overflow case in parquet-mr.
-        fromPrecision > toPrecision &&
+        (toScale < fromScale || toPrecision - toScale < fromPrecision - fromScale) &&
+          // parquet-mr allows reading decimals into a smaller precision decimal type without
+          // checking for overflows. See test below checking for the overflow case in parquet-mr.
           spark.conf.get(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
     )
   }
