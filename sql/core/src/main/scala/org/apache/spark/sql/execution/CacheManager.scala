@@ -334,7 +334,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 val canonicalizedCdProj = cdPlanProject.canonicalized.asInstanceOf[Project]
                 // matchIndexInCdPlanProj remains  -1 in the end, itindicates it is
                 // new cols created out of existing output attribs
-                val (incomingToCachedPlanIndxMapping, inComingProjNoDirectMapping) =
+                val (directlyMappedincomingToCachedPlanIndx, inComingProjNoDirectMapping) =
                     canonicalizedInProj.projectList.zipWithIndex.map {
                   case (inComingNE, index) =>
                     // first check for equivalent named expressions..if index is != -1, that means
@@ -373,27 +373,53 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 // of the incoming projection. so we have to handle that
                 val unusedAttribsOfCDPlanToGenIncomingAttr =
                   cdPlanProject.projectList.indices.filterNot(i =>
-                    incomingToCachedPlanIndxMapping.exists(_._2 == i)).map(i => {
+                    directlyMappedincomingToCachedPlanIndx.exists(_._2 == i)).map(i => {
                       val cdAttrib = cdPlanProject.projectList(i)
                       i -> AttributeReference(cdAttrib.name, cdAttrib.dataType,
                              cdAttrib.nullable, cdAttrib.metadata)(qualifier = cdAttrib.qualifier)
                     })
 
-
+                // Because in case of rename multiple incmong named exprs ( attribute or aliases)
+                // will point to a common cdplan attrib, we need to ensure they do not create
+                // separate attribute in the the modifiedProject for incoming plan..
+                // that is a single attribute ref is present in all mixes of rename and  pass thru
+                // attributes.
+                // so we will use the first attribute ref in the incoming directly mapped project
+                // or if no attrib exists ( only case of rename) we will pick the child expr which
+                // is bound to be an attribute as the common ref.
+                val cdAttribToCommonAttribForIncmngNe = directlyMappedincomingToCachedPlanIndx.map {
+                  case (inAttribIndex, cdAttribIndex) =>
+                    cdPlanProject.projectList(cdAttribIndex).toAttribute ->
+                      incomingProject.projectList(inAttribIndex)
+                }.groupBy(_._1).map {
+                  case (cdAttr, incomngSeq) =>
+                    val incmngCommonAttrib = incomngSeq.map(_._2).flatMap {
+                      case attr: Attribute => Seq(attr)
+                      case Alias(attr: Attribute, _) => Seq(attr)
+                      case _ => Seq.empty
+                    }.headOption.getOrElse(
+                      AttributeReference(cdAttr.name, cdAttr.dataType, cdAttr.nullable)())
+                    cdAttr -> incmngCommonAttrib
+                }
 
                 // If expressions of inComingProjNoDirectMapping can be expressed in terms of the
                 // incoming attribute refs or incoming alias exprs,  which can be mapped directly
                 // to the CachedPlan's output, we are good. so lets transform such indirectly
                 // mappable named expressions in terms of mappable attributes of the incoming plan
-                val directlyMappedIncomingProjs = incomingToCachedPlanIndxMapping.map {
-                  case(incmngIndex, _) => incomingProject.projectList(incmngIndex)
-                }
+
                 val transformedIndirectlyMappableExpr = inComingProjNoDirectMapping.map {
                   case (incomngIndex, _) =>
-                    val ne = incomingProject.projectList(incomngIndex)
-                    val modifiedNe = ne.transformDown {
-                      case expr => directlyMappedIncomingProjs.find(ne => ne.toAttribute == expr
-                      || ne.children.headOption.contains(expr)).orElse(
+                    val indirectIncmnNe = incomingProject.projectList(incomngIndex)
+                    val modifiedNe = indirectIncmnNe.transformDown {
+                      case expr => directlyMappedincomingToCachedPlanIndx.find {
+                        case(incomingIndex, _) =>
+                          val directMappedNe = incomingProject.projectList(incomingIndex)
+                          directMappedNe.toAttribute == expr ||
+                            directMappedNe.children.headOption.contains(expr)}.map {
+                              case (_, cdIndex) =>
+                                val cdAttrib = cdPlanProject.projectList(cdIndex).toAttribute
+                                cdAttribToCommonAttribForIncmngNe(cdAttrib)
+                      }.orElse(
                         unusedAttribsOfCDPlanToGenIncomingAttr.find {
                           case(i, _) => val cdNe = canonicalizedCdProj.projectList(i)
                             cdNe.children.headOption.contains(expr.canonicalized)
@@ -403,30 +429,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     incomngIndex -> modifiedNe
                 }.toMap
 
-                val cdAttribToInAttrib = incomingToCachedPlanIndxMapping.map {
-                  case (inAttribIndex, cdAttribIndex) =>
-                    cdPlanProject.projectList(cdAttribIndex).toAttribute ->
-                      incomingProject.projectList(inAttribIndex).toAttribute
-                }.toMap
-
                 if (transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
                   val projectionToForceOnCdPlan = cachedPlan.output.zipWithIndex.map {
                     case (cdAttr, i) =>
-                      cdAttribToInAttrib.getOrElse(cdAttr,
+                      cdAttribToCommonAttribForIncmngNe.getOrElse(cdAttr,
                         unusedAttribsOfCDPlanToGenIncomingAttr.find(_._1 == i).map(_._2).get)
                   }
 
                   val modifiedInProj = incomingProject.projectList.zipWithIndex.map {
-                    case (ne, indx) => if (incomingToCachedPlanIndxMapping.exists(_._1 == indx)) {
-                      ne.toAttribute
-                    } else {
-                      transformedIndirectlyMappableExpr(indx).transformUp {
-                        case Replaceable(attribToUse) => attribToUse
-                      }.asInstanceOf[NamedExpression]
+                    case (ne, indx) =>
+                      if (directlyMappedincomingToCachedPlanIndx.exists(_._1 == indx)) {
+                        ne
+                      } else {
+                        transformedIndirectlyMappableExpr(indx).transformUp {
+                          case Replaceable(attribToUse) => attribToUse
+                        }.asInstanceOf[NamedExpression]
+                      }
                     }
-                  }
                   val newPartialPlan = Project(modifiedInProj, cd.cachedRepresentation.toOption.
-                    get.withOutput(projectionToForceOnCdPlan))
+                      get.withOutput(projectionToForceOnCdPlan))
                   partialMatch = Option(cd.copy(cachedRepresentation = Left(newPartialPlan)))
                   foundMatch = true
                 }
@@ -565,6 +586,6 @@ private case class Replaceable(attribToUse: Attribute) extends LeafExpression {
 }
 
 object CacheManager {
-  val inMemoryRelationExtractor = (plan: LogicalPlan) => plan.collectLeaves().head.
-    asInstanceOf[InMemoryRelation]
+  val inMemoryRelationExtractor: LogicalPlan => InMemoryRelation =
+    plan => plan.collectLeaves().head.asInstanceOf[InMemoryRelation]
 }

@@ -165,6 +165,37 @@ class EarlyCollapseProjectSuite extends QueryTest
     checkAnswer(newDfOpt, newDfUnopt)
   }
 
+  test("mix of column addition, rename and dropping") {
+    val testDf = spark.range(10).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
+    val initNodes = collectNodes(testDf)
+    val (newDfOpt, newDfUnopt) = getComparableDataFrames(testDf,
+      df => df.select($"a" + $"d" as "newCol1", $"b" * $"a" as "newCol2",
+        $"a" as "renameCola", $"c" * $"d" as "c", $"a"))
+    val optDfNodes = collectNodes(newDfOpt)
+    val nonOptDfNodes = collectNodes(newDfUnopt)
+    assert(initNodes.size === optDfNodes.size)
+    assert(nonOptDfNodes.size === optDfNodes.size + 1)
+    checkAnswer(newDfOpt, newDfUnopt)
+  }
+
+  test("reuse of cache on mix of column addition, rename and dropping") {
+    val testDf = spark.range(10).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
+    testDf.cache()
+    val initNodes = collectNodes(testDf)
+    val (newDfOpt, newDfUnopt) = getComparableDataFrames(testDf,
+      df => df.select($"c" * $"d" as "c", $"a" + $"d" as "newCol1", $"b" * $"a" as "newCol2",
+        $"a" as "renameCola", $"a"))
+    val optDfNodes = collectNodes(newDfOpt)
+    val nonOptDfNodes = collectNodes(newDfUnopt)
+    assert(initNodes.size === optDfNodes.size)
+    assert(nonOptDfNodes.size === optDfNodes.size + 1)
+    checkAnswer(newDfOpt, newDfUnopt)
+    assert(newDfOpt.queryExecution.optimizedPlan.collectLeaves().head.
+      isInstanceOf[InMemoryRelation])
+  }
+
   test("use of cached InMemoryRelation when new columns added do not result in new project -1") {
     val testDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
