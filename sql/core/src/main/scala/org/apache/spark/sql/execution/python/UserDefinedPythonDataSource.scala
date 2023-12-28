@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkException}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonUtils, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
@@ -404,6 +404,59 @@ object UserDefinedPythonDataSource {
    * The schema of the output to the Python data source write function.
    */
   val writeOutputSchema: StructType = new StructType().add("message", BinaryType)
+
+  /**
+   * (Driver-side) Look up all available Python Data Sources.
+   */
+  def lookupAllDataSourcesInPython(): PythonLookupAllDataSourcesResult = {
+    new UserDefinedPythonDataSourceLookupRunner(
+      PythonUtils.createPythonFunction(Array.empty[Byte])).runInPython()
+  }
+}
+
+/**
+ * All Data Sources in Python
+ */
+case class PythonLookupAllDataSourcesResult(
+    names: Array[String], dataSources: Array[Array[Byte]])
+
+/**
+ * A runner used to look up Python Data Sources available in Python path.
+ */
+class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
+    extends PythonPlannerRunner[PythonLookupAllDataSourcesResult](lookupSources) {
+
+  override val workerModule = "pyspark.sql.worker.lookup_data_sources"
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // No input needed.
+  }
+
+  override protected def receiveFromPython(
+      dataIn: DataInputStream): PythonLookupAllDataSourcesResult = {
+    // Receive the pickled data source or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.failToPlanDataSourceError(
+        action = "lookup", tpe = "instance", msg = msg)
+    }
+
+    val shortNames = ArrayBuffer.empty[String]
+    val pickledDataSources = ArrayBuffer.empty[Array[Byte]]
+    val numDataSources = length
+
+    for (_ <- 0 until numDataSources) {
+      val shortName = PythonWorkerUtils.readUTF(dataIn)
+      val pickledDataSource: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
+      shortNames.append(shortName)
+      pickledDataSources.append(pickledDataSource)
+    }
+
+    PythonLookupAllDataSourcesResult(
+      names = shortNames.toArray,
+      dataSources = pickledDataSources.toArray)
+  }
 }
 
 /**
