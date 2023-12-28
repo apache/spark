@@ -20,10 +20,10 @@ import unittest
 
 import pyspark.sql.functions as sf
 from pyspark.ml.recommendation import ALS, ALSModel
-from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class ALSTest(SparkSessionTestCase):
+class ALSTest(ReusedSQLTestCase):
     def test_ambiguous_column(self):
         data = self.spark.createDataFrame(
             [[1, 15, 1], [1, 2, 2], [2, 3, 4], [2, 2, 5]], ["user", "item", "rating"]
@@ -42,10 +42,11 @@ class ALSTest(SparkSessionTestCase):
             model.write().overwrite().save(d)
             loaded_model = ALSModel().load(d)
 
-            users = loaded_model.userFactors.select(sf.col("id").alias("user"))
-            items = loaded_model.itemFactors.select(sf.col("id").alias("item"))
-            predictions = loaded_model.transform(users.crossJoin(items))
-            self.assertTrue(predictions.count() > 0)
+            with self.sql_conf({"spark.sql.analyzer.failAmbiguousSelfJoin": False}):
+                users = loaded_model.userFactors.select(sf.col("id").alias("user"))
+                items = loaded_model.itemFactors.select(sf.col("id").alias("item"))
+                predictions = loaded_model.transform(users.crossJoin(items))
+                self.assertTrue(predictions.count() > 0)
 
 
 if __name__ == "__main__":
