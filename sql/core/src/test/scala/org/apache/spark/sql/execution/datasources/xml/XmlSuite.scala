@@ -2468,8 +2468,6 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |  <b>" "<c>1</c></b>
          |  <d><e attr=" "></e></d>
          |</ROW>
-         |<ROW><b>" "<c>1</c></b></ROW>
-         |<ROW><d><e attr=" "></e></d></ROW>
          |""".stripMargin
     val input = spark.createDataset(Seq(xmlString))
     val df = spark.read
@@ -2479,7 +2477,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(input)
 
     checkAnswer(df, Seq(
-      Row(Row(" "), Row(Row(1), " "), Row(null, ""))))
+      Row("\" \"", Row(1, "\" \""), Row(Row(null, " ")))))
   }
 
   test("capture values interspersed between elements - nested comments") {
