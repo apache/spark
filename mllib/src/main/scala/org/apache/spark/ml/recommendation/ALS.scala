@@ -330,7 +330,7 @@ class ALSModel private[ml] (
     val userFactorsAlias = Identifiable.randomUID("__als_user_factors")
 
     val predictions = dataset
-      .withColumns(Map($(userCol) -> validatedUsers, $(itemCol) -> validatedItems))
+      .withColumns(Seq($(userCol), $(itemCol)), Seq(validatedUsers, validatedItems))
       .alias(validatedInputAlias)
       .join(userFactors.alias(userFactorsAlias),
         col(s"${validatedInputAlias}.${$(userCol)}") === col(s"${userFactorsAlias}.id"), "left")
