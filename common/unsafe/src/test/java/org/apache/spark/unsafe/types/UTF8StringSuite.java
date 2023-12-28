@@ -22,10 +22,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.text.Collator;
 import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
+import org.apache.spark.sql.catalyst.util.CollatorFactory;
 import org.apache.spark.unsafe.Platform;
 import org.junit.jupiter.api.Test;
 
@@ -884,38 +884,45 @@ public class UTF8StringSuite {
   @Test
   public void collatedStringComparison()
   {
-    Collator collator = Collator.getInstance(java.util.Locale.forLanguageTag("sr"));
 
     // Case-insensitive and accent insensitive.
     {
-      collator.setStrength(Collator.PRIMARY);
-      CollatedUTF8String collatedUTF8String = CollatedUTF8String.fromString("ćčc", collator);
-      assertEquals(0, collatedUTF8String.compareTo(CollatedUTF8String.fromString("ĆČC", collator)));
-      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ćčc", collator));
-      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ccc", collator));
-      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("CCC", collator));
+      int collationId = CollatorFactory.installComparator("en_US-primary");
+      assertEquals(collationId, 1);
+      UTF8String collatedUTF8String = UTF8String.fromString("ćčc");
+      collatedUTF8String.installCollationAwareComparator(collationId);
+      assertEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
+      assertEquals(collatedUTF8String, UTF8String.fromString("ćčc", collationId));
 
-      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("cba", collator));
+      var res = collatedUTF8String.compareTo(UTF8String.fromString("ccc", collationId));
+      assertEquals(collatedUTF8String, UTF8String.fromString("ccc", collationId));
+      assertEquals(collatedUTF8String, UTF8String.fromString("CCC", collationId));
+
+      assertNotEquals(collatedUTF8String, UTF8String.fromString("cba"));
     }
 
     // Move to secondary strength (ignore case, respect accents).
     {
-      collator.setStrength(Collator.SECONDARY);
-      CollatedUTF8String collatedUTF8String = CollatedUTF8String.fromString("ćčc", collator);
-      assertEquals(0, collatedUTF8String.compareTo(CollatedUTF8String.fromString("ĆČC", collator)));
-      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ĆČC", collator));
-      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("ccc", collator));
+      int collationId = CollatorFactory.installComparator("en_US-secondary");
+      assertEquals(collationId, 2);
+      UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
+      assertEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
+      assertEquals(collatedUTF8String, UTF8String.fromString("ĆČC", collationId));
+      assertNotEquals(collatedUTF8String, UTF8String.fromString("ccc", collationId));
     }
 
     // Tertiary strength (respect both)
     {
-      collator.setStrength(Collator.TERTIARY);
-      CollatedUTF8String collatedUTF8String = CollatedUTF8String.fromString("ćčc", collator);
-      assertNotEquals(0, collatedUTF8String.compareTo(CollatedUTF8String.fromString("ĆČC", collator)));
-      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("ĆČC", collator));
-      assertNotEquals(collatedUTF8String, CollatedUTF8String.fromString("ccc", collator));
+      int collationId = CollatorFactory.installComparator("en_US-tertiary");
+      assertEquals(collationId, 3);
+      UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
+      assertNotEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
+      assertNotEquals(collatedUTF8String, UTF8String.fromString("ĆČC", collationId));
+      assertNotEquals(collatedUTF8String, UTF8String.fromString("ccc", collationId));
 
-      assertEquals(collatedUTF8String, CollatedUTF8String.fromString("ćčc", collator));
+      assertEquals(collatedUTF8String, UTF8String.fromString("ćčc", collationId));
     }
+
+    // TODO: Cache is stateful, clear it after each test.
   }
 }

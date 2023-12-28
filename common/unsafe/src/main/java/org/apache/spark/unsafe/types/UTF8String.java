@@ -22,6 +22,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -30,12 +31,14 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import static org.apache.spark.sql.catalyst.util.CollatorFactory.getComparator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 import static org.apache.spark.unsafe.Platform.*;
+import scala.util.hashing.Hashing;
 
 
 /**
@@ -54,6 +57,8 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
   protected Object base;
   protected long offset;
   protected int numBytes;
+
+  private transient int comparatorId;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -99,6 +104,8 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
+  public static final int DefaultCollationId = 0;
+
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
    *
@@ -106,7 +113,15 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
    */
   public static UTF8String fromBytes(byte[] bytes) {
     if (bytes != null) {
-      return new UTF8String(bytes, BYTE_ARRAY_OFFSET, bytes.length);
+      return new UTF8String(bytes, BYTE_ARRAY_OFFSET, bytes.length, DefaultCollationId);
+    } else {
+      return null;
+    }
+  }
+
+  public static UTF8String fromBytes(byte[] bytes, int collatorId) {
+    if (bytes != null) {
+      return new UTF8String(bytes, BYTE_ARRAY_OFFSET, bytes.length, collatorId);
     } else {
       return null;
     }
@@ -119,7 +134,7 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
    */
   public static UTF8String fromBytes(byte[] bytes, int offset, int numBytes) {
     if (bytes != null) {
-      return new UTF8String(bytes, BYTE_ARRAY_OFFSET + offset, numBytes);
+      return new UTF8String(bytes, BYTE_ARRAY_OFFSET + offset, numBytes, DefaultCollationId);
     } else {
       return null;
     }
@@ -129,7 +144,7 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
    * Creates an UTF8String from given address (base and offset) and length.
    */
   public static UTF8String fromAddress(Object base, long offset, int numBytes) {
-    return new UTF8String(base, offset, numBytes);
+    return new UTF8String(base, offset, numBytes, DefaultCollationId);
   }
 
   /**
@@ -137,6 +152,13 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
    */
   public static UTF8String fromString(String str) {
     return str == null ? null : fromBytes(str.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
+   * Creates an UTF8String from String.
+   */
+  public static UTF8String fromString(String str, int collatorId) {
+    return str == null ? null : fromBytes(str.getBytes(StandardCharsets.UTF_8), collatorId);
   }
 
   /**
@@ -156,15 +178,16 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
     return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
   }
 
-  protected UTF8String(Object base, long offset, int numBytes) {
+  protected UTF8String(Object base, long offset, int numBytes, int comparatorId) {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;
+    this.comparatorId = comparatorId;
   }
 
   // for serialization
   public UTF8String() {
-    this(null, 0, 0);
+    this(null, 0, 0, DefaultCollationId);
   }
 
   /**
@@ -183,6 +206,10 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
     int pos = buffer.position();
     writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
     buffer.position(pos + numBytes);
+  }
+
+  public void installCollationAwareComparator(int comparatorId) {
+    this.comparatorId = comparatorId;
   }
 
   /**
@@ -1390,8 +1417,13 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
 
   @Override
   public int compareTo(@Nonnull final UTF8String other) {
-    return ByteArray.compareBinary(
-        base, offset, numBytes, other.base, other.offset, other.numBytes);
+    if (comparatorId == 0) {
+      return ByteArray.compareBinary(
+              base, offset, numBytes, other.base, other.offset, other.numBytes);
+    } else {
+      Comparator<UTF8String> comparator = getComparator(comparatorId);
+      return comparator.compare(this, other);
+    }
   }
 
   public int compare(final UTF8String other) {
@@ -1401,10 +1433,17 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
   @Override
   public boolean equals(final Object other) {
     if (other instanceof UTF8String o) {
-      if (numBytes != o.numBytes) {
-        return false;
+      if (comparatorId == 0)
+      {
+        if (numBytes != o.numBytes) {
+          return false;
+        }
+        return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
       }
-      return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
+      else
+      {
+        return compareTo(o) == 0;
+      }
     } else {
       return false;
     }
@@ -1652,5 +1691,4 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
     this.base = new byte[numBytes];
     in.read((byte[]) base);
   }
-
 }

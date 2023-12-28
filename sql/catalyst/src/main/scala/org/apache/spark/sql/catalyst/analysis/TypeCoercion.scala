@@ -1080,6 +1080,7 @@ object TypeCoercion extends TypeCoercionBase {
   @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
     case StringType => true
+    case CollatedStringType(_) => true
     case ArrayType(et, _) => hasStringType(et)
     // Add StructType if we support string promotion for struct fields in the future.
     case _ => false
