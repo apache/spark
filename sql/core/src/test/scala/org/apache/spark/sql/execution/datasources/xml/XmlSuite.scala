@@ -2443,6 +2443,45 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row(Row(Array(1.0, 3.0, 5.0), Array(2, 4)))))
   }
 
+  test("capture values interspersed between elements - comments") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |  <a> 1 <!--this is a comment--> 2 </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1, 2)))))
+  }
+
+  test("capture values interspersed between elements - nested comments") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <a> 1
+         |        <!--this is a comment--> 2
+         |        <b>1</b>
+         |        <!--this is a comment--> 3
+         |        <b>2</b>
+         |    </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1, 2, 3), Array(1, 2)))))
+  }
+
   test("capture values interspersed between elements - nested struct") {
     val xmlString =
       s"""
