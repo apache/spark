@@ -127,6 +127,7 @@ Invoke-Expression "7z.exe x python.zip"
 # add python to environment variables
 $env:PATH = "$tools\python;" + $env:PATH
 $env:PYSPARK_PYTHON = "$tools\python\python.exe"
+Invoke-Expression "$tools\python\python.exe --version"
 
 
 Pop-Location
