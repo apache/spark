@@ -64,7 +64,6 @@ environment:
   # "(converted from warning) unable to identify current timezone 'C':" for an unknown reason.
   # This environment variable works around to test SparkR against a higher version.
   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
-  PYSPARK_PYTHON: C:\Python39-x64\bin\python
   SKIP_LOCAL_M2: true
 
 test_script:

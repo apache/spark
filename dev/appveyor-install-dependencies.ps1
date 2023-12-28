@@ -117,6 +117,18 @@ Invoke-Expression "7z.exe x sbt.zip"
 # add sbt to environment variables
 $env:PATH = "$tools\sbt\bin;" + $env:PATH
 
+# ========================== Python
+$pythonVer = "3.9.13"
+Start-FileDownload "https://www.python.org/ftp/python/$pythonVer/python-$pythonVer-embed-amd64.zip" "python.zip"
+
+# extract
+Invoke-Expression "7z.exe x python.zip"
+
+# add python to environment variables
+$env:PATH = "$tools\python;" + $env:PATH
+$env:PYSPARK_PYTHON = "$tools\python\python.exe"
+
+
 Pop-Location
 
 # ========================== Hadoop bin package
