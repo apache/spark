@@ -324,10 +324,7 @@ case class ExpressionEncoder[T](
   // same `BoundReference` to refer to the object, and throw exception if they don't.
   assert(serializer.forall(_.references.isEmpty), "serializer cannot reference any attributes.")
   assert(serializer.flatMap { ser =>
-    val boundRefs = ser.collect { case b: BoundReference => b }
-    assert(boundRefs.nonEmpty,
-      "each serializer expression should contain at least one `BoundReference`")
-    boundRefs
+    ser.collect { case b: BoundReference => b }
   }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
 
   /**
