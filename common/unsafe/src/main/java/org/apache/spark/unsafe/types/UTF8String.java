@@ -32,6 +32,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import static org.apache.spark.sql.catalyst.util.CollatorFactory.getComparator;
+import static org.apache.spark.sql.catalyst.util.CollatorFactory.installComparator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -208,8 +209,14 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
     buffer.position(pos + numBytes);
   }
 
-  public void installCollationAwareComparator(int comparatorId) {
+  public UTF8String installCollationAwareComparator(int comparatorId) {
     this.comparatorId = comparatorId;
+    return this;
+  }
+
+  public UTF8String installCollationAwareComparator(String collationName) {
+    this.comparatorId = installComparator(collationName);
+    return this;
   }
 
   /**

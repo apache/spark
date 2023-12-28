@@ -29,7 +29,6 @@ case class Collate(inputString: Expression, collation: Expression)
 
   @transient
   private lazy val collationEval = right.eval().asInstanceOf[UTF8String]
-
   override def dataType: DataType = CollatedStringType(collationEval.toString)
   // TODO: Can this be foldable?
   override def foldable: Boolean = false
@@ -39,7 +38,12 @@ case class Collate(inputString: Expression, collation: Expression)
     newLeft: Expression, newRight: Expression): Expression = copy(newLeft, newRight)
 
   // Just pass through.
-  override def eval(input: InternalRow): Any = input
+  override def eval(row: InternalRow): Any = {
+    // TODO: Proper codegen here.
+    val input = left.eval(row).asInstanceOf[UTF8String]
+    input.installCollationAwareComparator(collationEval.toString)
+    input
+  }
 }
 
 case class Collation(child: Expression) extends UnaryExpression with CodegenFallback {

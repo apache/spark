@@ -26,9 +26,10 @@ class CollationSuite extends QueryTest
 
   test("collate keyword") {
     // Serbian case insensitive ordering
-    assert(sql("select collate('aaa', 'sr-pr')").collect()(0).getString(0) == "aaa")
-    assert(sql("select collation(collate('aaa', 'sr-pr'))").collect()(0).getString(0) == "sr-pr")
-    assert(sql("select collate('aaa', 'sr-pr') = collate('AAA', 'sr-pr')")
+    assert(sql("select collate('aaa', 'sr-primary')").collect()(0).getString(0) == "aaa")
+    assert(sql("select collation(collate('aaa', 'sr-primary'))").collect()(0).getString(0)
+      == "sr-primary")
+    assert(sql("select collate('aaa', 'sr-primary') = collate('AAA', 'sr-primary')")
       .collect()(0).getBoolean(0))
   }
 

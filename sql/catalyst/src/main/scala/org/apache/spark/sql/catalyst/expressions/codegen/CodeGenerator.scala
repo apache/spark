@@ -26,11 +26,11 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
+import org.apache.spark.{SparkException, TaskContext, TaskKilledException}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -1641,6 +1641,8 @@ object CodeGenerator extends Logging {
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
         case PhysicalStringType => s"$input.getUTF8String($ordinal)"
+        case PhysicalCollatedStringType(collation) =>
+          s"$input.getUTF8String($ordinal).installCollationAwareComparator(\"$collation\")"
         case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"
@@ -1928,7 +1930,7 @@ object CodeGenerator extends Logging {
       case PhysicalLongType => JAVA_LONG
       case _: PhysicalMapType => "MapData"
       case PhysicalShortType => JAVA_SHORT
-      case PhysicalStringType => "UTF8String"
+      case PhysicalStringType | PhysicalCollatedStringType(_) => "UTF8String"
       case _: PhysicalStructType => "InternalRow"
       case _: PhysicalVariantType => "VariantVal"
       case _ => "Object"
