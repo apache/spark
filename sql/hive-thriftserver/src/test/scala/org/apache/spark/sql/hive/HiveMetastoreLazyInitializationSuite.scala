@@ -61,11 +61,10 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
         spark.sql("show tables")
       })
       for (msg <- Seq(
-        "show tables",
         "Could not connect to meta store",
         "org.apache.thrift.transport.TTransportException",
         "Connection refused")) {
-        exceptionString.contains(msg)
+        assert(exceptionString.contains(msg))
       }
     } finally {
       Thread.currentThread().setContextClassLoader(originalClassLoader)
