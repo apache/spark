@@ -47,7 +47,7 @@ trait SharedThriftServer extends SharedSparkSession {
   protected val tempScratchDir: File = {
     val dir = Utils.createTempDir()
     dir.setWritable(true, false)
-    Utils.createTempDir(dir.getAbsolutePath)
+    Utils.deleteRecursively(dir)
     dir
   }
 
@@ -145,10 +145,6 @@ trait SharedThriftServer extends SharedSparkSession {
           logInfo(s"Started HiveThriftServer2: mode=$mode, port=$serverPort, attempt=$attempt")
         case _ =>
       }
-
-      // the scratch dir will be recreated after the probe sql `SELECT 1` executed, so we
-      // check it here first.
-      assert(!tempScratchDir.exists())
 
       // Wait for thrift server to be ready to serve the query, via executing simple query
       // till the query succeeds. See SPARK-30345 for more details.

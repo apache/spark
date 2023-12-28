@@ -330,30 +330,6 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
-   * Create a [[HiveClient]] used for execution.
-   *
-   * Currently this must always be the Hive built-in version that packaged
-   * with Spark SQL. This copy of the client is used for execution related tasks like
-   * registering temporary functions or ensuring that the ThreadLocal SessionState is
-   * correctly populated.  This copy of Hive is *not* used for storing persistent metadata,
-   * and only point to a dummy metastore in a temporary directory.
-   */
-  protected[hive] def newClientForExecution(
-      conf: SparkConf,
-      hadoopConf: Configuration): HiveClientImpl = {
-    logInfo(s"Initializing execution hive, version $builtinHiveVersion")
-    val loader = new IsolatedClientLoader(
-      version = IsolatedClientLoader.hiveVersion(builtinHiveVersion),
-      sparkConf = conf,
-      execJars = Seq.empty,
-      hadoopConf = hadoopConf,
-      config = newTemporaryConfiguration(useInMemoryDerby = true),
-      isolationOn = false,
-      baseClassLoader = Utils.getContextOrSparkClassLoader)
-    loader.createClient().asInstanceOf[HiveClientImpl]
-  }
-
-  /**
    * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
    *
    * The version of the Hive client that is used here must match the metastore that is configured

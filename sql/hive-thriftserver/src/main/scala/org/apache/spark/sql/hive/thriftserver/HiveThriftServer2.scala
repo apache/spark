@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.hadoop.hive.common.ServerUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
@@ -32,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui._
 import org.apache.spark.status.ElementTrackingStore
@@ -52,15 +52,12 @@ object HiveThriftServer2 extends Logging {
    */
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
-    val executionHive = HiveUtils.newClientForExecution(
-      sqlContext.sparkContext.conf,
-      sqlContext.sessionState.newHadoopConf())
-
-    // Cleanup the scratch dir before starting
-    ServerUtils.cleanUpScratchDir(executionHive.conf)
+    val sparkConf = sqlContext.sparkContext.conf
+    val hadoopConf = sqlContext.sessionState.newHadoopConf()
+    val extraConfigs = HiveUtils.newTemporaryConfiguration(true)
+    val conf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
     val server = new HiveThriftServer2(sqlContext)
-
-    server.init(executionHive.conf)
+    server.init(conf)
     server.start()
     logInfo("HiveThriftServer2 started")
     createListenerAndUI(server, sqlContext.sparkContext)
