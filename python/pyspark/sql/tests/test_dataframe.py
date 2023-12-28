@@ -969,7 +969,15 @@ class DataFrameTestsMixin:
             ["f1", "f2", "label", "pred", "model_version", "ts"],
         )
         self.assertEqual(
-            df.melt("model_version", ["label", "f2"], "f1", "f2").groupby("f1").count().count(),
+            df.melt(
+                "model_version",
+                ["label", "f2"],
+                "f1",
+                "f2",
+            )
+            .groupby("f1")
+            .count()
+            .count(),
             2,
         )
 
