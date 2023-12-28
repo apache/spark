@@ -40,7 +40,7 @@ class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
     schema: StructType,
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
-    maxRecordsPerBatch: Long,
+    maxRecordsPerBatch: Long
 ) extends PartitionEvaluator[InternalRow, ChunkMeta] {
 
   def eval(partitionIndex: Int, inputs: Iterator[InternalRow]*): Iterator[ChunkMeta] = {
