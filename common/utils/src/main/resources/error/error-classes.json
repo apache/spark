@@ -875,12 +875,6 @@
     ],
     "sqlState" : "42K01"
   },
-  "DATA_SOURCE_ALREADY_EXISTS" : {
-    "message" : [
-      "Data source '<provider>' already exists in the registry. Please use a different name for the new data source."
-    ],
-    "sqlState" : "42710"
-  },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
       "Data source '<provider>' not found. Please make sure the data source is registered."
@@ -895,7 +889,9 @@
   },
   "DATA_SOURCE_TABLE_SCHEMA_MISMATCH" : {
     "message" : [
-      "The schema of the data source table <tableSchema> does not match the actual schema <actualSchema>. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema."
+      "The schema of the data source table does not match the expected schema. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.",
+      "Data Source schema: <dsSchema>",
+      "Expected schema: <expectedSchema>"
     ],
     "sqlState" : "42K03"
   },
@@ -1478,12 +1474,6 @@
     },
     "sqlState" : "42K0B"
   },
-  "INCORRECT_END_OFFSET" : {
-    "message" : [
-      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
-    ],
-    "sqlState" : "22003"
-  },
   "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
@@ -1902,11 +1892,6 @@
       "OPERATION_NOT_FOUND" : {
         "message" : [
           "Operation not found."
-        ]
-      },
-      "SESSION_ALREADY_EXISTS" : {
-        "message" : [
-          "Session already exists."
         ]
       },
       "SESSION_CLOSED" : {
@@ -6063,11 +6048,6 @@
       "<walkedTypePath>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2142" : {
-    "message" : [
-      "Attributes for type <schema> is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
@@ -6918,11 +6898,6 @@
       "<clazz>: <msg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3066" : {
-    "message" : [
-      "<msg>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3067" : {
     "message" : [
       "Streaming aggregation doesn't support group aggregate pandas UDF"
@@ -6976,11 +6951,6 @@
   "_LEGACY_ERROR_TEMP_3077" : {
     "message" : [
       "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3078" : {
-    "message" : [
-      "Can not match ParquetTable in the query."
     ]
   },
   "_LEGACY_ERROR_TEMP_3079" : {

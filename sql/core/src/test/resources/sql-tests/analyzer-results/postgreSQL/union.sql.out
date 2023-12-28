@@ -409,7 +409,7 @@ Sort [five#x ASC NULLS FIRST], true
 +- Distinct
    +- Union false, false
       :- Project [f1#x AS five#x]
-      :  +- Filter ((f1#x >= -1000000.0) AND (f1#x <= 1000000.0))
+      :  +- Filter between(f1#x, -1000000.0, 1000000.0)
       :     +- SubqueryAlias float8_tbl
       :        +- View (`FLOAT8_TBL`, [f1#x])
       :           +- Project [cast(f1#x as double) AS f1#x]
@@ -419,7 +419,7 @@ Sort [five#x ASC NULLS FIRST], true
       :                       +- LocalRelation [col1#x]
       +- Project [cast(f1#x as double) AS f1#x]
          +- Project [f1#x]
-            +- Filter ((f1#x >= 0) AND (f1#x <= 1000000))
+            +- Filter between(f1#x, 0, 1000000)
                +- SubqueryAlias int4_tbl
                   +- View (`INT4_TBL`, [f1#x])
                      +- Project [cast(f1#x as int) AS f1#x]

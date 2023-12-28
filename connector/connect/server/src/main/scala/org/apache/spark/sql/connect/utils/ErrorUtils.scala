@@ -172,6 +172,7 @@ private[connect] object ErrorUtils extends Logging {
         "classes",
         JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
 
+    val maxMetadataSize = SparkEnv.get.conf.get(Connect.CONNECT_GRPC_MAX_METADATA_SIZE)
     // Add the SQL State and Error Class to the response metadata of the ErrorInfoObject.
     st match {
       case e: SparkThrowable =>
@@ -181,7 +182,12 @@ private[connect] object ErrorUtils extends Logging {
         }
         val errorClass = e.getErrorClass
         if (errorClass != null && errorClass.nonEmpty) {
-          errorInfo.putMetadata("errorClass", errorClass)
+          val messageParameters = JsonMethods.compact(
+            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
+          if (messageParameters.length <= maxMetadataSize) {
+            errorInfo.putMetadata("errorClass", errorClass)
+            errorInfo.putMetadata("messageParameters", messageParameters)
+          }
         }
       case _ =>
     }
@@ -200,8 +206,10 @@ private[connect] object ErrorUtils extends Logging {
     val withStackTrace =
       if (sessionHolderOpt.exists(
           _.session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty)) {
-        val maxSize = SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE)
-        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
+        val maxSize = Math.min(
+          SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
+          maxMetadataSize)
+        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize.toInt))
       } else {
         errorInfo
       }

@@ -114,8 +114,11 @@ class QueryExecution(
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
-        qe.executedPlan.executeCollect()
+      val name = commandExecutionName(c)
+      val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
+        SQLExecution.withNewExecutionId(qe, Some(name)) {
+          qe.executedPlan.executeCollect()
+        }
       }
       CommandResult(
         qe.analyzed.output,

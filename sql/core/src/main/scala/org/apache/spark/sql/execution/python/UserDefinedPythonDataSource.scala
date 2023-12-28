@@ -25,18 +25,18 @@ import scala.jdk.CollectionConverters._
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkException}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonUtils, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE}
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
@@ -77,7 +77,7 @@ class PythonTableProvider extends TableProvider {
       override def name(): String = shortName
 
       override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
-        BATCH_READ, BATCH_WRITE)
+        BATCH_READ, BATCH_WRITE, TRUNCATE)
 
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new ScanBuilder with Batch with Scan {
@@ -115,7 +115,15 @@ class PythonTableProvider extends TableProvider {
       override def schema(): StructType = outputSchema
 
       override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-        new WriteBuilder {
+        new WriteBuilder with SupportsTruncate {
+
+          private var isTruncate = false
+
+          override def truncate(): WriteBuilder = {
+            isTruncate = true
+            this
+          }
+
           override def build(): Write = new Write {
 
             override def toBatch: BatchWrite = new BatchWrite {
@@ -127,7 +135,7 @@ class PythonTableProvider extends TableProvider {
                   shortName,
                   info.schema(),
                   info.options(),
-                  SaveMode.Append)
+                  isTruncate)
                 PythonBatchWriterFactory(source, writeInfo.func, info.schema(), jobArtifactUUID)
               }
 
@@ -316,13 +324,13 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       provider: String,
       inputSchema: StructType,
       options: CaseInsensitiveStringMap,
-      mode: SaveMode): PythonDataSourceWriteInfo = {
+      overwrite: Boolean): PythonDataSourceWriteInfo = {
     new UserDefinedPythonDataSourceWriteRunner(
       dataSourceCls,
       provider,
       inputSchema,
       options.asCaseSensitiveMap().asScala.toMap,
-      mode).runInPython()
+      overwrite).runInPython()
   }
 
   /**
@@ -396,6 +404,59 @@ object UserDefinedPythonDataSource {
    * The schema of the output to the Python data source write function.
    */
   val writeOutputSchema: StructType = new StructType().add("message", BinaryType)
+
+  /**
+   * (Driver-side) Look up all available Python Data Sources.
+   */
+  def lookupAllDataSourcesInPython(): PythonLookupAllDataSourcesResult = {
+    new UserDefinedPythonDataSourceLookupRunner(
+      PythonUtils.createPythonFunction(Array.empty[Byte])).runInPython()
+  }
+}
+
+/**
+ * All Data Sources in Python
+ */
+case class PythonLookupAllDataSourcesResult(
+    names: Array[String], dataSources: Array[Array[Byte]])
+
+/**
+ * A runner used to look up Python Data Sources available in Python path.
+ */
+class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
+    extends PythonPlannerRunner[PythonLookupAllDataSourcesResult](lookupSources) {
+
+  override val workerModule = "pyspark.sql.worker.lookup_data_sources"
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // No input needed.
+  }
+
+  override protected def receiveFromPython(
+      dataIn: DataInputStream): PythonLookupAllDataSourcesResult = {
+    // Receive the pickled data source or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.failToPlanDataSourceError(
+        action = "lookup", tpe = "instance", msg = msg)
+    }
+
+    val shortNames = ArrayBuffer.empty[String]
+    val pickledDataSources = ArrayBuffer.empty[Array[Byte]]
+    val numDataSources = length
+
+    for (_ <- 0 until numDataSources) {
+      val shortName = PythonWorkerUtils.readUTF(dataIn)
+      val pickledDataSource: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
+      shortNames.append(shortName)
+      pickledDataSources.append(pickledDataSource)
+    }
+
+    PythonLookupAllDataSourcesResult(
+      names = shortNames.toArray,
+      dataSources = pickledDataSources.toArray)
+  }
 }
 
 /**
@@ -540,7 +601,7 @@ class UserDefinedPythonDataSourceWriteRunner(
     provider: String,
     inputSchema: StructType,
     options: Map[String, String],
-    mode: SaveMode) extends PythonPlannerRunner[PythonDataSourceWriteInfo](dataSourceCls) {
+    overwrite: Boolean) extends PythonPlannerRunner[PythonDataSourceWriteInfo](dataSourceCls) {
 
   override val workerModule: String = "pyspark.sql.worker.write_into_data_source"
 
@@ -564,8 +625,8 @@ class UserDefinedPythonDataSourceWriteRunner(
       PythonWorkerUtils.writeUTF(value, dataOut)
     }
 
-    // Send the mode
-    PythonWorkerUtils.writeUTF(mode.toString, dataOut)
+    // Send the `overwrite` flag
+    dataOut.writeBoolean(overwrite)
   }
 
   override protected def receiveFromPython(

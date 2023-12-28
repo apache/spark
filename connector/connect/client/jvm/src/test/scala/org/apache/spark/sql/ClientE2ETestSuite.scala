@@ -85,7 +85,13 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
                 |""".stripMargin)
             .collect()
         }
-        assert(ex.getErrorClass != null)
+        assert(
+          ex.getErrorClass ===
+            "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER")
+        assert(
+          ex.getMessageParameters.asScala == Map(
+            "datetime" -> "'02-29'",
+            "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
         if (enrichErrorEnabled) {
           assert(ex.getCause.isInstanceOf[DateTimeException])
         } else {

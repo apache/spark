@@ -185,8 +185,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.16.0</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.16.0</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.16.1</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.16.1</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.0</ws.xmlschema.version>
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
@@ -229,7 +229,7 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>14.0.1</arrow.version>
+    <arrow.version>14.0.2</arrow.version>
     <ammonite.version>2.5.11</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -800,7 +800,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-10</version>
+        <version>1.5.5-11</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -829,7 +829,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.1</version>
       </dependency>
 
       <!-- Netty Begin -->
