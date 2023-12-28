@@ -48,6 +48,12 @@ class ALSTest(ReusedSQLTestCase):
                 predictions = loaded_model.transform(users.crossJoin(items))
                 self.assertTrue(predictions.count() > 0)
 
+            with self.sql_conf({"spark.sql.analyzer.failAmbiguousSelfJoin": True}):
+                users = loaded_model.userFactors.select(sf.col("id").alias("user"))
+                items = loaded_model.itemFactors.select(sf.col("id").alias("item"))
+                predictions = loaded_model.transform(users.crossJoin(items))
+                self.assertTrue(predictions.count() > 0)
+
 
 if __name__ == "__main__":
     from pyspark.ml.tests.test_als import *  # noqa: F401
