@@ -26,7 +26,8 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 class ALSTest(ReusedSQLTestCase):
     def test_ambiguous_column(self):
         data = self.spark.createDataFrame(
-            [[1, 15, 1], [1, 2, 2], [2, 3, 4], [2, 2, 5]], ["user", "item", "rating"]
+            [[1, 15, 1], [1, 2, 2], [2, 3, 4], [2, 2, 5]],
+            ["user", "item", "rating"],
         )
         model = ALS(
             userCol="user",
