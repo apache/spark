@@ -188,7 +188,8 @@ public class VectorizedColumnReader {
    * with different scale.
    */
   private boolean needsDecimalScaleRebase(DataType sparkType) {
-      LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
       if (!(typeAnnotation instanceof DecimalLogicalTypeAnnotation)) return false;
       if (!(sparkType instanceof DecimalType)) return false;
       DecimalLogicalTypeAnnotation parquetDecimal = (DecimalLogicalTypeAnnotation) typeAnnotation;

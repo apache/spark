@@ -1404,7 +1404,8 @@ public class ParquetVectorUpdaterFactory {
 
     IntegerToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
       super(sparkType);
-      LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
       this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
     }
 
@@ -1428,7 +1429,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      BigDecimal decimal = BigDecimal.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), parquetScale);
+      BigDecimal decimal =
+        BigDecimal.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), parquetScale);
       writeDecimal(offset, values, decimal);
     }
   }
@@ -1438,7 +1440,8 @@ private static class LongToDecimalUpdater extends DecimalUpdater {
 
    LongToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
       super(sparkType);
-      LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
       this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
     }
 
@@ -1462,7 +1465,8 @@ private static class LongToDecimalUpdater extends DecimalUpdater {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      BigDecimal decimal = BigDecimal.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)), parquetScale);
+      BigDecimal decimal =
+        BigDecimal.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)), parquetScale);
       writeDecimal(offset, values, decimal);
     }
   }
@@ -1472,7 +1476,8 @@ private static class BinaryToDecimalUpdater extends DecimalUpdater {
 
   BinaryToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
       super(sparkType);
-      LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
       this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
     }
 
@@ -1498,7 +1503,8 @@ private static class BinaryToDecimalUpdater extends DecimalUpdater {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      BigInteger value = new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+      BigInteger value =
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
       BigDecimal decimal = new BigDecimal(value, parquetScale);
       writeDecimal(offset, values, decimal);
     }
@@ -1510,7 +1516,8 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
 
    FixedLenByteArrayToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
       super(sparkType);
-      LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
       this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
       this.arrayLen = descriptor.getPrimitiveType().getTypeLength();
     }
@@ -1536,7 +1543,8 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      BigInteger value = new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+      BigInteger value =
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
       BigDecimal decimal = new BigDecimal(value, this.parquetScale);
       writeDecimal(offset, values, decimal);
     }
