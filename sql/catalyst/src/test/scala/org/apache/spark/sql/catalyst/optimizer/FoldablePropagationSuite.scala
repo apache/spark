@@ -25,10 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
 class FoldablePropagationSuite extends PlanTest {
-  object FinishAnalysis extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("FinishAnalysis", Once, ComputeCurrentTime) :: Nil
-  }
-
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Foldable Propagation", FixedPoint(20),
@@ -77,44 +73,44 @@ class FoldablePropagationSuite extends PlanTest {
 
   test("Propagate to orderBy clause") {
     val query = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+      .select($"a".as("x"), "str".as("y"), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
-    val optimized = Optimize.execute(FinishAnalysis.execute(query.analyze))
-    val correctAnswer = FinishAnalysis.execute(testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-      .orderBy($"x".asc, SortOrder(Year(CurrentDate()), Ascending), $"b".desc).analyze)
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .select($"a".as("x"), "str".as("y"), $"b")
+      .orderBy($"x".asc, SortOrder("str", Ascending), $"b".desc).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Propagate to groupBy clause") {
     val query = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
       .groupBy($"x", $"y", $"b")(sum($"x"), avg($"y").as("AVG"), count($"b"))
-    val optimized = Optimize.execute(FinishAnalysis.execute(query.analyze))
-    val correctAnswer = FinishAnalysis.execute(testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-      .groupBy($"x", Year(CurrentDate()).as("y"), $"b")(sum($"x"),
-        avg(Year(CurrentDate())).as("AVG"),
-        count($"b")).analyze)
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
+      .groupBy($"x", Literal(42).as("y"), $"b")(sum($"x"),
+        avg(Literal(42)).as("AVG"),
+        count($"b")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Propagate in a complex query") {
     val query = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
       .where($"x" > 1 && $"y" === 2016 && $"b" > 1)
       .groupBy($"x", $"y", $"b")(sum($"x"), avg($"y").as("AVG"), count($"b"))
       .orderBy($"x".asc, $"AVG".asc)
-    val optimized = Optimize.execute(FinishAnalysis.execute(query.analyze))
-    val correctAnswer = FinishAnalysis.execute(testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-      .where($"x" > 1 && Year(CurrentDate()).as("y") === 2016 && $"b" > 1)
-      .groupBy($"x", Year(CurrentDate()).as("y"), $"b")(sum($"x"),
-        avg(Year(CurrentDate())).as("AVG"),
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
+      .where($"x" > 1 && Literal(42).as("y") === 2016 && $"b" > 1)
+      .groupBy($"x", Literal(42).as("y"), $"b")(sum($"x"),
+        avg(Literal(42)).as("AVG"),
         count($"b"))
-      .orderBy($"x".asc, $"AVG".asc).analyze)
+      .orderBy($"x".asc, $"AVG".asc).analyze
 
     comparePlans(optimized, correctAnswer)
   }

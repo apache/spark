@@ -81,23 +81,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("datetime function current_date") {
-    assert(intercept[SparkException] {
-      CurrentDate(UTC_OPT).eval(EmptyRow)
-    }.getMessage.contains("Cannot evaluate expression"))
+  test("datetime function CurrentDate and LocalTime are Unevaluable") {
+    checkError(exception = intercept[SparkException] { CurrentDate(UTC_OPT).eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: current_date(Some(UTC))"))
 
-  }
-
-  test("datetime function current_timestamp") {
-    assert(intercept[SparkException] {
-      CurrentDate(UTC_OPT).eval(EmptyRow)
-    }.getMessage.contains("Cannot evaluate expression"))
-  }
-
-  test("datetime function localtimestamp") {
-    assert(intercept[SparkException] {
-      LocalTimestamp(UTC_OPT).eval(EmptyRow)
-    }.getMessage.contains("Cannot evaluate expression"))
+    checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
 
   test("DayOfYear") {

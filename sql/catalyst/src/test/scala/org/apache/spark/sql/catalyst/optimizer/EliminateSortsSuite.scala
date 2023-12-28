@@ -33,10 +33,6 @@ import org.apache.spark.sql.types.IntegerType
 class EliminateSortsSuite extends AnalysisTest {
   val analyzer = getAnalyzer
 
-  object FinishAnalysis extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("FinishAnalysis", Once, ComputeCurrentTime) :: Nil
-  }
-
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Default", FixedPoint(10),
@@ -102,12 +98,12 @@ class EliminateSortsSuite extends AnalysisTest {
   test("Remove no-op alias") {
     val x = testRelation
 
-    val query = x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+    val query = x.select($"a".as("x"), Literal(1).as("y"), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
-    val optimized = Optimize.execute(FinishAnalysis.execute(analyzer.execute(query)))
-    val correctAnswer = FinishAnalysis.execute(analyzer.execute(
-      x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-        .orderBy($"x".asc, $"b".desc)))
+    val optimized = Optimize.execute(analyzer.execute(query))
+    val correctAnswer = analyzer.execute(
+      x.select($"a".as("x"), Literal(1).as("y"), $"b")
+        .orderBy($"x".asc, $"b".desc))
 
     comparePlans(optimized, correctAnswer)
   }

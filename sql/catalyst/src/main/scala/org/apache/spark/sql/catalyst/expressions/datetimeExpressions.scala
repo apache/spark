@@ -129,7 +129,6 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   """,
   note = """
     The syntax without braces has been supported since 2.0.1.
-    There is no code generation since this expression should get constant folded by the optimizer.
   """,
   group = "datetime_funcs",
   since = "1.5.0")
@@ -233,10 +232,6 @@ case class Now() extends CurrentTimestampLike {
       > SELECT _FUNC_();
        2020-04-25 15:49:11.914
   """,
-  note =
-    """
-     There is no code generation/eval since this expression should get constant folded by the optimizer.
-    """,
   group = "datetime_funcs",
   since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
