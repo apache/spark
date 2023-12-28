@@ -147,11 +147,6 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
           self
         } else {
           afterRule.copyTagsFrom(self)
-          // some rules (e.g. ResolveNaturalAndUsingJoin) may already attach tags,
-          // in this case 'copyTagsFrom' takes no effect
-          // here force copy the plan id if any
-          self.getTagValue(LogicalPlan.PLAN_ID_TAG)
-            .foreach(afterRule.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
           afterRule
         }
       }
@@ -182,15 +177,13 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
             self.markRuleAsIneffective(ruleId)
             self
           } else {
-            self.getTagValue(LogicalPlan.PLAN_ID_TAG)
-              .foreach(rewritten_plan.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
+            rewritten_plan.copyTagsFrom(self)
             rewritten_plan
           }
         } else {
           val newPlan = afterRule
             .mapChildren(_.resolveOperatorsDownWithPruning(cond, ruleId)(rule))
-          self.getTagValue(LogicalPlan.PLAN_ID_TAG)
-            .foreach(newPlan.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
+          newPlan.copyTagsFrom(self)
           newPlan
         }
       }
@@ -206,26 +199,11 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
       rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])])
   : LogicalPlan = {
     if (!analyzed) {
-      transformUpWithNewOutput(copyPlanId(rule), skipCond = _.analyzed, canGetOutput = _.resolved)
+      transformUpWithNewOutput(rule, skipCond = _.analyzed, canGetOutput = _.resolved)
     } else {
       self
     }
   }
-
-  def copyPlanId(rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])])
-  : PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])] =
-    new PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])]() {
-      override def isDefinedAt(p: LogicalPlan): Boolean = rule.isDefinedAt(p)
-
-      override def apply(p: LogicalPlan): (LogicalPlan, Seq[(Attribute, Attribute)]) = {
-        val (afterRule, attrs) = rule.apply(p)
-        if (!(afterRule eq p)) {
-          p.getTagValue(LogicalPlan.PLAN_ID_TAG)
-            .foreach(afterRule.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
-        }
-        (afterRule, attrs)
-      }
-    }
 
   override def transformUpWithNewOutput(
       rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])],

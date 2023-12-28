@@ -364,7 +364,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         planAfterRule -> resultAttrMapping.toSeq
       }
     }
-    rewrite(this)._1
+    val newPlan = rewrite(this)._1
+    if (this eq newPlan) {
+      this
+    } else {
+      newPlan.copyTagsFrom(this)
+      newPlan
+    }
   }
 
   def rewriteAttrs(attrMap: AttributeMap[Attribute]): PlanType = {
