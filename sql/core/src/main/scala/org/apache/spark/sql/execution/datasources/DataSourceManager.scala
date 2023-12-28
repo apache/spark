@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
 
@@ -26,6 +28,7 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
+import org.apache.spark.util.Utils
 
 
 /**
@@ -83,17 +86,28 @@ class DataSourceManager extends Logging {
 
 
 object DataSourceManager {
-  // Visiable for testing
+  // Visible for testing
   private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
-  private def initialDataSourceBuilders = this.synchronized {
-    if (dataSourceBuilders.isEmpty) {
-      val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
-      val builders = result.names.zip(result.dataSources).map { case (name, dataSource) =>
-        name ->
-          UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
-      }.toMap
-      dataSourceBuilders = Some(builders)
+  private lazy val shouldLoadPythonDataSources: Boolean = {
+    Utils.checkCommandAvailable(PythonUtils.defaultPythonExec) &&
+      // Make sure PySpark zipped files also exist.
+      PythonUtils.sparkPythonPath
+        .split(Pattern.quote(File.separator)).forall(new File(_).exists())
+  }
+
+  private def initialDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
+    if (Utils.isTesting || shouldLoadPythonDataSources) this.synchronized {
+      if (dataSourceBuilders.isEmpty) {
+        val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
+        val builders = result.names.zip(result.dataSources).map { case (name, dataSource) =>
+          name ->
+            UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
+        }.toMap
+        dataSourceBuilders = Some(builders)
+      }
+      dataSourceBuilders.get
+    } else {
+      Map.empty
     }
-    dataSourceBuilders.get
   }
 }

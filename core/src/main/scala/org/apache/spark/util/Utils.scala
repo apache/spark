@@ -3028,6 +3028,23 @@ private[spark] object Utils
   }
 
   /**
+   * Check if a command is available.
+   */
+  def checkCommandAvailable(command: String): Boolean = {
+    // To avoid conflicts with java.lang.Process
+    import scala.sys.process.{Process, ProcessLogger}
+
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
+    } else {
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
+  }
+
+  /**
    * Return whether we are using G1GC or not
    */
   lazy val isG1GC: Boolean = {
