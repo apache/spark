@@ -2258,7 +2258,7 @@
   },
   "INVALID_SAVE_MODE" : {
     "message" : [
-      "The specified save mode '<mode>' is invalid. Valid save modes include 'append', 'overwrite', 'ignore', 'error', 'errorifexists', and 'default'."
+      "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
     ],
     "sqlState" : "42K10"
   },

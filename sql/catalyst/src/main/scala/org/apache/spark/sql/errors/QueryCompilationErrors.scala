@@ -3187,7 +3187,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidSaveModeError(saveMode: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SAVE_MODE",
-      messageParameters = Map("mode" -> saveMode)
+      messageParameters = Map("mode" -> toDSOption(saveMode))
     )
   }
 
