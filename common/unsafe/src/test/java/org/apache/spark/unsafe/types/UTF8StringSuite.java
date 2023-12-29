@@ -884,7 +884,6 @@ public class UTF8StringSuite {
   @Test
   public void collatedStringComparison()
   {
-
     // Case-insensitive and accent insensitive.
     {
       int collationId = CollatorFactory.installComparator("en_US-primary");
@@ -893,8 +892,6 @@ public class UTF8StringSuite {
       collatedUTF8String.installCollationAwareComparator(collationId);
       assertEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
       assertEquals(collatedUTF8String, UTF8String.fromString("ćčc", collationId));
-
-      var res = collatedUTF8String.compareTo(UTF8String.fromString("ccc", collationId));
       assertEquals(collatedUTF8String, UTF8String.fromString("ccc", collationId));
       assertEquals(collatedUTF8String, UTF8String.fromString("CCC", collationId));
 
@@ -921,6 +918,46 @@ public class UTF8StringSuite {
       assertNotEquals(collatedUTF8String, UTF8String.fromString("ccc", collationId));
 
       assertEquals(collatedUTF8String, UTF8String.fromString("ćčc", collationId));
+    }
+
+    // TODO: Cache is stateful, clear it after each test.
+  }
+
+  @Test
+  public void collatedStringHashing() {
+    // Case-insensitive and accent insensitive.
+    {
+      String collationName = "en_US-primary";
+      int collatedHash = CollatorFactory.getCollationAwareHash("ćčc", collationName);
+
+      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ĆČC", collationName));
+      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ccc", collationName));
+      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("CCC", collationName));
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("cba", collationName));
+    }
+
+    // Move to secondary strength (ignore case, respect accents).
+    {
+      String collationName = "en_US-secondary";
+      int collatedHash = CollatorFactory.getCollationAwareHash("ćčc", collationName);
+
+      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ĆČC", collationName));
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("ccc", collationName));
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("CCC", collationName));
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("cba", collationName));
+    }
+
+    // Tertiary strength (respect both)
+    {
+      String collationName = "en_US-tertiary";
+
+      int collatedHash = CollatorFactory.getCollationAwareHash("ćčc", collationName);
+
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("ĆČC", collationName));
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("ccc", collationName));
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("CCC", collationName));
+      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("cba", collationName));
+      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ćčc", collationName));
     }
 
     // TODO: Cache is stateful, clear it after each test.
