@@ -765,7 +765,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
         || (p.groupByExprsOpt.isDefined && !p.groupByExprsOpt.get.forall(_.resolved))
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
-      case p @ Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
+      case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
           throw QueryCompilationErrors.unorderablePivotColError(pivotColumn)
         }
@@ -829,9 +829,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               Alias(ExtractValue(pivotAtt, Literal(i), resolver), outputName(value, aggregate))()
             }
           }
-          val newProject = Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
-          newProject.copyTagsFrom(p)
-          newProject
+          Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
             def ifExpr(e: Expression) = {
@@ -865,9 +863,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               Alias(filteredAggregate, outputName(value, aggregate))()
             }
           }
-          val newAggregate = Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
-          newAggregate.copyTagsFrom(p)
-          newAggregate
+          Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
         }
     }
 
@@ -3264,9 +3260,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagsFrom(f)
-        newProject
+        Project(finalProjectList, withWindow)
 
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -3284,9 +3278,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
-        val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagsFrom(a)
-        newProject
+        Project(finalProjectList, withWindow)
 
       // We only extract Window Expressions after all expressions of the Project
       // have been resolved, and lateral column aliases are properly handled first.
@@ -3303,9 +3295,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map(_.toAttribute)
-        val newProject = Project(finalProjectList, withWindow)
-        newProject.copyTagsFrom(p)
-        newProject
+        Project(finalProjectList, withWindow)
     }
   }
 
@@ -3461,14 +3451,20 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       _.containsPattern(NATURAL_LIKE_JOIN), ruleId) {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), _, hint)
           if left.resolved && right.resolved && j.duplicateResolved =>
-        commonNaturalJoinProcessing(left, right, joinType, usingCols, None, hint,
-          j.getTagValue(LogicalPlan.PLAN_ID_TAG))
+        val project = commonNaturalJoinProcessing(
+          left, right, joinType, usingCols, None, hint)
+        j.getTagValue(LogicalPlan.PLAN_ID_TAG)
+          .foreach(project.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
+        project
       case j @ Join(left, right, NaturalJoin(joinType), condition, hint)
           if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
-        commonNaturalJoinProcessing(left, right, joinType, joinNames, condition, hint,
-          j.getTagValue(LogicalPlan.PLAN_ID_TAG))
+        val project = commonNaturalJoinProcessing(
+          left, right, joinType, joinNames, condition, hint)
+        j.getTagValue(LogicalPlan.PLAN_ID_TAG)
+          .foreach(project.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
+        project
     }
   }
 
@@ -3516,8 +3512,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       joinType: JoinType,
       joinNames: Seq[String],
       condition: Option[Expression],
-      hint: JoinHint,
-      planId: Option[Long] = None): LogicalPlan = {
+      hint: JoinHint): LogicalPlan = {
     import org.apache.spark.sql.catalyst.util._
 
     val leftKeys = joinNames.map { keyName =>
@@ -3570,13 +3565,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         throw QueryExecutionErrors.unsupportedNaturalJoinTypeError(joinType)
     }
 
-    val newJoin = Join(left, right, joinType, newCondition, hint)
-    // retain the plan id used in Spark Connect
-    planId.foreach(newJoin.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
-
     // use Project to hide duplicated common keys
     // propagate hidden columns from nested USING/NATURAL JOINs
-    val project = Project(projectList, newJoin)
+    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
     project.setTagValue(
       Project.hiddenOutputTag,
       hiddenList.map(_.markAsQualifiedAccessOnly()) ++
