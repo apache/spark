@@ -85,7 +85,7 @@ class DataSourceManager extends Logging {
 }
 
 
-object DataSourceManager {
+object DataSourceManager extends Logging {
   // Visible for testing
   private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
   private lazy val shouldLoadPythonDataSources: Boolean = {
@@ -98,14 +98,25 @@ object DataSourceManager {
   private def initialDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
     if (Utils.isTesting || shouldLoadPythonDataSources) this.synchronized {
       if (dataSourceBuilders.isEmpty) {
-        val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
-        val builders = result.names.zip(result.dataSources).map { case (name, dataSource) =>
-          name ->
-            UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
-        }.toMap
-        dataSourceBuilders = Some(builders)
+        val maybeResult = try {
+          Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())
+        } catch {
+          case e: Throwable =>
+            // Even if it fails for whatever reason, we shouldn't make the whole
+            // application fail.
+            logWarning(
+              s"Failed to execute Python worker: $e, giving up looking Python Data Sources")
+            None
+        }
+
+        dataSourceBuilders = maybeResult.map { result =>
+          result.names.zip(result.dataSources).map { case (name, dataSource) =>
+            name ->
+              UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
+          }.toMap
+        }
       }
-      dataSourceBuilders.get
+      dataSourceBuilders.getOrElse(Map.empty)
     } else {
       Map.empty
     }
