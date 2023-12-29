@@ -223,12 +223,13 @@ class CollationSuite extends QueryTest
     // In physical plan we get BroadcastHashJoin which still isn't collation aware.
     sql(
       """
-        SELECT collate(c, 'sr-pr') as c
-        FROM VALUES
-          ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
-         as data(c)
-      """).createOrReplaceTempView("V")
+        SELECT collate(c, 'sr-primary') as c FROM VALUES ('ććć') as data(c)
+      """).createOrReplaceTempView("V1")
+    sql(
+      """
+        SELECT collate(c, 'sr-primary') as c FROM VALUES ('ccc') as data(c)
+      """).createOrReplaceTempView("V2")
 
-    sql("SELECT * FROM V a JOIN V b ON a.c = b.c").explain(true)
+    sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c").show()
   }
 }

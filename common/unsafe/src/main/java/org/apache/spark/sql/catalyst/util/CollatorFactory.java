@@ -14,6 +14,7 @@ public class CollatorFactory {
   private static HashMap<String, Integer> collationNameToId = new HashMap<String, Integer>(10);
   private static ArrayList<Comparator<UTF8String>> collationComparatorsCache =
     new ArrayList<Comparator<UTF8String>>(10);
+  private static ArrayList<Collator> collatorCache = new ArrayList<Collator>(10);
 
   private static Collator getCollator(String collationName) {
     var collationStrings = collationName.split("-");
@@ -49,6 +50,11 @@ public class CollatorFactory {
     return getCollator(collation).getCollationKey(input).hashCode();
   }
 
+  public static int getCollationAwareHash(String input, int collatorId) {
+    // TODO: Collator caching...
+    return collatorCache.get(collatorId).getCollationKey(input).hashCode();
+  }
+
   public synchronized  static Integer installComparator(String collationName) {
     // TODO: Think about concurrency here.
     // What happens when ArrayList is resized?
@@ -70,6 +76,7 @@ public class CollatorFactory {
     int id = collationComparatorsCache.size() + 1;
     collationNameToId.put(collationName, id);
     collationComparatorsCache.add(comparator);
+    collatorCache.add(collator);
     return id;
   }
 }
