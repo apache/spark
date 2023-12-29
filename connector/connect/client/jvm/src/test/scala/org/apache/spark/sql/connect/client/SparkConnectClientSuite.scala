@@ -211,7 +211,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test(s"error framework parameters") {
+  test("error framework parameters") {
     for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
       withClue(name) {
         val testParams = GrpcExceptionConverter.ErrorParams(
