@@ -3684,6 +3684,14 @@ sha1.__doc__ = pysparkfuncs.sha1.__doc__
 
 
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
+    if numBits not in [0, 224, 256, 384, 512]:
+        raise PySparkValueError(
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "numBits",
+                "allowed_values": "[0, 224, 256, 384, 512]",
+            },
+        )
     return _invoke_function("sha2", _to_col(col), lit(numBits))
 
 
