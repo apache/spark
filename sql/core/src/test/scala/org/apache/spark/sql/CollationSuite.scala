@@ -131,27 +131,16 @@ class CollationSuite extends QueryTest
       WITH t AS (
         SELECT collate(col1, 'sr-primary') as c
         FROM
-        VALUES ('a'), ('A')
+        VALUES ('aaa'), ('bbb'), ('AAA'), ('BBB')
       )
-      SELECT count(DISTINCT c) FROM t
-      """), Row(1))
+      SELECT COUNT(*), c FROM t GROUP BY c
+      """), Seq(Row(2, "aaa"), Row(2, "bbb")))
+    // TODO: Order here is not deterministic + group election is not deterministic.
   }
 
   test("collation and group by") {
-    val res = sql(
-      """
-      with t as (
-        SELECT collate(c, 'sr-primary') as c
-        FROM VALUES
-          ('aaa'), ('bbb'), ('AAA'), ('BBB')
-         as data(c)
-       )
-       select count(*), c from t  group by c
-      """).collect().map(r => (r.getLong(0), r.getString(1)))
-    assert(res === Array((2, "aaa"), (2, "bbb")))
-
     // accents. All of these will end up in the same group.
-    val res2 = sql(
+    checkAnswer(sql(
       """
       with t as (
         SELECT collate(c, 'sr-primary') as c
@@ -160,11 +149,10 @@ class CollationSuite extends QueryTest
          as data(c)
        )
        select count(*), c from t  group by c
-      """).collect().map(r => (r.getLong(0), r.getString(1)))
-    assert(res2 === Array((4, "ććć")))
+      """), Seq(Row(4, "ććć")))
 
     // Now look at the secondary characteristics. Look at accents but ignore case.
-    val res3 = sql(
+    checkAnswer(sql(
       """
       with t as (
         SELECT collate(c, 'sr-secondary') as c
@@ -173,33 +161,32 @@ class CollationSuite extends QueryTest
          as data(c)
        )
        select count(*), c from t group by c
-      """).collect().map(r => (r.getLong(0), r.getString(1)))
-    assert(res3 === Array((1, "ccc"), (1, "ććć"), (2, "ččč")))
+      """), Seq(Row(1, "ccc"), Row(1, "ććć"), Row(2, "ččč")))
 
-    // Now teriary characteristics. Look at accents and case.
-    val res4 = sql(
+    // Now tertiary characteristics. Look at accents and case.
+    // Every string will end up in it's own group.
+    checkAnswer(sql(
       """
       with t as (
-        SELECT collate(c, 'sr-tr') as c
+        SELECT collate(c, 'sr-tertiary') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
        )
        select count(*), c from t  group by c
-      """).collect().map(r => (r.getLong(0), r.getString(1)))
-    assert(res4 === Array((1, "ccc"), (1, "ććć"), (1, "ččč"), (1, "ČČČ")))
+      """), Seq(Row(1, "ccc"), Row(1, "ććć"), Row(1, "ččč"), Row(1, "ČČČ")))
   }
 
   test("views should propagate collation") {
     sql(
       """
-        SELECT collate(c, 'sr-pr') as c
+        SELECT collate(c, 'sr-primary') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
       """).createOrReplaceTempView("V")
 
-    assert(sql("SELECT collation(c) FROM V").collect().head.getString(0) == "sr-pr")
+    checkAnswer(sql("SELECT DISTINCT collation(c) FROM V"), Row("sr-primary"))
   }
 
   test("in operator") {
