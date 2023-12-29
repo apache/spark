@@ -140,6 +140,12 @@ class EarlyCollapseProjectSuite extends QueryTest
     checkProjectCollapseAndCacheUse(baseDf, df => df.select($"c"))
   }
 
+  test("reuse of cache on mix of column addition, rename and dropping - 5") {
+    val baseDf = spark.range(10).select($"id" as "a", $"id" + 5 as "b").
+      select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
+    checkProjectCollapseAndCacheUse(baseDf, df => df.select($"d" * 7 as "a"))
+  }
+
   test("use of cached InMemoryRelation when new columns added do not result in new project -1") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")

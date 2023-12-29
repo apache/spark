@@ -330,17 +330,24 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 incomingPlan.isInstanceOf[Project]) {
                 val incomingProject = incomingPlan.asInstanceOf[Project]
                 val cdPlanProject = cachedPlan.asInstanceOf[Project]
-                val canonicalizedInProj = incomingProject.canonicalized.asInstanceOf[Project]
-                val canonicalizedCdProj = cdPlanProject.canonicalized.asInstanceOf[Project]
+                // since the child of both incoming and cached plan are same
+                // that is why we are here. for mapping and comparison purposes lets
+                // canonicalize the cachedPlan's project list in terms of the incoming plan's child
+                // so that we can map correctly.
+                val cdPlanToIncomngPlanChildOutputMapping =
+                cdPlanProject.child.output.zip(incomingProject.child.output).toMap
+                // val canonicalizedInProj = incomingProject.canonicalized.asInstanceOf[Project]
+                val canonicalizedCdProjList = cdPlanProject.projectList.map(_.transformUp {
+                  case attr: Attribute => cdPlanToIncomngPlanChildOutputMapping(attr)
+                }.asInstanceOf[NamedExpression])
                 // matchIndexInCdPlanProj remains  -1 in the end, itindicates it is
                 // new cols created out of existing output attribs
                 val (directlyMappedincomingToCachedPlanIndx, inComingProjNoDirectMapping) =
-                    canonicalizedInProj.projectList.zipWithIndex.map {
+                    incomingProject.projectList.zipWithIndex.map {
                   case (inComingNE, index) =>
                     // first check for equivalent named expressions..if index is != -1, that means
                     // it is pass thru Alias or pass thru - Attribute
-                    var matchIndexInCdPlanProj =
-                    canonicalizedCdProj.projectList.indexWhere(_ == inComingNE)
+                    var matchIndexInCdPlanProj = canonicalizedCdProjList.indexWhere(_ == inComingNE)
                     if (matchIndexInCdPlanProj == -1) {
                       // if match index is -1, that means it could be two possibilities:
                       // 1) it is a case of rename which means the incoming expr is an alias and
@@ -356,7 +363,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                         case x: AttributeReference => x
                         case Alias(expr, _) => expr
                       }
-                      matchIndexInCdPlanProj = canonicalizedCdProj.projectList.indexWhere {
+                      matchIndexInCdPlanProj = canonicalizedCdProjList.indexWhere {
                         case Alias(expr, _) => expr == incomingExprToCheck
                         case x => x == incomingExprToCheck
                       }
@@ -410,6 +417,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 val transformedIndirectlyMappableExpr = inComingProjNoDirectMapping.map {
                   case (incomngIndex, _) =>
                     val indirectIncmnNe = incomingProject.projectList(incomngIndex)
+
                     val modifiedNe = indirectIncmnNe.transformDown {
                       case expr => directlyMappedincomingToCachedPlanIndx.find {
                         case(incomingIndex, _) =>
@@ -421,11 +429,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                                 cdAttribToCommonAttribForIncmngNe(cdAttrib)
                       }.orElse(
                         unusedAttribsOfCDPlanToGenIncomingAttr.find {
-                          case(i, _) => val cdNe = canonicalizedCdProj.projectList(i)
-                            cdNe.children.headOption.contains(expr.canonicalized)
+                          case(i, _) => val cdNe = canonicalizedCdProjList(i)
+                            cdNe.children.headOption.contains(expr)
                         }.map(_._2)).
                         map(ne => Replaceable(ne.toAttribute)).getOrElse(expr)
                     }.asInstanceOf[NamedExpression]
+
                     incomngIndex -> modifiedNe
                 }.toMap
 
