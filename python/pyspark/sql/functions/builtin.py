@@ -9112,6 +9112,14 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     |Bob  |cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961|
     +-----+----------------------------------------------------------------+
     """
+    if numBits not in [0, 224, 256, 384, 512]:
+        raise PySparkValueError(
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "numBits",
+                "allowed_values": "[0, 224, 256, 384, 512]",
+            },
+        )
     return _invoke_function("sha2", _to_java_column(col), numBits)
 
 
@@ -14769,7 +14777,7 @@ def size(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_min(col: "ColumnOrName") -> Column:
     """
-    Collection function: returns the minimum value of the array.
+    Array function: returns the minimum value of the array.
 
     .. versionadded:: 2.4.0
 
@@ -14779,18 +14787,74 @@ def array_min(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        The name of the column or an expression that represents the array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        minimum value of array.
+        A new column that contains the minimum value of each array.
 
     Examples
     --------
+    Example 1: Basic usage with integer array
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
-    >>> df.select(array_min(df.data).alias('min')).collect()
-    [Row(min=1), Row(min=-1)]
+    >>> df.select(sf.array_min(df.data)).show()
+    +---------------+
+    |array_min(data)|
+    +---------------+
+    |              1|
+    |             -1|
+    +---------------+
+
+    Example 2: Usage with string array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['apple', 'banana', 'cherry'],)], ['data'])
+    >>> df.select(sf.array_min(df.data)).show()
+    +---------------+
+    |array_min(data)|
+    +---------------+
+    |          apple|
+    +---------------+
+
+    Example 3: Usage with mixed type array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['apple', 1, 'cherry'],)], ['data'])
+    >>> df.select(sf.array_min(df.data)).show()
+    +---------------+
+    |array_min(data)|
+    +---------------+
+    |              1|
+    +---------------+
+
+    Example 4: Usage with array of arrays
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([[2, 1], [3, 4]],)], ['data'])
+    >>> df.select(sf.array_min(df.data)).show()
+    +---------------+
+    |array_min(data)|
+    +---------------+
+    |         [2, 1]|
+    +---------------+
+
+    Example 5: Usage with empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.array_min(df.data)).show()
+    +---------------+
+    |array_min(data)|
+    +---------------+
+    |           NULL|
+    +---------------+
     """
     return _invoke_function_over_columns("array_min", col)
 
@@ -14798,7 +14862,7 @@ def array_min(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_max(col: "ColumnOrName") -> Column:
     """
-    Collection function: returns the maximum value of the array.
+    Array function: returns the maximum value of the array.
 
     .. versionadded:: 2.4.0
 
@@ -14808,18 +14872,74 @@ def array_max(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        The name of the column or an expression that represents the array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        maximum value of an array.
+        A new column that contains the maximum value of each array.
 
     Examples
     --------
+    Example 1: Basic usage with integer array
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
-    >>> df.select(array_max(df.data).alias('max')).collect()
-    [Row(max=3), Row(max=10)]
+    >>> df.select(sf.array_max(df.data)).show()
+    +---------------+
+    |array_max(data)|
+    +---------------+
+    |              3|
+    |             10|
+    +---------------+
+
+    Example 2: Usage with string array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['apple', 'banana', 'cherry'],)], ['data'])
+    >>> df.select(sf.array_max(df.data)).show()
+    +---------------+
+    |array_max(data)|
+    +---------------+
+    |         cherry|
+    +---------------+
+
+    Example 3: Usage with mixed type array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['apple', 1, 'cherry'],)], ['data'])
+    >>> df.select(sf.array_max(df.data)).show()
+    +---------------+
+    |array_max(data)|
+    +---------------+
+    |         cherry|
+    +---------------+
+
+    Example 4: Usage with array of arrays
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([[2, 1], [3, 4]],)], ['data'])
+    >>> df.select(sf.array_max(df.data)).show()
+    +---------------+
+    |array_max(data)|
+    +---------------+
+    |         [3, 4]|
+    +---------------+
+
+    Example 5: Usage with empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.array_max(df.data)).show()
+    +---------------+
+    |array_max(data)|
+    +---------------+
+    |           NULL|
+    +---------------+
     """
     return _invoke_function_over_columns("array_max", col)
 
@@ -14827,25 +14947,82 @@ def array_max(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_size(col: "ColumnOrName") -> Column:
     """
-    Returns the total number of elements in the array. The function returns null for null input.
+    Array function: returns the total number of elements in the array.
+    The function returns null for null input.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The name of the column or an expression that represents the array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        total number of elements in the array.
+        A new column that contains the size of each array.
 
     Examples
     --------
+    Example 1: Basic usage with integer array
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([2, 1, 3],), (None,)], ['data'])
-    >>> df.select(array_size(df.data).alias('r')).collect()
-    [Row(r=3), Row(r=None)]
+    >>> df.select(sf.array_size(df.data)).show()
+    +----------------+
+    |array_size(data)|
+    +----------------+
+    |               3|
+    |            NULL|
+    +----------------+
+
+    Example 2: Usage with string array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['apple', 'banana', 'cherry'],)], ['data'])
+    >>> df.select(sf.array_size(df.data)).show()
+    +----------------+
+    |array_size(data)|
+    +----------------+
+    |               3|
+    +----------------+
+
+    Example 3: Usage with mixed type array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['apple', 1, 'cherry'],)], ['data'])
+    >>> df.select(sf.array_size(df.data)).show()
+    +----------------+
+    |array_size(data)|
+    +----------------+
+    |               3|
+    +----------------+
+
+    Example 4: Usage with array of arrays
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([[2, 1], [3, 4]],)], ['data'])
+    >>> df.select(sf.array_size(df.data)).show()
+    +----------------+
+    |array_size(data)|
+    +----------------+
+    |               2|
+    +----------------+
+
+    Example 5: Usage with empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", ArrayType(IntegerType()), True)
+    ... ])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.array_size(df.data)).show()
+    +----------------+
+    |array_size(data)|
+    +----------------+
+    |               0|
+    +----------------+
     """
     return _invoke_function_over_columns("array_size", col)
 
@@ -15268,7 +15445,7 @@ def map_from_entries(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
     """
-    Collection function: creates an array containing a column repeated count times.
+    Array function: creates an array containing a column repeated count times.
 
     .. versionadded:: 2.4.0
 
@@ -15278,20 +15455,65 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        column name or column that contains the element to be repeated
+        The name of the column or an expression that represents the element to be repeated.
     count : :class:`~pyspark.sql.Column` or str or int
-        column name, column, or int containing the number of times to repeat the first argument
+        The name of the column, an expression,
+        or an integer that represents the number of times to repeat the element.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of repeated elements.
+        A new column that contains an array of repeated elements.
 
     Examples
     --------
+    Example 1: Usage with string
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('ab',)], ['data'])
-    >>> df.select(array_repeat(df.data, 3).alias('r')).collect()
-    [Row(r=['ab', 'ab', 'ab'])]
+    >>> df.select(sf.array_repeat(df.data, 3)).show()
+    +---------------------+
+    |array_repeat(data, 3)|
+    +---------------------+
+    |         [ab, ab, ab]|
+    +---------------------+
+
+    Example 2: Usage with integer
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(3,)], ['data'])
+    >>> df.select(sf.array_repeat(df.data, 2)).show()
+    +---------------------+
+    |array_repeat(data, 2)|
+    +---------------------+
+    |               [3, 3]|
+    +---------------------+
+
+    Example 3: Usage with array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(['apple', 'banana'],)], ['data'])
+    >>> df.select(sf.array_repeat(df.data, 2)).show(truncate=False)
+    +----------------------------------+
+    |array_repeat(data, 2)             |
+    +----------------------------------+
+    |[[apple, banana], [apple, banana]]|
+    +----------------------------------+
+
+    Example 4: Usage with null
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import IntegerType, StructType, StructField
+    >>> schema = StructType([
+    ...   StructField("data", IntegerType(), True)
+    ... ])
+    >>> df = spark.createDataFrame([(None, )], schema=schema)
+    >>> df.select(sf.array_repeat(df.data, 3)).show()
+    +---------------------+
+    |array_repeat(data, 3)|
+    +---------------------+
+    |   [NULL, NULL, NULL]|
+    +---------------------+
     """
     count = lit(count) if isinstance(count, int) else count
 
