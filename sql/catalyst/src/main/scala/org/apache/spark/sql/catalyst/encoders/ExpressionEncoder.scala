@@ -326,7 +326,8 @@ case class ExpressionEncoder[T](
   assert(serializer.flatMap { ser =>
     val boundRefs = ser.collect { case b: BoundReference => b }
     assert(boundRefs.nonEmpty || isEmptyStruct(ser),
-      "each serializer expression should contain at least one `BoundReference`")
+      "each serializer expression should contain at least one `BoundReference` " +
+        "or be an empty struct")
     boundRefs
   }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
 
