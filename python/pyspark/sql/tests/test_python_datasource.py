@@ -135,6 +135,22 @@ class BasePythonDataSourceTestsMixin:
         df = self.spark.read.format("test").load()
         assertDataFrameEqual(df, [Row(0, 1)])
 
+    def test_data_source_read_output_named_row(self):
+        self.register_data_source(
+            read_func=lambda schema, partition: iter([Row(j=1, i=0), Row(i=1, j=2)])
+        )
+        df = self.spark.read.format("test").load()
+        assertDataFrameEqual(df, [Row(0, 1), Row(1, 2)])
+
+    def test_data_source_read_output_named_row_with_wrong_schema(self):
+        self.register_data_source(
+            read_func=lambda schema, partition: iter([Row(i=1, j=2), Row(j=3, k=4)])
+        )
+        with self.assertRaisesRegex(
+            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
+        ):
+            self.spark.read.format("test").load().show()
+
     def test_data_source_read_output_none(self):
         self.register_data_source(read_func=lambda schema, partition: None)
         df = self.spark.read.format("test").load()
