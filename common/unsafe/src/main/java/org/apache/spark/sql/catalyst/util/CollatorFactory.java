@@ -44,6 +44,11 @@ public class CollatorFactory {
     return collationComparatorsCache.get(id - 1);
   }
 
+  public static int getCollationAwareHash(String input, String collation) {
+    // TODO: Collator caching...
+    return getCollator(collation).getCollationKey(input).hashCode();
+  }
+
   public synchronized  static Integer installComparator(String collationName) {
     // TODO: Think about concurrency here.
     // What happens when ArrayList is resized?

@@ -1220,9 +1220,16 @@ object Aggregate {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
-  def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+  def isAggregateCollationAware(groupingExpression: Seq[Expression]): Boolean = {
+    groupingExpression.exists(_.dataType.isInstanceOf[CollatedStringType])
+  }
+
+  def supportsHashAggregate(
+     aggregateBufferAttributes: Seq[Attribute],
+     groupingExpressions: Seq[Expression]): Boolean = {
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
-    isAggregateBufferMutable(aggregationBufferSchema)
+    isAggregateBufferMutable(aggregationBufferSchema) &&
+      !isAggregateCollationAware(groupingExpressions)
   }
 
   def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {

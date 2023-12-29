@@ -127,21 +127,21 @@ class CollationSuite extends QueryTest
   }
 
   test("agg simple") {
-    assert(sql("""
+    checkAnswer(sql("""
       WITH t AS (
-        SELECT collate(col1, 'sr-pr') as c
+        SELECT collate(col1, 'sr-primary') as c
         FROM
         VALUES ('a'), ('A')
       )
       SELECT count(DISTINCT c) FROM t
-      """).collect()(0).get(0) == 1)
+      """), Row(1))
   }
 
   test("collation and group by") {
     val res = sql(
       """
       with t as (
-        SELECT collate(c, 'sr-pr') as c
+        SELECT collate(c, 'sr-primary') as c
         FROM VALUES
           ('aaa'), ('bbb'), ('AAA'), ('BBB')
          as data(c)
@@ -154,7 +154,7 @@ class CollationSuite extends QueryTest
     val res2 = sql(
       """
       with t as (
-        SELECT collate(c, 'sr-pr') as c
+        SELECT collate(c, 'sr-primary') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
@@ -167,12 +167,12 @@ class CollationSuite extends QueryTest
     val res3 = sql(
       """
       with t as (
-        SELECT collate(c, 'sr-se') as c
+        SELECT collate(c, 'sr-secondary') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
        )
-       select count(*), c from t  group by c
+       select count(*), c from t group by c
       """).collect().map(r => (r.getLong(0), r.getString(1)))
     assert(res3 === Array((1, "ccc"), (1, "ććć"), (2, "ččč")))
 

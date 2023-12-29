@@ -270,6 +270,8 @@ class PhysicalStringType() extends PhysicalDataType {
 case object PhysicalStringType extends PhysicalStringType
 
 case class PhysicalCollatedStringType(collation: String) extends PhysicalDataType {
+  // TODO: Store collation id (pointer to collator cache) instead of collation name
+  // to get quick lookups.
   private[sql] type InternalType = UTF8String
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]

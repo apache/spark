@@ -353,9 +353,12 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
         case a: AggregateExpression => a
       })
     }
+
     val Seq(newPlanSupportsHashAggregate, cachedPlanSupportsHashAggregate) =
       aggregateExpressionsSeq.map(aggregateExpressions => Aggregate.supportsHashAggregate(
-        aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)))
+        aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes),
+        Seq.empty)) // TODO: Collations! figure this out later.
+
     newPlanSupportsHashAggregate && cachedPlanSupportsHashAggregate ||
       newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate && {
         val Seq(newPlanSupportsObjectHashAggregate, cachedPlanSupportsObjectHashAggregate) =
