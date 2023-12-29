@@ -122,7 +122,7 @@ $pythonVer = "3.9.13"
 Start-FileDownload "https://www.python.org/ftp/python/$pythonVer/python-$pythonVer-embed-amd64.zip" "python.zip"
 
 # extract
-Invoke-Expression "7z.exe x python.zip"
+Invoke-Expression "7z.exe x python.zip -o$tools/python"
 
 
 Pop-Location
