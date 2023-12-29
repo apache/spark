@@ -27,7 +27,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
-  @transient private var _countState: ValueState[Long] = _
+  @transient var _countState: ValueState[Long] = _
   @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
@@ -57,22 +57,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def close(): Unit = {}
 }
 
-class RunningCountStatefulProcessorWithProcTimeTimer
-  extends StatefulProcessor[String, String, (String, String)]
-  with Logging {
-  @transient private var _countState: ValueState[Long] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
-
-  override def init(
-      handle: StatefulProcessorHandle,
-      outputMode: OutputMode) : Unit = {
-    _processorHandle = handle
-    assert(handle.getQueryInfo().getBatchId >= 0)
-    assert(handle.getQueryInfo().getOperatorId == 0)
-    assert(handle.getQueryInfo().getPartitionId >= 0 && handle.getQueryInfo().getPartitionId < 5)
-    _countState = _processorHandle.getValueState[Long]("countState")
-  }
-
+class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
@@ -100,8 +85,49 @@ class RunningCountStatefulProcessorWithProcTimeTimer
     _countState.remove()
     Iterator((key, "-1"))
   }
+}
 
-  override def close(): Unit = {}
+class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
+  extends RunningCountStatefulProcessor {
+  @transient private var _timerState: ValueState[Long] = _
+
+  override def init(
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode) : Unit = {
+    super.init(handle, outputMode)
+    _timerState = _processorHandle.getValueState[Long]("timerState")
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    _countState.update(count)
+    if (key == "a") {
+      var nextTimerTs: Long = 0L
+      if (currCount == 0) {
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
+        _processorHandle.registerProcessingTimeTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      } else if (currCount == 1) {
+        _processorHandle.deleteProcessingTimeTimer(_timerState.get())
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
+        _processorHandle.registerProcessingTimeTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      }
+    }
+    Iterator((key, count.toString))
+  }
+
+  override def handleProcessingTimeTimers(
+      key: String,
+      expiryTimestampMs: Long,
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    _timerState.remove()
+    Iterator((key, "-1"))
+  }
 }
 
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
@@ -208,6 +234,40 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "d"),
         AdvanceManualClock(10 * 1000),
         CheckNewAnswer(("c", "-1"), ("d", "1")),
+        StopStream
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and processing time timer " +
+   "and add/remove timers should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new RunningCountStatefulProcessorWithAddRemoveProcTimeTimer(),
+          TimeoutMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1")),
+
+        AddData(inputData, "a"),
+        AdvanceManualClock(2 * 1000),
+        CheckNewAnswer(("a", "2")),
+        StopStream,
+
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "d"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("a", "-1"), ("d", "1")),
         StopStream
       )
     }
