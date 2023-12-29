@@ -192,13 +192,30 @@ class CollationSuite extends QueryTest
   test("in operator") {
     sql(
       """
-        SELECT collate(c, 'sr-pr') as c
-        FROM VALUES
-          ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
-         as data(c)
+        SELECT * FROM VALUES ('ććć'), ('ccc') as data(c)
       """).createOrReplaceTempView("V")
 
-    assert(sql("SELECT collate('CCC', 'sr-pr') IN (SELECT c FROM V)").collect().head.getBoolean(0))
+    // Primary
+    checkAnswer(sql("SELECT collate('CCC', 'sr-primary') IN " +
+      "(SELECT collate(c, 'sr-primary') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('ččč', 'sr-primary') IN " +
+      "(SELECT collate(c, 'sr-primary') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('xxx', 'sr-primary') IN " +
+      "(SELECT collate(c, 'sr-primary') FROM V)"), Row(false))
+
+    // Secondary
+    checkAnswer(sql("SELECT collate('CCC', 'sr-secondary') IN " +
+      "(SELECT collate(c, 'sr-secondary') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('ččč', 'sr-secondary') IN " +
+      "(SELECT collate(c, 'sr-secondary') FROM V)"), Row(false))
+
+    // Tertiary
+    checkAnswer(sql("SELECT collate('CCC', 'sr-tertiary') IN " +
+      "(SELECT collate(c, 'sr-tertiary') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('ččč', 'sr-tertiary') IN " +
+      "(SELECT collate(c, 'sr-tertiary') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('ccc', 'sr-tertiary') IN " +
+      "(SELECT collate(c, 'sr-tertiary') FROM V)"), Row(true))
   }
 
   test("join operator") {
