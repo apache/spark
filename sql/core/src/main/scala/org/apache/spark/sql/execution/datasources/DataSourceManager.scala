@@ -20,9 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.jdk.CollectionConverters._
-
-import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
@@ -33,13 +30,9 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
  * their short names or fully qualified names.
  */
 class DataSourceManager extends Logging {
-  // Lazy to avoid being invoked during Session initialization.
-  // Otherwise, it goes infinite loop, session -> Python runner -> SQLConf -> session.
-  private lazy val dataSourceBuilders = {
-    val builders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
-    builders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
-    builders
-  }
+  // TODO(SPARK-45917): Statically load Python Data Source so idempotently Python
+  //   Data Sources can be loaded even when the Driver is restarted.
+  private val dataSourceBuilders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
@@ -78,22 +71,5 @@ class DataSourceManager extends Logging {
     val manager = new DataSourceManager
     dataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
     manager
-  }
-}
-
-
-object DataSourceManager {
-  // Visiable for testing
-  private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
-  private def initialDataSourceBuilders = this.synchronized {
-    if (dataSourceBuilders.isEmpty) {
-      val result = UserDefinedPythonDataSource.lookupAllDataSourcesInPython()
-      val builders = result.names.zip(result.dataSources).map { case (name, dataSource) =>
-        name ->
-          UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
-      }.toMap
-      dataSourceBuilders = Some(builders)
-    }
-    dataSourceBuilders.get
   }
 }

@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{File, FileWriter}
-
 import org.apache.spark.SparkException
-import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   import IntegratedUDFTestUtils._
@@ -34,7 +29,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   setupTestData()
 
   private def dataSourceName = "SimpleDataSource"
-  private val simpleDataSourceReaderScript: String =
+  private def simpleDataSourceReaderScript: String =
     """
       |from pyspark.sql.datasource import DataSourceReader, InputPartition
       |class SimpleDataSourceReader(DataSourceReader):
@@ -45,56 +40,6 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |        yield (1, partition.value)
       |        yield (2, partition.value)
       |""".stripMargin
-  private val staticSourceName = "custom_source"
-  private var tempDir: File = _
-
-  override def beforeAll(): Unit = {
-    // Create a Python Data Source package before starting up the Spark Session
-    // that triggers automatic registration of the Python Data Source.
-    val dataSourceScript =
-    s"""
-       |from pyspark.sql.datasource import DataSource, DataSourceReader
-       |$simpleDataSourceReaderScript
-       |
-       |class DefaultSource(DataSource):
-       |    def schema(self) -> str:
-       |        return "id INT, partition INT"
-       |
-       |    def reader(self, schema):
-       |        return SimpleDataSourceReader()
-       |
-       |    @classmethod
-       |    def name(cls):
-       |        return "$staticSourceName"
-       |""".stripMargin
-    tempDir = Utils.createTempDir()
-    // Write a temporary package to test.
-    // tmp/my_source
-    // tmp/my_source/__init__.py
-    val packageDir = new File(tempDir, "pyspark_mysource")
-    assert(packageDir.mkdir())
-    Utils.tryWithResource(
-      new FileWriter(new File(packageDir, "__init__.py")))(_.write(dataSourceScript))
-    // So Spark Session initialization can lookup this temporary directory.
-    DataSourceManager.dataSourceBuilders = None
-    PythonUtils.additionalTestingPath = Some(tempDir.toString)
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      Utils.deleteRecursively(tempDir)
-      PythonUtils.additionalTestingPath = None
-    } finally {
-      super.afterAll()
-    }
-  }
-
-  test("SPARK-45917: automatic registration of Python Data Source") {
-    assume(shouldTestPandasUDFs)
-    val df = spark.read.format(staticSourceName).load()
-    checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
-  }
 
   test("simple data source") {
     assume(shouldTestPandasUDFs)
