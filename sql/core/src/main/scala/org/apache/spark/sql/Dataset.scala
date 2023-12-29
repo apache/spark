@@ -1435,7 +1435,7 @@ class Dataset[T] private[sql](
         case s: Symbol => Column(s.name).expr
         case e: Expression => e
         case literal => Literal(literal)
-      }.toSeq
+      }
       UnresolvedHint(name, exprs, logicalPlan)
     }
   }

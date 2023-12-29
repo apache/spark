@@ -105,7 +105,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       functionName: String, argumentName: String, candidates: Seq[String]): Throwable = {
     import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 
-    val inputs = candidates.map(candidate => Seq(candidate)).toSeq
+    val inputs = candidates.map(candidate => Seq(candidate))
     val recommendations = orderSuggestedIdentifiersBySimilarity(argumentName, inputs)
       .take(3)
     new AnalysisException(
@@ -3856,12 +3856,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "reason" -> reason))
   }
 
-  def dataSourceAlreadyExists(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
-      messageParameters = Map("provider" -> name))
-  }
-
   def dataSourceDoesNotExist(name: String): Throwable = {
     new AnalysisException(
       errorClass = "DATA_SOURCE_NOT_EXIST",
@@ -3926,11 +3920,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def dataSourceTableSchemaMismatchError(
-      tableSchema: StructType, actualSchema: StructType): Throwable = {
+      dsSchema: StructType, expectedSchema: StructType): Throwable = {
     new AnalysisException(
       errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
       messageParameters = Map(
-        "tableSchema" -> toSQLType(tableSchema),
-        "actualSchema" -> toSQLType(actualSchema)))
+        "dsSchema" -> toSQLType(dsSchema),
+        "expectedSchema" -> toSQLType(expectedSchema)))
   }
 }

@@ -16,30 +16,21 @@
 #
 import unittest
 
-import pandas as pd
-
-from pyspark import pandas as ps
-from pyspark.pandas.tests.test_indexing import BasicIndexingTestsMixin
+from pyspark.pandas.tests.diff_frames_ops.test_arithmetic_ext import ArithmeticExtMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class BasicIndexingParityTests(
-    BasicIndexingTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class ArithmeticExtParityTests(
+    ArithmeticExtMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"month": [1, 4, 7, 10], "year": [2012, 2014, 2013, 2014], "sale": [55, 40, 84, 31]}
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_indexing import *  # noqa: F401
+    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic_ext import *  # noqa
 
     try:
         import xmlrunner  # type: ignore[import]

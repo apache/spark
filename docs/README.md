@@ -28,8 +28,7 @@ whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
 
-The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
-Python, R and SQL.
+The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, R, and SQL.
 
 You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
 [Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
@@ -48,6 +47,8 @@ $ bundle install
 
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
 
+To generate the Python or R docs, you'll need to [install Pandoc](https://pandoc.org/installing.html).
+
 ### SQL and Python API Documentation (Optional)
 
 To generate SQL and Python API docs, you'll need to install these libraries:
@@ -59,8 +60,7 @@ $ pip install --upgrade -r dev/requirements.txt
 
 ### R API Documentation (Optional)
 
-If you'd like to generate R API documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
-and install these libraries:
+If you'd like to generate R API documentation, install these libraries:
 
 ```sh
 $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'

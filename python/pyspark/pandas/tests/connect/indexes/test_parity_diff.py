@@ -16,22 +16,24 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_series_datetime import SeriesDateTimeTestsMixin
+from pyspark.pandas.tests.indexes.test_diff import IndexesDiffMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesDateTimeParityTests(
-    SeriesDateTimeTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+class IndexesDiffParityTests(
+    IndexesDiffMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_series_datetime import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_diff import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
