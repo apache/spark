@@ -219,17 +219,64 @@ class CollationSuite extends QueryTest
   }
 
   test("join operator") {
-    // TODO: This still doesn't work.
-    // In physical plan we get BroadcastHashJoin which still isn't collation aware.
+    // TODO: For joins we are faking it a bit since hashjoins still doesn't work.
+    // Here we forced merge join.
+
+    // Ignore accents and casing.
     sql(
       """
-        SELECT collate(c, 'sr-primary') as c FROM VALUES ('ććć') as data(c)
+        SELECT collate(c, 'sr-primary') as c FROM VALUES
+        ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
+        as data(c)
       """).createOrReplaceTempView("V1")
     sql(
       """
-        SELECT collate(c, 'sr-primary') as c FROM VALUES ('ccc') as data(c)
+        SELECT collate(c, 'sr-primary') as c FROM VALUES ('ccc'), ('CCC') as data(c)
       """).createOrReplaceTempView("V2")
 
-    sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c").show()
+    // Everyone is going to pair with everyone.
+    checkAnswer(sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c"),
+      Seq(
+        Row("ććć", "ccc"),
+        Row("ĆĆĆ", "ccc"),
+        Row("ččč", "ccc"),
+        Row("ČČČ", "ccc"),
+        Row("ććć", "CCC"),
+        Row("ĆĆĆ", "CCC"),
+        Row("ččč", "CCC"),
+        Row("ČČČ", "CCC")))
+
+    // Ignore casing but not accents
+    sql(
+      """
+        SELECT collate(c, 'sr-secondary') as c FROM VALUES
+        ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
+        as data(c)
+      """).createOrReplaceTempView("V1")
+    sql(
+      """
+        SELECT collate(c, 'sr-secondary') as c FROM VALUES ('ććć'), ('CCC') as data(c)
+      """).createOrReplaceTempView("V2")
+
+    checkAnswer(sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c"),
+      Seq(
+        Row("ććć", "ććć"),
+        Row("ĆĆĆ", "ććć")))
+
+    // Respect casing and accents
+    sql(
+      """
+        SELECT collate(c, 'sr-tertiary') as c FROM VALUES
+        ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
+        as data(c)
+      """).createOrReplaceTempView("V1")
+    sql(
+      """
+        SELECT collate(c, 'sr-tertiary') as c FROM VALUES ('ććć'), ('CCC') as data(c)
+      """).createOrReplaceTempView("V2")
+
+    checkAnswer(sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c"),
+      Seq(
+        Row("ććć", "ććć")))
   }
 }

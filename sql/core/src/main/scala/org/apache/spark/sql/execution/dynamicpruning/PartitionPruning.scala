@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.types.CollatedStringType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -207,6 +208,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     }
   }
 
+  private def hasNoCollations(plan: LogicalPlan): Boolean = {
+    // TODO: Should be more selective here.
+    // Don't fully understand this code path.
+    !plan.expressions.exists(e => e.dataType.isInstanceOf[CollatedStringType])
+  }
+
   /**
    * To be able to prune partitions on a join key, the filtering side needs to
    * meet the following requirements:
@@ -214,7 +221,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    *   (2) it needs to contain a selective predicate used for filtering
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
+    !plan.isStreaming && hasSelectivePredicate(plan) && hasNoCollations(plan)
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {

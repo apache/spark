@@ -282,7 +282,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastHashJoin(false)
+          // TODO: [HACK] Boosting priority of merge join, since that is the only join type
+          // that works with collations since it doesn't rely on hashing. Do the proper thing here.
+          createSortMergeJoin().orElse(createBroadcastHashJoin(false))
             .orElse(createShuffleHashJoin(false))
             .orElse(createSortMergeJoin())
             .orElse(createCartesianProduct())
