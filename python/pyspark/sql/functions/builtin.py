@@ -14226,6 +14226,11 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
+    if len(fields) == 0:
+        raise PySparkValueError(
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "field"},
+        )
     sc = _get_active_spark_context()
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
