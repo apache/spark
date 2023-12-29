@@ -44,7 +44,7 @@ object ImplicitKeyTracker {
  */
 object StatefulProcessorHandleState extends Enumeration {
   type StatefulProcessorHandleState = Value
-  val CREATED, INITIALIZED, DATA_PROCESSED, CLOSED = Value
+  val CREATED, INITIALIZED, DATA_PROCESSED, TIMER_PROCESSED, CLOSED = Value
 }
 
 class QueryInfoImpl(
@@ -140,6 +140,10 @@ class StatefulProcessorHandleImpl(
   override def registerProcessingTimeTimer(expiryTimestampMs: Long): Unit = {
     verify(timeoutMode == ProcessingTime, s"Cannot register processing time " +
       "timers with incorrect TimeoutMode")
+    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
+    s"Cannot register processing time timer with " +
+      s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+
     if (procTimers.exists(expiryTimestampMs)) {
       logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
     } else {
@@ -151,6 +155,10 @@ class StatefulProcessorHandleImpl(
   override def deleteProcessingTimeTimer(expiryTimestampMs: Long): Unit = {
     verify(timeoutMode == ProcessingTime, s"Cannot delete processing time " +
       "timers with incorrect TimeoutMode")
+    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
+    s"Cannot delete processing time timer with " +
+      s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+
     if (!procTimers.exists(expiryTimestampMs)) {
       logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")
     } else {

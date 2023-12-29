@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogChec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
+// Class to verify stateful processor usage without timers
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
   @transient var _countState: ValueState[Long] = _
@@ -57,6 +58,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def close(): Unit = {}
 }
 
+// Class to verify stateful processor usage with adding processing time timers
 class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
   override def handleInputRows(
       key: String,
@@ -87,6 +89,7 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
   }
 }
 
+// Class to verify stateful processor usage with adding/deleting processing time timers
 class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
   extends RunningCountStatefulProcessor {
   @transient private var _timerState: ValueState[Long] = _
@@ -130,6 +133,7 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
   }
 }
 
+// Class to verify incorrect usage of stateful processor
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
   @transient private var _tempState: ValueState[Long] = _
 
