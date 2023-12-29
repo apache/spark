@@ -3856,12 +3856,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "reason" -> reason))
   }
 
-  def dataSourceAlreadyExists(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
-      messageParameters = Map("provider" -> name))
-  }
-
   def dataSourceDoesNotExist(name: String): Throwable = {
     new AnalysisException(
       errorClass = "DATA_SOURCE_NOT_EXIST",

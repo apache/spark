@@ -3452,7 +3452,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.spark.stop()
         spark = (
             PySparkSession.builder.config(conf=self.conf())
-            .config("spark.connect.jvmStacktrace.maxSize", 128)
+            .config("spark.connect.grpc.maxMetadataSize", 128)
             .remote("local[4]")
             .getOrCreate()
         )

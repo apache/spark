@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
@@ -1145,7 +1146,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children.xml"))
     val mixedRow = mixedDF.head()
-    assert(mixedRow.getAs[Row](0).toSeq === Seq(" lorem "))
+    assert(mixedRow.getAs[Row](0) === Row(List(" issue ", " text ignored "), " lorem "))
     assert(mixedRow.getString(1) === " ipsum ")
   }
 
@@ -1729,9 +1730,15 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val TAG_NAME = "tag"
     val VALUETAG_NAME = "_VALUE"
     val schema = buildSchema(
+      field(VALUETAG_NAME),
       field(ATTRIBUTE_NAME),
-      field(TAG_NAME, LongType),
-      field(VALUETAG_NAME))
+      field(TAG_NAME, LongType))
+    val expectedAns = Seq(
+      Row("value1", null, null),
+      Row("value2", "attr1", null),
+      Row("4", null, 5L),
+      Row("7", null, 6L),
+      Row(null, "8", null))
     val dfs = Seq(
       // user specified schema
       spark.read
@@ -1744,25 +1751,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         .xml(getTestResourcePath(resDir + "root-level-value-none.xml"))
     )
     dfs.foreach { df =>
-      val result = df.collect()
-      assert(result.length === 5)
-      assert(result(0).get(0) == null && result(0).get(1) == null)
-      assert(
-        result(1).getAs[String](ATTRIBUTE_NAME) == "attr1"
-          && result(1).getAs[Any](TAG_NAME) == null
-      )
-      assert(
-        result(2).getAs[Long](TAG_NAME) == 5L
-          && result(2).getAs[Any](ATTRIBUTE_NAME) == null
-      )
-      assert(
-        result(3).getAs[Long](TAG_NAME) == 6L
-          && result(3).getAs[Any](ATTRIBUTE_NAME) == null
-      )
-      assert(
-        result(4).getAs[String](ATTRIBUTE_NAME) == "8"
-          && result(4).getAs[Any](TAG_NAME) == null
-      )
+      checkAnswer(df, expectedAns)
     }
   }
 
@@ -2370,5 +2359,249 @@ class XmlSuite extends QueryTest with SharedSparkSession {
             err.getMessage.contains("Unable to extract ZoneId"))
       }
     }
+  }
+
+  test("capture values interspersed between elements - simple") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <a>
+         |        value2
+         |        <b>1</b>
+         |        value3
+         |    </a>
+         |    value4
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Array("value1", "value4"), Row(Array("value2", "value3"), 1))))
+  }
+
+  test("capture values interspersed between elements - array") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <array>
+         |        value2
+         |        <b>1</b>
+         |        value3
+         |    </array>
+         |    <array>
+         |        value4
+         |        <b>2</b>
+         |        value5
+         |        <c>3</c>
+         |        value6
+         |    </array>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val expectedAns = Seq(
+      Row(
+        "value1",
+        Array(
+          Row(List("value2", "value3"), 1, null),
+          Row(List("value4", "value5", "value6"), 2, 3))))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, expectedAns)
+
+  }
+
+  test("capture values interspersed between elements - long and double") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |  <a>
+         |    1
+         |    <b>2</b>
+         |    3
+         |    <b>4</b>
+         |    5.0
+         |  </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1.0, 3.0, 5.0), Array(2, 4)))))
+  }
+
+  test("capture values interspersed between elements - comments") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |  <a> 1 <!--this is a comment--> 2 </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1, 2)))))
+  }
+
+  test("capture values interspersed between elements - whitespaces with quotes") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |  <a>" "</a>
+         |  <b>" "<c>1</c></b>
+         |  <d><e attr=" "></e></d>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", false)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(
+      Row("\" \"", Row(1, "\" \""), Row(Row(null, " ")))))
+  }
+
+  test("capture values interspersed between elements - nested comments") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <a> 1
+         |        <!--this is a comment--> 2
+         |        <b>1</b>
+         |        <!--this is a comment--> 3
+         |        <b>2</b>
+         |    </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1, 2, 3), Array(1, 2)))))
+  }
+
+  test("capture values interspersed between elements - nested struct") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct1>
+         |        <struct2>
+         |            <array>1</array>
+         |            value1
+         |            <array>2</array>
+         |            value2
+         |            <struct3>3</struct3>
+         |        </struct2>
+         |        value4
+         |    </struct1>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(
+      df,
+      Seq(
+        Row(
+          Row(
+            "value4",
+            Row(
+              Array("value1", "value2"),
+              Array(1, 2),
+              3)))))
+  }
+
+  test("capture values interspersed between elements - deeply nested") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <struct1>
+         |        value2
+         |        <struct2>
+         |            value3
+         |            <array1>
+         |                value4
+         |                <struct3>
+         |                    value5
+         |                    <array2>1</array2>
+         |                    value6
+         |                    <array2>2</array2>
+         |                    value7
+         |                </struct3>
+         |                value8
+         |                <string>string</string>
+         |                value9
+         |            </array1>
+         |            value10
+         |            <array1>
+         |                <struct3>
+         |                    <array2>3</array2>
+         |                    value11
+         |                    <array2>4</array2>
+         |                </struct3>
+         |                <string>string</string>
+         |                value12
+         |            </array1>
+         |            value13
+         |            <int>3</int>
+         |            value14
+         |        </struct2>
+         |        value15
+         |    </struct1>
+         |    value16
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("ignoreSurroundingSpaces", true)
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .xml(input)
+
+    val expectedAns = Seq(Row(
+      ArraySeq("value1", "value16"),
+      Row(
+        ArraySeq("value2", "value15"),
+        Row(
+          ArraySeq("value3", "value10", "value13", "value14"),
+          Array(
+            Row(
+              ArraySeq("value4", "value8", "value9"),
+              "string",
+              Row(ArraySeq("value5", "value6", "value7"), ArraySeq(1, 2))),
+            Row(
+              ArraySeq("value12"),
+              "string",
+              Row(ArraySeq("value11"), ArraySeq(3, 4)))),
+          3))))
+
+    checkAnswer(df, expectedAns)
   }
 }
