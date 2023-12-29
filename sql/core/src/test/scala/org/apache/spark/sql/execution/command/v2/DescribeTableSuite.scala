@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.junit.jupiter.api.Assertions
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command
@@ -90,7 +92,8 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Provider", "_", ""),
           Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
-          Row("Table Properties", "[bar=baz]", "")))
+          Row("Table Properties", "[bar=baz]", ""),
+          Row("Statistics", "0 bytes, 0 rows", null)))
     }
   }
 
@@ -194,6 +197,22 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("col_name", "key"),
           Row("data_type", "int"),
           Row("comment", "column_comment")))
+    }
+  }
+
+  test("describe extended table with stats") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(
+        s"""
+           |CREATE TABLE $tbl
+           |(key INT, col STRING)
+           |$defaultUsing""".stripMargin)
+
+      sql(s"INSERT INTO $tbl values (1, 'aaa'), (2, 'bbb'), (3, 'ccc'), (null, 'ddd')")
+      val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl")
+      val stats = descriptionDf.filter("col_name == 'Statistics'").select("data_type")
+        .collectAsList().get(0).toString
+      Assertions.assertTrue("""\[\d+\s+bytes,\s+4\s+rows]""".r.matches(stats))
     }
   }
 }
