@@ -105,8 +105,7 @@ object DataSourceManager extends Logging {
             // Even if it fails for whatever reason, we shouldn't make the whole
             // application fail.
             logWarning(
-              "Skipping the lookup of Python Data Sources " +
-                s"as it failed to execute the Python worker: $e")
+              s"Skipping the lookup of Python Data Sources due to the failure: $e")
             None
         }
 
