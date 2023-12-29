@@ -9112,6 +9112,14 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     |Bob  |cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961|
     +-----+----------------------------------------------------------------+
     """
+    if numBits not in [0, 224, 256, 384, 512]:
+        raise PySparkValueError(
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "numBits",
+                "allowed_values": "[0, 224, 256, 384, 512]",
+            },
+        )
     return _invoke_function("sha2", _to_java_column(col), numBits)
 
 
