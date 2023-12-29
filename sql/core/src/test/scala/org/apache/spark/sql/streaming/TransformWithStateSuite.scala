@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
@@ -76,7 +77,13 @@ class RunningCountStatefulProcessorWithProcTimeTimer
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + inputRows.size
+    val currCount = _countState.getOption().getOrElse(0L)
+    if (currCount == 0 && (key == "a" || key == "c")) {
+      _processorHandle.registerProcessingTimeTimer(timerValues.getCurrentProcessingTimeInMs()
+        + 5000)
+    }
+
+    val count = currCount + inputRows.size
     if (count == 3) {
       _countState.remove()
       Iterator.empty
@@ -90,7 +97,8 @@ class RunningCountStatefulProcessorWithProcTimeTimer
       key: String,
       expiryTimestampMs: Long,
       timerValues: TimerValues): Iterator[(String, String)] = {
-    Iterator.empty
+    _countState.remove()
+    Iterator((key, "-1"))
   }
 
   override def close(): Unit = {}
@@ -168,6 +176,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
    "should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
       val inputData = MemoryStream[String]
       val result = inputData.toDS()
         .groupByKey(x => x)
@@ -176,18 +186,29 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("a", "1")),
-        AddData(inputData, "a", "b"),
-        CheckNewAnswer(("a", "2"), ("b", "1")),
+
+        AddData(inputData, "b"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("b", "1")),
+
+        AddData(inputData, "b"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("a", "-1"), ("b", "2")),
+
         StopStream,
-        StartStream(),
-        AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
-        CheckNewAnswer(("b", "2")),
-        StopStream,
-        StartStream(),
-        AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
-        CheckNewAnswer(("a", "1"), ("c", "1"))
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "b"),
+        AddData(inputData, "c"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("c", "1")),
+        AddData(inputData, "d"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("c", "-1"), ("d", "1")),
+        StopStream
       )
     }
   }

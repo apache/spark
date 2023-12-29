@@ -95,6 +95,7 @@ case class TransformWithStateExec(
     groupingAttributes.map(SortOrder(_, Ascending)))
 
   private def handleTimerRows(
+      store: StateStore,
       keyRow: UnsafeRow,
       currTimestampMs: Long): Iterator[InternalRow] = {
 
@@ -111,6 +112,7 @@ case class TransformWithStateExec(
         getOutputRow(obj)
       }
       ImplicitKeyTracker.removeImplicitKey()
+      store.remove(keyRow, TimerStateUtils.PROC_TIMERS_STATE_NAME)
       mappedIterator
     } else {
       Iterator.empty
@@ -152,10 +154,12 @@ case class TransformWithStateExec(
     timeoutMode match {
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
+        store.createColFamilyIfAbsent(TimerStateUtils.PROC_TIMERS_STATE_NAME, true)
+
         val procTimeIter = store
           .iterator(TimerStateUtils.PROC_TIMERS_STATE_NAME)
         procTimeIter.flatMap { case rowPair =>
-          handleTimerRows(rowPair.key, batchTimestampMs.get)
+          handleTimerRows(store, rowPair.key, batchTimestampMs.get)
         }
 
       case _ => Iterator.empty

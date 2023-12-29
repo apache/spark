@@ -143,6 +143,7 @@ class StatefulProcessorHandleImpl(
     if (procTimers.exists(expiryTimestampMs)) {
       logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
     } else {
+      logInfo(s"Registering timer with expiryTimestampMs=$expiryTimestampMs")
       procTimers.add(expiryTimestampMs, true)
     }
   }
@@ -153,6 +154,7 @@ class StatefulProcessorHandleImpl(
     if (!procTimers.exists(expiryTimestampMs)) {
       logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")
     } else {
+      logInfo(s"Removing timer with expiryTimestampMs=$expiryTimestampMs")
       procTimers.remove(expiryTimestampMs)
     }
   }
