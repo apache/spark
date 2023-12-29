@@ -211,24 +211,28 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
-    test(s"error framework parameters - $name") {
-      val testParams = GrpcExceptionConverter.ErrorParams(
-        message = "Found duplicate keys `abc`",
-        cause = None,
-        errorClass = Some("DUPLICATE_KEY"),
-        messageParameters = Map("keyColumn" -> "`abc`"),
-        queryContext = Array.empty)
-      val error = constructor(testParams)
-      assert(error.getMessage.contains(testParams.message))
-      assert(error.getCause == null)
-      error match {
-        case sparkThrowable: SparkThrowable =>
-          assert(sparkThrowable.getErrorClass == testParams.errorClass.get)
-          assert(sparkThrowable.getMessageParameters.asScala == testParams.messageParameters)
-          assert(sparkThrowable.getQueryContext.isEmpty)
-        case _ =>
-      }
+    test(s"error framework parameters") {
+      for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
+        withClue(name) {
+          val testParams = GrpcExceptionConverter.ErrorParams(
+            message = "Found duplicate keys `abc`",
+            cause = None,
+            errorClass = Some("DUPLICATE_KEY"),
+            messageParameters = Map("keyColumn" -> "`abc`"),
+            queryContext = Array.empty)
+          val error = constructor(testParams)
+          assert(error.getMessage.contains(testParams.message))
+          assert(error.getCause == null)
+          error match {
+            case e: SparkThrowable if e.getErrorClass.startsWith("_LEGACY_ERROR_TEMP_") =>
+              assert(e.getMessageParameters().get("message") == "Found duplicate keys `abc`")
+            case sparkThrowable: SparkThrowable =>
+              assert(sparkThrowable.getErrorClass == testParams.errorClass.get)
+              assert(sparkThrowable.getMessageParameters.asScala == testParams.messageParameters)
+              assert(sparkThrowable.getQueryContext.isEmpty)
+            case _ =>
+          }
+        }
     }
   }
 
