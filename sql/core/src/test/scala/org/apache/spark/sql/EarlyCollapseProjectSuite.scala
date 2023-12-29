@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.test.SharedSparkSession
 
 
@@ -146,11 +146,25 @@ class EarlyCollapseProjectSuite extends QueryTest
     checkProjectCollapseAndCacheUse(baseDf, df => df.select($"d" * 7 as "a"))
   }
 
+  test("reuse of cache on mix of column addition, rename and dropping - 6") {
+    val baseDf = spark.range(10).select($"id" as "a", $"id" + 5 as "b").
+      select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
+    checkProjectCollapseAndCacheUse(baseDf, df => df.select($"d" * 7 as "a", $"d" * 7 as "b",
+    $"b" + $"a" as "e"))
+  }
+
+  test("reuse of cache on mix of column addition, rename and dropping - 7") {
+    val baseDf = spark.range(10).select($"id" as "a", $"id" + 5 as "b").
+      select($"a" + $"b" as "c", $"a", $"b").select( lit(9) as "e", $"c", lit(11) as "a", $"b",
+      $"c" * $"a" * $"b" as "d")
+    checkProjectCollapseAndCacheUse(baseDf, df => df.select($"a" as "a1", lit(7)  as "d1",
+      $"b" as "b1", $"c" * $"a" as "c", lit(13) as "f"))
+  }
+
   test("use of cached InMemoryRelation when new columns added do not result in new project -1") {
     val baseDf = spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
-    checkProjectCollapseAndCacheUse(baseDf,
-      df => df.withColumns(
+    checkProjectCollapseAndCacheUse(baseDf, df => df.withColumns(
         Seq("newCol1", "newCol2", "newCol3", "newCol4"),
         Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))))
   }
