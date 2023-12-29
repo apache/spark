@@ -487,28 +487,31 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //       original expression as it is.
   private def tryResolveColumnByPlanId(
       e: Expression,
-      q: LogicalPlan,
-      idToPlan: mutable.HashMap[Long, LogicalPlan] = mutable.HashMap.empty): Expression = e match {
+      q: LogicalPlan): Expression = e match {
     case u: UnresolvedAttribute =>
-      resolveUnresolvedAttributeByPlanId(
-        u, q, idToPlan: mutable.HashMap[Long, LogicalPlan]
-      ).getOrElse(u)
+      resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
     case _ if e.containsPattern(UNRESOLVED_ATTRIBUTE) =>
-      e.mapChildren(c => tryResolveColumnByPlanId(c, q, idToPlan))
+      e.mapChildren(c => tryResolveColumnByPlanId(c, q))
     case _ => e
   }
 
   private def resolveUnresolvedAttributeByPlanId(
       u: UnresolvedAttribute,
-      q: LogicalPlan,
-      idToPlan: mutable.HashMap[Long, LogicalPlan]): Option[NamedExpression] = {
+      q: LogicalPlan): Option[NamedExpression] = {
     val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
     if (planIdOpt.isEmpty) return None
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val plan = idToPlan.getOrElseUpdate(planId, {
-      findPlanById(u, planId, q).getOrElse {
+    if (q.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId)) {
+      resolveUnresolvedAttributeByPlan(u, q)
+    } else {
+      val found = q.children.flatMap { child =>
+        findPlanById(planId, child).map { plan =>
+          (child, plan)
+        }
+      }
+      if (found.isEmpty) {
         // For example:
         //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
         //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
@@ -520,8 +523,26 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             "planId" -> planId.toString,
             "q" -> q.toString))
       }
-    })
 
+      val matched = found.flatMap { case (child, plan) =>
+        resolveUnresolvedAttributeByPlan(u, plan)
+          .filter(child.outputSet.contains)
+      }
+      if (matched.length > 1) {
+        throw new AnalysisException(
+          errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+          messageParameters = Map("name" -> toSQLId(u.nameParts)),
+          origin = u.origin
+        )
+      }
+      matched.headOption
+    }
+  }
+
+  private def resolveUnresolvedAttributeByPlan(
+    u: UnresolvedAttribute,
+    plan: LogicalPlan
+  ): Option[NamedExpression] = {
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
     try {
       if (!isMetadataAccess) {
@@ -539,26 +560,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   }
 
   private def findPlanById(
-      u: UnresolvedAttribute,
       id: Long,
-      plan: LogicalPlan): Option[LogicalPlan] = {
+      plan: LogicalPlan): Seq[LogicalPlan] = {
     if (plan.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      Some(plan)
-    } else if (plan.children.length == 1) {
-      findPlanById(u, id, plan.children.head)
-    } else if (plan.children.length > 1) {
-      val matched = plan.children.flatMap(findPlanById(u, id, _))
-      if (matched.length > 1) {
-        throw new AnalysisException(
-          errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
-          messageParameters = Map("name" -> toSQLId(u.nameParts)),
-          origin = u.origin
-        )
-      } else {
-        matched.headOption
-      }
+      Seq(plan)
     } else {
-      None
+      plan.children.flatMap(findPlanById(id, _))
     }
   }
 }
