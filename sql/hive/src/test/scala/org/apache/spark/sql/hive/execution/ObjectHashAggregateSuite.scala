@@ -33,6 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.unsafe.types.CalendarInterval
 
 @SlowHiveTest
 class ObjectHashAggregateSuite
@@ -454,6 +455,33 @@ class ObjectHashAggregateSuite
           .groupBy(lit(1))
           .agg(typed_count($"c0"), first($"c0")),
         Row(1, 2, Map.empty[Int, Int])
+      )
+    }
+  }
+
+  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
+    withSQLConf(
+      SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
+      SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"
+    ) {
+      val numRows = 50
+
+      assert(
+        (1 to numRows)
+          .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
+          .toDF("c0")
+          .groupBy("c0")
+          .agg(count("*"))
+          .count() == 1
+      )
+
+      assert(
+        (1 to numRows)
+          .map(i => Tuple1(new CalendarInterval(i, i, i)))
+          .toDF("c0")
+          .groupBy("c0")
+          .agg(count("*"))
+          .count() == numRows
       )
     }
   }

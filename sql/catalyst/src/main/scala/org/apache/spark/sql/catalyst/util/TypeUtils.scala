@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 object TypeUtils extends QueryErrorsBase {
 
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
-    if (RowOrdering.isOrderable(dt)) {
+    if (ExprUtils.canBeUsedInGroupBy(dt)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(

@@ -627,6 +627,7 @@ class CodegenContext extends Logging {
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
+    case CalendarIntervalType => s"$c1.equals($c2)"
     case NullType => "false"
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError(
@@ -652,6 +653,7 @@ class CodegenContext extends Logging {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
+    case CalendarIntervalType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType

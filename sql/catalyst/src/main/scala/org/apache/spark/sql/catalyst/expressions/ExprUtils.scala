@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DataType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends QueryErrorsBase {
@@ -193,8 +193,8 @@ object ExprUtils extends QueryErrorsBase {
           messageParameters = Map("sqlExpr" -> expr.sql))
       }
 
-      // Check if the data type of expr is orderable.
-      if (!RowOrdering.isOrderable(expr.dataType)) {
+      // Check if the data type of expr can be used in group by
+      if (!canBeUsedInGroupBy(expr.dataType)) {
         expr.failAnalysis(
           errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
           messageParameters = Map(
@@ -216,5 +216,13 @@ object ExprUtils extends QueryErrorsBase {
 
     a.groupingExpressions.foreach(checkValidGroupingExprs)
     a.aggregateExpressions.foreach(checkValidAggregateExpression)
+  }
+
+  /**
+   * Returns whether the data type can be used in group by
+   */
+  def canBeUsedInGroupBy(dt: DataType): Boolean = dt match {
+    case CalendarIntervalType => true
+    case _ => RowOrdering.isOrderable(dt)
   }
 }

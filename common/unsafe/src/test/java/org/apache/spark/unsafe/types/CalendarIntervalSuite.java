@@ -77,6 +77,22 @@ public class CalendarIntervalSuite {
   }
 
   @Test
+  public void compareToTest() {
+   CalendarInterval i = new CalendarInterval(0, 0, 0);
+
+   assertEquals(i.compareTo(new CalendarInterval(0, 0, 0)), 0);
+   assertEquals(i.compareTo(new CalendarInterval(0, 0, 1)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(0, 1, 0)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(0, 1, -1)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(1, 0, 0)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(1, 0, -1)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(0, 0, -1)), 1);
+   assertEquals(i.compareTo(new CalendarInterval(0, -1, 0)), 1);
+   assertEquals(i.compareTo(new CalendarInterval(-1, 0, 0)), 1);
+   assertEquals(i.compareTo(new CalendarInterval(-1, 0, 1)), 1);
+  }
+
+  @Test
   public void periodAndDurationTest() {
     CalendarInterval interval = new CalendarInterval(120, -40, 123456);
     assertEquals(Period.of(0, 120, -40), interval.extractAsPeriod());
