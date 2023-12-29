@@ -543,7 +543,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        with self.assertRaisesRegex(AnalysisException, "attribute.*missing"):
+        with self.assertRaisesRegex(AnalysisException, "`b` cannot be resolved"):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
 
