@@ -655,4 +655,95 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
         Seq(Row(2)))
     }
   }
+
+  test("data source write commit and abort") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |import json
+         |import os
+         |from dataclasses import dataclass
+         |from pyspark import TaskContext
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
+         |
+         |@dataclass
+         |class SimpleCommitMessage(WriterCommitMessage):
+         |    partition_id: int
+         |    count: int
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |        self.path = self.options.get("path")
+         |        assert self.path is not None
+         |
+         |    def write(self, iterator):
+         |        context = TaskContext.get()
+         |        partition_id = context.partitionId()
+         |        output_path = os.path.join(self.path, f"{partition_id}.json")
+         |        cnt = 0
+         |        with open(output_path, "w") as file:
+         |            for row in iterator:
+         |                if row.id >= 10:
+         |                    raise Exception("invalid value")
+         |                file.write(json.dumps(row.asDict()) + "\\n")
+         |                cnt += 1
+         |        return SimpleCommitMessage(partition_id=partition_id, count=cnt)
+         |
+         |    def commit(self, messages) -> None:
+         |        status = dict(num_files=len(messages), count=sum(m.count for m in messages))
+         |
+         |        with open(os.path.join(self.path, "success.json"), "a") as file:
+         |            file.write(json.dumps(status) + "\\n")
+         |
+         |    def abort(self, messages) -> None:
+         |        with open(os.path.join(self.path, "failed.txt"), "a") as file:
+         |            file.write("failed")
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, saveMode):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+
+      withClue("commit") {
+        sql("SELECT * FROM range(0, 5, 1, 3)")
+          .write.format(dataSourceName)
+          .mode("append")
+          .save(path)
+        checkAnswer(
+          spark.read.format("json")
+            .schema("num_files bigint, count bigint")
+            .load(path + "/success.json"),
+          Seq(Row(3, 5)))
+      }
+
+      withClue("commit again") {
+        sql("SELECT * FROM range(5, 7, 1, 1)")
+          .write.format(dataSourceName)
+          .mode("append")
+          .save(path)
+        checkAnswer(
+          spark.read.format("json")
+            .schema("num_files bigint, count bigint")
+            .load(path + "/success.json"),
+          Seq(Row(3, 5), Row(1, 2)))
+      }
+
+      withClue("abort") {
+        intercept[SparkException] {
+          sql("SELECT * FROM range(8, 12, 1, 4)")
+            .write.format(dataSourceName)
+            .mode("append")
+            .save(path)
+        }
+        checkAnswer(
+          spark.read.text(path + "/failed.txt"),
+          Seq(Row("failed")))
+      }
+    }
+  }
 }

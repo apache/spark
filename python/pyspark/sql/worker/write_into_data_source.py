@@ -211,6 +211,9 @@ def main(infile: IO, outfile: IO) -> None:
         command = (data_source_write_func, return_type)
         pickleSer._write_with_length(command, outfile)
 
+        # Return the picked writer.
+        pickleSer._write_with_length(writer, outfile)
+
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
