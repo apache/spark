@@ -509,9 +509,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       resolveUnresolvedAttributeByPlan(u, q, isMetadataAccess)
     } else {
       val found = q.children.flatMap { child =>
-        findPlanById(planId, child).map { plan =>
-          (child, plan)
-        }
+        val nodes = findPlanById(planId, child)
+        if (nodes.nonEmpty) Some(child, nodes) else None
       }
       if (found.isEmpty) {
         // For example:
@@ -526,17 +525,16 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             "q" -> q.toString))
       }
 
-      val matched = found.flatMap { case (child, plan) =>
-        // NOTE: An already-referenced column might appear in `output` instead of `metadataOutput`.
-        val metadataOutputSet = child.outputSet ++ AttributeSet(child.metadataOutput)
-        resolveUnresolvedAttributeByPlan(u, plan, isMetadataAccess)
-          .filter { resolved =>
-            if (isMetadataAccess) {
-              metadataOutputSet.contains(resolved)
-            } else {
-              child.outputSet.contains(resolved)
-            }
-          }
+      val matched = found.flatMap { case (child, nodes) =>
+        val resolved = nodes
+          .flatMap(resolveUnresolvedAttributeByPlan(u, _, isMetadataAccess))
+        if (isMetadataAccess) {
+          // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
+          val metadataOutputSet = child.outputSet ++ AttributeSet(child.metadataOutput)
+          resolved.filter(metadataOutputSet.contains)
+        } else {
+          resolved.filter(child.outputSet.contains)
+        }
       }
       if (matched.length > 1) {
         throw new AnalysisException(
