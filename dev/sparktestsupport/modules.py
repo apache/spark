@@ -796,6 +796,8 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.series",
         # unittests
         "pyspark.pandas.tests.indexes.test_base",
+        "pyspark.pandas.tests.indexes.test_conversion",
+        "pyspark.pandas.tests.indexes.test_drop",
         "pyspark.pandas.tests.indexes.test_asof",
         "pyspark.pandas.tests.indexes.test_astype",
         "pyspark.pandas.tests.indexes.test_delete",
@@ -1086,6 +1088,8 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.test_parity_typedef",
         "pyspark.pandas.tests.connect.test_parity_utils",
         "pyspark.pandas.tests.connect.indexes.test_parity_base",
+        "pyspark.pandas.tests.connect.indexes.test_parity_conversion",
+        "pyspark.pandas.tests.connect.indexes.test_parity_drop",
         "pyspark.pandas.tests.connect.indexes.test_parity_asof",
         "pyspark.pandas.tests.connect.indexes.test_parity_astype",
         "pyspark.pandas.tests.connect.indexes.test_parity_delete",
