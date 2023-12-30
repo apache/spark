@@ -223,6 +223,7 @@
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
+    <datasketches.version>3.3.0</datasketches.version>
     <netty.version>4.1.100.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
     <!--
@@ -800,7 +801,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-10</version>
+        <version>1.5.5-11</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2836,6 +2837,12 @@
         <groupId>dev.ludovic.netlib</groupId>
         <artifactId>arpack</artifactId>
         <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <!-- SPARK-16484 add `datasketches-java` for support Datasketches HllSketch -->
+      <dependency>
+        <groupId>org.apache.datasketches</groupId>
+        <artifactId>datasketches-java</artifactId>
+        <version>${datasketches.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

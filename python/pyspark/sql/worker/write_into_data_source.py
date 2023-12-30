@@ -24,6 +24,7 @@ from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
+    read_bool,
     read_int,
     write_int,
     SpecialLengths,
@@ -148,8 +149,8 @@ def main(infile: IO, outfile: IO) -> None:
             value = utf8_deserializer.loads(infile)
             options[key] = value
 
-        # Receive the save mode.
-        save_mode = utf8_deserializer.loads(infile)
+        # Receive the `overwrite` flag.
+        overwrite = read_bool(infile)
 
         # Instantiate a data source.
         try:
@@ -162,7 +163,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate the data source writer.
         try:
-            writer = data_source.writer(schema, save_mode)
+            writer = data_source.writer(schema, overwrite)
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
@@ -209,6 +210,9 @@ def main(infile: IO, outfile: IO) -> None:
         # Return the pickled write UDF.
         command = (data_source_write_func, return_type)
         pickleSer._write_with_length(command, outfile)
+
+        # Return the picked writer.
+        pickleSer._write_with_length(writer, outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

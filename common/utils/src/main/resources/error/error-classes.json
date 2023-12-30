@@ -875,12 +875,6 @@
     ],
     "sqlState" : "42K01"
   },
-  "DATA_SOURCE_ALREADY_EXISTS" : {
-    "message" : [
-      "Data source '<provider>' already exists in the registry. Please use a different name for the new data source."
-    ],
-    "sqlState" : "42710"
-  },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
       "Data source '<provider>' not found. Please make sure the data source is registered."
@@ -1480,12 +1474,6 @@
     },
     "sqlState" : "42K0B"
   },
-  "INCORRECT_END_OFFSET" : {
-    "message" : [
-      "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but it's <endSeconds> now."
-    ],
-    "sqlState" : "22003"
-  },
   "INCORRECT_RAMP_UP_RATE" : {
     "message" : [
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
@@ -1904,11 +1892,6 @@
       "OPERATION_NOT_FOUND" : {
         "message" : [
           "Operation not found."
-        ]
-      },
-      "SESSION_ALREADY_EXISTS" : {
-        "message" : [
-          "Session already exists."
         ]
       },
       "SESSION_CLOSED" : {
@@ -6065,11 +6048,6 @@
       "<walkedTypePath>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2142" : {
-    "message" : [
-      "Attributes for type <schema> is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
@@ -6920,11 +6898,6 @@
       "<clazz>: <msg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3066" : {
-    "message" : [
-      "<msg>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3067" : {
     "message" : [
       "Streaming aggregation doesn't support group aggregate pandas UDF"
@@ -6978,11 +6951,6 @@
   "_LEGACY_ERROR_TEMP_3077" : {
     "message" : [
       "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3078" : {
-    "message" : [
-      "Can not match ParquetTable in the query."
     ]
   },
   "_LEGACY_ERROR_TEMP_3079" : {
@@ -7103,6 +7071,36 @@
   "_LEGACY_ERROR_TEMP_3103" : {
     "message" : [
       "Namespace '<namespace>' is non empty. <details>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3104" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3105" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3106" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3107" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3108" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3109" : {
+    "message" : [
+      "<message>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
