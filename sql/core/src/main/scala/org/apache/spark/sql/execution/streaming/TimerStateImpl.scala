@@ -26,6 +26,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.types._
 
+/**
+ * Singleton utils class used primarily while interacting with TimerState
+ */
 object TimerStateUtils {
   case class TimestampWithKey(
       key: Any,
@@ -35,7 +38,8 @@ object TimerStateUtils {
 }
 
 /**
- * Class that provides a concrete implementation for TimerState
+ * Class that provides the implementation for storing timers
+ * used within the `transformWithState` operator.
  * @param store - state store to be used for storing timer data
  * @param stateName - name of the timer state variable
  * @tparam S - type of timer value
@@ -44,8 +48,6 @@ class TimerStateImpl[S](
     store: StateStore,
     stateName: String) extends Logging {
 
-  // TODO: validate places that are trying to encode the key and check if we can eliminate/
-  // add caching for some of these calls.
   private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
@@ -54,7 +56,6 @@ class TimerStateImpl[S](
     }
 
     val tsWithKey = TimerStateUtils.TimestampWithKey(keyOption.get, expiryTimestampMs)
-
     val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
     val keyByteArr = SerializationUtils.serialize(tsWithKey.asInstanceOf[Serializable])
     val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
@@ -70,7 +71,11 @@ class TimerStateImpl[S](
     valueRow
   }
 
-  /** Function to check if state exists. Returns true if present and false otherwise */
+  /**
+   * Function to check if the timer for the given key and timestamp is already registered
+   * @param expiryTimestampMs - expiry timestamp of the timer
+   * @return - true if the timer is already registered, false otherwise
+   */
   def exists(expiryTimestampMs: Long): Boolean = {
     getImpl(expiryTimestampMs) != null
   }
@@ -79,12 +84,19 @@ class TimerStateImpl[S](
     store.get(encodeKey(expiryTimestampMs), stateName)
   }
 
-  /** Function to update and overwrite state associated with given key */
+  /**
+   * Function to add a new timer for the given key and timestamp
+   * @param expiryTimestampMs - expiry timestamp of the timer
+   * @param newState = boolean value to be stored for the state value
+   */
   def add(expiryTimestampMs: Long, newState: S): Unit = {
     store.put(encodeKey(expiryTimestampMs), encodeValue(newState), stateName)
   }
 
-  /** Function to remove state for given key */
+  /**
+   * Function to remove the timer for the given key and timestamp
+   * @param expiryTimestampMs - expiry timestamp of the timer
+   */
   def remove(expiryTimestampMs: Long): Unit = {
     store.remove(encodeKey(expiryTimestampMs), stateName)
   }

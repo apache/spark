@@ -53,14 +53,14 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
 
   val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
-  private def newStoreProviderWithValueState(useColumnFamilies: Boolean):
+  private def newStoreProviderWithHandle(useColumnFamilies: Boolean):
     RocksDBStateStoreProvider = {
-    newStoreProviderWithValueState(StateStoreId(newDir(), Random.nextInt(), 0),
+    newStoreProviderWithHandle(StateStoreId(newDir(), Random.nextInt(), 0),
       numColsPrefixKey = 0,
       useColumnFamilies = useColumnFamilies)
   }
 
-  private def newStoreProviderWithValueState(
+  private def newStoreProviderWithHandle(
     storeId: StateStoreId,
     numColsPrefixKey: Int,
     sqlConf: Option[SQLConf] = None,
@@ -84,7 +84,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   test("value state creation with no timeouts should succeed") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), TimeoutMode.NoTimeouts())
@@ -95,7 +95,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   test("value state creation with processing time timeout should succeed") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), TimeoutMode.ProcessingTime())
@@ -121,9 +121,13 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     handle.getValueState[Long]("testState")
   }
 
+  private def registerTimer(handle: StatefulProcessorHandleImpl): Unit = {
+    handle.registerProcessingTimeTimer(1000L)
+  }
+
   test("value state creation with processing time " +
     "timeout and invalid state should fail") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), TimeoutMode.ProcessingTime())
@@ -151,7 +155,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   test("registering processing time timeouts with NoTimeout mode should fail") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), TimeoutMode.NoTimeouts())
@@ -169,7 +173,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   test("registering processing time timeouts with ProcessingTime mode should succeed") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), TimeoutMode.ProcessingTime())
@@ -189,24 +193,24 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   test("registering processing time timeouts with invalid state should fail") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), TimeoutMode.ProcessingTime())
 
       verifyInvalidOperation(handle, StatefulProcessorHandleState.CREATED,
         "Cannot register processing time timer") { handle =>
-        handle.registerProcessingTimeTimer(10000L)
+        registerTimer(handle)
       }
 
       verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
         "Cannot register processing time timer") { handle =>
-        handle.registerProcessingTimeTimer(10000L)
+        registerTimer(handle)
       }
 
       verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
         "Cannot register processing time timer") { handle =>
-        handle.registerProcessingTimeTimer(10000L)
+        registerTimer(handle)
       }
     }
   }
