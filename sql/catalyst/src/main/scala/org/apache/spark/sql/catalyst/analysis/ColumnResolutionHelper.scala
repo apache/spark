@@ -503,8 +503,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
+
     if (q.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId)) {
-      resolveUnresolvedAttributeByPlan(u, q)
+      resolveUnresolvedAttributeByPlan(u, q, isMetadataAccess)
     } else {
       val found = q.children.flatMap { child =>
         findPlanById(planId, child).map { plan =>
@@ -525,8 +527,16 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
 
       val matched = found.flatMap { case (child, plan) =>
-        resolveUnresolvedAttributeByPlan(u, plan)
-          .filter(child.outputSet.contains)
+        // NOTE: An already-referenced column might appear in `output` instead of `metadataOutput`.
+        val metadataOutputSet = child.outputSet ++ AttributeSet(child.metadataOutput)
+        resolveUnresolvedAttributeByPlan(u, plan, isMetadataAccess)
+          .filter { resolved =>
+            if (isMetadataAccess) {
+              metadataOutputSet.contains(resolved)
+            } else {
+              child.outputSet.contains(resolved)
+            }
+          }
       }
       if (matched.length > 1) {
         throw new AnalysisException(
@@ -541,9 +551,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   private def resolveUnresolvedAttributeByPlan(
     u: UnresolvedAttribute,
-    plan: LogicalPlan
-  ): Option[NamedExpression] = {
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
+    plan: LogicalPlan,
+    isMetadataAccess: Boolean): Option[NamedExpression] = {
     try {
       if (!isMetadataAccess) {
         plan.resolve(u.nameParts, conf.resolver)
