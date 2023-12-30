@@ -452,6 +452,7 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
+    acquire()
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
     changelogWriter.foreach(_.abort())
