@@ -250,10 +250,12 @@ jobs:
       with:
         python-version: '3.9'
         architecture: x64
+        cache: 'pip'
+        cache-dependency-path: 'dev/py-tests/requirements-sql.txt'
     - name: Install Python packages (Python 3.9)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
+        python3.9 -m pip install -r dev/py-tests/requirements-sql.txt
         python3.9 -m pip list
     # Run the tests.
     - name: Run tests
