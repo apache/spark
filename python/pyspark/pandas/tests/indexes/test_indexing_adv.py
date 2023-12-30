@@ -22,11 +22,12 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
-from pyspark.testing.pandasutils import ComparisonTestBase, compare_both
+from pyspark.pandas.exceptions import SparkPandasNotImplementedError
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, compare_both
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class IndexingTest(ComparisonTestBase):
+class IndexingAdvMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -40,6 +41,10 @@ class IndexingTest(ComparisonTestBase):
             {0: [1, 2, 3, 4, 5, 6, 7, 8, 9], 1: [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     @property
     def psdf2(self):
@@ -380,8 +385,16 @@ class IndexingTest(ComparisonTestBase):
             psdf.iloc[[1, 1]]
 
 
+class IndexingAdvTests(
+    IndexingAdvMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
+    pass
+
+
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_indexing import *  # noqa: F401
+    from pyspark.pandas.tests.indexes.test_indexing_adv import *  # noqa: F401
 
     try:
         import xmlrunner

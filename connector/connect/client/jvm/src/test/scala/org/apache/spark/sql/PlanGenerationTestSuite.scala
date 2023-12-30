@@ -516,6 +516,10 @@ class PlanGenerationTestSuite
     simple.where("a + id < 1000")
   }
 
+  test("between expr") {
+    simple.selectExpr("rand(123) BETWEEN 0.1 AND 0.2")
+  }
+
   test("unpivot values") {
     simple.unpivot(
       ids = Array(fn.col("id"), fn.col("a")),

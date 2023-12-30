@@ -225,10 +225,12 @@ class BasePythonDataSourceTestsMixin:
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
         self.assertEqual(df.rdd.getNumPartitions(), 2)
 
-    def test_custom_json_data_source(self):
+    def _get_test_json_data_source(self):
         import json
+        import os
+        from dataclasses import dataclass
 
-        class JsonDataSourceReader(DataSourceReader):
+        class TestJsonReader(DataSourceReader):
             def __init__(self, options):
                 self.options = options
 
@@ -242,18 +244,39 @@ class BasePythonDataSourceTestsMixin:
                             data = json.loads(line)
                             yield data.get("name"), data.get("age")
 
-        class JsonDataSourceWriter(DataSourceWriter):
+        @dataclass
+        class TestCommitMessage(WriterCommitMessage):
+            count: int
+
+        class TestJsonWriter(DataSourceWriter):
             def __init__(self, options):
                 self.options = options
+                self.path = self.options.get("path")
 
             def write(self, iterator):
-                path = self.options.get("path")
-                with open(path, "w") as file:
-                    for row in iterator:
-                        file.write(json.dumps(row.asDict()) + "\n")
-                return WriterCommitMessage()
+                from pyspark import TaskContext
 
-        class JsonDataSource(DataSource):
+                context = TaskContext.get()
+                output_path = os.path.join(self.path, f"{context.partitionId}.json")
+                count = 0
+                with open(output_path, "w") as file:
+                    for row in iterator:
+                        count += 1
+                        if "id" in row and row.id > 5:
+                            raise Exception("id > 5")
+                        file.write(json.dumps(row.asDict()) + "\n")
+                return TestCommitMessage(count=count)
+
+            def commit(self, messages):
+                total_count = sum(message.count for message in messages)
+                with open(os.path.join(self.path, "_success.txt"), "a") as file:
+                    file.write(f"count: {total_count}\n")
+
+            def abort(self, messages):
+                with open(os.path.join(self.path, "_failed.txt"), "a") as file:
+                    file.write("failed")
+
+        class TestJsonDataSource(DataSource):
             @classmethod
             def name(cls):
                 return "my-json"
@@ -262,13 +285,16 @@ class BasePythonDataSourceTestsMixin:
                 return "name STRING, age INT"
 
             def reader(self, schema) -> "DataSourceReader":
-                return JsonDataSourceReader(self.options)
+                return TestJsonReader(self.options)
 
             def writer(self, schema, overwrite):
-                return JsonDataSourceWriter(self.options)
+                return TestJsonWriter(self.options)
 
-        self.spark.dataSource.register(JsonDataSource)
-        # Test data source read.
+        return TestJsonDataSource
+
+    def test_custom_json_data_source_read(self):
+        data_source = self._get_test_json_data_source()
+        self.spark.dataSource.register(data_source)
         path1 = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
         path2 = os.path.join(SPARK_HOME, "python/test_support/sql/people1.json")
         assertDataFrameEqual(
@@ -279,18 +305,34 @@ class BasePythonDataSourceTestsMixin:
             self.spark.read.format("my-json").load(path2),
             [Row(name="Jonathan", age=None)],
         )
-        # Test data source write.
-        df = self.spark.read.json(path1)
+
+    def test_custom_json_data_source_write(self):
+        data_source = self._get_test_json_data_source()
+        self.spark.dataSource.register(data_source)
+        input_path = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
+        df = self.spark.read.json(input_path)
         with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "res.json")
-            df.write.format("my-json").mode("append").save(path)
-            with open(path, "r") as file:
+            df.write.format("my-json").mode("append").save(d)
+            assertDataFrameEqual(self.spark.read.json(d), self.spark.read.json(input_path))
+
+    def test_custom_json_data_source_commit(self):
+        data_source = self._get_test_json_data_source()
+        self.spark.dataSource.register(data_source)
+        with tempfile.TemporaryDirectory() as d:
+            self.spark.range(0, 5, 1, 3).write.format("my-json").mode("append").save(d)
+            with open(os.path.join(d, "_success.txt"), "r") as file:
                 text = file.read()
-            assert text == (
-                '{"age": null, "name": "Michael"}\n'
-                '{"age": 30, "name": "Andy"}\n'
-                '{"age": 19, "name": "Justin"}\n'
-            )
+            assert text == "count: 5\n"
+
+    def test_custom_json_data_source_abort(self):
+        data_source = self._get_test_json_data_source()
+        self.spark.dataSource.register(data_source)
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(PythonException):
+                self.spark.range(0, 8, 1, 3).write.format("my-json").mode("append").save(d)
+            with open(os.path.join(d, "_failed.txt"), "r") as file:
+                text = file.read()
+            assert text == "failed"
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

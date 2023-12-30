@@ -14,21 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
+from pyspark.pandas.tests.indexes.test_indexing_adv import IndexingAdvMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.sql.tests.test_utils import UtilsTestsMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
+class IndexingAdvParityTests(
+    IndexingAdvMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_utils import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_indexing import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
