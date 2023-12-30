@@ -56,9 +56,7 @@ case class HllSketchEstimate(child: Expression)
     try {
       Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
     } catch {
-      case _: SketchesArgumentException =>
-        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
-      case _: java.lang.Error =>
+      case _: SketchesArgumentException | _: java.lang.Error =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -110,17 +108,13 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     val sketch1 = try {
       HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
     } catch {
-      case _: SketchesArgumentException =>
-        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
-      case _: java.lang.Error =>
+      case _: SketchesArgumentException | _: java.lang.Error =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
     val sketch2 = try {
       HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
     } catch {
-      case _: SketchesArgumentException =>
-        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
-      case _: java.lang.Error =>
+      case _: SketchesArgumentException | _: java.lang.Error =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]

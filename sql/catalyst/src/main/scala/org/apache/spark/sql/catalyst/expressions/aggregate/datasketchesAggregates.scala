@@ -316,9 +316,7 @@ case class HllUnionAgg(
             union.update(sketch)
             Some(union)
           } catch {
-            case _: SketchesArgumentException =>
-              throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
-            case _: java.lang.Error =>
+            case _: SketchesArgumentException | _: java.lang.Error =>
               throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
           }
         case _ =>
