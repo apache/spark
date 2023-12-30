@@ -25,6 +25,7 @@ branches:
     - master
 
 only_commits:
+  message: Trigger Appveyor
   files:
     - appveyor.yml
     - dev/appveyor-install-dependencies.ps1
