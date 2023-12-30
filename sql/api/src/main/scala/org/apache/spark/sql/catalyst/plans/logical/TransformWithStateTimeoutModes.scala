@@ -19,4 +19,4 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.streaming.TimeoutMode
 
 /** Types of timeouts used in tranformWithState operator */
-case object noTimeouts extends TimeoutMode
+case object NoTimeouts extends TimeoutMode
