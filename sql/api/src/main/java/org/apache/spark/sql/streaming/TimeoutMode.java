@@ -31,10 +31,14 @@ public class TimeoutMode {
   /**
    * Stateful processor that only registers processing time timers
    */
-  public static TimeoutMode ProcessingTime() { return ProcessingTime$.MODULE$; }
+  public static final TimeoutMode ProcessingTime() {
+    return ProcessingTime$.MODULE$;
+  }
 
   /**
    * Stateful processor that does not register timers
    */
-  public static TimeoutMode NoTimeouts() { return NoTimeouts$.MODULE$; }
+  public static final TimeoutMode NoTimeouts() {
+    return NoTimeouts$.MODULE$;
+  }
 }
