@@ -143,118 +143,124 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Spark Properties
 
-<table>
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
+<thead>
+  <tr>
+    <th style="width: 30%">Property Name</th>
+    <th>Default</th>
+    <th style="width: 40%">Meaning</th>
+    <th style="width: 12%">Since Version</th>
+  </tr>
+</thead>
 <tr>
-  <td><code>spark.yarn.am.memory</code></td>
-  <td><code>512m</code></td>
+  <td>spark.yarn.am.memory</td>
+  <td>512m</td>
   <td>
-    Amount of memory to use for the YARN Application Master in client mode, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
-    In cluster mode, use <code>spark.driver.memory</code> instead.
-    <p/>
-    Use lower-case suffixes, e.g. <code>k</code>, <code>m</code>, <code>g</code>, <code>t</code>, and <code>p</code>, for kibi-, mebi-, gibi-, tebi-, and pebibytes, respectively.
+    Amount of memory to use for the YARN Application Master in client mode, in the same format as JVM memory strings (e.g. 512m, 2g).
+    In cluster mode, use spark.driver.memory instead.<br>
+    Use lower-case suffixes, e.g. k, m, g, t, and p, for kibi-, mebi-, gibi-, tebi-, and pebibytes, respectively.
   </td>
   <td>1.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.resource.{resource-type}.amount</code></td>
-  <td><code>(none)</code></td>
+  <td>spark.yarn.am.resource.{resource-type}.amount</td>
+  <td>(none)</td>
   <td>
     Amount of resource to use for the YARN Application Master in client mode.
-    In cluster mode, use <code>spark.yarn.driver.resource.&lt;resource-type&gt;.amount</code> instead.
+    In cluster mode, use spark.yarn.driver.resource.&lt;resource-type&gt;.amount instead.
     Please note that this feature can be used only with YARN 3.0+
     For reference, see <a href="https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/ResourceModel.html">YARN Resource Model documentation</a>
-    <p/>
+    <br>
     Example:
-    To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu.amount</code>
+    To request GPU resources from YARN, use: spark.yarn.am.resource.yarn.io/gpu.amount
   </td>
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.applicationType</code></td>
-  <td><code>SPARK</code></td>
+  <td>spark.yarn.applicationType</td>
+  <td>SPARK</td>
   <td>
-    Defines more specific application types, e.g. <code>SPARK</code>, <code>SPARK-SQL</code>, <code>SPARK-STREAMING</code>,
-    <code>SPARK-MLLIB</code> and <code>SPARK-GRAPH</code>. Please be careful not to exceed 20 characters.
+    Defines more specific application types, e.g. SPARK, SPARK-SQL, SPARK-STREAMING,
+    SPARK-MLLIB and SPARK-GRAPH. Please be careful not to exceed 20 characters.
   </td>
   <td>3.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.driver.resource.{resource-type}.amount</code></td>
-  <td><code>(none)</code></td>
+  <td>spark.yarn.driver.resource.{resource-type}.amount</td>
+  <td>(none)</td>
   <td>
     Amount of resource to use for the YARN Application Master in cluster mode.
     Please note that this feature can be used only with YARN 3.0+
     For reference, see <a href="https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/ResourceModel.html">YARN Resource Model documentation</a>
     <p/>
     Example:
-    To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu.amount</code>
+    To request GPU resources from YARN, use: spark.yarn.driver.resource.yarn.io/gpu.amount
   </td>
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.resource.{resource-type}.amount</code></td>
-  <td><code>(none)</code></td>
+  <td>spark.yarn.executor.resource.{resource-type}.amount</td>
+  <td>(none)</td>
   <td>
     Amount of resource to use per executor process.
     Please note that this feature can be used only with YARN 3.0+
     For reference, see <a href="https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/ResourceModel.html">YARN Resource Model documentation</a>
-    <p/>
+    <br>
     Example:
-    To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu.amount</code>
+    To request GPU resources from YARN, use: spark.yarn.executor.resource.yarn.io/gpu.amount
   </td>
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.resourceGpuDeviceName</code></td>
-  <td><code>yarn.io/gpu</code></td>
+  <td>spark.yarn.resourceGpuDeviceName</td>
+  <td>yarn.io/gpu</td>
   <td>
-    Specify the mapping of the Spark resource type of <code>gpu</code> to the YARN resource
-    representing a GPU. By default YARN uses <code>yarn.io/gpu</code> but if YARN has been
+    Specify the mapping of the Spark resource type of gpu to the YARN resource
+    representing a GPU. By default YARN uses yarn.io/gpu but if YARN has been
     configured with a custom resource type, this allows remapping it.
-    Applies when using the <code>spark.{driver/executor}.resource.gpu.*</code> configs.
+    Applies when using the spark.{driver/executor}.resource.gpu.* configs.
   </td>
   <td>3.2.1</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.resourceFpgaDeviceName</code></td>
-  <td><code>yarn.io/fpga</code></td>
+  <td>spark.yarn.resourceFpgaDeviceName</td>
+  <td>yarn.io/fpga</td>
   <td>
-    Specify the mapping of the Spark resource type of <code>fpga</code> to the YARN resource
-    representing a FPGA. By default YARN uses <code>yarn.io/fpga</code> but if YARN has been
+    Specify the mapping of the Spark resource type of fpga to the YARN resource
+    representing a FPGA. By default YARN uses yarn.io/fpga but if YARN has been
     configured with a custom resource type, this allows remapping it.
-    Applies when using the <code>spark.{driver/executor}.resource.fpga.*</code> configs.
+    Applies when using the spark.{driver/executor}.resource.fpga.* configs.
   </td>
   <td>3.2.1</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.cores</code></td>
-  <td><code>1</code></td>
+  <td>spark.yarn.am.cores</td>
+  <td>1</td>
   <td>
     Number of cores to use for the YARN Application Master in client mode.
-    In cluster mode, use <code>spark.driver.cores</code> instead.
+    In cluster mode, use spark.driver.cores instead.
   </td>
   <td>1.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.waitTime</code></td>
-  <td><code>100s</code></td>
+  <td>spark.yarn.am.waitTime</td>
+  <td>100s</td>
   <td>
-    Only used in <code>cluster</code> mode. Time for the YARN Application Master to wait for the
+    Only used in cluster mode. Time for the YARN Application Master to wait for the
     SparkContext to be initialized.
   </td>
  <td>1.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.submit.file.replication</code></td>
-  <td>The default HDFS replication (usually <code>3</code>)</td>
+  <td>spark.yarn.submit.file.replication</td>
+  <td>The default HDFS replication (usually 3)</td>
   <td>
     HDFS replication level for the files uploaded into HDFS for the application. These include things like the Spark jar, the app jar, and any distributed cache files/archives.
   </td>
   <td>0.8.1</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.stagingDir</code></td>
+  <td>spark.yarn.stagingDir</td>
   <td>Current user's home directory in the filesystem</td>
   <td>
     Staging directory used while submitting applications.
@@ -262,46 +268,46 @@ To use a custom metrics.properties for the application master and executors, upd
  <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.preserve.staging.files</code></td>
-  <td><code>false</code></td>
+  <td>spark.yarn.preserve.staging.files</td>
+  <td>false</td>
   <td>
-    Set to <code>true</code> to preserve the staged files (Spark jar, app jar, distributed cache files) at the end of the job rather than delete them.
+    Set to true to preserve the staged files (Spark jar, app jar, distributed cache files) at the end of the job rather than delete them.
   </td>
   <td>1.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
-  <td><code>3000</code></td>
+  <td>spark.yarn.scheduler.heartbeat.interval-ms</td>
+  <td>3000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
     The value is capped at half the value of YARN's configuration for the expiry interval, i.e.
-    <code>yarn.am.liveness-monitor.expiry-interval-ms</code>.
+    yarn.am.liveness-monitor.expiry-interval-ms.
   </td>
   <td>0.8.1</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.scheduler.initial-allocation.interval</code></td>
-  <td><code>200ms</code></td>
+  <td>spark.yarn.scheduler.initial-allocation.interval</td>
+  <td>200ms</td>
   <td>
     The initial interval in which the Spark application master eagerly heartbeats to the YARN ResourceManager
     when there are pending container allocation requests. It should be no larger than
-    <code>spark.yarn.scheduler.heartbeat.interval-ms</code>. The allocation interval will doubled on
+    spark.yarn.scheduler.heartbeat.interval-ms. The allocation interval will doubled on
     successive eager heartbeats if pending containers still exist, until
-    <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
+    spark.yarn.scheduler.heartbeat.interval-ms is reached.
   </td>
   <td>1.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.historyServer.address</code></td>
+  <td>spark.yarn.historyServer.address</td>
   <td>(none)</td>
   <td>
-    The address of the Spark history server, e.g. <code>host.com:18080</code>. The address should not contain a scheme (<code>http://</code>). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
-    For this property, YARN properties can be used as variables, and these are substituted by Spark at runtime. For example, if the Spark history server runs on the same node as the YARN ResourceManager, it can be set to <code>${hadoopconf-yarn.resourcemanager.hostname}:18080</code>.
+    The address of the Spark history server, e.g. host.com:18080. The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
+    For this property, YARN properties can be used as variables, and these are substituted by Spark at runtime. For example, if the Spark history server runs on the same node as the YARN ResourceManager, it can be set to ${hadoopconf-yarn.resourcemanager.hostname}:18080.
   </td>
   <td>1.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.dist.archives</code></td>
+  <td>spark.yarn.dist.archives</td>
   <td>(none)</td>
   <td>
     Comma separated list of archives to be extracted into the working directory of each executor.
@@ -309,7 +315,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.dist.files</code></td>
+  <td>spark.yarn.dist.files</td>
   <td>(none)</td>
   <td>
     Comma-separated list of files to be placed in the working directory of each executor.
@@ -317,7 +323,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.dist.jars</code></td>
+  <td>spark.yarn.dist.jars</td>
   <td>(none)</td>
   <td>
     Comma-separated list of jars to be placed in the working directory of each executor.
@@ -325,8 +331,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.dist.forceDownloadSchemes</code></td>
-  <td><code>(none)</code></td>
+  <td>spark.yarn.dist.forceDownloadSchemes</td>
+  <td>(none)</td>
   <td>
     Comma-separated list of schemes for which resources will be downloaded to the local disk prior to
     being added to YARN's distributed cache. For use in cases where the YARN service does not
@@ -336,47 +342,47 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.3.0</td>
 </tr>
 <tr>
- <td><code>spark.executor.instances</code></td>
-  <td><code>2</code></td>
+  <td>spark.executor.instances</td>
+  <td>2</td>
   <td>
-    The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
+    The number of executors for static allocation. With spark.dynamicAllocation.enabled, the initial set of executors will be at least this large.
   </td>
   <td>1.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.memoryOverhead</code></td>
+  <td>spark.yarn.am.memoryOverhead</td>
   <td>AM memory * 0.10, with minimum of 384 </td>
   <td>
-    Same as <code>spark.driver.memoryOverhead</code>, but for the YARN Application Master in client mode.
+    Same as spark.driver.memoryOverhead, but for the YARN Application Master in client mode.
   </td>
   <td>1.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.queue</code></td>
-  <td><code>default</code></td>
+  <td>spark.yarn.queue</td>
+  <td>default</td>
   <td>
     The name of the YARN queue to which the application is submitted.
   </td>
   <td>1.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.jars</code></td>
+  <td>spark.yarn.jars</td>
   <td>(none)</td>
   <td>
     List of libraries containing Spark code to distribute to YARN containers.
     By default, Spark on YARN will use Spark jars installed locally, but the Spark jars can also be
     in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't
     need to be distributed each time an application runs. To point to jars on HDFS, for example,
-    set this configuration to <code>hdfs:///some/path</code>. Globs are allowed.
+    set this configuration to hdfs:///some/path. Globs are allowed.
   </td>
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.archive</code></td>
+  <td>spark.yarn.archive</td>
   <td>(none)</td>
   <td>
     An archive containing needed Spark jars for distribution to the YARN cache. If set, this
-    configuration replaces <code>spark.yarn.jars</code> and the archive is used in all the
+    configuration replaces spark.yarn.jars and the archive is used in all the
     application's containers. The archive should contain jar files in its root directory.
     Like with the previous option, the archive can also be hosted on HDFS to speed up file
     distribution.
@@ -384,38 +390,38 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
+  <td>spark.yarn.appMasterEnv.[EnvironmentVariableName]</td>
   <td>(none)</td>
   <td>
-     Add the environment variable specified by <code>EnvironmentVariableName</code> to the
+     Add the environment variable specified by EnvironmentVariableName to the
      Application Master process launched on YARN. The user can specify multiple of
-     these and to set multiple environment variables. In <code>cluster</code> mode this controls
-     the environment of the Spark driver and in <code>client</code> mode it only controls
+     these and to set multiple environment variables. In cluster mode this controls
+     the environment of the Spark driver and in client mode it only controls
      the environment of the executor launcher.
   </td>
   <td>1.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.containerLauncherMaxThreads</code></td>
-  <td><code>25</code></td>
+  <td>spark.yarn.containerLauncherMaxThreads</td>
+  <td>25</td>
   <td>
     The maximum number of threads to use in the YARN Application Master for launching executor containers.
   </td>
   <td>1.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.extraJavaOptions</code></td>
+  <td>spark.yarn.am.extraJavaOptions</td>
   <td>(none)</td>
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
-  In cluster mode, use <code>spark.driver.extraJavaOptions</code> instead. Note that it is illegal
+  In cluster mode, use spark.driver.extraJavaOptions instead. Note that it is illegal
   to set maximum heap size (-Xmx) settings with this option. Maximum heap size settings can be set
-  with <code>spark.yarn.am.memory</code>
+  with spark.yarn.am.memory
   </td>
   <td>1.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.extraLibraryPath</code></td>
+  <td>spark.yarn.am.extraLibraryPath</td>
   <td>(none)</td>
   <td>
     Set a special library path to use when launching the YARN Application Master in client mode.
@@ -423,22 +429,22 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.populateHadoopClasspath</code></td>
+  <td>spark.yarn.populateHadoopClasspath</td>
   <td>
-    For <code>with-hadoop</code> Spark distribution, this is set to false;
-    for <code>no-hadoop</code> distribution, this is set to true.
+    For with-hadoop Spark distribution, this is set to false;
+    for no-hadoop distribution, this is set to true.
   </td>
   <td>
-    Whether to populate Hadoop classpath from <code>yarn.application.classpath</code> and
-    <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>,
-    it requires a <code>with-Hadoop</code> Spark distribution that bundles Hadoop runtime or
+    Whether to populate Hadoop classpath from yarn.application.classpath and
+    mapreduce.application.classpath Note that if this is set to false,
+    it requires a with-Hadoop Spark distribution that bundles Hadoop runtime or
     user has to provide a Hadoop installation separately.
   </td>
   <td>2.4.6</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.maxAppAttempts</code></td>
-  <td><code>yarn.resourcemanager.am.max-attempts</code> in YARN</td>
+  <td>spark.yarn.maxAppAttempts</td>
+  <td>yarn.resourcemanager.am.max-attempts in YARN</td>
   <td>
   The maximum number of attempts that will be made to submit the application.
   It should be no larger than the global number of max attempts in the YARN configuration.
@@ -446,7 +452,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.attemptFailuresValidityInterval</code></td>
+  <td>spark.yarn.am.attemptFailuresValidityInterval</td>
   <td>(none)</td>
   <td>
   Defines the validity interval for AM failure tracking.
@@ -456,7 +462,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.6.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.clientModeTreatDisconnectAsFailed</code></td>
+  <td>spark.yarn.am.clientModeTreatDisconnectAsFailed</td>
   <td>false</td>
   <td>
   Treat yarn-client unclean disconnects as failures. In yarn-client mode, normally the application will always finish
@@ -469,7 +475,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.clientModeExitOnError</code></td>
+  <td>spark.yarn.am.clientModeExitOnError</td>
   <td>false</td>
   <td>
   In yarn-client mode, when this is true, if driver got application report with final status of KILLED or FAILED,
@@ -479,30 +485,30 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.tokenConfRegex</code></td>
+  <td>spark.yarn.am.tokenConfRegex</td>
   <td>(none)</td>
   <td>
     The value of this config is a regex expression used to grep a list of config entries from the job's configuration file (e.g., hdfs-site.xml)
     and send to RM, which uses them when renewing delegation tokens. A typical use case of this feature is to support delegation
     tokens in an environment where a YARN cluster needs to talk to multiple downstream HDFS clusters, where the YARN RM may not have configs
     (e.g., dfs.nameservices, dfs.ha.namenodes.*, dfs.namenode.rpc-address.*) to connect to these clusters.
-    In this scenario, Spark users can specify the config value to be <code>^dfs.nameservices$|^dfs.namenode.rpc-address.*$|^dfs.ha.namenodes.*$</code> to parse
-    these HDFS configs from the job's local configuration files. This config is very similar to <code>mapreduce.job.send-token-conf</code>. Please check YARN-5910 for more details.
+    In this scenario, Spark users can specify the config value to be ^dfs.nameservices$|^dfs.namenode.rpc-address.*$|^dfs.ha.namenodes.*$ to parse
+    these HDFS configs from the job's local configuration files. This config is very similar to mapreduce.job.send-token-conf. Please check YARN-5910 for more details.
   </td>
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.submit.waitAppCompletion</code></td>
-  <td><code>true</code></td>
+  <td>spark.yarn.submit.waitAppCompletion</td>
+  <td>true</td>
   <td>
   In YARN cluster mode, controls whether the client waits to exit until the application completes.
-  If set to <code>true</code>, the client process will stay alive reporting the application's status.
+  If set to true, the client process will stay alive reporting the application's status.
   Otherwise, the client process will exit after submission.
   </td>
   <td>1.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.nodeLabelExpression</code></td>
+  <td>spark.yarn.am.nodeLabelExpression</td>
   <td>(none)</td>
   <td>
   A YARN node label expression that restricts the set of nodes AM will be scheduled on.
@@ -512,7 +518,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.6.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
+  <td>spark.yarn.executor.nodeLabelExpression</td>
   <td>(none)</td>
   <td>
   A YARN node label expression that restricts the set of nodes executors will be scheduled on.
@@ -522,7 +528,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.tags</code></td>
+  <td>spark.yarn.tags</td>
   <td>(none)</td>
   <td>
   Comma-separated list of strings to pass through as YARN application tags appearing
@@ -531,7 +537,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.5.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.priority</code></td>
+  <td>spark.yarn.priority</td>
   <td>(none)</td>
   <td>
   Application priority for YARN to define pending applications ordering policy, those with higher
@@ -541,41 +547,41 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.config.gatewayPath</code></td>
+  <td>spark.yarn.config.gatewayPath</td>
   <td>(none)</td>
   <td>
   A path that is valid on the gateway host (the host where a Spark application is started) but may
   differ for paths for the same resource in other nodes in the cluster. Coupled with
-  <code>spark.yarn.config.replacementPath</code>, this is used to support clusters with
+  spark.yarn.config.replacementPath, this is used to support clusters with
   heterogeneous configurations, so that Spark can correctly launch remote processes.
-  <p/>
+  <br>
   The replacement path normally will contain a reference to some environment variable exported by
   YARN (and, thus, visible to Spark containers).
-  <p/>
-  For example, if the gateway node has Hadoop libraries installed on <code>/disk1/hadoop</code>, and
-  the location of the Hadoop install is exported by YARN as the  <code>HADOOP_HOME</code>
-  environment variable, setting this value to <code>/disk1/hadoop</code> and the replacement path to
-  <code>$HADOOP_HOME</code> will make sure that paths used to launch remote processes properly
+  <br>
+  For example, if the gateway node has Hadoop libraries installed on /disk1/hadoop, and
+  the location of the Hadoop install is exported by YARN as the HADOOP_HOME
+  environment variable, setting this value to /disk1/hadoop and the replacement path to
+  $HADOOP_HOME will make sure that paths used to launch remote processes properly
   reference the local YARN configuration.
   </td>
   <td>1.5.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.config.replacementPath</code></td>
+  <td>spark.yarn.config.replacementPath</td>
   <td>(none)</td>
   <td>
-  See <code>spark.yarn.config.gatewayPath</code>.
+  See spark.yarn.config.gatewayPath.
   </td>
   <td>1.5.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.rolledLog.includePattern</code></td>
+  <td>spark.yarn.rolledLog.includePattern</td>
   <td>(none)</td>
   <td>
   Java Regex to filter the log files which match the defined include pattern
   and those log files will be aggregated in a rolling fashion.
   This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
-  <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
+  yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds should be
   configured in yarn-site.xml. The Spark log4j appender needs be changed to use
   FileAppender or another appender that can handle the files being removed while it is running. Based
   on the file name configured in the log4j configuration (like spark.log), the user should set the
@@ -584,7 +590,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.rolledLog.excludePattern</code></td>
+  <td>spark.yarn.rolledLog.excludePattern</td>
   <td>(none)</td>
   <td>
   Java Regex to filter the log files which match the defined exclude pattern
@@ -594,17 +600,17 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.launch.excludeOnFailure.enabled</code></td>
+  <td>spark.yarn.executor.launch.excludeOnFailure.enabled</td>
   <td>false</td>
   <td>
   Flag to enable exclusion of nodes having YARN resource allocation problems.
   The error limit for excluding can be configured by
-  <code>spark.excludeOnFailure.application.maxFailedExecutorsPerNode</code>.
+  spark.excludeOnFailure.application.maxFailedExecutorsPerNode.
   </td>
   <td>2.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.exclude.nodes</code></td>
+  <td>spark.yarn.exclude.nodes</td>
   <td>(none)</td>
   <td>
   Comma-separated list of YARN node names which are excluded from resource allocation.
@@ -612,7 +618,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.metrics.namespace</code></td>
+  <td>spark.yarn.metrics.namespace</td>
   <td>(none)</td>
   <td>
   The root namespace for AM metrics reporting.
@@ -621,16 +627,16 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.report.interval</code></td>
-  <td><code>1s</code></td>
+  <td>spark.yarn.report.interval</td>
+  <td>1s</td>
   <td>
     Interval between reports of the current Spark job status in cluster mode.
   </td>
   <td>0.9.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.report.loggingFrequency</code></td>
-  <td><code>30</code></td>
+  <td>spark.yarn.report.loggingFrequency</td>
+  <td>30</td>
   <td>
     Maximum number of application reports processed until the next application status
     is logged. If there is a change of state, the application status will be logged regardless
@@ -639,16 +645,16 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.5.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.clientLaunchMonitorInterval</code></td>
-  <td><code>1s</code></td>
+  <td>spark.yarn.clientLaunchMonitorInterval</td>
+  <td>1s</td>
   <td>
     Interval between requests for status the client mode AM when starting the app.
   </td>
   <td>2.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.includeDriverLogsLink</code></td>
-  <td><code>false</code></td>
+  <td>spark.yarn.includeDriverLogsLink</td>
+  <td>false</td>
   <td>
     In cluster mode, whether the client application report includes links to the driver
     container's logs. This requires polling the ResourceManager's REST API, so it
@@ -657,8 +663,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.unmanagedAM.enabled</code></td>
-  <td><code>false</code></td>
+  <td>spark.yarn.unmanagedAM.enabled</td>
+  <td>false</td>
   <td>
     In client mode, whether to launch the Application Master service as part of the client
     using unmanaged am.
@@ -666,7 +672,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.shuffle.server.recovery.disabled</code></td>
+  <td>spark.yarn.shuffle.server.recovery.disabled</td>
   <td>false</td>
   <td>
     Set to true for applications that have higher security requirements and prefer that their
@@ -721,7 +727,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
 
-<code>&#123;&#123;HTTP_SCHEME&#125;&#125;&lt;JHS_HOST&gt;:&lt;JHS_PORT&gt;/jobhistory/logs/&#123;&#123;NM_HOST&#125;&#125;:&#123;&#123;NM_PORT&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;USER&#125;&#125;/&#123;&#123;FILE_NAME&#125;&#125;?start=-4096</code>
+&#123;&#123;HTTP_SCHEME&#125;&#125;&lt;JHS_HOST&gt;:&lt;JHS_PORT&gt;/jobhistory/logs/&#123;&#123;NM_HOST&#125;&#125;:&#123;&#123;NM_PORT&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;USER&#125;&#125;/&#123;&#123;FILE_NAME&#125;&#125;?start=-4096
 
 NOTE: you need to replace `<JHS_HOST>` and `<JHS_PORT>` with actual value.
 
@@ -766,34 +772,39 @@ staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 
-<table>
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
+<thead>
 <tr>
-  <td><code>spark.kerberos.keytab</code></td>
+  <th style="width: 30%">Property Name</th>
+  <th>Default</th>
+  <th style="width: 40%">Meaning</th>
+  <th style="width: 12%">Since Version</th></tr></thead>
+<tr>
+  <td>spark.kerberos.keytab</td>
   <td>(none)</td>
   <td>
   The full path to the file that contains the keytab for the principal specified above. This keytab
   will be copied to the node running the YARN Application Master via the YARN Distributed Cache, and
   will be used for renewing the login tickets and the delegation tokens periodically. Equivalent to
-  the <code>--keytab</code> command line argument.
+  the --keytab command line argument.
 
   <br /> (Works also with the "local" master.)
   </td>
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kerberos.principal</code></td>
+  <td>spark.kerberos.principal</td>
   <td>(none)</td>
   <td>
   Principal to be used to login to KDC, while running on secure clusters. Equivalent to the
-  <code>--principal</code> command line argument.
+  --principal command line argument.
 
   <br /> (Works also with the "local" master.)
   </td>
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.kerberos.relogin.period</code></td>
+  <td>spark.yarn.kerberos.relogin.period</td>
   <td>1m</td>
   <td>
   How often to check whether the kerberos TGT should be renewed. This should be set to a value
@@ -803,12 +814,12 @@ staging directory of the Spark application.
   <td>2.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems</code></td>
+  <td>spark.yarn.kerberos.renewal.excludeHadoopFileSystems</td>
   <td>(none)</td>
   <td>
     A comma-separated list of Hadoop filesystems for whose hosts will be excluded from delegation
-    token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
-    hdfs://nn2.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
+    token renewal at resource scheduler. For example, spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
+    hdfs://nn2.com:8032. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
     Note that as resource scheduler does not renew token, so any application running longer than the original token expiration that tries
     to use that token will likely fail.
   </td>
@@ -865,38 +876,48 @@ to avoid garbage collection issues during shuffle.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
 
-<table>
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
+<thead>
+  <tr>
+    <th style="width: 30%">Property Name</th>
+    <th>Default</th>
+    <th style="width: 40%">Meaning</th>
+    <th style="width: 12%">Since Version</th>
+  </tr>
+</thead>
 <tr>
-  <td><code>spark.yarn.shuffle.stopOnFailure</code></td>
-  <td><code>false</code></td>
+  <td>spark.yarn.shuffle.stopOnFailure</td>
+  <td>false</td>
   <td>
     Whether to stop the NodeManager when there's a failure in the Spark Shuffle Service's
     initialization. This prevents application failures caused by running containers on
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
+  <td></td>
 </tr>
 <tr>
-  <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
-  <td><code>sparkShuffleService</code></td>
+  <td>spark.yarn.shuffle.service.metrics.namespace</td>
+  <td>sparkShuffleService</td>
   <td>
     The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
     NodeManager.
   </td>
+  <td></td>
 </tr>
 <tr>
-  <td><code>spark.yarn.shuffle.service.logs.namespace</code></td>
-  <td><code>(not set)</code></td>
+  <td>spark.yarn.shuffle.service.logs.namespace</td>
+  <td>(not set)</td>
   <td>
     A namespace which will be appended to the class name when forming the logger name to use for
     emitting logs from the YARN shuffle service, like
-    <code>org.apache.spark.network.yarn.YarnShuffleService.logsNamespaceValue</code>. Since some logging frameworks
+    org.apache.spark.network.yarn.YarnShuffleService.logsNamespaceValue. Since some logging frameworks
     may expect the logger name to look like a class name, it's generally recommended to provide a value which
     would be a valid Java package or class name and not include spaces.
   </td>
+  <td></td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.service.db.backend</code></td>
+  <td>spark.shuffle.service.db.backend</td>
   <td>ROCKSDB</td>
   <td>
     When work-preserving restart is enabled in YARN, this is used to specify the disk-base store used
