@@ -153,10 +153,10 @@ private[spark] object PythonUtils extends Logging {
   // Only for testing.
   private[spark] var additionalTestingPath: Option[String] = None
 
-  private[spark] def createPythonFunction(command: Array[Byte]): SimplePythonFunction = {
-    val pythonExec: String = sys.env.getOrElse(
-      "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
+  private[spark] val defaultPythonExec: String = sys.env.getOrElse(
+    "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
 
+  private[spark] def createPythonFunction(command: Array[Byte]): SimplePythonFunction = {
     val sourcePython = if (Utils.isTesting) {
       // Put PySpark source code instead of the build zip archive so we don't need
       // to build PySpark every time during development.
@@ -180,7 +180,7 @@ private[spark] object PythonUtils extends Logging {
 
     val pythonVer: String =
       Process(
-        Seq(pythonExec, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"),
+        Seq(defaultPythonExec, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"),
         None,
         "PYTHONPATH" -> pythonPath).!!.trim()
 
@@ -188,7 +188,7 @@ private[spark] object PythonUtils extends Logging {
       command = command.toImmutableArraySeq,
       envVars = mutable.Map("PYTHONPATH" -> pythonPath).asJava,
       pythonIncludes = List.empty.asJava,
-      pythonExec = pythonExec,
+      pythonExec = defaultPythonExec,
       pythonVer = pythonVer,
       broadcastVars = List.empty.asJava,
       accumulator = null)

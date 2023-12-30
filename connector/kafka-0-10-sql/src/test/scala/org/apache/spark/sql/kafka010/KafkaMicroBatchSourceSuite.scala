@@ -1789,7 +1789,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       CheckAnswer(data: _*),
       Execute { query =>
         // The rate limit is 1, so there must be some delay in offsets per partition.
-        val progressWithDelay = query.recentProgress.map(_.sources.head).reverse.find { progress =>
+        val progressWithDelay = query.recentProgress.map(_.sources.head).findLast { progress =>
           // find the metrics that has non-zero average offsetsBehindLatest greater than 0.
           !progress.metrics.isEmpty && progress.metrics.get("avgOffsetsBehindLatest").toDouble > 0
         }
