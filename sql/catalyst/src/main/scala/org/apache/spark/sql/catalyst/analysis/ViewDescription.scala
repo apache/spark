@@ -48,13 +48,13 @@ trait ViewDescription {
 
   val properties: Map[String, String]
 
-  val query: String = viewText.getOrElse("")
+  def query: String = viewText.getOrElse("")
 
-  val comment: Option[String] = properties.get(ViewCatalog.PROP_COMMENT)
+  def comment: Option[String] = properties.get(ViewCatalog.PROP_COMMENT)
 
-  val owner: Option[String] = properties.get(ViewCatalog.PROP_OWNER)
+  def owner: Option[String] = properties.get(ViewCatalog.PROP_OWNER)
 
-  val createEngineVersion: Option[String] = properties.get(ViewCatalog.PROP_CREATE_ENGINE_VERSION)
+  def createEngineVersion: Option[String] = properties.get(ViewCatalog.PROP_CREATE_ENGINE_VERSION)
 }
 
 /**
