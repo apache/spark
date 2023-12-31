@@ -59,7 +59,6 @@ trait FunctionResourceLoader {
 
 object DummyFunctionResourceLoader extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3120")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3120")
   }
 }

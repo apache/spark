@@ -27,7 +27,6 @@ trait FunctionExpressionBuilder {
 
 object DummyFunctionExpressionBuilder extends FunctionExpressionBuilder {
   override def makeExpression(name: String, clazz: Class[_], input: Seq[Expression]): Expression = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3119")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3119")
   }
 }

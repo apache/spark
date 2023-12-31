@@ -42,12 +42,12 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   // this should be replaced first
   override lazy val resolved: Boolean = false
 
-  override def dataType: DataType = throw new SparkUnsupportedOperationException(
-    0, "_LEGACY_ERROR_TEMP_3122")
+  override def dataType: DataType =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3122")
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = throw new SparkUnsupportedOperationException(
-    0, "_LEGACY_ERROR_TEMP_3123")
+  override def eval(input: InternalRow): Any =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3123")
   final override val nodePatterns: Seq[TreePattern] = Seq(GROUPING_ANALYTICS)
 }
 

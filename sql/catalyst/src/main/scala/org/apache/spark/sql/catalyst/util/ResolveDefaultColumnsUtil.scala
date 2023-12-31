@@ -451,8 +451,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
     override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
     override def name(): String = CatalogManager.SESSION_CATALOG_NAME
     override def listFunctions(namespace: Array[String]): Array[Identifier] = {
-      throw new SparkUnsupportedOperationException(
-        0, "_LEGACY_ERROR_TEMP_3111")
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3111")
     }
     override def loadFunction(ident: Identifier): UnboundFunction = {
       V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))

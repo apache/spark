@@ -79,11 +79,11 @@ private[spark] object SparkCoreErrors {
   }
 
   def histogramOnEmptyRDDOrContainingInfinityOrNaNError(): Throwable = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3005")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3005")
   }
 
   def emptyRDDError(): Throwable = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3006")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3006")
   }
 
   def pathNotSupportedError(path: String): Throwable = {
@@ -128,7 +128,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def cannotChangeStorageLevelError(): Throwable = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3012")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3012")
   }
 
   def canOnlyZipRDDsWithSamePartitionSizeError(): Throwable = {
@@ -138,7 +138,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def emptyCollectionError(): Throwable = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3014")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3014")
   }
 
   def countByValueApproxNotSupportArraysError(): Throwable = {
@@ -262,7 +262,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def durationCalledOnUnfinishedTaskError(): Throwable = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3026")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3026")
   }
 
   def unrecognizedSchedulerModePropertyError(
@@ -419,7 +419,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def unsupportedOperationError(): Throwable = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3041")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3041")
   }
 
   def noSuchElementError(): Throwable = {

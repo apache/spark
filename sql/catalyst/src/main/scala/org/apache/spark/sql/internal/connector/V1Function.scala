@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructType
 
 case class V1Function(info: ExpressionInfo) extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3110")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3110")
   }
   override def name(): String = info.getName
   override def description(): String = info.getUsage

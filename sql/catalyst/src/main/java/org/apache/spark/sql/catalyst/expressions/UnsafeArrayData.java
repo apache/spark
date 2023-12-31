@@ -102,7 +102,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public Object[] array() {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3127");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3127");
   }
 
   /**
@@ -274,7 +274,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3128");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3128");
   }
 
   @Override
@@ -432,7 +432,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3129");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3129");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];
@@ -453,7 +453,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3129");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3129");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];

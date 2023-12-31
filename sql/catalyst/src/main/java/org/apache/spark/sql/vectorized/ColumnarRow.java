@@ -95,7 +95,7 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public boolean anyNull() {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3154");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3154");
   }
 
   @Override
@@ -197,17 +197,17 @@ public final class ColumnarRow extends InternalRow {
     } else if (dataType instanceof VariantType) {
       return getVariant(ordinal);
     } else {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3155");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3155");
     }
   }
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3156");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3156");
   }
 
   @Override
   public void setNullAt(int ordinal) {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3157");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3157");
   }
 }

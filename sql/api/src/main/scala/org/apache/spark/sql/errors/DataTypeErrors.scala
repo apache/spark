@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2225")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2225")
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(
@@ -262,7 +262,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2231")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2231")
   }
 
   def valueIsNullError(index: Int): Throwable = {

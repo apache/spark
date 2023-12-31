@@ -216,7 +216,7 @@ private[spark] class SparkUnsupportedOperationException private(
     this(errorClass, messageParameters.asScala.toMap)
 
 
-  def this(a: Int, errorClass: String) = {
+  def this(errorClass: String) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, Map.empty[String, String]),
       Option(errorClass),

@@ -395,28 +395,23 @@ case class PrettyAttribute(
   override def sql: String = toString
 
   override def withNullability(newNullability: Boolean): Attribute =
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3125")
-  override def newInstance(): Attribute = throw new SparkUnsupportedOperationException(
-    0, "_LEGACY_ERROR_TEMP_3125")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+  override def newInstance(): Attribute =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
   override def withQualifier(newQualifier: Seq[String]): Attribute =
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3125")
-  override def withName(newName: String): Attribute = throw new SparkUnsupportedOperationException(
-    0, "_LEGACY_ERROR_TEMP_3125")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+  override def withName(newName: String): Attribute =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
   override def withMetadata(newMetadata: Metadata): Attribute =
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3125")
-  override def qualifier: Seq[String] = throw new SparkUnsupportedOperationException(
-    0, "_LEGACY_ERROR_TEMP_3125")
-  override def exprId: ExprId = throw new SparkUnsupportedOperationException(
-    0, "_LEGACY_ERROR_TEMP_3125")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+  override def qualifier: Seq[String] =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+  override def exprId: ExprId =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
   override def withExprId(newExprId: ExprId): Attribute =
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3125")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
   override def withDataType(newType: DataType): Attribute =
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3125")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
   override def nullable: Boolean = true
 }
 

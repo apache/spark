@@ -266,38 +266,31 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
       name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3124")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3124")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def listFunction(): Seq[FunctionIdentifier] = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3124")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3124")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3124")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3124")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def clear(): Unit = {
-    throw new SparkUnsupportedOperationException(
-      0, "_LEGACY_ERROR_TEMP_3124")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 }
 

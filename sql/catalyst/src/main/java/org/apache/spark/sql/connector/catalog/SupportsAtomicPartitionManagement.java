@@ -127,6 +127,6 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    */
   default boolean truncatePartitions(InternalRow[] idents)
       throws NoSuchPartitionException, SparkUnsupportedOperationException {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3145");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3145");
   }
 }

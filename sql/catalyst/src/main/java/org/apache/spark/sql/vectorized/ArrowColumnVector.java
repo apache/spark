@@ -202,7 +202,7 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof IntervalMonthDayNanoVector intervalMonthDayNanoVector) {
       accessor = new IntervalMonthDayNanoAccessor(intervalMonthDayNanoVector);
     } else {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3160");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3160");
     }
   }
 
@@ -227,55 +227,55 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     boolean getBoolean(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3161");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3161");
     }
 
     byte getByte(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3162");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3162");
     }
 
     short getShort(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3163");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3163");
     }
 
     int getInt(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3164");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3164");
     }
 
     long getLong(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3165");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3165");
     }
 
     float getFloat(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3166");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3166");
     }
 
     double getDouble(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3167");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3167");
     }
 
     CalendarInterval getInterval(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3168");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3168");
     }
 
     Decimal getDecimal(int rowId, int precision, int scale) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3169");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3169");
     }
 
     UTF8String getUTF8String(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3170");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3170");
     }
 
     byte[] getBinary(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3171");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3171");
     }
 
     ColumnarArray getArray(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3172");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3172");
     }
 
     ColumnarMap getMap(int rowId) {
-      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3173");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3173");
     }
   }
 

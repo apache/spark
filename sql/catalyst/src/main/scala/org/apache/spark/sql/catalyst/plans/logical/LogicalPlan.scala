@@ -208,8 +208,8 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
   /** Leaf nodes that can survive analysis must define their own statistics. */
-  def computeStats(): Statistics = throw new SparkUnsupportedOperationException(
-    0, "_LEGACY_ERROR_TEMP_3114")
+  def computeStats(): Statistics =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
 }
 
 /**

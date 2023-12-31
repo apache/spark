@@ -149,7 +149,7 @@ public interface ScalarFunction<R> extends BoundFunction {
    * @return a result value
    */
   default R produceResult(InternalRow input) {
-    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3146");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3146");
   }
 
 }

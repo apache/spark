@@ -417,7 +417,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2017")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2017")
   }
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
@@ -902,15 +902,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotCreateJDBCTableWithPartitionsError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2073")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2073")
   }
 
   def unsupportedUserSpecifiedSchemaError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2074")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2074")
   }
 
   def writeUnsupportedForBinaryFileDataSourceError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2075")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2075")
   }
 
   def fileLengthExceedsMaxLengthError(status: FileStatus, maxLength: Int): Throwable = {
@@ -1138,15 +1138,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2108")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2108")
   }
 
   def cannotBuildHashedRelationWithUniqueKeysExceededError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2109")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2109")
   }
 
   def cannotBuildHashedRelationLargerThan8GError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2110")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2110")
   }
 
   def failedToPushRowIntoRowQueueError(rowQueue: String): Throwable = {
@@ -1322,7 +1322,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_2150")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
   }
 
   def expressionDecodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
@@ -1546,8 +1546,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def inferSchemaUnsupportedForHiveError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2181")
+    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2181")
   }
 
   def requestedPartitionsMismatchTablePartitionsError(
@@ -1613,12 +1612,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def getTablesByTypeUnsupportedByHiveVersionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
+    new SparkUnsupportedOperationException(
       errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION")
   }
 
   def invalidPartitionFilterError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
+    new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2192")
   }
 
@@ -1717,18 +1716,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotSetTimeoutDurationError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2203")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2203")
   }
 
   def cannotGetEventTimeWatermarkError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2204")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2204")
   }
 
   def cannotSetTimeoutTimestampError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2205")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2205")
   }
 
   def batchMetadataFileNotFoundError(batchMetadataFile: Path): SparkFileNotFoundException = {
@@ -1768,8 +1764,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotExecuteStreamingRelationExecError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2210")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2210")
   }
 
   def invalidStreamingOutputModeError(
@@ -1879,13 +1874,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotMutateReadOnlySQLConfError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2222")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2222")
   }
 
   def cannotCloneOrCopyReadOnlySQLConfError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2223")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2223")
   }
 
   def cannotGetSQLConfInSchedulerEventLoopThreadError(): SparkRuntimeException = {
@@ -1903,8 +1896,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def primitiveTypesNotSupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2230")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2230")
   }
 
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
@@ -2208,18 +2200,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2260")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }
 
   def cleanUpSourceFilesUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2261")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2261")
   }
 
   def latestOffsetNotCalledError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
-      errorClass = "_LEGACY_ERROR_TEMP_2262")
+    new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2262")
   }
 
   def legacyCheckpointDirectoryExistsError(
@@ -2453,7 +2442,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def unsupportedMultipleBucketTransformsError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0,
+    new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS")
   }
 
@@ -2666,11 +2655,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def unsupportedPurgePartitionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "UNSUPPORTED_FEATURE.PURGE_PARTITION")
+    new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.PURGE_PARTITION")
   }
 
   def unsupportedPurgeTableError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(0, "UNSUPPORTED_FEATURE.PURGE_TABLE")
+    new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.PURGE_TABLE")
   }
 
   def raiseError(
