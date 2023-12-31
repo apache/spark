@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.write;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
+
+import java.util.Map;
 
 /**
  * A logical representation of a data source write that handles a delta of rows.
@@ -28,6 +31,7 @@ import org.apache.spark.annotation.Experimental;
 public interface DeltaWrite extends Write {
   @Override
   default DeltaBatchWrite toBatch() {
-    throw new UnsupportedOperationException(description() + ": Delta batch write is not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3139", Map.of("description", description()));
   }
 }

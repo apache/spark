@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.util.Locale
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /** A trait that represents the type of a resourced needed by a function. */
@@ -58,6 +59,7 @@ trait FunctionResourceLoader {
 
 object DummyFunctionResourceLoader extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException(
+      0, "_LEGACY_ERROR_TEMP_3120")
   }
 }

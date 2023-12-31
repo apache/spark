@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
@@ -120,12 +121,12 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @param idents an array of partition identifiers
    * @return true if partitions were truncated successfully otherwise false
    * @throws NoSuchPartitionException If any partition identifier to truncate doesn't exist
-   * @throws UnsupportedOperationException If partition truncate is not supported
+   * @throws SparkUnsupportedOperationException If partition truncate is not supported
    *
    * @since 3.2.0
    */
   default boolean truncatePartitions(InternalRow[] idents)
-      throws NoSuchPartitionException, UnsupportedOperationException {
-    throw new UnsupportedOperationException("Partitions truncate is not supported");
+      throws NoSuchPartitionException, SparkUnsupportedOperationException {
+    throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3145");
   }
 }

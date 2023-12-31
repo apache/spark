@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
@@ -147,17 +148,17 @@ public interface SupportsPartitionManagement extends Table {
      * @param from an existing partition identifier to rename
      * @param to new partition identifier
      * @return true if renaming completes successfully otherwise false
-     * @throws UnsupportedOperationException If partition renaming is not supported
+     * @throws SparkUnsupportedOperationException If partition renaming is not supported
      * @throws PartitionsAlreadyExistException If the `to` partition exists already
      * @throws NoSuchPartitionException If the `from` partition does not exist
      *
      * @since 3.2.0
      */
     default boolean renamePartition(InternalRow from, InternalRow to)
-        throws UnsupportedOperationException,
+        throws SparkUnsupportedOperationException,
                PartitionsAlreadyExistException,
                NoSuchPartitionException {
-      throw new UnsupportedOperationException("Partition renaming is not supported");
+      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3143");
     }
 
     /**
@@ -166,12 +167,12 @@ public interface SupportsPartitionManagement extends Table {
      * @param ident a partition identifier
      * @return true if the partition was truncated successfully otherwise false
      * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
-     * @throws UnsupportedOperationException If partition truncation is not supported
+     * @throws SparkUnsupportedOperationException If partition truncation is not supported
      *
      * @since 3.2.0
      */
     default boolean truncatePartition(InternalRow ident)
-        throws NoSuchPartitionException, UnsupportedOperationException {
-      throw new UnsupportedOperationException("Partition truncate is not supported");
+        throws NoSuchPartitionException, SparkUnsupportedOperationException {
+      throw new SparkUnsupportedOperationException(0, "_LEGACY_ERROR_TEMP_3144");
     }
 }

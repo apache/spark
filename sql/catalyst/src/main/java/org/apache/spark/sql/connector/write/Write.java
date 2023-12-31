@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.connector.write;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
+
+import java.util.Map;
 
 /**
  * A logical representation of a data source write.
@@ -51,7 +54,8 @@ public interface Write {
    * its {@link Table#capabilities()}.
    */
   default BatchWrite toBatch() {
-    throw new UnsupportedOperationException(description() + ": Batch write is not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3137", Map.of("description", description()));
   }
 
   /**
@@ -61,7 +65,8 @@ public interface Write {
    * in its {@link Table#capabilities()}.
    */
   default StreamingWrite toStreaming() {
-    throw new UnsupportedOperationException(description() + ": Streaming write is not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3138", Map.of("description", description()));
   }
 
   /**

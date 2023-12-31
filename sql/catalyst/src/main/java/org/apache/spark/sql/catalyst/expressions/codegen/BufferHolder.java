@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+
+import java.util.Map;
 
 /**
  * A helper class to manage the data buffer for an unsafe row.  The data buffer can grow and
@@ -48,9 +51,9 @@ final class BufferHolder {
   BufferHolder(UnsafeRow row, int initialSize) {
     int bitsetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields());
     if (row.numFields() > (ARRAY_MAX - initialSize - bitsetWidthInBytes) / 8) {
-      throw new UnsupportedOperationException(
-        "Cannot create BufferHolder for input UnsafeRow because there are " +
-          "too many fields (number of fields: " + row.numFields() + ")");
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3130",
+        Map.of("numFields", String.valueOf(row.numFields())));
     }
     this.fixedSize = bitsetWidthInBytes + 8 * row.numFields();
     int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(fixedSize + initialSize);

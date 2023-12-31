@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
+
+import java.util.Map;
 
 public final class SpecializedGettersReader {
   private SpecializedGettersReader() {}
@@ -82,6 +85,7 @@ public final class SpecializedGettersReader {
       return obj.get(ordinal, dt.sqlType());
     }
 
-    throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3131", Map.of("dataType", dataType.simpleString()));
   }
 }

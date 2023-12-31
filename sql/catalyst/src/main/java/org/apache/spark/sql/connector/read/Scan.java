@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.metric.CustomTaskMetric;
@@ -25,6 +26,8 @@ import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
+
+import java.util.Map;
 
 /**
  * A logical representation of a data source scan. This interface is used to provide logical
@@ -71,10 +74,11 @@ public interface Scan {
    * this method may be called multiple times. Therefore, implementations can cache some state
    * to avoid planning the job twice.
    *
-   * @throws UnsupportedOperationException
+   * @throws SparkUnsupportedOperationException
    */
   default Batch toBatch() {
-    throw new UnsupportedOperationException(description() + ": Batch scan are not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3147", Map.of("description", description()));
   }
 
   /**
@@ -87,10 +91,11 @@ public interface Scan {
    *                           recovery. Data streams for the same logical source in the same query
    *                           will be given the same checkpointLocation.
    *
-   * @throws UnsupportedOperationException
+   * @throws SparkUnsupportedOperationException
    */
   default MicroBatchStream toMicroBatchStream(String checkpointLocation) {
-    throw new UnsupportedOperationException(description() + ": Micro-batch scan are not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3148", Map.of("description", description()));
   }
 
   /**
@@ -103,10 +108,11 @@ public interface Scan {
    *                           recovery. Data streams for the same logical source in the same query
    *                           will be given the same checkpointLocation.
    *
-   * @throws UnsupportedOperationException
+   * @throws SparkUnsupportedOperationException
    */
   default ContinuousStream toContinuousStream(String checkpointLocation) {
-    throw new UnsupportedOperationException(description() + ": Continuous scan are not supported");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3149", Map.of("description", description()));
   }
 
   /**

@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connector.write;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
+
+import java.util.Map;
 
 /**
  * An interface for building the {@link Write}. Implementations can mix in some interfaces to
@@ -58,8 +61,8 @@ public interface WriteBuilder {
    */
   @Deprecated(since = "3.2.0")
   default BatchWrite buildForBatch() {
-    throw new UnsupportedOperationException(getClass().getName() +
-      " does not support batch write");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3135", Map.of("class", getClass().getName()));
   }
 
   /**
@@ -69,7 +72,7 @@ public interface WriteBuilder {
    */
   @Deprecated(since = "3.2.0")
   default StreamingWrite buildForStreaming() {
-    throw new UnsupportedOperationException(getClass().getName() +
-      " does not support streaming write");
+    throw new SparkUnsupportedOperationException(getClass().getName() +
+      "_LEGACY_ERROR_TEMP_3136", Map.of("class", getClass().getName()));
   }
 }
