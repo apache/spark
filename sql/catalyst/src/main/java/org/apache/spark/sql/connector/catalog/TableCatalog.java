@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
@@ -191,7 +192,7 @@ public interface TableCatalog extends CatalogPlugin {
    *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
    *
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws SparkUnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default Table createTable(
@@ -256,11 +257,11 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @return true if a table was deleted, false if no table exists for the identifier
-   * @throws UnsupportedOperationException If table purging is not supported
+   * @throws SparkUnsupportedOperationException If table purging is not supported
    *
    * @since 3.1.0
    */
-  default boolean purgeTable(Identifier ident) throws UnsupportedOperationException {
+  default boolean purgeTable(Identifier ident) throws SparkUnsupportedOperationException {
     throw QueryExecutionErrors.unsupportedPurgeTableError();
   }
 
@@ -278,7 +279,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @param newIdent the new table identifier of the table
    * @throws NoSuchTableException If the table to rename doesn't exist or is a view
    * @throws TableAlreadyExistsException If the new table name already exists or is a view
-   * @throws UnsupportedOperationException If the namespaces of old and new identifiers do not
+   * @throws SparkUnsupportedOperationException If the namespaces of old and new identifiers do not
    *                                       match (optional)
    */
   void renameTable(Identifier oldIdent, Identifier newIdent)

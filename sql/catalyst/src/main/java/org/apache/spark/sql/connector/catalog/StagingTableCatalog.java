@@ -82,7 +82,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param properties a string map of table properties
    * @return metadata for the new table
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws SparkUnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default StagedTable stageCreate(
@@ -129,7 +129,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws SparkUnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws NoSuchTableException If the table does not exist
    */
@@ -177,7 +177,7 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws SparkUnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default StagedTable stageCreateOrReplace(

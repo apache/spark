@@ -62,12 +62,12 @@ public interface SupportsPartitionManagement extends Table {
      * @param ident a new partition identifier
      * @param properties the metadata of a partition
      * @throws PartitionsAlreadyExistException If a partition already exists for the identifier
-     * @throws UnsupportedOperationException If partition property is not supported
+     * @throws SparkUnsupportedOperationException If partition property is not supported
      */
     void createPartition(
         InternalRow ident,
         Map<String, String> properties)
-        throws PartitionsAlreadyExistException, UnsupportedOperationException;
+        throws PartitionsAlreadyExistException, SparkUnsupportedOperationException;
 
     /**
      * Drop a partition from table.
@@ -84,12 +84,12 @@ public interface SupportsPartitionManagement extends Table {
      * @param ident a partition identifier
      * @return true if a partition was deleted, false if no partition exists for the identifier
      * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
-     * @throws UnsupportedOperationException If partition purging is not supported
+     * @throws SparkUnsupportedOperationException If partition purging is not supported
      *
      * @since 3.2.0
      */
     default boolean purgePartition(InternalRow ident)
-      throws NoSuchPartitionException, UnsupportedOperationException {
+      throws NoSuchPartitionException, SparkUnsupportedOperationException {
       throw QueryExecutionErrors.unsupportedPurgePartitionError();
     }
 
@@ -116,22 +116,22 @@ public interface SupportsPartitionManagement extends Table {
      * @param ident the partition identifier of the existing partition
      * @param properties the new metadata of the partition
      * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
-     * @throws UnsupportedOperationException If partition property is not supported
+     * @throws SparkUnsupportedOperationException If partition property is not supported
      */
     void replacePartitionMetadata(
         InternalRow ident,
         Map<String, String> properties)
-        throws NoSuchPartitionException, UnsupportedOperationException;
+        throws NoSuchPartitionException, SparkUnsupportedOperationException;
 
     /**
      * Retrieve the partition metadata of the existing partition.
      *
      * @param ident a partition identifier
      * @return the metadata of the partition
-     * @throws UnsupportedOperationException If partition property is not supported
+     * @throws SparkUnsupportedOperationException If partition property is not supported
      */
     Map<String, String> loadPartitionMetadata(InternalRow ident)
-        throws UnsupportedOperationException;
+        throws SparkUnsupportedOperationException;
 
     /**
      * List the identifiers of all partitions that match to the ident by names.
