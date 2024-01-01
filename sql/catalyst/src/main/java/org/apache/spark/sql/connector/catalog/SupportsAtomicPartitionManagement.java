@@ -52,7 +52,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
   default void createPartition(
       InternalRow ident,
       Map<String, String> properties)
-      throws PartitionsAlreadyExistException, SparkUnsupportedOperationException {
+      throws PartitionsAlreadyExistException, UnsupportedOperationException {
     try {
       createPartitions(new InternalRow[]{ident}, new Map[]{properties});
     } catch (PartitionsAlreadyExistException e) {
@@ -75,12 +75,12 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @param idents an array of new partition identifiers
    * @param properties the metadata of the partitions
    * @throws PartitionsAlreadyExistException If any partition already exists for the identifier
-   * @throws SparkUnsupportedOperationException If partition property is not supported
+   * @throws UnsupportedOperationException If partition property is not supported
    */
   void createPartitions(
       InternalRow[] idents,
       Map<String, String>[] properties)
-      throws PartitionsAlreadyExistException, SparkUnsupportedOperationException;
+      throws PartitionsAlreadyExistException, UnsupportedOperationException;
 
   /**
    * Drop an array of partitions atomically from table.
@@ -103,12 +103,12 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @param idents an array of partition identifiers
    * @return true if partitions were deleted, false if any partition not exists
    * @throws NoSuchPartitionException If any partition identifier to alter doesn't exist
-   * @throws SparkUnsupportedOperationException If partition purging is not supported
+   * @throws UnsupportedOperationException If partition purging is not supported
    *
    * @since 3.2.0
    */
   default boolean purgePartitions(InternalRow[] idents)
-    throws NoSuchPartitionException, SparkUnsupportedOperationException {
+    throws NoSuchPartitionException, UnsupportedOperationException {
     throw QueryExecutionErrors.unsupportedPurgePartitionError();
   }
 

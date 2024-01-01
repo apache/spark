@@ -108,7 +108,7 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * @param namespace a multi-part namespace
    * @return a string map of properties for the given namespace
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
-   * @throws SparkUnsupportedOperationException If namespace properties are not supported
+   * @throws UnsupportedOperationException If namespace properties are not supported
    */
   Map<String, String> loadNamespaceMetadata(String[] namespace) throws NoSuchNamespaceException;
 
@@ -118,7 +118,7 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * @param namespace a multi-part namespace
    * @param metadata a string map of properties for the given namespace
    * @throws NamespaceAlreadyExistsException If the namespace already exists
-   * @throws SparkUnsupportedOperationException If create is not a supported operation
+   * @throws UnsupportedOperationException If create is not a supported operation
    */
   void createNamespace(
       String[] namespace,
@@ -130,7 +130,7 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * @param namespace a multi-part namespace
    * @param changes a collection of changes to apply to the namespace
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
-   * @throws SparkUnsupportedOperationException If namespace properties are not supported
+   * @throws UnsupportedOperationException If namespace properties are not supported
    */
   void alterNamespace(
       String[] namespace,
@@ -148,7 +148,7 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * @return true if the namespace was dropped
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
    * @throws NonEmptyNamespaceException If the namespace is non-empty and cascade is false
-   * @throws SparkUnsupportedOperationException If drop is not a supported operation
+   * @throws UnsupportedOperationException If drop is not a supported operation
    */
   boolean dropNamespace(
       String[] namespace,

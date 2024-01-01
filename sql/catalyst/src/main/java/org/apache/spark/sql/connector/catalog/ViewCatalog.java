@@ -189,7 +189,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @param newIdent the new view identifier of the view
    * @throws NoSuchViewException If the view to rename doesn't exist or is a table
    * @throws ViewAlreadyExistsException If the new view name already exists or is a table
-   * @throws SparkUnsupportedOperationException If the namespaces of old and new identifiers do not
+   * @throws UnsupportedOperationException If the namespaces of old and new identifiers do not
    * match (optional)
    */
   void renameView(Identifier oldIdent, Identifier newIdent)

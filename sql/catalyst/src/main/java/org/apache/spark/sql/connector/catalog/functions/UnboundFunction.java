@@ -40,7 +40,7 @@ public interface UnboundFunction extends Function {
    *
    * @param inputType a struct type for inputs that will be passed to the bound function
    * @return a function that can process rows with the given input type
-   * @throws SparkUnsupportedOperationException If the function cannot be applied to the input type
+   * @throws UnsupportedOperationException If the function cannot be applied to the input type
    */
   BoundFunction bind(StructType inputType);
 
