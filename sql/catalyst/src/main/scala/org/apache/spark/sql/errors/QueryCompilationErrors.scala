@@ -2999,21 +2999,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def recursiveViewDetectedError(
       viewIdent: TableIdentifier,
       newPath: Seq[TableIdentifier]): Throwable =
-    recursiveViewDetectedError(viewIdent.quoted, newPath.map(_.quoted))
+    recursiveViewDetectedError(viewIdent.nameParts, newPath.map(_.nameParts))
 
   def recursiveViewDetectedError(
       viewIdent: Identifier,
       newPath: Seq[Identifier]): Throwable =
-    recursiveViewDetectedError(viewIdent.quoted, newPath.map(_.quoted))
+    recursiveViewDetectedError(
+      viewIdent.asMultipartIdentifier,
+      newPath.map(_.asMultipartIdentifier))
 
   def recursiveViewDetectedError(
-      viewIdent: String,
-      newPath: Seq[String]): Throwable =
+      viewIdent: Seq[String],
+      newPath: Seq[Seq[String]]): Throwable =
     new AnalysisException(
       errorClass = "RECURSIVE_VIEW",
       messageParameters = Map(
         "viewIdent" -> toSQLId(viewIdent),
-        "newPath" -> toSQLId(newPath).mkString(" -> ")))
+        "newPath" -> newPath.map(toSQLId(_)).mkString(" -> ")))
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
       name: TableIdentifier,
