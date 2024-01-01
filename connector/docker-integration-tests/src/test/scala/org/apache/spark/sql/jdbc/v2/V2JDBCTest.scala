@@ -323,7 +323,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  private def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
+  def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
     val filter = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
