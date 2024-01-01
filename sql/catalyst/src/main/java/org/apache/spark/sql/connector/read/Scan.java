@@ -74,7 +74,7 @@ public interface Scan {
    * this method may be called multiple times. Therefore, implementations can cache some state
    * to avoid planning the job twice.
    *
-   * @throws SparkUnsupportedOperationException
+   * @throws UnsupportedOperationException
    */
   default Batch toBatch() {
     throw new SparkUnsupportedOperationException(
@@ -91,7 +91,7 @@ public interface Scan {
    *                           recovery. Data streams for the same logical source in the same query
    *                           will be given the same checkpointLocation.
    *
-   * @throws SparkUnsupportedOperationException
+   * @throws UnsupportedOperationException
    */
   default MicroBatchStream toMicroBatchStream(String checkpointLocation) {
     throw new SparkUnsupportedOperationException(
@@ -108,7 +108,7 @@ public interface Scan {
    *                           recovery. Data streams for the same logical source in the same query
    *                           will be given the same checkpointLocation.
    *
-   * @throws SparkUnsupportedOperationException
+   * @throws UnsupportedOperationException
    */
   default ContinuousStream toContinuousStream(String checkpointLocation) {
     throw new SparkUnsupportedOperationException(

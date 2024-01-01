@@ -148,7 +148,7 @@ public interface SupportsPartitionManagement extends Table {
      * @param from an existing partition identifier to rename
      * @param to new partition identifier
      * @return true if renaming completes successfully otherwise false
-     * @throws SparkUnsupportedOperationException If partition renaming is not supported
+     * @throws UnsupportedOperationException If partition renaming is not supported
      * @throws PartitionsAlreadyExistException If the `to` partition exists already
      * @throws NoSuchPartitionException If the `from` partition does not exist
      *
@@ -167,7 +167,7 @@ public interface SupportsPartitionManagement extends Table {
      * @param ident a partition identifier
      * @return true if the partition was truncated successfully otherwise false
      * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
-     * @throws SparkUnsupportedOperationException If partition truncation is not supported
+     * @throws UnsupportedOperationException If partition truncation is not supported
      *
      * @since 3.2.0
      */

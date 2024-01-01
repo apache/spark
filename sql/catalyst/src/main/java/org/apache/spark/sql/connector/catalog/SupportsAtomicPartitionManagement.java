@@ -121,7 +121,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @param idents an array of partition identifiers
    * @return true if partitions were truncated successfully otherwise false
    * @throws NoSuchPartitionException If any partition identifier to truncate doesn't exist
-   * @throws SparkUnsupportedOperationException If partition truncate is not supported
+   * @throws UnsupportedOperationException If partition truncate is not supported
    *
    * @since 3.2.0
    */
