@@ -84,10 +84,11 @@ trait ReadStateStore {
 
   /**
    * Clean up the resource.
-   *
+   * @param releaseOnly - if true, only release the instance lock and do not run the full abort
+   *                    sequence.
    * The method name is to respect backward compatibility on [[StateStore]].
    */
-  def abort(): Unit
+  def abort(releaseOnly: Boolean = false): Unit
 }
 
 /**
@@ -124,7 +125,7 @@ trait StateStore extends ReadStateStore {
    * Abort all the updates that have been made to the store. Implementations should ensure that
    * no more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
    */
-  override def abort(): Unit
+  override def abort(releaseOnly: Boolean = false): Unit
 
   /**
    * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
@@ -155,7 +156,7 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
   override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
 
-  override def abort(): Unit = store.abort()
+  override def abort(releaseOnly: Boolean = false): Unit = store.abort(releaseOnly)
 
   override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] =
     store.prefixScan(prefixKey)

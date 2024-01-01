@@ -37,7 +37,7 @@ class MemoryStateStore extends StateStore() {
 
   override def commit(): Long = version + 1
 
-  override def abort(): Unit = {}
+  override def abort(releaseOnly: Boolean = false): Unit = {}
 
   override def id: StateStoreId = null
 

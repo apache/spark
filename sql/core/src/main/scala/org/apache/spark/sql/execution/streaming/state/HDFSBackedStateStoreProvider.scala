@@ -84,7 +84,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       map.iterator()
     }
 
-    override def abort(): Unit = {}
+    override def abort(releaseOnly: Boolean = false): Unit = {}
 
     override def toString(): String = {
       s"HDFSReadStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
@@ -149,7 +149,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     /** Abort all the updates made on this store. This store will not be usable any more. */
-    override def abort(): Unit = {
+    override def abort(releaseOnly: Boolean = false): Unit = {
       // This if statement is to ensure that files are deleted only once: if either commit or abort
       // is called before, it will be no-op.
       if (state == UPDATING) {
