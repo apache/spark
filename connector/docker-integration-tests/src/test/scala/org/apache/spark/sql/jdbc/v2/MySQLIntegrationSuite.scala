@@ -178,5 +178,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     }
   }
 
+  private def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
+    val filter = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    if (!pushed) {
+      assert(filter.isEmpty)
+    } else {
+      assert(filter.nonEmpty)
+    }
+  }
 
 }
