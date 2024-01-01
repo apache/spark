@@ -61,3 +61,25 @@ class FakeV2Provider extends TableProvider {
 object FakeV2Provider {
   val schema: StructType = new StructType().add("i", "int").add("j", "int")
 }
+
+class FakeV2ProviderWithCustomSchema extends FakeV2Provider {
+  class FakeTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      options: CaseInsensitiveStringMap) extends SimpleBatchTable {
+    override def schema(): StructType = schema
+
+    override def partitioning(): Array[Transform] = partitioning
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder()
+    }
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new FakeTable(schema, partitioning, new CaseInsensitiveStringMap(properties))
+  }
+}

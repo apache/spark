@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  * This does not include exceptions thrown during the eager execution of commands, which are
- * grouped into [[QueryCompilationErrors]].
+ * grouped into [[CompilationErrors]].
  */
 private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {

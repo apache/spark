@@ -511,7 +511,7 @@ object FunctionRegistry {
     expression[RegrSYY]("regr_syy"),
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
-    expression[Mode]("mode"),
+    expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
 
@@ -771,6 +771,7 @@ object FunctionRegistry {
     expression[PercentRank]("percent_rank"),
 
     // predicates
+    expression[Between]("between"),
     expression[And]("and"),
     expression[In]("in"),
     expression[Not]("not"),
@@ -876,9 +877,6 @@ object FunctionRegistry {
       "expr1 <> expr2 - Returns true if `expr1` is not equal to `expr2`."),
     "!=" -> makeExprInfoForVirtualOperator("!=",
       "expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`."),
-    "between" -> makeExprInfoForVirtualOperator("between",
-      "expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-        "evaluate if `expr1` is [not] in between `expr2` and `expr3`."),
     "case" -> makeExprInfoForVirtualOperator("case",
       "CASE expr1 WHEN expr2 THEN expr3 [WHEN expr4 THEN expr5]* [ELSE expr6] END " +
         "- When `expr1` = `expr2`, returns `expr3`; when `expr1` = `expr4`, return `expr5`; " +

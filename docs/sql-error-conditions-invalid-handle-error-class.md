@@ -41,10 +41,6 @@ Operation already exists.
 
 Operation not found.
 
-## SESSION_ALREADY_EXISTS
-
-Session already exists.
-
 ## SESSION_CLOSED
 
 Session was closed.

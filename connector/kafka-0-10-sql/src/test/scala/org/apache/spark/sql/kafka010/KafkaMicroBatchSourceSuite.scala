@@ -154,7 +154,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
       }
 
       val offset = KafkaSourceOffset(testUtils.getLatestOffsets(topics))
-      logInfo(s"Added data, expected offset $offset")
+      logInfo(s"Added data to topic: $topic, expected offset: $offset")
       (kafkaSource, offset)
     }
 
@@ -1789,7 +1789,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       CheckAnswer(data: _*),
       Execute { query =>
         // The rate limit is 1, so there must be some delay in offsets per partition.
-        val progressWithDelay = query.recentProgress.map(_.sources.head).reverse.find { progress =>
+        val progressWithDelay = query.recentProgress.map(_.sources.head).findLast { progress =>
           // find the metrics that has non-zero average offsetsBehindLatest greater than 0.
           !progress.metrics.isEmpty && progress.metrics.get("avgOffsetsBehindLatest").toDouble > 0
         }
@@ -2691,7 +2691,9 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
     start + Random.nextInt(start + end - 1)
   }
 
-  test("stress test with multiple topics and partitions")  {
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
+
+  test("stress test with multiple topics and partitions") {
     topics.foreach { topic =>
       testUtils.createTopic(topic, partitions = nextInt(1, 6))
       testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)

@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
+import org.apache.spark.sql.execution.python.PythonTableProvider
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -638,6 +639,8 @@ object DataSource extends Logging {
     val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
+    lazy val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
+      _.sessionState.dataSourceManager.dataSourceExists(provider))
 
     try {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
@@ -657,6 +660,8 @@ object DataSource extends Logging {
                   throw QueryCompilationErrors.failedToFindAvroDataSourceError(provider1)
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
+                } else if (isUserDefinedDataSource) {
+                  classOf[PythonTableProvider]
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
@@ -671,8 +676,11 @@ object DataSource extends Logging {
                 throw e
               }
           }
+        case _ :: Nil if isUserDefinedDataSource =>
+          // There was DSv1 or DSv2 loaded, but the same name source was found
+          // in user defined data source.
+          throw QueryCompilationErrors.foundMultipleDataSources(provider)
         case head :: Nil =>
-          // there is exactly one registered alias
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
@@ -719,6 +727,10 @@ object DataSource extends Logging {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        t match {
+          case p: PythonTableProvider => p.setShortName(provider)
+          case _ =>
+        }
         Some(t)
       case _ => None
     }

@@ -17,17 +17,24 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.{File, FileWriter}
+
+import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{BatchEvalPythonUDTF, PythonDataSourcePartitions}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.DataSourceManager
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   import IntegratedUDFTestUtils._
 
+  setupTestData()
+
   private def dataSourceName = "SimpleDataSource"
-  private def simpleDataSourceReaderScript: String =
+  private val simpleDataSourceReaderScript: String =
     """
       |from pyspark.sql.datasource import DataSourceReader, InputPartition
       |class SimpleDataSourceReader(DataSourceReader):
@@ -38,9 +45,59 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |        yield (1, partition.value)
       |        yield (2, partition.value)
       |""".stripMargin
+  private val staticSourceName = "custom_source"
+  private var tempDir: File = _
+
+  override def beforeAll(): Unit = {
+    // Create a Python Data Source package before starting up the Spark Session
+    // that triggers automatic registration of the Python Data Source.
+    val dataSourceScript =
+    s"""
+       |from pyspark.sql.datasource import DataSource, DataSourceReader
+       |$simpleDataSourceReaderScript
+       |
+       |class DefaultSource(DataSource):
+       |    def schema(self) -> str:
+       |        return "id INT, partition INT"
+       |
+       |    def reader(self, schema):
+       |        return SimpleDataSourceReader()
+       |
+       |    @classmethod
+       |    def name(cls):
+       |        return "$staticSourceName"
+       |""".stripMargin
+    tempDir = Utils.createTempDir()
+    // Write a temporary package to test.
+    // tmp/my_source
+    // tmp/my_source/__init__.py
+    val packageDir = new File(tempDir, "pyspark_mysource")
+    assert(packageDir.mkdir())
+    Utils.tryWithResource(
+      new FileWriter(new File(packageDir, "__init__.py")))(_.write(dataSourceScript))
+    // So Spark Session initialization can lookup this temporary directory.
+    DataSourceManager.dataSourceBuilders = None
+    PythonUtils.additionalTestingPath = Some(tempDir.toString)
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      Utils.deleteRecursively(tempDir)
+      PythonUtils.additionalTestingPath = None
+    } finally {
+      super.afterAll()
+    }
+  }
+
+  test("SPARK-45917: automatic registration of Python Data Source") {
+    assume(shouldTestPandasUDFs)
+    val df = spark.read.format(staticSourceName).load()
+    checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+  }
 
   test("simple data source") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
         |from pyspark.sql.datasource import DataSource
@@ -53,20 +110,20 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
-    val df = dataSource.apply(
-      spark, provider = dataSourceName, userSpecifiedSchema = Some(schema))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).schema(schema).load()
     assert(df.rdd.getNumPartitions == 2)
     val plan = df.queryExecution.optimizedPlan
     plan match {
-      case BatchEvalPythonUDTF(pythonUDTF, _, _, _: PythonDataSourcePartitions)
-        if pythonUDTF.name == "python_data_source_read" =>
+      case s: DataSourceV2ScanRelation
+        if s.relation.table.getClass.toString.contains("PythonTable") =>
       case _ => fail(s"Plan did not match the expected pattern. Actual plan:\n$plan")
     }
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
   test("simple data source with string schema") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -80,12 +137,13 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
   test("simple data source with StructType schema") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -103,12 +161,13 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
   test("data source with invalid schema") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -122,14 +181,15 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     checkError(
-      exception = intercept[AnalysisException](dataSource(spark, provider = dataSourceName)),
+      exception = intercept[AnalysisException](spark.read.format(dataSourceName).load()),
       errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map("inputSchema" -> "INT", "dataType" -> "\"INT\""))
   }
 
   test("register data source") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -146,9 +206,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
-    val ds1 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
     checkAnswer(
-      ds1(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
+      spark.read.format(dataSourceName).load(),
       Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
 
     // Should be able to override an already registered data source.
@@ -169,15 +228,13 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val newDataSource = createUserDefinedPythonDataSource(dataSourceName, newScript)
     spark.dataSource.registerPython(dataSourceName, newDataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
-
-    val ds2 = spark.sessionState.dataSourceManager.lookupDataSource(dataSourceName)
     checkAnswer(
-      ds2(spark, dataSourceName, None, CaseInsensitiveMap(Map.empty)),
+      spark.read.format(dataSourceName).load(),
       Seq(Row(0)))
   }
 
   test("load data source") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -196,12 +253,12 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |            paths = []
          |        return [InputPartition(p) for p in paths]
          |
-         |    def read(self, path):
-         |        if path is not None:
-         |            assert isinstance(path, InputPartition)
-         |            yield (path.value, 1)
+         |    def read(self, part):
+         |        if part is not None:
+         |            assert isinstance(part, InputPartition)
+         |            yield (part.value, 1)
          |        else:
-         |            yield (path, 1)
+         |            yield (part, 1)
          |
          |class $dataSourceName(DataSource):
          |    @classmethod
@@ -219,10 +276,16 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     checkAnswer(spark.read.format("test").load(), Seq(Row(null, 1)))
     checkAnswer(spark.read.format("test").load("1"), Seq(Row("1", 1)))
     checkAnswer(spark.read.format("test").load("1", "2"), Seq(Row("1", 1), Row("2", 1)))
+
+    withTable("tblA") {
+      sql("CREATE TABLE tblA USING test")
+      // The path will be the actual temp path.
+      checkAnswer(spark.table("tblA").selectExpr("value"), Seq(Row(1)))
+    }
   }
 
   test("reader not implemented") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
        s"""
         |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -232,15 +295,16 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
-      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
+      spark.read.format(dataSourceName).schema(schema).load().collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED"))
   }
 
   test("error creating reader") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
         |from pyspark.sql.datasource import DataSource
@@ -251,8 +315,9 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
-      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
+      spark.read.format(dataSourceName).schema(schema).load().collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
@@ -260,7 +325,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source assertion error") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
         |class $dataSourceName:
@@ -270,8 +335,9 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id INT, partition INT")
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
     val err = intercept[AnalysisException] {
-      dataSource(spark, dataSourceName, userSpecifiedSchema = Some(schema)).collect()
+      spark.read.format(dataSourceName).schema(schema).load().collect()
     }
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
     assert(err.getMessage.contains("PYTHON_DATA_SOURCE_TYPE_MISMATCH"))
@@ -279,7 +345,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("data source read with custom partitions") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -305,12 +371,13 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Seq(Row(1), Row(3)))
   }
 
   test("data source read with empty partitions") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
          |from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -332,12 +399,13 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
          |        return SimpleDataSourceReader()
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    val df = dataSource(spark, provider = dataSourceName)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Row("success"))
   }
 
   test("data source read with invalid partitions") {
-    assume(shouldTestPythonUDFs)
+    assume(shouldTestPandasUDFs)
     val reader1 =
       s"""
          |class SimpleDataSourceReader(DataSourceReader):
@@ -379,10 +447,303 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
            |        return SimpleDataSourceReader()
            |""".stripMargin
       val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+      spark.dataSource.registerPython(dataSourceName, dataSource)
       val err = intercept[AnalysisException](
-        dataSource(spark, provider = dataSourceName).collect())
+        spark.read.format(dataSourceName).load().collect())
       assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
       assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
+    }
+  }
+
+  test("SPARK-46424: Support Python metrics") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def partitions(self):
+         |        return []
+         |
+         |    def read(self, partition):
+         |        if partition is None:
+         |            yield ("success", )
+         |        else:
+         |            yield ("failed", )
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "status STRING"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
+
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    df.collect()
+
+    // Wait until the new execution is started and being tracked.
+    while (statusStore.executionsCount() < oldCount) {
+      Thread.sleep(100)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().isEmpty ||
+      statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val executedPlan = df.queryExecution.executedPlan.collectFirst {
+      case p: BatchScanExec => p
+    }
+    assert(executedPlan.isDefined)
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val pythonDataSent = executedPlan.get.metrics("pythonDataSent")
+    val pythonDataReceived = executedPlan.get.metrics("pythonDataReceived")
+    assert(metrics.contains(pythonDataSent.id))
+    assert(metrics(pythonDataSent.id).asInstanceOf[String].endsWith("B"))
+    assert(metrics.contains(pythonDataReceived.id))
+    assert(metrics(pythonDataReceived.id).asInstanceOf[String].endsWith("B"))
+  }
+
+  test("simple data source write") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |import json
+         |import os
+         |from pyspark import TaskContext
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def write(self, iterator):
+         |        context = TaskContext.get()
+         |        partition_id = context.partitionId()
+         |        path = self.options.get("path")
+         |        assert path is not None
+         |        output_path = os.path.join(path, f"{partition_id}.json")
+         |        cnt = 0
+         |        with open(output_path, "w") as file:
+         |            for row in iterator:
+         |                file.write(json.dumps(row.asDict()) + "\\n")
+         |                cnt += 1
+         |        return WriterCommitMessage()
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, overwrite):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    Seq(
+      "SELECT * FROM range(0, 5, 1, 3)",
+      "SELECT * FROM testData LIMIT 5",
+      "SELECT * FROM testData3",
+      "SELECT * FROM arrayData"
+    ).foreach { query =>
+      withTempDir { dir =>
+        val df = sql(query)
+        val path = dir.getAbsolutePath
+        df.write.format(dataSourceName).mode("append").save(path)
+        val df2 = spark.read.json(path)
+        checkAnswer(df, df2)
+      }
+    }
+  }
+
+  test("data source write - error cases") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def write(self, iterator):
+         |        num_rows = 0
+         |        for row in iterator:
+         |            num_rows += 1
+         |            if num_rows > 2:
+         |                raise Exception("something is wrong")
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, saveMode):
+         |        return SimpleDataSourceWriter()
+         |""".stripMargin
+    spark.dataSource.registerPython(dataSourceName,
+      createUserDefinedPythonDataSource(dataSourceName, dataSourceScript))
+
+    withClue("user error") {
+      val error = intercept[SparkException] {
+        spark.range(10).write.format(dataSourceName).mode("append").save()
+      }
+      assert(error.getMessage.contains("something is wrong"))
+    }
+
+    withClue("no commit message") {
+      val error = intercept[SparkException] {
+        spark.range(1).write.format(dataSourceName).mode("append").save()
+      }
+      assert(error.getMessage.contains("PYTHON_DATA_SOURCE_WRITE_ERROR"))
+    }
+
+    withClue("without mode") {
+      val error = intercept[AnalysisException] {
+        spark.range(1).write.format(dataSourceName).save()
+      }
+      // TODO: improve this error message.
+      assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
+        "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
+    }
+  }
+
+  test("data source write - overwrite mode") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |import json
+         |import os
+         |from pyspark import TaskContext
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options, overwrite):
+         |        self.options = options
+         |        self.overwrite = overwrite
+         |
+         |    def write(self, iterator):
+         |        context = TaskContext.get()
+         |        partition_id = context.partitionId()
+         |        path = self.options.get("path")
+         |        assert path is not None
+         |        output_path = os.path.join(path, f"{partition_id}.json")
+         |        cnt = 0
+         |        mode = "w" if self.overwrite else "a"
+         |        with open(output_path, mode) as file:
+         |            for row in iterator:
+         |                file.write(json.dumps(row.asDict()) + "\\n")
+         |                cnt += 1
+         |        return WriterCommitMessage()
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, overwrite):
+         |        return SimpleDataSourceWriter(self.options, overwrite)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(1).write.format(dataSourceName).mode("append").save(path)
+      checkAnswer(
+        spark.read.json(path),
+        Seq(Row(0)))
+      spark.range(1).write.format(dataSourceName).mode("append").save(path)
+      checkAnswer(
+        spark.read.json(path),
+        Seq(Row(0), Row(0)))
+      spark.range(2, 3).write.format(dataSourceName).mode("overwrite").save(path)
+      checkAnswer(
+        spark.read.json(path),
+        Seq(Row(2)))
+    }
+  }
+
+  test("data source write commit and abort") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |import json
+         |import os
+         |from dataclasses import dataclass
+         |from pyspark import TaskContext
+         |from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
+         |
+         |@dataclass
+         |class SimpleCommitMessage(WriterCommitMessage):
+         |    partition_id: int
+         |    count: int
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |        self.path = self.options.get("path")
+         |        assert self.path is not None
+         |
+         |    def write(self, iterator):
+         |        context = TaskContext.get()
+         |        partition_id = context.partitionId()
+         |        output_path = os.path.join(self.path, f"{partition_id}.json")
+         |        cnt = 0
+         |        with open(output_path, "w") as file:
+         |            for row in iterator:
+         |                if row.id >= 10:
+         |                    raise Exception("invalid value")
+         |                file.write(json.dumps(row.asDict()) + "\\n")
+         |                cnt += 1
+         |        return SimpleCommitMessage(partition_id=partition_id, count=cnt)
+         |
+         |    def commit(self, messages) -> None:
+         |        status = dict(num_files=len(messages), count=sum(m.count for m in messages))
+         |
+         |        with open(os.path.join(self.path, "success.json"), "a") as file:
+         |            file.write(json.dumps(status) + "\\n")
+         |
+         |    def abort(self, messages) -> None:
+         |        with open(os.path.join(self.path, "failed.txt"), "a") as file:
+         |            file.write("failed")
+         |
+         |class SimpleDataSource(DataSource):
+         |    def writer(self, schema, saveMode):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+
+      withClue("commit") {
+        sql("SELECT * FROM range(0, 5, 1, 3)")
+          .write.format(dataSourceName)
+          .mode("append")
+          .save(path)
+        checkAnswer(
+          spark.read.format("json")
+            .schema("num_files bigint, count bigint")
+            .load(path + "/success.json"),
+          Seq(Row(3, 5)))
+      }
+
+      withClue("commit again") {
+        sql("SELECT * FROM range(5, 7, 1, 1)")
+          .write.format(dataSourceName)
+          .mode("append")
+          .save(path)
+        checkAnswer(
+          spark.read.format("json")
+            .schema("num_files bigint, count bigint")
+            .load(path + "/success.json"),
+          Seq(Row(3, 5), Row(1, 2)))
+      }
+
+      withClue("abort") {
+        intercept[SparkException] {
+          sql("SELECT * FROM range(8, 12, 1, 4)")
+            .write.format(dataSourceName)
+            .mode("append")
+            .save(path)
+        }
+        checkAnswer(
+          spark.read.text(path + "/failed.txt"),
+          Seq(Row("failed")))
+      }
     }
   }
 }

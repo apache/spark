@@ -266,10 +266,8 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
-            val newExcept = Except(newChildren.head, newChildren.last, isAll)
-            newExcept.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            newExcept -> attrMapping
+            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s @ Intersect(left, right, isAll) if s.childrenResolved &&
@@ -279,10 +277,8 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
-            val newIntersect = Intersect(newChildren.head, newChildren.last, isAll)
-            newIntersect.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            newIntersect -> attrMapping
+            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s: Union if s.childrenResolved && !s.byName &&
@@ -292,9 +288,7 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
-            val newUnion = s.copy(children = newChildren)
-            newUnion.copyTagsFrom(s)
-            newUnion -> attrMapping
+            s.copy(children = newChildren) -> attrMapping
           }
       }
     }

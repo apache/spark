@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
@@ -48,6 +49,13 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
 
   private lazy val dateFormatter = DateFormatter(
     options.dateFormatInRead,
@@ -138,6 +146,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
     if (options.inferSchema) {
       lazy val decimalTry = tryParseDecimal(value)
+      lazy val timestampNTZTry = tryParseTimestampNTZ(value)
       value match {
         case null => NullType
         case v if v.isEmpty => NullType
@@ -146,6 +155,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
         case v if isDate(v) => DateType
+        case v if timestampNTZTry.isDefined => timestampNTZTry.get
         case v if isTimestamp(v) => TimestampType
         case _ => StringType
       }
@@ -154,7 +164,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  @tailrec
   private def inferField(parser: XMLEventReader): DataType = {
     parser.peek match {
       case _: EndElement => NullType
@@ -172,18 +181,25 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _ => inferField(parser)
         }
       case c: Characters if !c.isWhiteSpace =>
-        // This could be the characters of a character-only element, or could have mixed
-        // characters and other complex structure
         val characterType = inferFrom(c.getData)
         parser.nextEvent()
         parser.peek match {
           case _: StartElement =>
-            // Some more elements follow; so ignore the characters.
-            // Use the schema of the rest
-            inferObject(parser).asInstanceOf[StructType]
+            // Some more elements follow;
+            // This is a mix of values and other elements
+            val innerType = inferObject(parser).asInstanceOf[StructType]
+            addOrUpdateValueTagType(innerType, characterType)
           case _ =>
-            // That's all, just the character-only body; use that as the type
-            characterType
+            val fieldType = inferField(parser)
+            fieldType match {
+              case st: StructType => addOrUpdateValueTagType(st, characterType)
+              case _: NullType => characterType
+              case _: DataType =>
+                // The field type couldn't be an array type
+                new StructType()
+                .add(options.valueTag, addOrUpdateType(Some(characterType), fieldType))
+
+            }
         }
       case e: XMLEvent =>
         throw new IllegalArgumentException(s"Failed to parse data with unexpected event $e")
@@ -219,17 +235,19 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     val nameToDataType =
       collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)
 
-    def addOrUpdateType(fieldName: String, newType: DataType): Unit = {
-      val oldTypeOpt = nameToDataType.get(fieldName)
-      oldTypeOpt match {
-        // If the field name exists in the map,
-        // merge the type and infer the combined field as an array type if necessary
-        case Some(oldType) if !oldType.isInstanceOf[ArrayType] =>
-          nameToDataType.update(fieldName, ArrayType(compatibleType(oldType, newType)))
-        case Some(oldType) =>
-          nameToDataType.update(fieldName, compatibleType(oldType, newType))
-        case None =>
-          nameToDataType.put(fieldName, newType)
+    @tailrec
+    def inferAndCheckEndElement(parser: XMLEventReader): Boolean = {
+      parser.peek match {
+        case _: EndElement | _: EndDocument => true
+        case _: StartElement => false
+        case c: Characters if !c.isWhiteSpace =>
+          val characterType = inferFrom(c.getData)
+          parser.nextEvent()
+          addOrUpdateType(nameToDataType, options.valueTag, characterType)
+          inferAndCheckEndElement(parser)
+        case _ =>
+          parser.nextEvent()
+          inferAndCheckEndElement(parser)
       }
     }
 
@@ -238,7 +256,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
     rootValuesMap.foreach {
       case (f, v) =>
-        addOrUpdateType(f, inferFrom(v))
+        addOrUpdateType(nameToDataType, f, inferFrom(v))
     }
     var shouldStop = false
     while (!shouldStop) {
@@ -271,28 +289,18 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           }
           // Add the field and datatypes so that we can check if this is ArrayType.
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          addOrUpdateType(field, inferredType)
+          addOrUpdateType(nameToDataType, field, inferredType)
 
         case c: Characters if !c.isWhiteSpace =>
           // This can be an attribute-only object
           val valueTagType = inferFrom(c.getData)
-          addOrUpdateType(options.valueTag, valueTagType)
+          addOrUpdateType(nameToDataType, options.valueTag, valueTagType)
 
         case _: EndElement =>
-          shouldStop = StaxXmlParserUtils.checkEndElement(parser)
+          shouldStop = inferAndCheckEndElement(parser)
 
         case _ => // do nothing
       }
-    }
-    // A structure object is an attribute-only element
-    // if it only consists of attributes and valueTags.
-    // If not, we will remove the valueTag field from the schema
-    val attributesOnly = nameToDataType.forall {
-      case (fieldName, _) =>
-        fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix)
-    }
-    if (!attributesOnly) {
-      nameToDataType -= options.valueTag
     }
 
     // Note: other code relies on this sorting for correctness, so don't remove it!
@@ -392,6 +400,23 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  private def tryParseTimestampNTZ(field: String): Option[DataType] = {
+    // We can only parse the value as TimestampNTZType if it does not have zone-offset or
+    // time-zone component and can be parsed with the timestamp formatter.
+    // Otherwise, it is likely to be a timestamp with timezone.
+    val timestampType = SQLConf.get.timestampType
+    try {
+      if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+        timestampType == TimestampNTZType) &&
+        timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+        return Some(timestampType)
+      }
+    } catch {
+      case _: Exception =>
+    }
+    None
+  }
+
   private def isDate(value: String): Boolean = {
     (allCatch opt dateFormatter.parse(value)).isDefined
   }
@@ -454,6 +479,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           } else {
             DecimalType(range + scale, scale)
           }
+        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
 
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2)
@@ -503,6 +530,77 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         // strings and every string is a XML object.
         case (_, _) => StringType
       }
+    }
+  }
+
+  /**
+   * This helper function merges the data type of value tags and inner elements.
+   * It could only be structure data. Consider the following case,
+   * <a>
+   *   value1
+   *   <b>1</b>
+   *   value2
+   * </a>
+   * Input: ''a struct<b int, _VALUE string>'' and ''_VALUE string''
+   * Return: ''a struct<b int, _VALUE array<string>>''
+   * @param objectType inner elements' type
+   * @param valueTagType value tag's type
+   */
+  private[xml] def addOrUpdateValueTagType(
+      objectType: DataType,
+      valueTagType: DataType): DataType = {
+    (objectType, valueTagType) match {
+      case (st: StructType, _) =>
+        val valueTagIndexOpt = st.getFieldIndex(options.valueTag)
+
+        valueTagIndexOpt match {
+          // If the field name exists in the inner elements,
+          // merge the type and infer the combined field as an array type if necessary
+          case Some(index) if !st(index).dataType.isInstanceOf[ArrayType] =>
+            updateStructField(
+              st,
+              index,
+              ArrayType(compatibleType(st(index).dataType, valueTagType)))
+          case Some(index) =>
+            updateStructField(st, index, compatibleType(st(index).dataType, valueTagType))
+          case None =>
+            st.add(options.valueTag, valueTagType)
+        }
+      case _ =>
+        throw new IllegalStateException(
+          "illegal state when merging value tags types in schema inference"
+        )
+    }
+  }
+
+  private def updateStructField(
+      structType: StructType,
+      index: Int,
+      newType: DataType): StructType = {
+    val newFields: Array[StructField] =
+      structType.fields.updated(index, structType.fields(index).copy(dataType = newType))
+    StructType(newFields)
+  }
+
+  private def addOrUpdateType(
+      nameToDataType: collection.mutable.TreeMap[String, DataType],
+      fieldName: String,
+      newType: DataType): Unit = {
+    val oldTypeOpt = nameToDataType.get(fieldName)
+    val mergedType = addOrUpdateType(oldTypeOpt, newType)
+    nameToDataType.put(fieldName, mergedType)
+  }
+
+  private def addOrUpdateType(oldTypeOpt: Option[DataType], newType: DataType): DataType = {
+    oldTypeOpt match {
+      // If the field name already exists,
+      // merge the type and infer the combined field as an array type if necessary
+      case Some(oldType) if !oldType.isInstanceOf[ArrayType] && !newType.isInstanceOf[NullType] =>
+        ArrayType(compatibleType(oldType, newType))
+      case Some(oldType) =>
+        compatibleType(oldType, newType)
+      case None =>
+        newType
     }
   }
 }
