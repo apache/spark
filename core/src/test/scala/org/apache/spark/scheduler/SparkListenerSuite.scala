@@ -291,7 +291,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("SPARK-46383: Track TaskInfo objects") {
-    sc = new SparkContext("local", "SparkListenerSuite")
+    sc = new SparkContext("local", "SparkListenerSuite").
+      set(config.DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
     val listener = new SaveActiveTaskInfos
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)

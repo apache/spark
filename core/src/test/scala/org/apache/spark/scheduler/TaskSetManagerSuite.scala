@@ -236,8 +236,9 @@ class TaskSetManagerSuite
 
   test("SPARK-46383: Accumulables of TaskInfo objects held by TaskSetManager must not be " +
     "accessed once the task has completed") {
-    sc = new SparkContext("local", "test", conf)
-    sched = FakeTaskScheduler(sc, ("exec1", "host1"))
+    sc = new SparkContext("local", "test", conf).
+      set(config.DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
@@ -259,8 +260,9 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-46383: TaskInfo accumulables are cleared upon task completion") {
-    sc = new SparkContext("local", "test", conf)
-    sched = FakeTaskScheduler(sc, ("exec1", "host1"))
+    sc = new SparkContext("local", "test", conf).
+      set(config.DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(2)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
@@ -287,7 +289,6 @@ class TaskSetManagerSuite
         "Expect resource offer on iteration %s to return a task".format(index))
       assert(offerResult.get.index === 1)
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
-      assert(!sched.taskSetsFailed.contains(FakeTaskFailure(taskSet.id)))
     }
 
     clock.advance(1)

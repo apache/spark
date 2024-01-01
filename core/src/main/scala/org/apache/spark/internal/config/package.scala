@@ -2629,5 +2629,5 @@ package object config {
       "task info accumulables for the active tasks and not for completed tasks.")
     .version("4.0.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 }
