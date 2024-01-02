@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.analysis.EarlyCollapseProject
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -113,7 +113,7 @@ class EarlyCollapseProjectSuite extends QueryTest
         $"a" as "renameCola", $"c" * $"d" as "c", $"a"))
   }
 
-  test("reuse of cache on mix of column addition, rename and dropping - 1") {
+  test("mix of column addition, rename and dropping - 1") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     checkProjectCollapseAndCacheUse(baseDfCreator,
@@ -121,14 +121,14 @@ class EarlyCollapseProjectSuite extends QueryTest
         $"a" as "renameCola", $"a"))
   }
 
-  test("reuse of cache on mix of column addition, rename and dropping - 2") {
+  test("mix of column addition, rename and dropping - 2") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
     checkProjectCollapseAndCacheUse(baseDfCreator,
       df => df.select($"d", $"b" as "renameB", $"a" as "renameA", $"a" as "renameColA"))
   }
 
-  test("reuse of cache on mix of column addition, rename and dropping - 3") {
+  test("mix of column addition, rename and dropping - 3") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
     checkProjectCollapseAndCacheUse(baseDfCreator,
@@ -136,26 +136,26 @@ class EarlyCollapseProjectSuite extends QueryTest
       $"a" as "renameColA"))
   }
 
-  test("reuse of cache on mix of column addition, rename and dropping - 4") {
+  test("mix of column addition, rename and dropping - 4") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.select($"c"))
   }
 
-  test("reuse of cache on mix of column addition, rename and dropping - 5") {
+  test("mix of column addition, rename and dropping - 5") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.select($"d" * 7 as "a"))
   }
 
-  test("reuse of cache on mix of column addition, rename and dropping - 6") {
+  test("mix of column addition, rename and dropping - 6") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select($"c", $"a", $"b", $"c" * $"a" * $"b" as "d")
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.select($"d" * 7 as "a", $"d" * 7 as "b",
     $"b" + $"a" as "e"))
   }
 
-  test("reuse of cache on mix of column addition, rename and dropping - 7") {
+  test("mix of column addition, rename and dropping - 7") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" + 5 as "b").
       select($"a" + $"b" as "c", $"a", $"b").select( lit(9) as "e", $"c", lit(11) as "a", $"b",
       $"c" * $"a" * $"b" as "d")
@@ -163,7 +163,7 @@ class EarlyCollapseProjectSuite extends QueryTest
       $"b" as "b1", $"c" * $"a" as "c", lit(13) as "f"))
   }
 
-  test("use of cached InMemoryRelation when new columns added do not result in new project -1") {
+  test("new columns added do not result in new project -1") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.withColumns(
@@ -171,7 +171,7 @@ class EarlyCollapseProjectSuite extends QueryTest
         Seq(col("a") + 2, col("b") + 7, col("a") + col("b"), col("a") + col("d"))))
   }
 
-  test("use of cached InMemoryRelation when new columns added do not result in new project -2") {
+  test("new columns added do not result in new project -2") {
     val baseDfCreator = () => spark.range(20).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").
       select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e")
@@ -179,8 +179,7 @@ class EarlyCollapseProjectSuite extends QueryTest
       df => df.withColumns(Seq("newCol1"), Seq(col("c") + 2 + col("a") * col("e"))))
   }
 
-  test("use of cached InMemoryRelation when new columns added do not result in new project, with" +
-    "positions changed") {
+  test("new columns added do not result in new project, with positions changed") {
     val baseDfCreator = () => spark.range(20).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").
       select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e")
@@ -188,12 +187,32 @@ class EarlyCollapseProjectSuite extends QueryTest
       df => df.select( $"e", $"a", $"c" + 2 + $"a" * $"e" as "newCol", $"c", $"d", $"b"))
   }
 
-  test("use of cached InMemoryRelation when renamed columns do not result in new project") {
+  test("renamed columns do not result in new project") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").select($"c", $"a", $"b", $"c" + 7 as "d")
 
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.withColumnsRenamed(
       Map("c" -> "c1", "a" -> "a1", "b" -> "b1", "d" -> "d1")))
+  }
+
+  test("resurrection of intermediate dropped cols when used in filter") {
+    val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"b").select($"c", $"b", $"c" + 7 as "d")
+    // A dropped column would result in a new project being added on top of filter
+    // so we have to take into account of that extra project added while checking
+    // assertion of init node size and optimized df nodes size
+    checkProjectCollapseAndCacheUse(baseDfCreator, df => df.withColumnsRenamed(
+      Map("c" -> "c1", "b" -> "b1", "d" -> "d1")).filter($"a" > 5))
+  }
+
+  test("resurrection of right renamed intermediate dropped cols when used in filter") {
+    val baseDfCreator = () => spark.range(10).select($"id" + 7 as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"b", $"a" * $"b" as "a").select($"c", $"b", $"c" + 7 as "d")
+    // A dropped column would result in a new project being added on top of filter
+    // so we have to take into account of that extra project added while checking
+    // assertion of init node size and optimized df nodes size
+    checkProjectCollapseAndCacheUse(baseDfCreator, df => df.withColumnsRenamed(
+      Map("c" -> "c1", "b" -> "b1", "d" -> "d1")).select($"c1", $"d1").filter($"a" > 25))
   }
 
   private def checkProjectCollapseAndCacheUse(
@@ -207,8 +226,11 @@ class EarlyCollapseProjectSuite extends QueryTest
     val (newDfOpt, newDfUnopt) = getComparableDataFrames(baseDf, testExec)
     val optDfNodes = collectNodes(newDfOpt)
     val nonOptDfNodes = collectNodes(newDfUnopt)
-    assert(initNodes.size === optDfNodes.size)
-    assert(nonOptDfNodes.size === optDfNodes.size + 1)
+    val foundFilterNodes = optDfNodes.exists(_.isInstanceOf[Filter])
+    if (!foundFilterNodes) {
+      assert(initNodes.size === optDfNodes.size)
+    }
+    assert(nonOptDfNodes.size > optDfNodes.size)
     checkAnswer(newDfOpt, newDfUnopt)
     if (useCaching) {
       assert(newDfOpt.queryExecution.optimizedPlan.collectLeaves().head.
@@ -219,10 +241,8 @@ class EarlyCollapseProjectSuite extends QueryTest
       SQLConf.EXCLUDE_POST_ANALYSIS_RULES.key -> EarlyCollapseProject.ruleName) {
        testExec(baseDfCreator())
     }
-
     assert(collectNodes(fullyUnopt).size >= nonOptDfNodes.size)
     checkAnswer(newDfOpt, fullyUnopt)
-
   }
 
   private def getComparableDataFrames(
