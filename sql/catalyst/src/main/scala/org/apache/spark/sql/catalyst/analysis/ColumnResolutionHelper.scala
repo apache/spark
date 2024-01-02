@@ -59,39 +59,24 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           val (newExprs, newChild) = {
             // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
-
             // Recursively resolving expressions on the child of current plan.
             resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
           }
           // If some attributes used by expressions are resolvable only on the rewritten child
           // plan, we need to add them into original projection.
-          val (missingAttrsFromOutput, missingAttrsFromDroppedAttr) = {
-            val missing1 = (AttributeSet(newExprs) -- u.outputSet)
-            val fulfilledFromOutput = missing1.intersect(newChild.outputSet)
-            val missing2 = missing1 -- fulfilledFromOutput
-            val fulfilledFromDroppedCol = missing2.intersect(u.getTagValue(
-              LogicalPlan.DROPPED_NAMED_EXPRESSIONS).
-              map(sq => AttributeSet(sq.map(_.toAttribute))).getOrElse(AttributeSet.empty))
-            fulfilledFromOutput -> fulfilledFromDroppedCol
-          }
+          lazy val missingAttrs =
+            (AttributeSet(newExprs) -- u.outputSet).intersect(newChild.outputSet)
           u match {
             case p: Project =>
-              val droppedNamedExprs = p.getTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS).
-                getOrElse(Seq.empty)
-              val newProject = Project(p.projectList ++ missingAttrsFromOutput ++
-                missingAttrsFromDroppedAttr.map(attr =>
-                  droppedNamedExprs.find(_.toAttribute.canonicalized == attr.canonicalized).get),
-                  newChild)
+              val newProject = Project(p.projectList ++ missingAttrs, newChild)
               newProject.copyTagsFrom(p)
               (newExprs, newProject)
 
             case a @ Aggregate(groupExprs, aggExprs, child) =>
-              if (missingAttrsFromOutput.forall(attr =>
-                groupExprs.exists(_.semanticEquals(attr)))) {
+              if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
                 // All the missing attributes are grouping expressions, valid case.
                 (newExprs,
-                  a.copy(aggregateExpressions = aggExprs ++ missingAttrsFromOutput,
-                    child = newChild))
+                  a.copy(aggregateExpressions = aggExprs ++ missingAttrs, child = newChild))
               } else {
                 // Need to add non-grouping attributes, invalid case.
                 (exprs, a)

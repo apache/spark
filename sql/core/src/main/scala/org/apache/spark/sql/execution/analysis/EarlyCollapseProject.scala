@@ -169,26 +169,12 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
       remappedNewProjListResult match {
         case Success(remappedNewProjList) =>
           val newProject = Project(remappedNewProjList, child)
-          val droppedNamedExprs = projList.filter(ne =>
-            remappedNewProjList.forall(_.toAttribute != ne.toAttribute))
-          val prevDroppedColsPart1 = p.getTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS).
-            getOrElse(Seq.empty)
-          // remove any attribs which have been added back in the new project list
-          val prevDroppedColsPart2 = prevDroppedColsPart1.filterNot(x =>
-            remappedNewProjList.exists(y => y.toAttribute == x.toAttribute || y.name == x.name))
-          val prevDroppedColsFinal = prevDroppedColsPart2.filterNot(x =>
-            droppedNamedExprs.exists(y => y == x || y.name == x.name))
-          val newDroppedList = droppedNamedExprs ++ prevDroppedColsFinal
           newProject.copyTagsFrom(p)
           // remove the datasetId copied from current P due to above copy
           newProject.unsetTagValue(Dataset.DATASET_ID_TAG)
           // use the dataset id of the incoming new project
           newP.getTagValue(Dataset.DATASET_ID_TAG).foreach(map =>
             newProject.setTagValue(Dataset.DATASET_ID_TAG, map.clone()))
-          newProject.unsetTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS)
-          if (newDroppedList.nonEmpty) {
-            newProject.setTagValue(LogicalPlan.DROPPED_NAMED_EXPRESSIONS, newDroppedList)
-          }
           Option(newProject)
 
         case Failure(x) => if (Utils.isTesting) {

@@ -227,8 +227,6 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         customCheckRules
-
-
   }
 
   /**
