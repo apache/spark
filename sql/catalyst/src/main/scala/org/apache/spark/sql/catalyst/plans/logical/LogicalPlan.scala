@@ -133,6 +133,9 @@ abstract class LogicalPlan
 
   private[this] lazy val outputAttributes = AttributeSeq.fromNormalOutput(output)
 
+  private[this] lazy val droppedAttributes = this.getTagValue(
+    LogicalPlan.DROPPED_NAMED_EXPRESSIONS).map(_.map(_.toAttribute)).getOrElse(Seq.empty)
+
   private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
   /**
@@ -155,7 +158,8 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     outputAttributes.resolve(nameParts, resolver)
-      .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
+      .orElse(outputMetadataAttributes.resolve(nameParts, resolver)).orElse(
+      droppedAttributes.resolve(nameParts, resolver))
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -199,6 +203,8 @@ object LogicalPlan {
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
   private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
+  private[spark] val DROPPED_NAMED_EXPRESSIONS =
+    TreeNodeTag[Seq[NamedExpression]]("dropped_namedexprs")
 }
 
 /**
