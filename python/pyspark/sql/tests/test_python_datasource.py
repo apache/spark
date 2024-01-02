@@ -19,13 +19,14 @@ import tempfile
 import unittest
 from typing import Callable, Union
 
-from pyspark.errors import PythonException
+from pyspark.errors import PythonException, PySparkTypeError
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,
     InputPartition,
     DataSourceWriter,
     WriterCommitMessage,
+    CaseInsensitiveDict,
 )
 from pyspark.sql.types import Row, StructType
 from pyspark.testing import assertDataFrameEqual
@@ -345,6 +346,26 @@ class BasePythonDataSourceTestsMixin:
             with open(os.path.join(d, "_failed.txt"), "r") as file:
                 text = file.read()
             assert text == "failed"
+
+    def test_case_insensitive_dict(self):
+        d = CaseInsensitiveDict({"foo": 1, "Bar": 2})
+        self.assertEqual(d["foo"], d["FOO"])
+        self.assertEqual(d["bar"], d["BAR"])
+        self.assertTrue("baR" in d)
+        d["BAR"] = 3
+        self.assertEqual(d["BAR"], 3)
+        # Test update
+        d.update({"BaZ": 3})
+        self.assertEqual(d["BAZ"], 3)
+        d.update({"FOO": 4})
+        self.assertEqual(d["foo"], 4)
+        # Test delete
+        del d["FoO"]
+        self.assertFalse("FOO" in d)
+        # Test copy
+        d2 = d.copy()
+        self.assertEqual(d2["BaR"], 3)
+        self.assertEqual(d2["baz"], 3)
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
