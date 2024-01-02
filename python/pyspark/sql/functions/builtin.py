@@ -12810,7 +12810,7 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
 @_try_remote_functions
 def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     """
-    Collection function: Returns element of array at given (0-based) index.
+    Array function: Returns the element of an array at the given (0-based) index.
     If the index points outside of the array boundaries, then this function
     returns NULL.
 
@@ -12819,18 +12819,18 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        Name of the column containing the array.
     index : :class:`~pyspark.sql.Column` or str or int
-        index to check for in array
+        Index to check for in the array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        value at given position.
+        Value at the given position.
 
     Notes
     -----
-    The position is not 1 based, but 0 based index.
+    The position is not 1-based, but 0-based index.
     Supports Spark Connect.
 
     See Also
@@ -12839,41 +12839,61 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["a", "b", "c"], 1)], ['data', 'index'])
-    >>> df.select(get(df.data, 1)).show()
+    Example 1: Getting an element at a fixed position
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.get(df.data, 1)).show()
     +------------+
     |get(data, 1)|
     +------------+
     |           b|
     +------------+
 
-    >>> df.select(get(df.data, -1)).show()
-    +-------------+
-    |get(data, -1)|
-    +-------------+
-    |         NULL|
-    +-------------+
+    Example 2: Getting an element at a position outside the array boundaries
 
-    >>> df.select(get(df.data, 3)).show()
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.get(df.data, 3)).show()
     +------------+
     |get(data, 3)|
     +------------+
     |        NULL|
     +------------+
 
-    >>> df.select(get(df.data, "index")).show()
+    Example 3: Getting an element at a position specified by another column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"], 2)], ['data', 'index'])
+    >>> df.select(sf.get(df.data, df.index)).show()
     +----------------+
     |get(data, index)|
     +----------------+
-    |               b|
+    |               c|
     +----------------+
 
-    >>> df.select(get(df.data, col("index") - 1)).show()
+
+    Example 4: Getting an element at a position calculated from another column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"], 2)], ['data', 'index'])
+    >>> df.select(sf.get(df.data, df.index - 1)).show()
     +----------------------+
     |get(data, (index - 1))|
     +----------------------+
-    |                     a|
+    |                     b|
     +----------------------+
+
+    Example 5: Getting an element at a negative position
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"], )], ['data'])
+    >>> df.select(sf.get(df.data, -1)).show()
+    +-------------+
+    |get(data, -1)|
+    +-------------+
+    |         NULL|
+    +-------------+
     """
     index = lit(index) if isinstance(index, int) else index
 
@@ -14226,6 +14246,11 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
+    if len(fields) == 0:
+        raise PySparkValueError(
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "field"},
+        )
     sc = _get_active_spark_context()
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
@@ -15064,7 +15089,7 @@ def cardinality(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     """
-    Collection function: sorts the input array in ascending or descending order according
+    Array function: Sorts the input array in ascending or descending order according
     to the natural ordering of the array elements. Null elements will be placed at the beginning
     of the returned array in ascending order or at the end of the returned array in descending
     order.
@@ -15077,23 +15102,76 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        Name of the column or expression.
     asc : bool, optional
-        whether to sort in ascending or descending order. If `asc` is True (default)
-        then ascending and if False then descending.
+        Whether to sort in ascending or descending order. If `asc` is True (default),
+        then the sorting is in ascending order. If False, then in descending order.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        sorted array.
+        Sorted array.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
-    >>> df.select(sort_array(df.data).alias('r')).collect()
-    [Row(r=[None, 1, 2, 3]), Row(r=[1]), Row(r=[])]
-    >>> df.select(sort_array(df.data, asc=False).alias('r')).collect()
-    [Row(r=[3, 2, 1, None]), Row(r=[1]), Row(r=[])]
+    Example 1: Sorting an array in ascending order
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([([2, 1, None, 3],)], ['data'])
+    >>> df.select(sf.sort_array(df.data)).show()
+    +----------------------+
+    |sort_array(data, true)|
+    +----------------------+
+    |       [NULL, 1, 2, 3]|
+    +----------------------+
+
+    Example 2: Sorting an array in descending order
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([([2, 1, None, 3],)], ['data'])
+    >>> df.select(sf.sort_array(df.data, asc=False)).show()
+    +-----------------------+
+    |sort_array(data, false)|
+    +-----------------------+
+    |        [3, 2, 1, NULL]|
+    +-----------------------+
+
+    Example 3: Sorting an array with a single element
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([([1],)], ['data'])
+    >>> df.select(sf.sort_array(df.data)).show()
+    +----------------------+
+    |sort_array(data, true)|
+    +----------------------+
+    |                   [1]|
+    +----------------------+
+
+    Example 4: Sorting an empty array
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+    >>> schema = StructType([StructField("data", ArrayType(StringType()), True)])
+    >>> df = spark.createDataFrame([([],)], schema=schema)
+    >>> df.select(sf.sort_array(df.data)).show()
+    +----------------------+
+    |sort_array(data, true)|
+    +----------------------+
+    |                    []|
+    +----------------------+
+
+    Example 5: Sorting an array with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
+    >>> schema = StructType([StructField("data", ArrayType(IntegerType()), True)])
+    >>> df = spark.createDataFrame([([None, None, None],)], schema=schema)
+    >>> df.select(sf.sort_array(df.data)).show()
+    +----------------------+
+    |sort_array(data, true)|
+    +----------------------+
+    |    [NULL, NULL, NULL]|
+    +----------------------+
     """
     return _invoke_function("sort_array", _to_java_column(col), asc)
 
@@ -15151,32 +15229,73 @@ def array_sort(
 @_try_remote_functions
 def shuffle(col: "ColumnOrName") -> Column:
     """
-    Collection function: Generates a random permutation of the given array.
+    Array function: Generates a random permutation of the given array.
 
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    Notes
-    -----
-    The function is non-deterministic.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        The name of the column or expression to be shuffled.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of elements in random order.
+        A new column that contains an array of elements in random order.
+
+    Notes
+    -----
+    The `shuffle` function is non-deterministic, meaning the order of the output array
+    can be different for each execution.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([1, 20, 3, 5],), ([1, 20, None, 3],)], ['data'])
-    >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
-    [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
+    Example 1: Shuffling a simple array
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([([1, 20, 3, 5],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +-------------+
+    |shuffle(data)|
+    +-------------+
+    |[1, 3, 20, 5]|
+    +-------------+
+
+    Example 2: Shuffling an array with null values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([([1, 20, None, 3],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +----------------+
+    |   shuffle(data)|
+    +----------------+
+    |[20, 3, NULL, 1]|
+    +----------------+
+
+    Example 3: Shuffling an array with duplicate values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 2, 3, 3, 3],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +------------------+
+    |     shuffle(data)|
+    +------------------+
+    |[3, 2, 1, 3, 2, 3]|
+    +------------------+
+
+    Example 4: Shuffling an array with different types of elements
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(['a', 'b', 'c', 1, 2, 3],)], ['data'])
+    >>> df.select(sf.shuffle(df.data)).show() # doctest: +SKIP
+    +------------------+
+    |     shuffle(data)|
+    +------------------+
+    |[1, c, 2, a, b, 3]|
+    +------------------+
     """
     return _invoke_function_over_columns("shuffle", col)
 
@@ -15216,7 +15335,7 @@ def reverse(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def flatten(col: "ColumnOrName") -> Column:
     """
-    Collection function: creates a single array from an array of arrays.
+    Array function: creates a single array from an array of arrays.
     If a structure of nested arrays is deeper than two levels,
     only one level of nesting is removed.
 
@@ -15228,29 +15347,57 @@ def flatten(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        The name of the column or expression to be flattened.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        flattened array.
+        A new column that contains the flattened array.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([[1, 2, 3], [4, 5], [6]],), ([None, [4, 5]],)], ['data'])
-    >>> df.show(truncate=False)
-    +------------------------+
-    |data                    |
-    +------------------------+
-    |[[1, 2, 3], [4, 5], [6]]|
-    |[NULL, [4, 5]]          |
-    +------------------------+
-    >>> df.select(flatten(df.data).alias('r')).show()
+    Example 1: Flattening a simple nested array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([[1, 2, 3], [4, 5], [6]],)], ['data'])
+    >>> df.select(sf.flatten(df.data)).show()
     +------------------+
-    |                 r|
+    |     flatten(data)|
     +------------------+
     |[1, 2, 3, 4, 5, 6]|
-    |              NULL|
+    +------------------+
+
+    Example 2: Flattening an array with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([None, [4, 5]],)], ['data'])
+    >>> df.select(sf.flatten(df.data)).show()
+    +-------------+
+    |flatten(data)|
+    +-------------+
+    |         NULL|
+    +-------------+
+
+    Example 3: Flattening an array with more than two levels of nesting
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([[[1, 2], [3, 4]], [[5, 6], [7, 8]]],)], ['data'])
+    >>> df.select(sf.flatten(df.data)).show(truncate=False)
+    +--------------------------------+
+    |flatten(data)                   |
+    +--------------------------------+
+    |[[1, 2], [3, 4], [5, 6], [7, 8]]|
+    +--------------------------------+
+
+    Example 4: Flattening an array with mixed types
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([['a', 'b', 'c'], [1, 2, 3]],)], ['data'])
+    >>> df.select(sf.flatten(df.data)).show()
+    +------------------+
+    |     flatten(data)|
+    +------------------+
+    |[a, b, c, 1, 2, 3]|
     +------------------+
     """
     return _invoke_function_over_columns("flatten", col)
@@ -15523,9 +15670,9 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
 @_try_remote_functions
 def arrays_zip(*cols: "ColumnOrName") -> Column:
     """
-    Collection function: Returns a merged array of structs in which the N-th struct contains all
+    Array function: Returns a merged array of structs in which the N-th struct contains all
     N-th values of input arrays. If one of the arrays is shorter than others then
-    resulting struct type value will be a `null` for missing elements.
+    the resulting struct type value will be a `null` for missing elements.
 
     .. versionadded:: 2.4.0
 
@@ -15535,31 +15682,60 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
-        columns of arrays to be merged.
+        Columns of arrays to be merged.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        merged array of entries.
+        Merged array of entries.
 
     Examples
     --------
-    >>> from pyspark.sql.functions import arrays_zip
-    >>> df = spark.createDataFrame([([1, 2, 3], [2, 4, 6], [3, 6])], ['vals1', 'vals2', 'vals3'])
-    >>> df = df.select(arrays_zip(df.vals1, df.vals2, df.vals3).alias('zipped'))
-    >>> df.show(truncate=False)
-    +------------------------------------+
-    |zipped                              |
-    +------------------------------------+
-    |[{1, 2, 3}, {2, 4, 6}, {3, 6, NULL}]|
-    +------------------------------------+
-    >>> df.printSchema()
-    root
-     |-- zipped: array (nullable = true)
-     |    |-- element: struct (containsNull = false)
-     |    |    |-- vals1: long (nullable = true)
-     |    |    |-- vals2: long (nullable = true)
-     |    |    |-- vals3: long (nullable = true)
+    Example 1: Zipping two arrays of the same length
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3], ['a', 'b', 'c'])], ['nums', 'letters'])
+    >>> df.select(sf.arrays_zip(df.nums, df.letters)).show(truncate=False)
+    +-------------------------+
+    |arrays_zip(nums, letters)|
+    +-------------------------+
+    |[{1, a}, {2, b}, {3, c}] |
+    +-------------------------+
+
+
+    Example 2: Zipping arrays of different lengths
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2], ['a', 'b', 'c'])], ['nums', 'letters'])
+    >>> df.select(sf.arrays_zip(df.nums, df.letters)).show(truncate=False)
+    +---------------------------+
+    |arrays_zip(nums, letters)  |
+    +---------------------------+
+    |[{1, a}, {2, b}, {NULL, c}]|
+    +---------------------------+
+
+    Example 3: Zipping more than two arrays
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [([1, 2], ['a', 'b'], [True, False])], ['nums', 'letters', 'bools'])
+    >>> df.select(sf.arrays_zip(df.nums, df.letters, df.bools)).show(truncate=False)
+    +--------------------------------+
+    |arrays_zip(nums, letters, bools)|
+    +--------------------------------+
+    |[{1, a, true}, {2, b, false}]   |
+    +--------------------------------+
+
+    Example 4: Zipping arrays with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, None], ['a', None, 'c'])], ['nums', 'letters'])
+    >>> df.select(sf.arrays_zip(df.nums, df.letters)).show(truncate=False)
+    +------------------------------+
+    |arrays_zip(nums, letters)     |
+    +------------------------------+
+    |[{1, a}, {2, NULL}, {NULL, c}]|
+    +------------------------------+
     """
     return _invoke_function_over_seq_of_columns("arrays_zip", cols)
 
@@ -15616,9 +15792,9 @@ def sequence(
     start: "ColumnOrName", stop: "ColumnOrName", step: Optional["ColumnOrName"] = None
 ) -> Column:
     """
-    Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
-    If `step` is not set, incrementing by 1 if `start` is less than or equal to `stop`,
-    otherwise -1.
+    Array function: Generate a sequence of integers from `start` to `stop`, incrementing by `step`.
+    If `step` is not set, the function increments by 1 if `start` is less than or equal to `stop`,
+    otherwise it decrements by 1.
 
     .. versionadded:: 2.4.0
 
@@ -15628,25 +15804,53 @@ def sequence(
     Parameters
     ----------
     start : :class:`~pyspark.sql.Column` or str
-        starting value (inclusive)
+        The starting value (inclusive) of the sequence.
     stop : :class:`~pyspark.sql.Column` or str
-        last values (inclusive)
+        The last value (inclusive) of the sequence.
     step : :class:`~pyspark.sql.Column` or str, optional
-        value to add to current to get next element (default is 1)
+        The value to add to the current element to get the next element in the sequence.
+        The default is 1 if `start` is less than or equal to `stop`, otherwise -1.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of sequence values
+        A new column that contains an array of sequence values.
 
     Examples
     --------
-    >>> df1 = spark.createDataFrame([(-2, 2)], ('C1', 'C2'))
-    >>> df1.select(sequence('C1', 'C2').alias('r')).collect()
-    [Row(r=[-2, -1, 0, 1, 2])]
-    >>> df2 = spark.createDataFrame([(4, -4, -2)], ('C1', 'C2', 'C3'))
-    >>> df2.select(sequence('C1', 'C2', 'C3').alias('r')).collect()
-    [Row(r=[4, 2, 0, -2, -4])]
+    Example 1: Generating a sequence with default step
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(-2, 2)], ['start', 'stop'])
+    >>> df.select(sf.sequence(df.start, df.stop)).show()
+    +---------------------+
+    |sequence(start, stop)|
+    +---------------------+
+    |    [-2, -1, 0, 1, 2]|
+    +---------------------+
+
+    Example 2: Generating a sequence with a custom step
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(4, -4, -2)], ['start', 'stop', 'step'])
+    >>> df.select(sf.sequence(df.start, df.stop, df.step)).show()
+    +---------------------------+
+    |sequence(start, stop, step)|
+    +---------------------------+
+    |          [4, 2, 0, -2, -4]|
+    +---------------------------+
+
+
+    Example 3: Generating a sequence with a negative step
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(5, 1, -1)], ['start', 'stop', 'step'])
+    >>> df.select(sf.sequence(df.start, df.stop, df.step)).show()
+    +---------------------------+
+    |sequence(start, stop, step)|
+    +---------------------------+
+    |            [5, 4, 3, 2, 1]|
+    +---------------------------+
     """
     if step is None:
         return _invoke_function_over_columns("sequence", start, stop)

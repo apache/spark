@@ -7073,6 +7073,356 @@
       "Namespace '<namespace>' is non empty. <details>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3104" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3105" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3106" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3107" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3108" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3109" : {
+    "message" : [
+      "<message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3110" : {
+    "message" : [
+      "Cannot bind a V1 function."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3111" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3112" : {
+    "message" : [
+      "Operation unsupported for <class>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3113" : {
+    "message" : [
+      "UnresolvedTableSpec doesn't have a data type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3114" : {
+    "message" : [
+      "UnresolvedTableSpec doesn't have a data type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3115" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3116" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3117" : {
+    "message" : [
+      "Cannot modify <class>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3118" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3119" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3120" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3121" : {
+    "message" : [
+      "A HllSketch instance cannot be updates with a Spark <dataType> type"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3122" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3123" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3124" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3125" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3126" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3127" : {
+    "message" : [
+      "Not supported on UnsafeArrayData."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3128" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3129" : {
+    "message" : [
+      "Cannot convert this array to unsafe format as it's too big."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3130" : {
+    "message" : [
+      "Cannot create BufferHolder for input UnsafeRow because there are too many fields (number of fields: <numFields>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3131" : {
+    "message" : [
+      "Unsupported data type <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3132" : {
+    "message" : [
+      "CaseInsensitiveStringMap is read-only."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3133" : {
+    "message" : [
+      "<class> does not implement rowIdSchema"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3134" : {
+    "message" : [
+      "<class> does not implement metadataSchema"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3135" : {
+    "message" : [
+      "<class> does not support batch write"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3136" : {
+    "message" : [
+      "<class> does not support streaming write"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3137" : {
+    "message" : [
+      "<description>: Batch write is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3138" : {
+    "message" : [
+      "<description>: Streaming write is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3139" : {
+    "message" : [
+      "<description>: Delta batch write is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3140" : {
+    "message" : [
+      "<class> does not implement build"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3141" : {
+    "message" : [
+      "<class> does not support user defined function: <funcName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3142" : {
+    "message" : [
+      "<class> does not support user defined aggregate function: <funcName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3143" : {
+    "message" : [
+      "Partition renaming is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3144" : {
+    "message" : [
+      "Partition truncate is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3145" : {
+    "message" : [
+      "Partitions truncate is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3146" : {
+    "message" : [
+      "Cannot find a compatible ScalarFunction#produceResult"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3147" : {
+    "message" : [
+      "<description>: Batch scan are not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3148" : {
+    "message" : [
+      "<description>: Micro-batch scan are not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3149" : {
+    "message" : [
+      "<description>: Continuous scan are not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3150" : {
+    "message" : [
+      "Cannot create columnar reader."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3151" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3152" : {
+    "message" : [
+      "Datatype not supported <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3153" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3154" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3155" : {
+    "message" : [
+      "Datatype not supported <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3156" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3157" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3158" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3159" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3160" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3161" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3162" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3163" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3164" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3165" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3166" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3167" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3168" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3169" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3170" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3171" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3172" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3173" : {
+    "message" : [
+      ""
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -81,7 +81,7 @@ object SimpleAnalyzer extends Analyzer(
 }
 
 object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
-  private def fail() = throw new UnsupportedOperationException
+  private def fail() = throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3118")
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
     throw new NoSuchTableException(ident.asMultipartIdentifier)

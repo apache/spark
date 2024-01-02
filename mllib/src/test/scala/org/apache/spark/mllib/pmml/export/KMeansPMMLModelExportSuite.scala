@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
 import org.dmg.pmml.clustering.ClusteringModel
 
