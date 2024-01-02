@@ -359,23 +359,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        Create a local temporary view.
+        Example 1: Creating and querying a local temporary view
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createTempView("people")
-        >>> df2 = spark.sql("SELECT * FROM people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
+        >>> spark.sql("SELECT * FROM people").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
 
-        Throw an exception if the table already exists.
+        Example 2: Attempting to create a temporary view with an existing name
 
         >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
+
+        Example 3: Creating and dropping a local temporary view
+
         >>> spark.catalog.dropTempView("people")
         True
+        >>> df.createTempView("people")
 
+        Example 4: Creating temporary views with multiple DataFrames with
+        :meth:`SparkSession.table`
+
+        >>> df1 = spark.createDataFrame([(1, "John"), (2, "Jane")], schema=["id", "name"])
+        >>> df2 = spark.createDataFrame([(3, "Jake"), (4, "Jill")], schema=["id", "name"])
+        >>> df1.createTempView("table1")
+        >>> df2.createTempView("table2")
+        >>> result_df = spark.table("table1").union(spark.table("table2"))
+        >>> result_df.show()
+        +---+----+
+        | id|name|
+        +---+----+
+        |  1|John|
+        |  2|Jane|
+        |  3|Jake|
+        |  4|Jill|
+        +---+----+
         """
         self._jdf.createTempView(name)
 
@@ -397,21 +422,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        Create a local temporary view named 'people'.
+        Example 1: Creating a local temporary view named 'people'.
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createOrReplaceTempView("people")
 
-        Replace the local temporary view.
+        Example 2: Replacing the local temporary view.
 
         >>> df2 = df.filter(df.age > 3)
+        >>> # Replace the local temporary view with the filtered DataFrame
         >>> df2.createOrReplaceTempView("people")
+        >>> # Query the temporary view
         >>> df3 = spark.sql("SELECT * FROM people")
-        >>> sorted(df3.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-        True
+        >>> # Check if the DataFrames are equal
+        ... assert sorted(df3.collect()) == sorted(df2.collect())
 
+        Example 3: Dropping the temporary view.
+
+        >>> # Drop the local temporary view
+        ... spark.catalog.dropTempView("people")
+        True
         """
         self._jdf.createOrReplaceTempView(name)
 
