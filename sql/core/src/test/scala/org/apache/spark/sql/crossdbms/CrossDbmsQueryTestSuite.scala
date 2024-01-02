@@ -185,9 +185,8 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   }
 
   override protected def resultFileForInputFile(file: File): String = {
-    val defaultResultsDir = new File(baseResourcePath, "results")
-    val goldenFilePath = new File(
-      defaultResultsDir, s"$crossDbmsToGenerateGoldenFiles-results").getAbsolutePath
+    val goldenFilePathsql/core/src/test/resources/sql-tests/crossdbms-results/ = new File(baseResourcePath,
+      CrossDbmsQueryTestSuite.RESULT_DIR).getAbsolutePath
     file.getAbsolutePath.replace(customInputFilePath, goldenFilePath) + ".out"
   }
 
@@ -206,6 +205,10 @@ object CrossDbmsQueryTestSuite {
   final val POSTGRES = "postgres"
   final val SUPPORTED_DBMS = Seq(POSTGRES)
 
+  // Result directory for golden files produced by CrossDBMS. This means that all DBMS will share
+  // the same golden files. This is only possible if we make the queries simple enough that they are
+  // compatible with all DBMS.
+  private final val RESULT_DIR = "crossdbms-results"
   // System argument to indicate a custom connection URL to the reference DBMS.
   private final val REF_DBMS_CONNECTION_URL = "REF_DBMS_CONNECTION_URL"
   // Argument in input files to indicate that the sql file is restricted to certain systems.
