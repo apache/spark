@@ -15303,7 +15303,7 @@ def shuffle(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def reverse(col: "ColumnOrName") -> Column:
     """
-    Collection function: returns a reversed string or an array with reverse order of elements.
+    Collection function: returns a reversed string or an array with elements in reverse order.
 
     .. versionadded:: 1.5.0
 
@@ -15313,18 +15313,23 @@ def reverse(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        The name of the column or an expression that represents the element to be reversed.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        array of elements in reverse order.
+        A new column that contains a reversed string or an array with elements in reverse order.
 
     Examples
     --------
+    Example 1: Reverse a string
+
     >>> df = spark.createDataFrame([('Spark SQL',)], ['data'])
     >>> df.select(reverse(df.data).alias('s')).collect()
     [Row(s='LQS krapS')]
+
+    Example 2: Reverse an array
+
     >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
     >>> df.select(reverse(df.data).alias('r')).collect()
     [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
@@ -15406,7 +15411,7 @@ def flatten(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     """
-    Returns true if the map contains the key.
+    Map function: Returns true if the map contains the key.
 
     .. versionadded:: 3.4.0
 
@@ -15416,9 +15421,9 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        The name of the column or an expression that represents the map.
     value :
-        a literal value
+        A literal value.
 
     Returns
     -------
@@ -15427,6 +15432,8 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
 
     Examples
     --------
+    Example 1: The key is in the map
+
     >>> from pyspark.sql.functions import map_contains_key
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
     >>> df.select(map_contains_key("data", 1)).show()
@@ -15435,6 +15442,8 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     +-------------------------+
     |                     true|
     +-------------------------+
+
+    Example 2: The key is not in the map
     >>> df.select(map_contains_key("data", -1)).show()
     +--------------------------+
     |map_contains_key(data, -1)|
