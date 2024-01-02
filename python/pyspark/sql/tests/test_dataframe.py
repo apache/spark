@@ -74,6 +74,8 @@ class DataFrameTestsMixin:
         df2 = df1.withColumnRenamed("a", "b")
         df = df1.join(df2, df1["a"] == df2["b"])
         self.assertTrue(df.count() == 100)
+        df = df2.join(df1, df2["b"] == df1["a"])
+        self.assertTrue(df.count() == 100)
 
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])

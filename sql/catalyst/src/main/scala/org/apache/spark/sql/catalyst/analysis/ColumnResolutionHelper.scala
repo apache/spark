@@ -508,11 +508,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     if (q.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId)) {
       resolveUnresolvedAttributeByPlan(u, q, isMetadataAccess)
     } else {
-      val found = q.children.flatMap { child =>
-        val nodes = findPlanById(planId, child)
-        if (nodes.nonEmpty) Some(child, nodes) else None
+      val (resolved, found) = q.children.map { child =>
+        val outputSet = if (isMetadataAccess) {
+          // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
+          child.outputSet ++ AttributeSet(child.metadataOutput)
+        } else {
+          child.outputSet
+        }
+        resolveUnresolvedAttributeByPlanId(
+          u, planId, child, outputSet, isMetadataAccess)
+      }.fold((Seq.empty, 0)) { case ((r1, c1), (r2, c2)) =>
+        (r1 ++ r2, c1 + c2)
       }
-      if (found.isEmpty) {
+      if (found == 0) {
         // For example:
         //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
         //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
@@ -524,33 +532,41 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             "planId" -> planId.toString,
             "q" -> q.toString))
       }
-
-      val matched = found.flatMap { case (child, nodes) =>
-        val resolved = nodes
-          .flatMap(resolveUnresolvedAttributeByPlan(u, _, isMetadataAccess))
-        if (isMetadataAccess) {
-          // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
-          val metadataOutputSet = child.outputSet ++ AttributeSet(child.metadataOutput)
-          resolved.filter(metadataOutputSet.contains)
-        } else {
-          resolved.filter(child.outputSet.contains)
-        }
-      }
-      if (matched.length > 1) {
+      if (resolved.length > 1) {
         throw new AnalysisException(
           errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
           messageParameters = Map("name" -> toSQLId(u.nameParts)),
           origin = u.origin
         )
       }
-      matched.headOption
+      resolved.headOption
+    }
+  }
+
+  private def resolveUnresolvedAttributeByPlanId(
+      u: UnresolvedAttribute,
+      id: Long,
+      p: LogicalPlan,
+      outputSet: AttributeSet,
+      isMetadataAccess: Boolean): (Seq[NamedExpression], Int) = {
+    if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      val resolved = resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
+        .filter(outputSet.contains).toSeq
+      (resolved, 1)
+    } else {
+      p.children.map { child =>
+        resolveUnresolvedAttributeByPlanId(
+          u, id, child, outputSet, isMetadataAccess)
+      }.fold((Seq.empty, 0)) { case ((r1, c1), (r2, c2)) =>
+        (r1 ++ r2, c1 + c2)
+      }
     }
   }
 
   private def resolveUnresolvedAttributeByPlan(
-    u: UnresolvedAttribute,
-    plan: LogicalPlan,
-    isMetadataAccess: Boolean): Option[NamedExpression] = {
+      u: UnresolvedAttribute,
+      plan: LogicalPlan,
+      isMetadataAccess: Boolean): Option[NamedExpression] = {
     try {
       if (!isMetadataAccess) {
         plan.resolve(u.nameParts, conf.resolver)
@@ -563,16 +579,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       case e: AnalysisException =>
         logDebug(s"Fail to resolve $u with $plan due to $e")
         None
-    }
-  }
-
-  private def findPlanById(
-      id: Long,
-      plan: LogicalPlan): Seq[LogicalPlan] = {
-    if (plan.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      Seq(plan)
-    } else {
-      plan.children.flatMap(findPlanById(id, _))
     }
   }
 }

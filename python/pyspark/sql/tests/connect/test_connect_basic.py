@@ -543,7 +543,10 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        with self.assertRaisesRegex(AnalysisException, "`b` cannot be resolved"):
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
 
