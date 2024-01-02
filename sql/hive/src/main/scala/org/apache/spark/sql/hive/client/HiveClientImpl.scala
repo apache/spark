@@ -1195,6 +1195,27 @@ private[hive] object HiveClientImpl extends Logging {
     } else {
       Map.empty
     }
+    val bucketSpec = if (apiPartition.getSd.getNumBuckets > 0) {
+      val sortColumnOrders = apiPartition.getSd.getSortCols.asScala
+      // Currently Spark only supports columns to be sorted in ascending order
+      // but Hive can support both ascending and descending order. If all the columns
+      // are sorted in ascending order, only then propagate the sortedness information
+      // to downstream processing / optimizations in Spark
+      // TODO: In future we can have Spark support columns sorted in descending order
+      val allAscendingSorted = sortColumnOrders.forall(_.getOrder == HIVE_COLUMN_ORDER_ASC)
+
+      val sortColumnNames = if (allAscendingSorted) {
+        sortColumnOrders.map(_.getCol)
+      } else {
+        Seq.empty
+      }
+      Option(BucketSpec(
+        numBuckets = apiPartition.getSd.getNumBuckets,
+        bucketColumnNames = apiPartition.getSd.getBucketCols.asScala.toSeq,
+        sortColumnNames = sortColumnNames.toSeq))
+    } else {
+      None
+    }
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
@@ -1208,6 +1229,7 @@ private[hive] object HiveClientImpl extends Logging {
       createTime = apiPartition.getCreateTime.toLong * 1000,
       lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,
+      bucketSpec = bucketSpec,
       stats = readHiveStats(properties))
   }
 
