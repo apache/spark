@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.junit.jupiter.api.Assertions
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command
@@ -210,9 +208,9 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
 
       sql(s"INSERT INTO $tbl values (1, 'aaa'), (2, 'bbb'), (3, 'ccc'), (null, 'ddd')")
       val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl")
-      val stats = descriptionDf.filter("col_name == 'Statistics'").select("data_type")
-        .collectAsList().get(0).toString
-      Assertions.assertTrue("""\[\d+\s+bytes,\s+4\s+rows]""".r.matches(stats))
+      val stats = descriptionDf.filter("col_name == 'Statistics'").head()
+        .getAs[String]("data_type")
+      assert("""\d+\s+bytes,\s+4\s+rows""".r.matches(stats))
     }
   }
 }
