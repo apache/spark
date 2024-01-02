@@ -15,9 +15,8 @@
 # limitations under the License.
 #
 
-import inspect
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -25,13 +24,7 @@ import pandas as pd
 import pyspark.pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeDatetimeIndex,
-    MissingPandasLikeIndex,
-    MissingPandasLikeMultiIndex,
-    MissingPandasLikeTimedeltaIndex,
-)
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
 class IndexesTestsMixin:
@@ -41,6 +34,10 @@ class IndexesTestsMixin:
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_index_basic(self):
         for pdf in [
@@ -172,69 +169,6 @@ class IndexesTestsMixin:
         with self.assertRaises(PandasNotImplementedError):
             psidx.name = "renamed"
 
-    def test_index_rename(self):
-        pdf = pd.DataFrame(
-            np.random.randn(10, 5), index=pd.Index([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], name="x")
-        )
-        psdf = ps.from_pandas(pdf)
-
-        pidx = pdf.index
-        psidx = psdf.index
-
-        self.assert_eq(psidx.rename("y"), pidx.rename("y"))
-        self.assert_eq(psdf.index.names, pdf.index.names)
-
-        # non-string names
-        self.assert_eq(psidx.rename(0), pidx.rename(0))
-        self.assert_eq(psidx.rename(("y", 0)), pidx.rename(("y", 0)))
-
-        psidx.rename("z", inplace=True)
-        pidx.rename("z", inplace=True)
-
-        self.assert_eq(psidx, pidx)
-        self.assert_eq(psdf.index.names, pdf.index.names)
-
-        self.assert_eq(psidx.rename(None), pidx.rename(None))
-        self.assert_eq(psdf.index.names, pdf.index.names)
-
-        self.assertRaises(TypeError, lambda: psidx.rename(["x", "y"]))
-
-    def test_multi_index_rename(self):
-        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
-        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
-        pdf = pd.DataFrame(np.random.randn(4, 5), idx)
-        psdf = ps.from_pandas(pdf)
-
-        pmidx = pdf.index
-        psmidx = psdf.index
-
-        self.assert_eq(psmidx.rename(["n", "c"]), pmidx.rename(["n", "c"]))
-        self.assert_eq(psdf.index.names, pdf.index.names)
-
-        # non-string names
-        self.assert_eq(psmidx.rename([0, 1]), pmidx.rename([0, 1]))
-        self.assert_eq(
-            psmidx.rename([("x", "a"), ("y", "b")]), pmidx.rename([("x", "a"), ("y", "b")])
-        )
-
-        psmidx.rename(["num", "col"], inplace=True)
-        pmidx.rename(["num", "col"], inplace=True)
-
-        self.assert_eq(psmidx, pmidx)
-        self.assert_eq(psdf.index.names, pdf.index.names)
-
-        self.assert_eq(psmidx.rename([None, None]), pmidx.rename([None, None]))
-        self.assert_eq(psdf.index.names, pdf.index.names)
-
-        self.assertRaises(TypeError, lambda: psmidx.rename("number"))
-        self.assertRaises(TypeError, lambda: psmidx.rename(None))
-        self.assertRaises(ValueError, lambda: psmidx.rename(["number"]))
-
-    def test_multi_index_levshape(self):
-        pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2)])
-        psidx = ps.from_pandas(pidx)
-        self.assertEqual(pidx.levshape, psidx.levshape)
-
     def test_multi_index_copy(self):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
         idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
@@ -242,269 +176,6 @@ class IndexesTestsMixin:
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.index.copy(), pdf.index.copy())
-
-    def test_missing(self):
-        psdf = ps.DataFrame(
-            {
-                "a": [1, 2, 3],
-                "b": [4, 5, 6],
-                "c": pd.date_range("2011-01-01", freq="D", periods=3),
-                "d": pd.Categorical(["a", "b", "c"]),
-                "e": [timedelta(1), timedelta(2), timedelta(3)],
-            }
-        )
-
-        # Index functions
-        missing_functions = inspect.getmembers(MissingPandasLikeIndex, inspect.isfunction)
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("a").index, name)()
-
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("a").index, name)()
-
-        # MultiIndex functions
-        missing_functions = inspect.getmembers(MissingPandasLikeMultiIndex, inspect.isfunction)
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index(["a", "b"]).index, name)()
-
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index(["a", "b"]).index, name)()
-
-        # DatetimeIndex functions
-        missing_functions = inspect.getmembers(MissingPandasLikeDatetimeIndex, inspect.isfunction)
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("c").index, name)()
-
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("c").index, name)()
-
-        # TimedeltaIndex functions
-        missing_functions = inspect.getmembers(MissingPandasLikeTimedeltaIndex, inspect.isfunction)
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("e").index, name)()
-
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("e").index, name)()
-
-        # Index properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("a").index, name)
-
-        deprecated_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "deprecated_property"
-        ]
-        for name in deprecated_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "property.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("a").index, name)
-
-        # MultiIndex properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeMultiIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index(["a", "b"]).index, name)
-
-        deprecated_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "deprecated_property"
-        ]
-        for name in deprecated_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "property.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index(["a", "b"]).index, name)
-
-        # DatetimeIndex properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeDatetimeIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("c").index, name)
-
-        # TimedeltaIndex properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeDatetimeIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("c").index, name)
-
-    def test_multi_index_not_supported(self):
-        psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
-
-        with self.assertRaisesRegex(TypeError, "cannot perform any with this index type"):
-            psdf.set_index(["a", "b"]).index.any()
-
-        with self.assertRaisesRegex(TypeError, "cannot perform all with this index type"):
-            psdf.set_index(["a", "b"]).index.all()
-
-    def test_index_nlevels(self):
-        pdf = pd.DataFrame({"a": [1, 2, 3]}, index=pd.Index(["a", "b", "c"]))
-        psdf = ps.from_pandas(pdf)
-
-        self.assertEqual(psdf.index.nlevels, 1)
-
-    def test_multiindex_nlevel(self):
-        pdf = pd.DataFrame({"a": [1, 2, 3]}, index=[list("abc"), list("def")])
-        psdf = ps.from_pandas(pdf)
-
-        self.assertEqual(psdf.index.nlevels, 2)
-
-    def test_multiindex_swaplevel(self):
-        pidx = pd.MultiIndex.from_arrays([["a", "b"], [1, 2]])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.swaplevel(0, 1), psidx.swaplevel(0, 1))
-
-        pidx = pd.MultiIndex.from_arrays([["a", "b"], [1, 2]], names=["word", "number"])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.swaplevel(0, 1), psidx.swaplevel(0, 1))
-
-        pidx = pd.MultiIndex.from_arrays([["a", "b"], [1, 2]], names=["word", None])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.swaplevel(-2, -1), psidx.swaplevel(-2, -1))
-        self.assert_eq(pidx.swaplevel(0, 1), psidx.swaplevel(0, 1))
-        self.assert_eq(pidx.swaplevel("word", 1), psidx.swaplevel("word", 1))
-
-        with self.assertRaisesRegex(IndexError, "Too many levels: Index"):
-            psidx.swaplevel(-3, "word")
-        with self.assertRaisesRegex(IndexError, "Too many levels: Index"):
-            psidx.swaplevel(0, 2)
-        with self.assertRaisesRegex(IndexError, "Too many levels: Index"):
-            psidx.swaplevel(0, -3)
-        with self.assertRaisesRegex(KeyError, "Level work not found"):
-            psidx.swaplevel(0, "work")
-
-    def test_index_fillna(self):
-        pidx = pd.Index([1, 2, None])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.fillna(0), psidx.fillna(0), almost=True)
-        self.assert_eq(pidx.rename("name").fillna(0), psidx.rename("name").fillna(0), almost=True)
-
-        with self.assertRaisesRegex(TypeError, "Unsupported type list"):
-            psidx.fillna([1, 2])
-
-    def test_multiindex_isna(self):
-        psidx = ps.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-
-        with self.assertRaisesRegex(NotImplementedError, "isna is not defined for MultiIndex"):
-            psidx.isna()
-
-        with self.assertRaisesRegex(NotImplementedError, "isna is not defined for MultiIndex"):
-            psidx.isnull()
-
-        with self.assertRaisesRegex(NotImplementedError, "notna is not defined for MultiIndex"):
-            psidx.notna()
-
-        with self.assertRaisesRegex(NotImplementedError, "notna is not defined for MultiIndex"):
-            psidx.notnull()
-
-    def test_multiindex_rename(self):
-        pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-        psidx = ps.from_pandas(pidx)
-
-        pidx = pidx.rename(list("ABC"))
-        psidx = psidx.rename(list("ABC"))
-        self.assert_eq(pidx, psidx)
-
-        pidx = pidx.rename(["my", "name", "is"])
-        psidx = psidx.rename(["my", "name", "is"])
-        self.assert_eq(pidx, psidx)
 
     def test_multiindex_set_names(self):
         pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
@@ -549,150 +220,6 @@ class IndexesTestsMixin:
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf, psdf)
 
-    def test_len(self):
-        pidx = pd.Index(range(10000))
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(len(pidx), len(psidx))
-
-        pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-        psidx = ps.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-
-        self.assert_eq(len(pidx), len(psidx))
-
-    def test_argmin(self):
-        pidx = pd.Index([100, 50, 10, 20, 30, 60, 0, 50, 0, 100, 100, 100, 20, 0, 0])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.argmin(), psidx.argmin())
-
-        # MultiIndex
-        psidx = ps.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-        with self.assertRaisesRegex(
-            TypeError, "reduction operation 'argmin' not allowed for this dtype"
-        ):
-            psidx.argmin()
-
-    def test_argmax(self):
-        pidx = pd.Index([100, 50, 10, 20, 30, 60, 0, 50, 0, 100, 100, 100, 20, 0, 0])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.argmax(), psidx.argmax())
-
-        # MultiIndex
-        psidx = ps.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-        with self.assertRaisesRegex(
-            TypeError, "reduction operation 'argmax' not allowed for this dtype"
-        ):
-            psidx.argmax()
-
-    def test_min(self):
-        pidx = pd.Index([3, 2, 1])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.min(), psidx.min())
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2)])
-        psmidx = ps.from_pandas(pmidx)
-
-        self.assert_eq(pmidx.min(), psmidx.min())
-
-        pidx = pd.DatetimeIndex(["2021-02-01", "2021-01-01", "2021-04-01", "2021-03-01"])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.min(), psidx.min())
-
-    def test_max(self):
-        pidx = pd.Index([3, 2, 1])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.max(), psidx.max())
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2)])
-        psmidx = ps.from_pandas(pmidx)
-
-        self.assert_eq(pmidx.max(), psmidx.max())
-
-        pidx = pd.DatetimeIndex(["2021-02-01", "2021-01-01", "2021-04-01", "2021-03-01"])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(pidx.max(), psidx.max())
-
-    def test_repeat(self):
-        pidx = pd.Index(["a", "b", "c"])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(psidx.repeat(3).sort_values(), pidx.repeat(3).sort_values())
-        self.assert_eq(psidx.repeat(0).sort_values(), pidx.repeat(0).sort_values())
-        self.assert_eq((psidx + "x").repeat(3).sort_values(), (pidx + "x").repeat(3).sort_values())
-
-        self.assertRaises(ValueError, lambda: psidx.repeat(-1))
-        self.assertRaises(TypeError, lambda: psidx.repeat("abc"))
-
-        pmidx = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
-        psmidx = ps.from_pandas(pmidx)
-
-        self.assert_eq(psmidx.repeat(3).sort_values(), pmidx.repeat(3).sort_values())
-        self.assert_eq(psmidx.repeat(0).sort_values(), pmidx.repeat(0).sort_values(), almost=True)
-
-        self.assertRaises(ValueError, lambda: psmidx.repeat(-1))
-        self.assertRaises(TypeError, lambda: psmidx.repeat("abc"))
-
-    def test_index_get_level_values(self):
-        pidx = pd.Index([1, 2, 3], name="ks")
-        psidx = ps.from_pandas(pidx)
-
-        for level in [0, "ks"]:
-            self.assert_eq(psidx.get_level_values(level), pidx.get_level_values(level))
-
-    def test_multiindex_get_level_values(self):
-        pmidx = pd.MultiIndex.from_tuples([("a", "d"), ("b", "e"), ("c", "f")])
-        pmidx.names = ["level_1", "level_2"]
-        psmidx = ps.from_pandas(pmidx)
-
-        for level in [0, 1, "level_1", "level_2"]:
-            self.assert_eq(psmidx.get_level_values(level), pmidx.get_level_values(level))
-
-    def test_index_get_level_number(self):
-        # name of two levels are the same, which is None
-        psdf = ps.DataFrame({"a": [1, 2, 3]}, index=[list("aac"), list("ddf")])
-        with self.assertRaisesRegex(
-            ValueError, "The name None occurs multiple times, use a level number"
-        ):
-            psdf.index._get_level_number(None)
-
-        mi = pd.MultiIndex.from_arrays((list("abc"), list("def")))
-        mi.names = ["level_1", "level_2"]
-        psdf = ps.DataFrame({"a": [1, 2, 3]}, index=mi)
-
-        # level is not int and not in the level name list
-        with self.assertRaisesRegex(KeyError, "Level lv_3 not found"):
-            psdf.index._get_level_number("lv_3")
-
-        # level is int, but an invalid negative number
-        with self.assertRaisesRegex(IndexError, "Too many levels: Index has only"):
-            psdf.index._get_level_number(-3)
-
-        # level is int, but an invalid positive number
-        with self.assertRaisesRegex(IndexError, "Too many levels: Index has only"):
-            psdf.index._get_level_number(3)
-
-        # Correct and valid inputs in numbers
-        level_number = [-2, -1, 0, 1]
-        outputs = [0, 1, 0, 1]
-
-        for lv, output in zip(level_number, outputs):
-            self.assertEqual(output, psdf.index._get_level_number(lv))
-
-        # Valid inputs as level names
-        level_names = ["level_1", "level_2"]
-        outputs = [0, 1]
-
-        for lv, output in zip(level_names, outputs):
-            self.assertEqual(output, psdf.index._get_level_number(lv))
-
     def test_holds_integer(self):
         pidx = pd.Index([1, 2, 3, 4])
         psidx = ps.from_pandas(pidx)
@@ -714,45 +241,6 @@ class IndexesTestsMixin:
         pmidx = pd.MultiIndex.from_tuples([(10, 1), (10, 2), (20, 1)])
         psmidx = ps.from_pandas(pmidx)
         self.assert_eq(pmidx.holds_integer(), psmidx.holds_integer())
-
-    def test_abs(self):
-        pidx = pd.Index([-2, -1, 0, 1])
-        psidx = ps.from_pandas(pidx)
-
-        self.assert_eq(abs(pidx), abs(psidx))
-        self.assert_eq(np.abs(pidx), np.abs(psidx))
-
-        psidx = ps.MultiIndex.from_tuples([(1, 2)], names=["level1", "level2"])
-        with self.assertRaisesRegex(TypeError, "perform __abs__ with this index"):
-            abs(psidx)
-
-    def test_hasnans(self):
-        # BooleanType
-        pidx = pd.Index([True, False, True, True])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.hasnans, psidx.hasnans)
-
-        pidx = pd.Index([True, False, np.nan, True])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.hasnans, psidx.hasnans)
-
-        # TimestampType
-        pser = pd.Series([pd.Timestamp("2020-07-30") for _ in range(3)])
-        psser = ps.from_pandas(pser)
-        self.assert_eq(pser.hasnans, psser.hasnans)
-
-        pser = pd.Series([pd.Timestamp("2020-07-30"), np.nan, pd.Timestamp("2020-07-30")])
-        psser = ps.from_pandas(pser)
-        self.assert_eq(pser.hasnans, psser.hasnans)
-
-        # empty
-        pidx = pd.Index([])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.hasnans, psidx.hasnans)
-
-        # Not supported for MultiIndex
-        psmidx = ps.Index([("a", 1), ("b", 2)])
-        self.assertRaises(NotImplementedError, lambda: psmidx.hasnans())
 
     def test_item(self):
         pidx = pd.Index([10])
@@ -858,45 +346,10 @@ class IndexesTestsMixin:
 
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
 
-    def test_multiindex_equal_levels(self):
-        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        pmidx2 = pd.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])
-        psmidx1 = ps.from_pandas(pmidx1)
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
-
-        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "j")])
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
-
-        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("a", "x")])
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
-
-        pmidx2 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
-
-        pmidx2 = pd.MultiIndex.from_tuples([("a", "y"), ("b", "x"), ("c", "z")])
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
-
-        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z"), ("a", "y")])
-        pmidx2 = pd.MultiIndex.from_tuples([("a", "y"), ("b", "x"), ("c", "z"), ("c", "x")])
-        psmidx1 = ps.from_pandas(pmidx1)
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
-
-        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        pmidx2 = pd.MultiIndex.from_tuples([("a", "x", "q"), ("b", "y", "w"), ("c", "z", "e")])
-        psmidx1 = ps.from_pandas(pmidx1)
-        psmidx2 = ps.from_pandas(pmidx2)
-        self.assert_eq(pmidx1.equal_levels(pmidx2), psmidx1.equal_levels(psmidx2))
-
 
 class IndexesTests(
     IndexesTestsMixin,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     TestUtils,
 ):
     pass
