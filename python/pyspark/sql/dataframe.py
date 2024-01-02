@@ -609,14 +609,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Retrieve the inferred schema of the current DataFrame.
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-
-        Retrieve the schema of the current DataFrame.
-
         >>> df.schema
         StructType([StructField('age', LongType(), True),
                     StructField('name', StringType(), True)])
+
+        Example 2: Retrieve the schema of the current DataFrame (DDL-formatted schema).
+
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")],
+        ...     "age INT, name STRING")
+        >>> df.schema
+        StructType([StructField('age', IntegerType(), True),
+                    StructField('name', StringType(), True)])
+
+        Example 3: Retrieve the specified schema of the current DataFrame.
+
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> df = spark.createDataFrame(
+        ...     [("a",), ("b",), ("c",)],
+        ...     StructType([StructField("value", StringType(), False)]))
+        >>> df.schema
+        StructType([StructField('value', StringType(), False)])
+
         """
         if self._schema is None:
             try:
@@ -648,6 +666,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Printing the schema of a DataFrame with basic columns
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df.printSchema()
@@ -655,11 +675,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          |-- age: long (nullable = true)
          |-- name: string (nullable = true)
 
-        >>> df = spark.createDataFrame([(1, (2,2))], ["a", "b"])
+        Example 2: Printing the schema with a specified level for nested columns
+
+        >>> df = spark.createDataFrame([(1, (2, 2))], ["a", "b"])
         >>> df.printSchema(1)
         root
          |-- a: long (nullable = true)
          |-- b: struct (nullable = true)
+
+        Example 3: Printing the schema with deeper nesting level
 
         >>> df.printSchema(2)
         root
@@ -667,6 +691,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          |-- b: struct (nullable = true)
          |    |-- _1: long (nullable = true)
          |    |-- _2: long (nullable = true)
+
+        Example 4: Printing the schema of a DataFrame with nullable and non-nullable columns
+
+        >>> df = spark.range(1).selectExpr("id AS nonnullable", "NULL AS nullable")
+        >>> df.printSchema()
+        root
+         |-- nonnullable: long (nullable = false)
+         |-- nullable: void (nullable = true)
         """
         if level:
             print(self._jdf.schema().treeString(level))
@@ -704,18 +736,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Print out the physical plan only (default).
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-
-        Print out the physical plan only (default).
-
         >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         *(1) Scan ExistingRDD[age...,name...]
 
-        Print out all of the parsed, analyzed, optimized and physical plans.
+        Example 2: Print out all parsed, analyzed, optimized, and physical plans.
 
-        >>> df.explain(True)
+        >>> df.explain(extended=True)
         == Parsed Logical Plan ==
         ...
         == Analyzed Logical Plan ==
@@ -725,7 +756,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         == Physical Plan ==
         ...
 
-        Print out the plans with two sections: a physical plan outline and node details
+        Example 3: Print out the plans with two sections: a physical plan outline and node details.
 
         >>> df.explain(mode="formatted")  # doctest: +SKIP
         == Physical Plan ==
@@ -734,9 +765,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Output [2]: [age..., name...]
         ...
 
-        Print a logical plan and statistics if they are available.
+        Example 4: Print a logical plan and statistics if they are available.
 
-        >>> df.explain("cost")
+        >>> df.explain(mode="cost")
         == Optimized Logical Plan ==
         ...Statistics...
         ...
