@@ -262,7 +262,7 @@ object SparkBuild extends PomBuild {
     Vector(CachePolicy.LocalUpdateChanging, CachePolicy.LocalOnly, CachePolicy.Update)
   }
 
-  lazy val resolvers = if (sys.env.contains("SKIP_LOCAL_M2")) {
+  lazy val csrResolvers = if (sys.env.contains("SKIP_LOCAL_M2")) {
     Seq(
       // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
       // See https://storage-download.googleapis.com/maven-central/index.html for more info.
@@ -293,7 +293,7 @@ object SparkBuild extends PomBuild {
     unidocGenjavadocVersion := "0.18",
     // csrConfiguration := csrConfiguration.value.withCachePolicies(cachePolicies),
     // Override SBT's default resolvers:
-    resolvers := resolvers,
+    resolvers := csrResolvers,
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
     (MavenCompile / publishLocalConfiguration) := PublishConfiguration()
