@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SPARK_DOC_ROOT
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -917,6 +918,31 @@ class QueryCompilationErrorsSuite
           start = 7, stop = 7)
       )
     }
+  }
+
+  test("ComplexTypeMergingExpression should throw exception if no children") {
+    val coalesce = Coalesce(Seq.empty)
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        coalesce.dataType
+      },
+      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
+      parameters = Map("expression" -> "COALESCE"))
+  }
+
+  test("ComplexTypeMergingExpression should throw " +
+    "exception if children have different data types") {
+    val coalesce = Coalesce(Seq(Literal(1), Literal("a"), Literal("a")))
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        coalesce.dataType
+      },
+      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
+      parameters = Map(
+        "expression" -> "COALESCE",
+        "inputTypes" -> "[INTEGER, STRING, STRING]"))
   }
 }
 
