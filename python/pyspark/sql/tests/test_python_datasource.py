@@ -154,7 +154,7 @@ class BasePythonDataSourceTestsMixin:
     def test_data_source_read_output_none(self):
         self.register_data_source(read_func=lambda schema, partition: None)
         df = self.spark.read.format("test").load()
-        with self.assertRaisesRegex(PythonException, "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE"):
+        with self.assertRaisesRegex(PythonException, "DATA_SOURCE_INVALID_RETURN_TYPE"):
             assertDataFrameEqual(df, [])
 
     def test_data_source_read_output_empty_iter(self):
@@ -186,22 +186,18 @@ class BasePythonDataSourceTestsMixin:
     def test_data_source_read_output_with_schema_mismatch(self):
         self.register_data_source(read_func=lambda schema, partition: iter([(0, 1)]))
         df = self.spark.read.format("test").schema("i int").load()
-        with self.assertRaisesRegex(
-            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
-        ):
+        with self.assertRaisesRegex(PythonException, "DATA_SOURCE_RETURN_SCHEMA_MISMATCH"):
             df.collect()
         self.register_data_source(
             read_func=lambda schema, partition: iter([(0, 1)]), output="i int, j int, k int"
         )
-        with self.assertRaisesRegex(
-            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
-        ):
+        with self.assertRaisesRegex(PythonException, "DATA_SOURCE_RETURN_SCHEMA_MISMATCH"):
             df.collect()
 
     def test_read_with_invalid_return_row_type(self):
         self.register_data_source(read_func=lambda schema, partition: iter([1]))
         df = self.spark.read.format("test").load()
-        with self.assertRaisesRegex(PythonException, "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE"):
+        with self.assertRaisesRegex(PythonException, "DATA_SOURCE_INVALID_RETURN_TYPE"):
             df.collect()
 
     def test_in_memory_data_source(self):
