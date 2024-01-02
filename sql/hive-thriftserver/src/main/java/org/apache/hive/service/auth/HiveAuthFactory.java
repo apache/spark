@@ -17,7 +17,6 @@
 package org.apache.hive.service.auth;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -85,18 +84,9 @@ public class HiveAuthFactory {
   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
   public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
 
-  private static Field keytabFile = null;
   private static Method getKeytab = null;
   static {
     Class<?> clz = UserGroupInformation.class;
-    try {
-      keytabFile = clz.getDeclaredField("keytabFile");
-      keytabFile.setAccessible(true);
-    } catch (NoSuchFieldException nfe) {
-      LOG.debug("Cannot find private field \"keytabFile\" in class: " +
-        UserGroupInformation.class.getCanonicalName(), nfe);
-      keytabFile = null;
-    }
 
     try {
       getKeytab = clz.getDeclaredMethod("getKeytab");
@@ -347,9 +337,7 @@ public class HiveAuthFactory {
   private static String getKeytabFromUgi() {
     synchronized (UserGroupInformation.class) {
       try {
-        if (keytabFile != null) {
-          return (String) keytabFile.get(null);
-        } else if (getKeytab != null) {
+        if (getKeytab != null) {
           return (String) getKeytab.invoke(UserGroupInformation.getCurrentUser());
         } else {
           return null;
