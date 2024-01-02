@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
-
-import java.util.Map;
 
 /**
  * A logical representation of a data source write.

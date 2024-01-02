@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
-
-import java.util.Map;
 
 /**
  * An interface for building a {@link DeltaWrite}.

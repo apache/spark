@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
-
-import java.util.Map;
 
 public final class SpecializedGettersReader {
   private SpecializedGettersReader() {}

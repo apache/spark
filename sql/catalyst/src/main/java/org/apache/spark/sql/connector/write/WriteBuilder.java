@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
-
-import java.util.Map;
 
 /**
  * An interface for building the {@link Write}. Implementations can mix in some interfaces to

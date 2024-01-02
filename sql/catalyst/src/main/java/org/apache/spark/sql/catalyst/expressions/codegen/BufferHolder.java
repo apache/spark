@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-
-import java.util.Map;
 
 /**
  * A helper class to manage the data buffer for an unsafe row.  The data buffer can grow and

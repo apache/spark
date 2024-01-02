@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -25,8 +27,6 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-
-import java.util.Map;
 
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
