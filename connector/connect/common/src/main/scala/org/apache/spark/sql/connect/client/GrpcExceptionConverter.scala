@@ -372,11 +372,13 @@ private[client] object GrpcExceptionConverter {
   /**
    * This method is used to convert error parameters to message parameters.
    *
-   * @param params The error parameters to be converted.
-   * @return A Map of message parameters. If the error class is defined in the params,
-   *         it returns the message parameters from the params.
-   *         If the error class is not defined, it returns a new Map with a single entry
-   *         where the key is "message" and the value is the message from the params.
+   * @param params
+   *   The error parameters to be converted.
+   * @return
+   *   A Map of message parameters. If the error class is defined in the params, it returns the
+   *   message parameters from the params. If the error class is not defined, it returns a new Map
+   *   with a single entry where the key is "message" and the value is the message from the
+   *   params.
    */
   private def errorParamsToMessageParameters(params: ErrorParams): Map[String, String] =
     params.errorClass match {
