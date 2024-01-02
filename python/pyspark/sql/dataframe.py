@@ -382,9 +382,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def createOrReplaceTempView(self, name: str) -> None:
         """Creates or replaces a local temporary view with this :class:`DataFrame`.
 
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
@@ -394,6 +391,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         name : str
             Name of the view.
+
+        Notes
+        -----
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
 
         Examples
         --------
@@ -418,10 +420,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def createGlobalTempView(self, name: str) -> None:
         """Creates a global temporary view with this :class:`DataFrame`.
 
-        The lifetime of this temporary view is tied to this Spark application.
-        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
-        catalog.
-
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.4.0
@@ -432,25 +430,38 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         name : str
             Name of the view.
 
+        Notes
+        -----
+        The lifetime of this temporary view is tied to this Spark application.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
         Examples
         --------
-        Create a global temporary view.
+        Example 1: Creating and querying a global temporary view
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createGlobalTempView("people")
         >>> df2 = spark.sql("SELECT * FROM global_temp.people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
+        >>> df2.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
 
-        Throws an exception if the global temporary view already exists.
+        Example 2: Attempting to create a duplicate global temporary view
 
         >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
+
+        Example 3: Dropping a global temporary view
+
         >>> spark.catalog.dropGlobalTempView("people")
         True
-
         """
         self._jdf.createGlobalTempView(name)
 
@@ -471,21 +482,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        Create a global temporary view.
+        Example 1: Creating a global temporary view with a DataFrame
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createOrReplaceGlobalTempView("people")
 
-        Replace the global temporary view.
+        Example 2: Replacing a global temporary view with a filtered DataFrame
 
         >>> df2 = df.filter(df.age > 3)
         >>> df2.createOrReplaceGlobalTempView("people")
-        >>> df3 = spark.sql("SELECT * FROM global_temp.people")
+        >>> df3 = spark.table("global_temp.people")
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
+
+        Example 3: Dropping a global temporary view
         >>> spark.catalog.dropGlobalTempView("people")
         True
-
         """
         self._jdf.createOrReplaceGlobalTempView(name)
 
