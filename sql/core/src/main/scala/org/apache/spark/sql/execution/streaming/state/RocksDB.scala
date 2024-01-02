@@ -22,6 +22,7 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
@@ -693,16 +694,16 @@ class RocksDB(
     assert(db == null)
     val colFamilies = NativeRocksDB.listColumnFamilies(dbOptions, workingDir.toString)
 
-    var colFamilyDescriptors: Seq[ColumnFamilyDescriptor] = Seq.empty[ColumnFamilyDescriptor]
+    var colFamilyDescriptors = new ArrayBuffer[ColumnFamilyDescriptor]
     // populate the list of available col family descriptors
     colFamilies.asScala.toList.foreach { family =>
       val descriptor = new ColumnFamilyDescriptor(family, columnFamilyOptions)
-      colFamilyDescriptors = colFamilyDescriptors :+ descriptor
+      colFamilyDescriptors += descriptor
     }
 
     if (colFamilyDescriptors.isEmpty) {
-      colFamilyDescriptors = colFamilyDescriptors :+
-        new ColumnFamilyDescriptor(NativeRocksDB.DEFAULT_COLUMN_FAMILY, columnFamilyOptions)
+      colFamilyDescriptors += new ColumnFamilyDescriptor(NativeRocksDB.DEFAULT_COLUMN_FAMILY,
+        columnFamilyOptions)
     }
 
     val colFamilyHandles = new java.util.ArrayList[ColumnFamilyHandle]()
