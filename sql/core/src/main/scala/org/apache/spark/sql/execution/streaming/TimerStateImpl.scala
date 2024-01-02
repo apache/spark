@@ -35,6 +35,7 @@ object TimerStateUtils {
       expiryTimestampMs: Long) extends Serializable
 
   val PROC_TIMERS_STATE_NAME = "_procTimers"
+  val EVENT_TIMERS_STATE_NAME = "_eventTimers"
 }
 
 /**

@@ -53,4 +53,19 @@ trait StatefulProcessorHandle extends Serializable {
    * @param expiryTimestampMs - timer expiry timestamp in milliseconds
    */
   def deleteProcessingTimeTimer(expiryTimestampMs: Long): Unit
+
+  /**
+   * Function to register a event time timer for given implicit key
+   *
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  def registerEventTimeTimer(expiryTimestampMs: Long): Unit
+
+  /**
+   * Function to delete a event time timer for implicit key and given
+   * timestamp
+   *
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  def deleteEventTimeTimer(expiryTimestampMs: Long): Unit
 }

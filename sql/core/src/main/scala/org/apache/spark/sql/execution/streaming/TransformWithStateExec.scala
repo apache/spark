@@ -70,7 +70,8 @@ case class TransformWithStateExec(
       // TODO: check if we can return true only if actual timers are registered
       case ProcessingTime =>
         true
-
+      case EventTime =>
+        true
       case _ =>
         false
     }
@@ -105,13 +106,30 @@ case class TransformWithStateExec(
 
     if (tsWithKey.expiryTimestampMs < currTimestampMs) {
       ImplicitKeyTracker.setImplicitKey(tsWithKey.key)
-      val mappedIterator = statefulProcessor.handleProcessingTimeTimers(tsWithKey.key,
-        tsWithKey.expiryTimestampMs,
-        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
-        getOutputRow(obj)
-      }
-      ImplicitKeyTracker.removeImplicitKey()
-      store.remove(keyRow, TimerStateUtils.PROC_TIMERS_STATE_NAME)
+
+      val mappedIterator =
+        timeoutMode match {
+          case ProcessingTime =>
+            val mi = statefulProcessor.handleProcessingTimeTimers(tsWithKey.key,
+              tsWithKey.expiryTimestampMs,
+              new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map {
+              obj =>
+                getOutputRow(obj)
+            }
+            ImplicitKeyTracker.removeImplicitKey()
+            store.remove(keyRow, TimerStateUtils.PROC_TIMERS_STATE_NAME)
+            mi
+          case EventTime =>
+            val mi = statefulProcessor.handleEventTimeTimers(tsWithKey.key,
+              tsWithKey.expiryTimestampMs,
+              new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map {
+              obj =>
+                getOutputRow(obj)
+            }
+            ImplicitKeyTracker.removeImplicitKey()
+            store.remove(keyRow, TimerStateUtils.EVENT_TIMERS_STATE_NAME)
+            mi
+        }
       mappedIterator
     } else {
       Iterator.empty
@@ -161,7 +179,15 @@ case class TransformWithStateExec(
         procTimeIter.flatMap { case rowPair =>
           handleTimerRows(store, rowPair.key, batchTimestampMs.get)
         }
+      case EventTime =>
+        assert(batchTimestampMs.isDefined)
+        store.createColFamilyIfAbsent(TimerStateUtils.EVENT_TIMERS_STATE_NAME, true)
 
+        val eventTimeIter = store
+          .iterator(TimerStateUtils.EVENT_TIMERS_STATE_NAME)
+        eventTimeIter.flatMap { case rowPair =>
+          handleTimerRows(store, rowPair.key, batchTimestampMs.get)
+        }
       case _ => Iterator.empty
     }
   }
@@ -236,6 +262,8 @@ case class TransformWithStateExec(
 
     timeoutMode match {
       case ProcessingTime =>
+        require(batchTimestampMs.nonEmpty)
+      case EventTime =>
         require(batchTimestampMs.nonEmpty)
 
       case _ =>

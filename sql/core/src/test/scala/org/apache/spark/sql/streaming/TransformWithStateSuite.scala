@@ -133,6 +133,81 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
   }
 }
 
+// Class to verify stateful processor usage with adding event time timers
+class RunningCountStatefulProcessorWithEventTimeTimer extends RunningCountStatefulProcessor {
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    if (currCount == 0 && (key == "a" || key == "c")) {
+      _processorHandle.registerEventTimeTimer(timerValues.getCurrentProcessingTimeInMs()
+        + 5000)
+    }
+
+    val count = currCount + inputRows.size
+    if (count == 3) {
+      _countState.remove()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+
+  override def handleEventTimeTimers(
+     key: String,
+     expiryTimestampMs: Long,
+     timerValues: TimerValues): Iterator[(String, String)] = {
+    _countState.remove()
+    Iterator((key, "-1"))
+  }
+}
+
+// Class to verify stateful processor usage with adding/deleting processing time timers
+class RunningCountStatefulProcessorWithAddRemoveEventTimeTimer
+  extends RunningCountStatefulProcessor {
+  @transient private var _timerState: ValueState[Long] = _
+
+  override def init(
+     handle: StatefulProcessorHandle,
+     outputMode: OutputMode) : Unit = {
+    super.init(handle, outputMode)
+    _timerState = _processorHandle.getValueState[Long]("timerState")
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    _countState.update(count)
+    if (key == "a") {
+      var nextTimerTs: Long = 0L
+      if (currCount == 0) {
+        nextTimerTs = timerValues.getCurrentWatermarkInMs() + 5000
+        _processorHandle.registerEventTimeTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      } else if (currCount == 1) {
+        _processorHandle.deleteEventTimeTimer(_timerState.get())
+        nextTimerTs = timerValues.getCurrentWatermarkInMs() + 7500
+        _processorHandle.registerEventTimeTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      }
+    }
+    Iterator((key, count.toString))
+  }
+
+  override def handleEventTimeTimers(
+     key: String,
+     expiryTimestampMs: Long,
+     timerValues: TimerValues): Iterator[(String, String)] = {
+    _timerState.remove()
+    Iterator((key, "-1"))
+  }
+}
+
 // Class to verify incorrect usage of stateful processor
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
   @transient private var _tempState: ValueState[Long] = _
@@ -255,6 +330,81 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         .transformWithState(
           new RunningCountStatefulProcessorWithAddRemoveProcTimeTimer(),
           TimeoutMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1")),
+
+        AddData(inputData, "a"),
+        AdvanceManualClock(2 * 1000),
+        CheckNewAnswer(("a", "2")),
+        StopStream,
+
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "d"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("a", "-1"), ("d", "1")),
+        StopStream
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and event time timer " +
+    "should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorWithEventTimeTimer(),
+          TimeoutMode.EventTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1")),
+
+        AddData(inputData, "b"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("b", "1")),
+
+        AddData(inputData, "b"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("a", "-1"), ("b", "2")),
+
+        StopStream,
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "b"),
+        AddData(inputData, "c"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("c", "1")),
+        AddData(inputData, "d"),
+        AdvanceManualClock(10 * 1000),
+        CheckNewAnswer(("c", "-1"), ("d", "1")),
+        StopStream
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and event time timer " +
+    "and add/remove timers should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new RunningCountStatefulProcessorWithAddRemoveEventTimeTimer(),
+          TimeoutMode.EventTime(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(

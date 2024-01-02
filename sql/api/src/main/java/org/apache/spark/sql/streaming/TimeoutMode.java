@@ -36,6 +36,13 @@ public class TimeoutMode {
   }
 
   /**
+   * Stateful processor that only registers event time timers
+   */
+  public static final TimeoutMode EventTime() {
+    return EventTime$.MODULE$;
+  }
+
+  /**
    * Stateful processor that does not register timers
    */
   public static final TimeoutMode NoTimeouts() {

@@ -212,7 +212,8 @@ class RocksDB(
    * @return - true if the column family is for internal use, false otherwise
    */
   private def checkInternalColumnFamilies(cfName: String): Boolean = {
-    if (cfName == TimerStateUtils.PROC_TIMERS_STATE_NAME) {
+    if (cfName == TimerStateUtils.PROC_TIMERS_STATE_NAME
+      || cfName == TimerStateUtils.EVENT_TIMERS_STATE_NAME) {
       true
     } else {
       false

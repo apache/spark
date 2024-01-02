@@ -137,6 +137,9 @@ class StatefulProcessorHandleImpl(
   private lazy val procTimers =
     getTimerState[Boolean](TimerStateUtils.PROC_TIMERS_STATE_NAME)
 
+  private lazy val eventTimers =
+    getTimerState[Boolean](TimerStateUtils.EVENT_TIMERS_STATE_NAME)
+
   override def registerProcessingTimeTimer(expiryTimestampMs: Long): Unit = {
     verify(timeoutMode == ProcessingTime, s"Cannot register processing time " +
       "timers with incorrect TimeoutMode")
@@ -164,6 +167,47 @@ class StatefulProcessorHandleImpl(
     } else {
       logInfo(s"Removing timer with expiryTimestampMs=$expiryTimestampMs")
       procTimers.remove(expiryTimestampMs)
+    }
+  }
+
+  /**
+   * Function to register a event time timer for given implicit key
+   *
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  override def registerEventTimeTimer(expiryTimestampMs: Long): Unit = {
+    verify(timeoutMode == EventTime, s"Cannot register event time " +
+      "timers with incorrect TimeoutMode")
+    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
+      s"Cannot register event time timer with " +
+        s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+
+    if (eventTimers.exists(expiryTimestampMs)) {
+      logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
+    } else {
+      logInfo(s"Registering timer with expiryTimestampMs=$expiryTimestampMs")
+      eventTimers.add(expiryTimestampMs, true)
+    }
+  }
+
+  /**
+   * Function to delete a event time timer for implicit key and given
+   * timestamp
+   *
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  override def deleteEventTimeTimer(expiryTimestampMs: Long): Unit = {
+    verify(timeoutMode == EventTime, s"Cannot delete event time " +
+      "timers with incorrect TimeoutMode")
+    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
+      s"Cannot delete event time timer with " +
+        s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+
+    if (!eventTimers.exists(expiryTimestampMs)) {
+      logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")
+    } else {
+      logInfo(s"Removing timer with expiryTimestampMs=$expiryTimestampMs")
+      eventTimers.remove(expiryTimestampMs)
     }
   }
 }
