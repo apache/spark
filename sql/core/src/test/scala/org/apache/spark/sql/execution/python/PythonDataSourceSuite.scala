@@ -554,7 +554,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
           spark.range(1).write.format(dataSourceName).mode("foo").save()
         },
         errorClass = "INVALID_SAVE_MODE",
-        parameters = Map("mode" -> "foo"))
+        parameters = Map("mode" -> "\"foo\""))
     }
   }
 }
