@@ -737,7 +737,7 @@ case class View(
   override def metadataOutput: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
-    s"View (${desc.ident}, ${output.mkString("[", ",", "]")})"
+    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 
   override def doCanonicalize(): LogicalPlan = child match {
