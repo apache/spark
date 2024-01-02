@@ -174,10 +174,13 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Append: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").append()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").append()
+      },
+      errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+      parameters = Map("viewName" -> "`spark_catalog`.`default`.`v`", "operation" -> "V2WRITE")
+    )
   }
 
   test("Append: fail if it writes to a v1 table") {
@@ -279,10 +282,13 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Overwrite: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwrite(lit(true))
+      },
+      errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+      parameters = Map("viewName" -> "`spark_catalog`.`default`.`v`", "operation" -> "V2WRITE")
+    )
   }
 
   test("Overwrite: fail if it writes to a v1 table") {
@@ -384,10 +390,13 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("OverwritePartitions: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwritePartitions()
+      },
+      errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+      parameters = Map("viewName" -> "`spark_catalog`.`default`.`v`", "operation" -> "V2WRITE")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a v1 table") {

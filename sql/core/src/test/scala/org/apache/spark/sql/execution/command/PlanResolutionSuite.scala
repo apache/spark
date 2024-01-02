@@ -753,16 +753,6 @@ class PlanResolutionSuite extends AnalysisTest {
       DropTempViewCommand(tempViewIdent))
   }
 
-  test("drop view in v2 catalog") {
-    val e = intercept[AnalysisException] {
-      parseAndResolve("DROP VIEW testcat.db.view", checkAnalysis = true)
-    }
-    checkError(
-      e,
-      errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
-  }
-
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
   // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter view: alter view properties") {

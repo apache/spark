@@ -2376,16 +2376,6 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("CREATE VIEW") {
-    val v = "testcat.ns1.ns2.v"
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"CREATE VIEW $v AS SELECT 1")
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
-  }
-
   test("global temp view should not be masked by v2 catalog") {
     val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
