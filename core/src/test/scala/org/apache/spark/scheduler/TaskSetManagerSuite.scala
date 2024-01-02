@@ -254,7 +254,7 @@ class TaskSetManagerSuite
     manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
     assert(sched.endedTasks(0) === Success)
 
-    val e = intercept[IllegalStateException]{
+    val e = intercept[SparkException]{
       manager.taskInfos.head._2.accumulables
     }
     assert(e.getMessage.contains("Accumulables for the TaskInfo have been cleared"))
