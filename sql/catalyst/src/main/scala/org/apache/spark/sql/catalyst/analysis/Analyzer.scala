@@ -59,6 +59,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and
@@ -212,7 +213,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     AnalysisHelper.markInAnalyzer {
       val analyzed = executeAndTrack(plan, tracker)
       checkAnalysis(analyzed)
-      postAnalysisEarlyOptimizationRules.foldLeft(analyzed) {
+      val excludedPostAnalysisRulesConf =
+        conf.postAnalysisExcludesRules.toSeq.flatMap(Utils.stringToSeq)
+      postAnalysisEarlyOptimizationRules.filterNot(
+        rule => excludedPostAnalysisRulesConf.contains(rule.ruleName)).foldLeft(analyzed) {
         case(rs, rule) => rule(rs)
       }
     }

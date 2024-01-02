@@ -238,6 +238,14 @@ object SQLConf {
     }
   }
 
+  val EXCLUDE_POST_ANALYSIS_RULES =
+    buildConf("spark.sql.analyzer.excludePostAnalysisRules")
+    .internal()
+    .doc("The names of the comma separated post analysis rules to be excluded")
+    .version("3.5.0")
+    .stringConf
+    .createOptional
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -4763,6 +4771,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   /** ************************ Spark SQL Params/Hints ******************* */
 
   def analyzerMaxIterations: Int = getConf(ANALYZER_MAX_ITERATIONS)
+
+  def postAnalysisExcludesRules: Option[String] = getConf(EXCLUDE_POST_ANALYSIS_RULES)
 
   def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
