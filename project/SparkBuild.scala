@@ -262,6 +262,25 @@ object SparkBuild extends PomBuild {
     Vector(CachePolicy.LocalUpdateChanging, CachePolicy.LocalOnly, CachePolicy.Update)
   }
 
+  lazy val resolvers = if (sys.env.contains("SKIP_LOCAL_M2")) {
+    Seq(
+      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
+      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
+      DefaultMavenRepository,
+      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+    )
+  } else {
+    Seq(
+      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
+      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
+      DefaultMavenRepository,
+      Resolver.mavenLocal,
+      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+    )
+  }
+
   lazy val sharedSettings = sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
@@ -272,17 +291,9 @@ object SparkBuild extends PomBuild {
       .map(file),
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.18",
-    csrConfiguration := csrConfiguration.value.withCachePolicies(cachePolicies),
-
+    // csrConfiguration := csrConfiguration.value.withCachePolicies(cachePolicies),
     // Override SBT's default resolvers:
-    resolvers := Seq(
-      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
-      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
-      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
-      DefaultMavenRepository,
-      Resolver.mavenLocal,
-      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
-    ),
+    resolvers := resolvers,
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
     (MavenCompile / publishLocalConfiguration) := PublishConfiguration()
