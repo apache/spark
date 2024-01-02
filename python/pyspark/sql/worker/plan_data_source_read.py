@@ -29,6 +29,7 @@ from pyspark.serializers import (
     write_int,
     SpecialLengths,
 )
+from pyspark.sql import Row
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
 from pyspark.sql.datasource import DataSource, InputPartition
 from pyspark.sql.pandas.types import to_arrow_schema
@@ -234,6 +235,8 @@ def main(infile: IO, outfile: IO) -> None:
 
             # Convert the results from the `reader.read` method to an iterator of arrow batches.
             num_cols = len(column_names)
+            col_mapping = {name: i for i, name in enumerate(column_names)}
+            col_name_set = set(column_names)
             for batch in batched(output_iter, max_arrow_batch_size):
                 pylist: List[List] = [[] for _ in range(num_cols)]
                 for result in batch:
@@ -258,8 +261,25 @@ def main(infile: IO, outfile: IO) -> None:
                             },
                         )
 
-                    for col in range(num_cols):
-                        pylist[col].append(column_converters[col](result[col]))
+                    # Assign output values by name of the field, not position, if the result is a
+                    # named `Row` object.
+                    if isinstance(result, Row) and hasattr(result, "__fields__"):
+                        # Check if the names are the same as the schema.
+                        if set(result.__fields__) != col_name_set:
+                            raise PySparkRuntimeError(
+                                error_class="PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH",
+                                message_parameters={
+                                    "expected": str(column_names),
+                                    "actual": str(result.__fields__),
+                                },
+                            )
+                        # Assign the values by name.
+                        for name in column_names:
+                            idx = col_mapping[name]
+                            pylist[idx].append(column_converters[idx](result[name]))
+                    else:
+                        for col in range(num_cols):
+                            pylist[col].append(column_converters[col](result[col]))
 
                 yield pa.RecordBatch.from_arrays(pylist, schema=pa_schema)
 
