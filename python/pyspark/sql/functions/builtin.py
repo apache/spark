@@ -15444,6 +15444,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     +-------------------------+
 
     Example 2: The key is not in the map
+
     >>> df.select(map_contains_key("data", -1)).show()
     +--------------------------+
     |map_contains_key(data, -1)|
