@@ -368,13 +368,15 @@ trait SQLQueryTestHelper extends Logging {
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
     (filteredFiles ++ dirs.flatMap(listFilesRecursively)).toImmutableArraySeq
   }
-  protected def splitCommentsAndCodes(input: String) =
+
+  protected def splitCommentsAndCodes(input: String): (Array[String], Array[String]) =
     input.split("\n").partition { line =>
       val newLine = line.trim
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
 
-  protected def getQueries(code: Array[String], comments: Array[String]) = {
+  protected def getQueries(code: Array[String], comments: Array[String],
+      allTestCases: Seq[TestCase]): Seq[String] = {
     def splitWithSemicolon(seq: Seq[String]) = {
       seq.mkString("\n").split("(?<=[^\\\\]);")
     }
@@ -383,7 +385,7 @@ trait SQLQueryTestHelper extends Logging {
     // into the head in this test.
     val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
-      listTestCases.find(_.name == testCaseName).map { testCase =>
+      allTestCases.find(_.name == testCaseName).map { testCase =>
         val input = fileToString(new File(testCase.inputFile))
         val (_, code) = splitCommentsAndCodes(input)
         code
@@ -452,5 +454,21 @@ trait SQLQueryTestHelper extends Logging {
     configDims.values.foldLeft(Seq(Seq[(String, String)]())) { (res, dim) =>
       dim.flatMap { configSet => res.map(_ ++ configSet) }
     }
+  }
+
+  /** This is a helper function to normalize non-deterministic Python error stacktraces. */
+  def normalizeTestResults(output: String): String = {
+    val strippedPythonErrors: String = {
+      var traceback = false
+      output.split("\n").filter { line: String =>
+        if (line == "Traceback (most recent call last):") {
+          traceback = true
+        } else if (!line.startsWith(" ")) {
+          traceback = false
+        }
+        !traceback
+      }.mkString("\n")
+    }
+    strippedPythonErrors.replaceAll("\\s+$", "")
   }
 }

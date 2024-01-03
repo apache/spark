@@ -17,15 +17,22 @@
 package org.apache.spark.sql.jdbc
 
 import java.io.File
-import java.sql.Connection
+import java.sql.{Connection, ResultSet}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.SQLQueryTestHelper
+import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTestHelper {
+class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTestHelper
+  with CrossDbmsQueryTestHelper {
+
+  val DATABASE_NAME = POSTGRES
+
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1-alpine")
     override val env = Map(
@@ -38,7 +45,18 @@ class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryT
       s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
   }
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement(
+      // Custom function `double` to imitate Spark's function, so that more tests are covered.
+      """
+        |CREATE OR REPLACE FUNCTION double(numeric_value numeric) RETURNS double precision
+        |    AS 'select CAST($1 AS double precision);'
+        |    LANGUAGE SQL
+        |    IMMUTABLE
+        |    RETURNS NULL ON NULL INPUT;
+        |""".stripMargin
+    )
+  }
 
   protected val baseResourcePath = {
     // We use a path based on Spark home for 2 reasons:
@@ -61,11 +79,6 @@ class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryT
 
   def createScalaTestCase(testCase: TestCase): Unit = {
     testCase match {
-      case _ if ignoreList.exists(t =>
-        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT))) =>
-        ignore(s"${testCase.name} is in the ignore list.") {
-          log.debug(s"${testCase.name} is in the ignore list.")
-        }
       case _: RegularTestCase =>
         // Create a test case to run this case.
         test(testCase.name) {
@@ -81,48 +94,97 @@ class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryT
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
     val input = fileToString(new File(testCase.inputFile))
     val (comments, code) = splitCommentsAndCodes(input)
-    val queries = getQueries(code, comments)
-    val settings = getSparkSettings(comments)
+    val queries = getQueries(code, comments, listTestCases)
 
-    val dbmsConfig = comments.filter(_.startsWith(CrossDbmsQueryTestSuite.ONLY_IF_ARG))
-      .map(_.substring(CrossDbmsQueryTestSuite.ONLY_IF_ARG.length))
+    val dbmsConfig = comments.filter(_.startsWith(ONLY_IF_ARG))
+      .map(_.substring(ONLY_IF_ARG.length))
     // If `--ONLY_IF` is found, check if the DBMS being used is allowed.
-    if (dbmsConfig.nonEmpty && !dbmsConfig.contains(crossDbmsToGenerateGoldenFiles)) {
+    if (dbmsConfig.nonEmpty && !dbmsConfig.contains(DATABASE_NAME)) {
       log.info(s"This test case (${testCase.name}) is ignored because it indicates that it is " +
-        s"not eligible with $crossDbmsToGenerateGoldenFiles.")
+        s"not eligible with $DATABASE_NAME.")
     } else {
-      runQueries(queries, testCase, settings.toImmutableArraySeq)
+      runQueriesAndCheckAgainstGoldenFile(queries, testCase)
     }
   }
 
-
-  protected def runQueries(
-      queries: Seq[String],
-      testCase: TestCase,
-      sparkConfigSet: Seq[(String, String)]): Unit = {
+  protected def runQueriesAndCheckAgainstGoldenFile(
+      queries: Seq[String], testCase: TestCase): Unit = {
     val localSparkSession = spark.newSession()
-    var runner: Option[SQLQueryTestRunner] = None
+    val conn = getConnection()
+    val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
 
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
       val output = {
-        val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
-        setOperations.foreach(localSparkSession.sql)
-        val (_, output) = handleExceptions(
-          getNormalizedQueryExecutionResult(localSparkSession, sql))
-        output
+        try {
+          val sparkDf = localSparkSession.sql(sql)
+
+          val isResultSet = stmt.execute(sql)
+          val rows = ArrayBuffer[Row]()
+          if (isResultSet) {
+            val rs = stmt.getResultSet
+            val metadata = rs.getMetaData
+            while (rs.next()) {
+              val row = Row.fromSeq((1 to metadata.getColumnCount).map(i => {
+                val value = rs.getObject(i)
+                if (value == null) {
+                  "NULL"
+                } else {
+                  value
+                }
+              }))
+              rows.append(row)
+            }
+          }
+          val output = rows.map(_.mkString("\t")).toSeq
+          // Use Spark analyzed plan to check if the query result is already semantically sorted.
+          if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
+            output
+          } else {
+            // Sort the answer manually if it isn't sorted.
+            output.sorted
+          }
+        } catch {
+          case NonFatal(e) => Seq(e.getClass.getName, e.getMessage)
+        }
       }
+
       ExecutionOutput(
         sql = sql,
         // Don't care about the schema for this test. Only care about correctness.
         schema = None,
-        output = normalizeTestResults(output.mkString("\n")))
+        output = output.mkString("\n"))
     }
-    if (runner.isDefined) {
-      runner.foreach(_.cleanUp())
-      runner = None
+    conn.close()
+
+    // Read back the golden files.
+    var curSegment = 0
+    val expectedOutputs: Seq[QueryTestOutput] = {
+      val goldenOutput = fileToString(new File(testCase.resultFile))
+      val segments = goldenOutput.split("-- !query.*\n")
+      outputs.map { output =>
+        val result = ExecutionOutput(
+          segments(curSegment + 1).trim, // SQL
+          None, // Schema
+          normalizeTestResults(segments(curSegment + 3))) // Output
+        curSegment += output.numSegments
+        result
+      }
     }
 
-    readGoldenFileAndCompareResults(testCase.resultFile, outputs, ExecutionOutput)
+    // Compare results.
+    assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
+      outputs.size
+    }
+
+    outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
+      assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
+        output.sql
+      }
+      assertResult(expected.output, s"Result did not match" +
+        s" for query #$i\n${expected.sql}") {
+        output.output
+      }
+    }
   }
 
   listTestCases.foreach(createScalaTestCase)

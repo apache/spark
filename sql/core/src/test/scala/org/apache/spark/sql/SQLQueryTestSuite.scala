@@ -226,7 +226,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
     val input = fileToString(new File(testCase.inputFile))
     val (comments, code) = splitCommentsAndCodes(input)
-    val queries = getQueries(code, comments)
+    val queries = getQueries(code, comments, listTestCases)
     val settings = getSparkSettings(comments)
 
     if (regenerateGoldenFiles) {
@@ -662,22 +662,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         output.output
       }
     }
-  }
-
-  /** This is a helper function to normalize non-deterministic Python error stacktraces. */
-  def normalizeTestResults(output: String): String = {
-    val strippedPythonErrors: String = {
-      var traceback = false
-      output.split("\n").filter { line: String =>
-        if (line == "Traceback (most recent call last):") {
-          traceback = true
-        } else if (!line.startsWith(" ")) {
-          traceback = false
-        }
-        !traceback
-      }.mkString("\n")
-    }
-    strippedPythonErrors.replaceAll("\\s+$", "")
   }
 
   test("test splitCommentsAndCodes") {
