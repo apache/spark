@@ -846,7 +846,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`pubview`, SELECT * FROM tbl1 
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f), false, false, PersistedView, true
    +- Project [a#x, b#x]
-      +- Filter (((a#x >= scalar-subquery#x []) AND (a#x <= scalar-subquery#x [])) AND exists#x [])
+      +- Filter (between(a#x, scalar-subquery#x [], scalar-subquery#x []) AND exists#x [])
          :  :- Project [d#x]
          :  :  +- Filter (c#x = 1)
          :  :     +- SubqueryAlias spark_catalog.testviewschm2.tbl2
@@ -882,7 +882,7 @@ BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j), false, false, PersistedView, true
    +- Project [a#x, b#x]
-      +- Filter ((((a#x >= scalar-subquery#x []) AND (a#x <= scalar-subquery#x [])) AND exists#x []) AND NOT exists#x [])
+      +- Filter ((between(a#x, scalar-subquery#x [], scalar-subquery#x []) AND exists#x []) AND NOT exists#x [])
          :  :- Project [d#x]
          :  :  +- Filter (c#x = 1)
          :  :     +- SubqueryAlias spark_catalog.testviewschm2.tbl2

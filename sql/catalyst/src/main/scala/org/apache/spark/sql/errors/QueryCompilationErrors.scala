@@ -2040,9 +2040,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def failToPlanDataSourceError(action: String, tpe: String, msg: String): Throwable = {
+  def pythonDataSourceError(action: String, tpe: String, msg: String): Throwable = {
     new AnalysisException(
-      errorClass = "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON",
+      errorClass = "PYTHON_DATA_SOURCE_ERROR",
       messageParameters = Map("action" -> action, "type" -> tpe, "msg" -> msg)
     )
   }
@@ -3854,12 +3854,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "functionName" -> functionName,
         "reason" -> reason))
-  }
-
-  def dataSourceAlreadyExists(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
-      messageParameters = Map("provider" -> name))
   }
 
   def dataSourceDoesNotExist(name: String): Throwable = {

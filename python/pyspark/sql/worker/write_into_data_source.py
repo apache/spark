@@ -24,6 +24,7 @@ from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
+    read_bool,
     read_int,
     write_int,
     SpecialLengths,
@@ -83,7 +84,7 @@ def main(infile: IO, outfile: IO) -> None:
         data_source_cls = read_command(pickleSer, infile)
         if not (isinstance(data_source_cls, type) and issubclass(data_source_cls, DataSource)):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "a subclass of DataSource",
                     "actual": f"'{type(data_source_cls).__name__}'",
@@ -93,7 +94,7 @@ def main(infile: IO, outfile: IO) -> None:
         # Check the name method is a class method.
         if not inspect.ismethod(data_source_cls.name):
             raise PySparkTypeError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "'name()' method to be a classmethod",
                     "actual": f"'{type(data_source_cls.name).__name__}'",
@@ -106,7 +107,7 @@ def main(infile: IO, outfile: IO) -> None:
         # Check if the provider name matches the data source's name.
         if provider.lower() != data_source_cls.name().lower():
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": f"provider with name {data_source_cls.name()}",
                     "actual": f"'{provider}'",
@@ -117,7 +118,7 @@ def main(infile: IO, outfile: IO) -> None:
         schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if not isinstance(schema, StructType):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "the schema to be a 'StructType'",
                     "actual": f"'{type(data_source_cls).__name__}'",
@@ -128,7 +129,7 @@ def main(infile: IO, outfile: IO) -> None:
         return_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if not isinstance(return_type, StructType):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "a return type of type 'StructType'",
                     "actual": f"'{type(return_type).__name__}'",
@@ -148,26 +149,14 @@ def main(infile: IO, outfile: IO) -> None:
             value = utf8_deserializer.loads(infile)
             options[key] = value
 
-        # Receive the save mode.
-        save_mode = utf8_deserializer.loads(infile)
+        # Receive the `overwrite` flag.
+        overwrite = read_bool(infile)
 
         # Instantiate a data source.
-        try:
-            data_source = data_source_cls(options=options)
-        except Exception as e:
-            raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
-                message_parameters={"type": "instance", "error": str(e)},
-            )
+        data_source = data_source_cls(options=options)
 
         # Instantiate the data source writer.
-        try:
-            writer = data_source.writer(schema, save_mode)
-        except Exception as e:
-            raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
-                message_parameters={"type": "writer", "error": str(e)},
-            )
+        writer = data_source.writer(schema, overwrite)
 
         # Create a function that can be used in mapInArrow.
         import pyarrow as pa
@@ -192,10 +181,12 @@ def main(infile: IO, outfile: IO) -> None:
             # Check the commit message has the right type.
             if not isinstance(res, WriterCommitMessage):
                 raise PySparkRuntimeError(
-                    error_class="PYTHON_DATA_SOURCE_WRITE_ERROR",
+                    error_class="DATA_SOURCE_TYPE_MISMATCH",
                     message_parameters={
-                        "error": f"return type of the `write` method must be "
-                        f"an instance of WriterCommitMessage, but got {type(res)}"
+                        "expected": (
+                            "'WriterCommitMessage' as the return type of " "the `write` method"
+                        ),
+                        "actual": type(res).__name__,
                     },
                 )
 
@@ -209,6 +200,9 @@ def main(infile: IO, outfile: IO) -> None:
         # Return the pickled write UDF.
         command = (data_source_write_func, return_type)
         pickleSer._write_with_length(command, outfile)
+
+        # Return the picked writer.
+        pickleSer._write_with_length(writer, outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)
