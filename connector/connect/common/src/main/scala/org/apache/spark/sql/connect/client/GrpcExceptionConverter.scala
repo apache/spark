@@ -27,7 +27,7 @@ import io.grpc.protobuf.StatusProto
 import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkThrowableHelper, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, SparkConnectServiceGrpc, UserContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -198,7 +198,7 @@ private[client] object GrpcExceptionConverter {
         queryContext = params.queryContext)),
     errorConstructor(params =>
       new AnalysisException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3100"),
+        errorClass = getErrorClass(params, "_LEGACY_ERROR_TEMP_3100"),
         messageParameters = errorParamsToMessageParameters(params),
         cause = params.cause,
         context = params.queryContext)),
@@ -223,32 +223,32 @@ private[client] object GrpcExceptionConverter {
       new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3104"),
+        errorClass = getErrorClass(params, "_LEGACY_ERROR_TEMP_3104"),
         messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[IllegalArgumentException](params =>
       new SparkIllegalArgumentException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3105"),
+        errorClass = getErrorClass(params, "_LEGACY_ERROR_TEMP_3105"),
         messageParameters = errorParamsToMessageParameters(params),
         params.queryContext,
         cause = params.cause.orNull)),
     errorConstructor[ArithmeticException](params =>
       new SparkArithmeticException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3106"),
+        errorClass = getErrorClass(params, "_LEGACY_ERROR_TEMP_3106"),
         messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[UnsupportedOperationException](params =>
       new SparkUnsupportedOperationException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3107"),
+        errorClass = getErrorClass(params, "_LEGACY_ERROR_TEMP_3107"),
         messageParameters = errorParamsToMessageParameters(params))),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
       new SparkArrayIndexOutOfBoundsException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3108"),
+        errorClass = getErrorClass(params, "_LEGACY_ERROR_TEMP_3108"),
         messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[DateTimeException](params =>
       new SparkDateTimeException(
-        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3109"),
+        errorClass = getErrorClass(params, "_LEGACY_ERROR_TEMP_3109"),
         messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor(params =>
@@ -369,6 +369,12 @@ private[client] object GrpcExceptionConverter {
     errorsToThrowable(0, Seq(builder.build()))
   }
 
+  private def isValidErrorClass(errorClass: Option[String]): Boolean = {
+    errorClass.map { ec =>
+      SparkThrowableHelper.isValidErrorClass(ec)
+    }.getOrElse(false)
+  }
+
   /**
    * This method is used to convert error parameters to message parameters.
    *
@@ -380,9 +386,19 @@ private[client] object GrpcExceptionConverter {
    *   with a single entry where the key is "message" and the value is the message from the
    *   params.
    */
-  private def errorParamsToMessageParameters(params: ErrorParams): Map[String, String] =
-    params.errorClass match {
-      case Some(_) => params.messageParameters
-      case None => Map("message" -> params.message)
+  private def errorParamsToMessageParameters(params: ErrorParams): Map[String, String] = {
+    if (isValidErrorClass(params.errorClass)) {
+      params.messageParameters
+    } else {
+      Map("message" -> params.message)
     }
+  }
+
+  private def getErrorClass(params: ErrorParams, defaultErrorClass: String): String = {
+    if (isValidErrorClass(params.errorClass)) {
+      params.errorClass.get
+    } else {
+      defaultErrorClass
+    }
+  }
 }
