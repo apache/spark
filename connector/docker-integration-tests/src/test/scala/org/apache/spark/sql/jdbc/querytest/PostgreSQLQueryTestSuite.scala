@@ -27,6 +27,26 @@ import org.apache.spark.sql.SQLQueryTestHelper
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.tags.DockerTest
 
+/**
+ * READ THIS IF YOU ADDED A NEW SQL TEST AND THIS SUITE IS FAILING:
+ * Your new SQL test is automatically opted into this suite. It is likely failing because it is not
+ * compatible with the default Postgres. You have two options:
+ * 1. (Recommended) Modify your queries to be compatible with both systems. This is recommended
+ *    because it will run your queries against postgres, providing higher correctness testing
+ *    confidence, and you won't have to manually verify the golden files generated with your test.
+ * 2. Add this line to your .sql file: --ONLY_IF spark
+ *
+ * This suite builds off of that to allow us to run Postgres against the SQL test golden files (on
+ * which SQLQueryTestSuite generates and tests against) to perform cross-checking for correctness.
+ * Note that this is not currently run on all SQL input files by default because there is
+ * incompatibility between SQL dialects for Spark and the other DBMS.
+ *
+ * This suite adds a new comment argument, --ONLY_IF. This comment is used to indicate the DBMS for
+ * which is eligible for the SQL file. These strings are defined in the companion object. For
+ * example, if you have a SQL file named `describe.sql`, and you want to indicate that Postgres is
+ * incompatible, add the following comment into the input file:
+ * --ONLY_IF spark
+ */
 @DockerTest
 class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTestHelper
   with CrossDbmsQueryTestHelper {
