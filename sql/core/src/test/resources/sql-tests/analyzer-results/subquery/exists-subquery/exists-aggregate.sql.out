@@ -345,3 +345,32 @@ Project [emp_name#x, bonus_amt#x]
             +- Project [emp_name#x, bonus_amt#x]
                +- SubqueryAlias BONUS
                   +- LocalRelation [emp_name#x, bonus_amt#x]
+
+
+-- !query
+SELECT tt1.emp_name
+FROM EMP as tt1
+WHERE EXISTS (
+  select max(tt2.id)
+  from EMP as tt2
+  where tt1.emp_name is null
+)
+-- !query analysis
+Project [emp_name#x]
++- Filter exists#x [emp_name#x]
+   :  +- Aggregate [max(id#x) AS max(id)#x]
+   :     +- Filter isnull(outer(emp_name#x))
+   :        +- SubqueryAlias tt2
+   :           +- SubqueryAlias emp
+   :              +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+   :                 +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+   :                    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+   :                       +- SubqueryAlias EMP
+   :                          +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+   +- SubqueryAlias tt1
+      +- SubqueryAlias emp
+         +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+            +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+               +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+                  +- SubqueryAlias EMP
+                     +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]

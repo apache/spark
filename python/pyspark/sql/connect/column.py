@@ -160,6 +160,7 @@ class Column:
 
     isNull = _unary_op("isnull", PySparkColumn.isNull.__doc__)
     isNotNull = _unary_op("isnotnull", PySparkColumn.isNotNull.__doc__)
+    isNaN = _unary_op("isNaN", PySparkColumn.isNaN.__doc__)
 
     def __ne__(  # type: ignore[override]
         self,
@@ -256,7 +257,7 @@ class Column:
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT",
-                message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
+                message_parameters={"arg_name": "startPos", "arg_type": type(length).__name__},
             )
         return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
@@ -461,6 +462,8 @@ class Column:
                     message_parameters={},
                 )
             return self.substr(k.start, k.stop)
+        elif isinstance(k, Column):
+            return Column(UnresolvedExtractValue(self._expr, k._expr))
         else:
             return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 

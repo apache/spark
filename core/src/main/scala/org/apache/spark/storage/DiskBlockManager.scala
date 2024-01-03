@@ -168,7 +168,7 @@ private[spark] class DiskBlockManager(
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files.toSeq else Seq.empty
+      if (files != null) files.toImmutableArraySeq else Seq.empty
     }.toImmutableArraySeq
   }
 

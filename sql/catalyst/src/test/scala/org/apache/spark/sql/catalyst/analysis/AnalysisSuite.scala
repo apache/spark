@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.logging.log4j.Level
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
@@ -63,14 +64,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val schema3 = new StructType().add("c", ArrayType(CharType(5)))
     Seq(schema1, schema2, schema3).foreach { schema =>
       val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
-      intercept[IllegalStateException] {
-        DataSourceV2Relation(
-          table,
-          DataTypeUtils.toAttributes(schema),
-          None,
-          None,
-          CaseInsensitiveStringMap.empty()).analyze
-      }
+      checkError(
+        exception = intercept[SparkException] {
+          DataSourceV2Relation(
+            table,
+            DataTypeUtils.toAttributes(schema),
+            None,
+            None,
+            CaseInsensitiveStringMap.empty()).analyze
+        },
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" ->
+          "Logical plan should not have output of char/varchar type.*\n"),
+        matchPVals = true)
     }
   }
 
@@ -735,7 +741,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       false)
     val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
-    val mapInArrow = PythonMapInArrow(
+    val mapInArrow = MapInArrow(
       pythonUdf,
       output,
       project,
@@ -1459,6 +1465,30 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(finalPlan)
   }
 
+  test("Execute Immediate plan transformation") {
+    try {
+    SimpleAnalyzer.catalogManager.tempVariableManager.create(
+      "res", "1", Literal(1), overrideIfExists = true)
+    SimpleAnalyzer.catalogManager.tempVariableManager.create(
+      "res2", "1", Literal(1), overrideIfExists = true)
+    val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
+    val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
+    comparePlans(actual1, expected1)
+    val actual2 = parsePlan(
+      "EXECUTE IMMEDIATE 'SELECT 42 WHERE :first = 1' USING 2 as first").analyze
+    val expected2 = parsePlan("SELECT 42 where 2 = 1").analyze
+    comparePlans(actual2, expected2)
+    // Test that plan is transformed to SET operation
+    val actual3 = parsePlan(
+      "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
+    val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
+      comparePlans(actual3, expected3)
+    } finally {
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res")
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res2")
+    }
+  }
+
   test("SPARK-41271: bind named parameters to literals") {
     CTERelationDef.curId.set(0)
     val actual1 = NameParameterizedQuery(
@@ -1573,7 +1603,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-43030: deduplicate relations in CTE relation definitions") {
     val join = testRelation.as("left").join(testRelation.as("right"))
     val cteDef = CTERelationDef(join)
-    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+    val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
 
     withClue("flat CTE") {
       val plan = WithCTE(cteRef.select($"left.a"), Seq(cteDef)).analyze
@@ -1586,7 +1616,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     withClue("nested CTE") {
       val cteDef2 = CTERelationDef(WithCTE(cteRef.join(testRelation), Seq(cteDef)))
-      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil, false)
       val plan = WithCTE(cteRef2, Seq(cteDef2)).analyze
       val relations = plan.collect {
         case r: LocalRelation => r
@@ -1598,7 +1628,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-43030: deduplicate CTE relation references") {
     val cteDef = CTERelationDef(testRelation.select($"a"))
-    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+    val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
 
     withClue("single reference") {
       val plan = WithCTE(cteRef.where($"a" > 1), Seq(cteDef)).analyze
@@ -1621,7 +1651,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     withClue("CTE relation has duplicated attributes") {
       val cteDef = CTERelationDef(testRelation.select($"a", $"a"))
-      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
       val plan = WithCTE(cteRef.join(cteRef.select($"a")), Seq(cteDef)).analyze
       val refs = plan.collect {
         case r: CTERelationRef => r
@@ -1633,14 +1663,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     withClue("CTE relation has duplicate aliases") {
       val alias = Alias($"a", "x")()
       val cteDef = CTERelationDef(testRelation.select(alias, alias).where($"x" === 1))
-      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      val cteRef = CTERelationRef(cteDef.id, false, Nil, false)
       // Should not fail with the assertion failure: Found duplicate rewrite attributes.
       WithCTE(cteRef.join(cteRef), Seq(cteDef)).analyze
     }
 
     withClue("references in both CTE relation definition and main query") {
       val cteDef2 = CTERelationDef(cteRef.where($"a" > 2))
-      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil, false)
       val plan = WithCTE(cteRef.union(cteRef2), Seq(cteDef, cteDef2)).analyze
       val refs = plan.collect {
         case r: CTERelationRef => r
@@ -1723,5 +1753,43 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
       checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
+  }
+
+  test("SPARK-46064 Basic functionality of elimination for watermark node in batch query") {
+    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+      IntervalUtils.fromIntervalString("10 seconds"), batchRelationWithTs)
+
+    val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
+
+    // EventTimeWatermark node is eliminated via EliminateEventTimeWatermark.
+    assert(!analyzed.exists(_.isInstanceOf[EventTimeWatermark]))
+  }
+
+  test("SPARK-46064 EliminateEventTimeWatermark properly handles the case where the child of " +
+    "EventTimeWatermark changes the isStreaming flag during resolution") {
+    // UnresolvedRelation which is batch initially and will be resolved as streaming
+    val dfWithTempView = UnresolvedRelation(TableIdentifier("streamingTable"))
+    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+      IntervalUtils.fromIntervalString("10 seconds"), dfWithTempView)
+
+    val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
+
+    // EventTimeWatermark node is NOT eliminated.
+    assert(analyzed.exists(_.isInstanceOf[EventTimeWatermark]))
+  }
+
+  test("SPARK-46062: isStreaming flag is synced from CTE definition to CTE reference") {
+    val cteDef = CTERelationDef(streamingRelation.select($"a", $"ts"))
+    // Intentionally marking the flag _resolved to false, so that analyzer has a chance to sync
+    // the flag isStreaming on syncing the flag _resolved.
+    val cteRef = CTERelationRef(cteDef.id, _resolved = false, Nil, isStreaming = false)
+    val plan = WithCTE(cteRef, Seq(cteDef)).analyze
+
+    val refs = plan.collect {
+      case r: CTERelationRef => r
+    }
+    assert(refs.length == 1)
+    assert(refs.head.resolved)
+    assert(refs.head.isStreaming)
   }
 }

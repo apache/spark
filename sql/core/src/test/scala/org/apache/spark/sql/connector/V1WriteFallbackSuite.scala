@@ -36,7 +36,6 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoI
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
-import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -250,7 +249,7 @@ private object InMemoryV1Provider {
 }
 
 class InMemoryV1Provider
-  extends SimpleTableProvider
+  extends FakeV2ProviderWithCustomSchema
   with DataSourceRegister
   with CreatableRelationProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {

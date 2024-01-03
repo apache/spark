@@ -18,7 +18,9 @@ package org.apache.spark.sql.protobuf.utils
 
 import scala.jdk.CollectionConverters._
 
+import com.google.protobuf.{BoolValue, BytesValue, DoubleValue, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+import com.google.protobuf.WireFormat
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
@@ -67,9 +69,22 @@ object SchemaConverters extends Logging {
       existingRecordNames: Map[String, Int],
       protobufOptions: ProtobufOptions): Option[StructField] = {
     import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+
     val dataType = fd.getJavaType match {
-      case INT => Some(IntegerType)
-      case LONG => Some(LongType)
+      // When the protobuf type is unsigned and upcastUnsignedIntegers has been set,
+      // use a larger type (LongType and Decimal(20,0) for uint32 and uint64).
+      case INT =>
+        if (fd.getLiteType == WireFormat.FieldType.UINT32 && protobufOptions.upcastUnsignedInts) {
+          Some(LongType)
+        } else {
+          Some(IntegerType)
+        }
+      case LONG => if (fd.getLiteType == WireFormat.FieldType.UINT64
+          && protobufOptions.upcastUnsignedInts) {
+        Some(DecimalType.LongDecimal)
+      } else {
+        Some(LongType)
+      }
       case FLOAT => Some(FloatType)
       case DOUBLE => Some(DoubleType)
       case BOOLEAN => Some(BooleanType)
@@ -89,8 +104,46 @@ object SchemaConverters extends Logging {
           fd.getMessageType.getFields.get(1).getName.equals("nanos")) =>
         Some(TimestampType)
       case MESSAGE if protobufOptions.convertAnyFieldsToJson &&
-            fd.getMessageType.getFullName == "google.protobuf.Any" =>
+        fd.getMessageType.getFullName == "google.protobuf.Any" =>
         Some(StringType) // Any protobuf will be parsed and converted to json string.
+
+      // Unwrap well known primitive wrapper types if the option has been set.
+      case MESSAGE if fd.getMessageType.getFullName == BoolValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(BooleanType)
+      case MESSAGE if fd.getMessageType.getFullName == Int32Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(IntegerType)
+      case MESSAGE if fd.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        if (protobufOptions.upcastUnsignedInts) {
+          Some(LongType)
+        } else {
+          Some(IntegerType)
+        }
+      case MESSAGE if fd.getMessageType.getFullName == Int64Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(LongType)
+      case MESSAGE if fd.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        if (protobufOptions.upcastUnsignedInts) {
+          Some(DecimalType.LongDecimal)
+        } else {
+          Some(LongType)
+        }
+      case MESSAGE if fd.getMessageType.getFullName == StringValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(StringType)
+      case MESSAGE if fd.getMessageType.getFullName == BytesValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(BinaryType)
+      case MESSAGE if fd.getMessageType.getFullName == FloatValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(FloatType)
+      case MESSAGE if fd.getMessageType.getFullName == DoubleValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(DoubleType)
+
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: Option[DataType] = None
         var valueType: Option[DataType] = None

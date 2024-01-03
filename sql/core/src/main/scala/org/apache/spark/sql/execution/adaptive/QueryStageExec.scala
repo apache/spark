@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.Future
 
-import org.apache.spark.{FutureAction, MapOutputStatistics}
+import org.apache.spark.{FutureAction, MapOutputStatistics, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -179,7 +179,7 @@ case class ShuffleQueryStageExec(
     case s: ShuffleExchangeLike => s
     case ReusedExchangeExec(_, s: ShuffleExchangeLike) => s
     case _ =>
-      throw new IllegalStateException(s"wrong plan for shuffle stage:\n ${plan.treeString}")
+      throw SparkException.internalError(s"wrong plan for shuffle stage:\n ${plan.treeString}")
   }
 
   def advisoryPartitionSize: Option[Long] = shuffle.advisoryPartitionSize
@@ -233,7 +233,7 @@ case class BroadcastQueryStageExec(
     case b: BroadcastExchangeLike => b
     case ReusedExchangeExec(_, b: BroadcastExchangeLike) => b
     case _ =>
-      throw new IllegalStateException(s"wrong plan for broadcast stage:\n ${plan.treeString}")
+      throw SparkException.internalError(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
   override protected def doMaterialize(): Future[Any] = {
@@ -273,7 +273,7 @@ case class TableCacheQueryStageExec(
   @transient val inMemoryTableScan = plan match {
     case i: InMemoryTableScanExec => i
     case _ =>
-      throw new IllegalStateException(s"wrong plan for table cache stage:\n ${plan.treeString}")
+      throw SparkException.internalError(s"wrong plan for table cache stage:\n ${plan.treeString}")
   }
 
   @transient
@@ -285,7 +285,7 @@ case class TableCacheQueryStageExec(
       sparkContext.submitJob(
         rdd,
         (_: Iterator[CachedBatch]) => (),
-        (0 until rdd.getNumPartitions).toSeq,
+        (0 until rdd.getNumPartitions),
         (_: Int, _: Unit) => (),
         ()
       )

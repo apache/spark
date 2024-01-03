@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.broadcast
+import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -402,7 +402,7 @@ trait CodegenSupport extends SparkPlan {
       val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
       if (Utils.isTesting) {
-        throw new IllegalStateException(errMsg)
+        throw SparkException.internalError(errMsg)
       } else {
         logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
       }

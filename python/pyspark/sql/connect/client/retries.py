@@ -22,6 +22,7 @@ import typing
 from typing import Optional, Callable, Generator, List, Type
 from types import TracebackType
 from pyspark.sql.connect.client.logging import logger
+from pyspark.errors import PySparkRuntimeError, RetriesExceeded
 
 """
 This module contains retry system. The system is designed to be
@@ -185,6 +186,9 @@ class Retrying:
         self._done = False
 
     def can_retry(self, exception: BaseException) -> bool:
+        if isinstance(exception, RetryException):
+            return True
+
         return any(policy.can_retry(exception) for policy in self._policies)
 
     def accept_exception(self, exception: BaseException) -> bool:
@@ -198,14 +202,21 @@ class Retrying:
 
     def _last_exception(self) -> BaseException:
         if self._exception is None:
-            raise RuntimeError("No active exception")
+            raise PySparkRuntimeError(
+                error_class="NO_ACTIVE_EXCEPTION",
+                message_parameters={},
+            )
         return self._exception
 
     def _wait(self) -> None:
         exception = self._last_exception()
 
-        # Attempt to find a policy to wait with
+        if isinstance(exception, RetryException):
+            # Considered immediately retriable
+            logger.debug(f"Got error: {repr(exception)}. Retrying.")
+            return
 
+        # Attempt to find a policy to wait with
         for policy in self._policies:
             if not policy.can_retry(exception):
                 continue
@@ -222,7 +233,7 @@ class Retrying:
 
         # Exceeded retries
         logger.debug(f"Given up on retrying. error: {repr(exception)}")
-        raise RetriesExceeded from exception
+        raise RetriesExceeded(error_class="RETRIES_EXCEEDED", message_parameters={}) from exception
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
@@ -244,12 +255,34 @@ class Retrying:
 class RetryException(Exception):
     """
     An exception that can be thrown upstream when inside retry and which is always retryable
+    even without policies
     """
 
 
 class DefaultPolicy(RetryPolicy):
-    def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
-        super().__init__(**kwargs)
+    # Please synchronize changes here with Scala side in
+    # org.apache.spark.sql.connect.client.RetryPolicy
+    #
+    # Note: the number of retries is selected so that the maximum tolerated wait
+    # is guaranteed to be at least 10 minutes
+
+    def __init__(
+        self,
+        max_retries: Optional[int] = 15,
+        backoff_multiplier: float = 4.0,
+        initial_backoff: int = 50,
+        max_backoff: Optional[int] = 60000,
+        jitter: int = 500,
+        min_jitter_threshold: int = 2000,
+    ):
+        super().__init__(
+            max_retries=max_retries,
+            backoff_multiplier=backoff_multiplier,
+            initial_backoff=initial_backoff,
+            max_backoff=max_backoff,
+            jitter=jitter,
+            min_jitter_threshold=min_jitter_threshold,
+        )
 
     def can_retry(self, e: BaseException) -> bool:
         """
@@ -267,8 +300,6 @@ class DefaultPolicy(RetryPolicy):
         True if the exception can be retried, False otherwise.
 
         """
-        if isinstance(e, RetryException):
-            return True
 
         if not isinstance(e, grpc.RpcError):
             return False
@@ -284,10 +315,3 @@ class DefaultPolicy(RetryPolicy):
             return True
 
         return False
-
-
-class RetriesExceeded(Exception):
-    """
-    Represents an exception which is considered retriable, but retry limits
-    were exceeded
-    """

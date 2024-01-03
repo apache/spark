@@ -1068,7 +1068,7 @@ abstract class AvroSuite
       val readValues =
         spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect()
 
-      assert(readValues.size == 1)
+      assert(readValues.length == 1)
       assert(readValues.head == ((nullDate, nullTime)))
     }
   }
@@ -1944,7 +1944,7 @@ abstract class AvroSuite
       df.write.format("avro").save(outputDir)
       val input = spark.read.format("avro").load(outputDir)
       assert(input.collect().toSet.size === 1024 * 3 + 1)
-      assert(input.rdd.partitions.size > 2)
+      assert(input.rdd.partitions.length > 2)
     }
   }
 
@@ -2347,12 +2347,16 @@ abstract class AvroSuite
               |  ]
               |}""".stripMargin
 
-          // By default we should fail to write ancient datetime values.
-          val e = intercept[SparkException] {
-            df.write.format("avro").option("avroSchema", avroSchema).save(path3_x)
+          withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+            val e = intercept[SparkException] {
+              df.write.format("avro").option("avroSchema", avroSchema).save(path3_x)
+            }
+            assert(e.getCause.getCause.isInstanceOf[SparkUpgradeException])
           }
-          assert(e.getCause.getCause.isInstanceOf[SparkUpgradeException])
           checkDefaultLegacyRead(oldPath)
+
+          // By default we should not fail to write ancient datetime values.
+          df.write.format("avro").option("avroSchema", avroSchema).mode("overwrite").save(path3_x)
 
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
             df.write.format("avro").option("avroSchema", avroSchema).mode("overwrite").save(path3_x)
@@ -2378,9 +2382,9 @@ abstract class AvroSuite
     }
     def successInRead(path: String): Unit = spark.read.format("avro").load(path).collect()
     Seq(
-      // By default we should fail to read ancient datetime values when parquet files don't
+      // By default we should not fail to read ancient datetime values when parquet files don't
       // contain Spark version.
-      "2_4_5" -> failInRead _,
+      "2_4_5" -> successInRead _,
       "2_4_6" -> successInRead _,
       "3_2_0" -> successInRead _
     ).foreach { case (version, checkDefaultRead) =>

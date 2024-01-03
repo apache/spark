@@ -43,7 +43,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
     PySparkTypeError,
-    PySparkNotImplementedError,
+    PySparkValueError,
     PySparkPicklingError,
     IllegalArgumentException,
 )
@@ -778,10 +778,17 @@ class Aggregate(LogicalPlan):
         aggregate_cols: Sequence[Column],
         pivot_col: Optional[Column],
         pivot_values: Optional[Sequence[Any]],
+        grouping_sets: Optional[Sequence[Sequence[Column]]],
     ) -> None:
         super().__init__(child)
 
-        assert isinstance(group_type, str) and group_type in ["groupby", "rollup", "cube", "pivot"]
+        assert isinstance(group_type, str) and group_type in [
+            "groupby",
+            "rollup",
+            "cube",
+            "pivot",
+            "grouping_sets",
+        ]
         self._group_type = group_type
 
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
@@ -795,12 +802,16 @@ class Aggregate(LogicalPlan):
         if group_type == "pivot":
             assert pivot_col is not None and isinstance(pivot_col, Column)
             assert pivot_values is None or isinstance(pivot_values, list)
+        elif group_type == "grouping_sets":
+            assert grouping_sets is None or isinstance(grouping_sets, list)
         else:
             assert pivot_col is None
             assert pivot_values is None
+            assert grouping_sets is None
 
         self._pivot_col = pivot_col
         self._pivot_values = pivot_values
+        self._grouping_sets = grouping_sets
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         from pyspark.sql.connect.functions import lit
@@ -829,7 +840,15 @@ class Aggregate(LogicalPlan):
                 plan.aggregate.pivot.values.extend(
                     [lit(v).to_plan(session).literal for v in self._pivot_values]
                 )
-
+        elif self._group_type == "grouping_sets":
+            plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS
+            assert self._grouping_sets is not None
+            for grouping_set in self._grouping_sets:
+                plan.aggregate.grouping_sets.append(
+                    proto.Aggregate.GroupingSets(
+                        grouping_set=[c.to_plan(session) for c in grouping_set]
+                    )
+                )
         return plan
 
 
@@ -1041,9 +1060,9 @@ class SetOperation(LogicalPlan):
         elif self.set_op == "except":
             plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
         else:
-            raise PySparkNotImplementedError(
+            raise PySparkValueError(
                 error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"feature": self.set_op},
+                message_parameters={"operation": self.set_op},
             )
 
         plan.set_op.is_all = self.is_all
@@ -1246,8 +1265,12 @@ class WithColumnsRenamed(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.with_columns_renamed.input.CopyFrom(self._child.plan(session))
-        for k, v in self._colsMap.items():
-            plan.with_columns_renamed.rename_columns_map[k] = v
+        if len(self._colsMap) > 0:
+            for k, v in self._colsMap.items():
+                rename = proto.WithColumnsRenamed.Rename()
+                rename.col_name = k
+                rename.new_col_name = v
+                plan.with_columns_renamed.renames.append(rename)
         return plan
 
 
@@ -1680,8 +1703,9 @@ class WriteOperation(LogicalPlan):
                         proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
                     )
                 else:
-                    raise ValueError(
-                        f"Unknown TestSaveMethod value for DataFrame: {self.table_save_method}"
+                    raise PySparkValueError(
+                        error_class="UNSUPPORTED_OPERATION",
+                        message_parameters={"operation": tsm},
                     )
         elif self.path is not None:
             plan.write_operation.path = self.path
@@ -1697,7 +1721,10 @@ class WriteOperation(LogicalPlan):
             elif wm == "ignore":
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
             else:
-                raise ValueError(f"Unknown SaveMode value for DataFrame: {self.mode}")
+                raise PySparkValueError(
+                    error_class="UNSUPPORTED_OPERATION",
+                    message_parameters={"operation": self.mode},
+                )
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -1793,7 +1820,10 @@ class WriteOperationV2(LogicalPlan):
             elif wm == "create_or_replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
             else:
-                raise ValueError(f"Unknown Mode value for DataFrame: {self.mode}")
+                raise PySparkValueError(
+                    error_class="UNSUPPORTED_OPERATION",
+                    message_parameters={"operation": self.mode},
+                )
         return plan
 
 
@@ -1968,40 +1998,6 @@ class FunctionExists(LogicalPlan):
         plan.catalog.function_exists.function_name = self._function_name
         if self._db_name is not None:
             plan.catalog.function_exists.db_name = self._db_name
-        return plan
-
-
-class CreateExternalTable(LogicalPlan):
-    def __init__(
-        self,
-        table_name: str,
-        path: str,
-        source: Optional[str] = None,
-        schema: Optional[DataType] = None,
-        options: Mapping[str, str] = {},
-    ) -> None:
-        super().__init__(None)
-        self._table_name = table_name
-        self._path = path
-        self._source = source
-        self._schema = schema
-        self._options = options
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = self._create_proto_relation()
-        plan.catalog.create_external_table.table_name = self._table_name
-        if self._path is not None:
-            plan.catalog.create_external_table.path = self._path
-        if self._source is not None:
-            plan.catalog.create_external_table.source = self._source
-        if self._schema is not None:
-            plan.catalog.create_external_table.schema.CopyFrom(
-                pyspark_types_to_proto_types(self._schema)
-            )
-        for k in self._options.keys():
-            v = self._options.get(k)
-            if v is not None:
-                plan.catalog.create_external_table.options[k] = v
         return plan
 
 
@@ -2189,14 +2185,14 @@ class MapPartitions(LogicalPlan):
     ) -> None:
         super().__init__(child)
 
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._function = function._build_common_inline_user_defined_function(*cols)
         self._is_barrier = is_barrier
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.map_partitions.input.CopyFrom(self._child.plan(session))
-        plan.map_partitions.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.map_partitions.func.CopyFrom(self._function.to_plan_udf(session))
         plan.map_partitions.is_barrier = self._is_barrier
         return plan
 
@@ -2215,7 +2211,7 @@ class GroupMap(LogicalPlan):
 
         super().__init__(child)
         self._grouping_cols = grouping_cols
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._function = function._build_common_inline_user_defined_function(*cols)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -2224,7 +2220,7 @@ class GroupMap(LogicalPlan):
         plan.group_map.grouping_expressions.extend(
             [c.to_plan(session) for c in self._grouping_cols]
         )
-        plan.group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.group_map.func.CopyFrom(self._function.to_plan_udf(session))
         return plan
 
 
@@ -2238,7 +2234,6 @@ class CoGroupMap(LogicalPlan):
         other: Optional["LogicalPlan"],
         other_grouping_cols: Sequence[Column],
         function: "UserDefinedFunction",
-        cols: List[Column],
     ):
         assert isinstance(input_grouping_cols, list) and all(
             isinstance(c, Column) for c in input_grouping_cols
@@ -2253,7 +2248,7 @@ class CoGroupMap(LogicalPlan):
         self._other = cast(LogicalPlan, other)
         # The function takes entire DataFrame as inputs, no need to do
         # column binding (no input columns).
-        self._func = function._build_common_inline_user_defined_function()
+        self._function = function._build_common_inline_user_defined_function()
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -2266,7 +2261,7 @@ class CoGroupMap(LogicalPlan):
         plan.co_group_map.other_grouping_expressions.extend(
             [c.to_plan(session) for c in self._other_grouping_cols]
         )
-        plan.co_group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.co_group_map.func.CopyFrom(self._function.to_plan_udf(session))
         return plan
 
 
@@ -2288,7 +2283,7 @@ class ApplyInPandasWithState(LogicalPlan):
 
         super().__init__(child)
         self._grouping_cols = grouping_cols
-        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._function = function._build_common_inline_user_defined_function(*cols)
         self._output_schema = output_schema
         self._state_schema = state_schema
         self._output_mode = output_mode
@@ -2301,7 +2296,7 @@ class ApplyInPandasWithState(LogicalPlan):
         plan.apply_in_pandas_with_state.grouping_expressions.extend(
             [c.to_plan(session) for c in self._grouping_cols]
         )
-        plan.apply_in_pandas_with_state.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.apply_in_pandas_with_state.func.CopyFrom(self._function.to_plan_udf(session))
         plan.apply_in_pandas_with_state.output_schema = self._output_schema
         plan.apply_in_pandas_with_state.state_schema = self._state_schema
         plan.apply_in_pandas_with_state.output_mode = self._output_mode

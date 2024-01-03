@@ -162,7 +162,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   test("SPARK-16625 : Importing Oracle numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
     val rows = df.collect()
-    assert(rows.size == 1)
+    assert(rows.length == 1)
     val row = rows(0)
     // The main point of the below assertions is not to make sure that these Oracle types are
     // mapped to decimal types, but to make sure that the returned values are correct.
@@ -175,8 +175,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
 
-  // SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle jdbc-am""
-  test("SPARK-12941: String datatypes to be mapped to CLOB in Oracle") {
+  test("SPARK-12941: String datatypes to be mapped to VARCHAR(255) in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
@@ -413,7 +412,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     // read records from oracle_types
     val dfRead = sqlContext.read.jdbc(jdbcUrl, tableName, new Properties)
     val rows = dfRead.collect()
-    assert(rows.size == 1)
+    assert(rows.length == 1)
 
     // check data types
     val types = dfRead.schema.map(field => field.dataType)

@@ -53,7 +53,7 @@ You should see the new node listed there, along with its number of CPUs and memo
 
 Finally, the following configuration options can be passed to the master and worker:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th style="width:21%">Argument</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>-h HOST</code>, <code>--host HOST</code></td>
@@ -116,7 +116,7 @@ Note that these scripts must be executed on the machine you want to run the Spar
 
 You can optionally configure the cluster further by setting environment variables in `conf/spark-env.sh`. Create this file by starting with the `conf/spark-env.sh.template`, and _copy it to all your worker machines_ for the settings to take effect. The following settings are available:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>SPARK_MASTER_HOST</code></td>
@@ -188,7 +188,7 @@ You can optionally configure the cluster further by setting environment variable
 
 SPARK_MASTER_OPTS supports the following system properties:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.master.ui.port</code></td>
@@ -225,6 +225,14 @@ SPARK_MASTER_OPTS supports the following system properties:
     Whether to use the Master REST API endpoint or not.
   </td>
   <td>1.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.rest.host</code></td>
+  <td>(None)</td>
+  <td>
+    Specifies the host of the Master REST API endpoint.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.master.rest.port</code></td>
@@ -386,8 +394,26 @@ SPARK_MASTER_OPTS supports the following system properties:
 
 SPARK_WORKER_OPTS supports the following system properties:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<tr>
+  <td><code>spark.worker.initialRegistrationRetries</code></td>
+  <td>6</td>
+  <td>
+    The number of retries to reconnect in short intervals (between 5 and 15 seconds).
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.maxRegistrationRetries</code></td>
+  <td>16</td>
+  <td>
+    The max number of retries to reconnect.
+    After <code>spark.worker.initialRegistrationRetries</code> attempts, the interval is between
+    30 and 90 seconds.
+  </td>
+  <td>4.0.0</td>
+</tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
@@ -501,7 +527,7 @@ You can also pass an option `--total-executor-cores <numCores>` to control the n
 
 Spark applications supports the following configuration properties specific to standalone mode:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
   <td><code>spark.standalone.submit.waitAppCompletion</code></td>
@@ -517,6 +543,8 @@ Spark applications supports the following configuration properties specific to s
 
 
 # Launching Spark Applications
+
+## Spark Protocol
 
 The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
@@ -539,6 +567,84 @@ failing repeatedly, you may do so through:
     ./bin/spark-class org.apache.spark.deploy.Client kill <master url> <driver ID>
 
 You can find the driver ID through the standalone Master web UI at `http://<master url>:8080`.
+
+## REST API
+
+If `spark.master.rest.enabled` is enabled, Spark master provides additional REST API
+via <code>http://[host:port]/[version]/submissions/[action]</code> where
+<code>host</code> is the master host, and
+<code>port</code> is the port number specified by `spark.master.rest.port` (default: 6066), and 
+<code>version</code> is a protocol version, <code>v1</code> as of today, and
+<code>action</code> is one of the following supported actions.
+
+<table>
+  <thead><tr><th style="width:21%">Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>create</code></td>
+    <td>Create a Spark driver via <code>cluster</code> mode.</td>
+    <td>POST</td>
+    <td>1.3.0</td>
+  </tr>
+  <tr>
+    <td><code>kill</code></td>
+    <td>Kill a single Spark driver.</td>
+    <td>POST</td>
+    <td>1.3.0</td>
+  </tr>
+  <tr>
+    <td><code>killall</code></td>
+    <td>Kill all running Spark drivers.</td>
+    <td>POST</td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td><code>status</code></td>
+    <td>Check the status of a Spark job.</td>
+    <td>GET</td>
+    <td>1.3.0</td>
+  </tr>
+  <tr>
+    <td><code>clear</code></td>
+    <td>Clear the completed drivers and applications.</td>
+    <td>POST</td>
+    <td>4.0.0</td>
+  </tr>
+</table>
+
+The following is a <code>curl</code> CLI command example with the `pi.py` and REST API.
+
+```bash
+$ curl -XPOST http://IP:PORT/v1/submissions/create \
+--header "Content-Type:application/json;charset=UTF-8" \
+--data '{
+  "appResource": "",
+  "sparkProperties": {
+    "spark.master": "spark://master:7077",
+    "spark.app.name": "Spark Pi",
+    "spark.driver.memory": "1g",
+    "spark.driver.cores": "1",
+    "spark.jars": ""
+  },
+  "clientSparkVersion": "",
+  "mainClass": "org.apache.spark.deploy.SparkSubmit",
+  "environmentVariables": { },
+  "action": "CreateSubmissionRequest",
+  "appArgs": [ "/opt/spark/examples/src/main/python/pi.py", "10" ]
+}'
+```
+
+The following is the response from the REST API for the above <code>create</code> request.
+
+```bash
+{
+  "action" : "CreateSubmissionResponse",
+  "message" : "Driver successfully submitted as driver-20231124153531-0000",
+  "serverSparkVersion" : "4.0.0",
+  "submissionId" : "driver-20231124153531-0000",
+  "success" : true
+}
+```
+
 
 # Resource Scheduling
 
@@ -650,22 +756,51 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th style="width:21%">System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>NONE</td>
-    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
-      Set to FILESYSTEM to enable single-node recovery mode, ZOOKEEPER to use Zookeeper-based recovery mode, and
+    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches. Set to
+      FILESYSTEM to enable file-system-based single-node recovery mode,
+      ROCKSDB to enable RocksDB-based single-node recovery mode,
+      ZOOKEEPER to use Zookeeper-based recovery mode, and
       CUSTOM to provide a customer provider class via additional `spark.deploy.recoveryMode.factory` configuration.
+      NONE is the default value which disables this recovery mode.
     </td>
     <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>""</td>
-    <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.
+      Note that the directory should be clearly manualy if <code>spark.deploy.recoveryMode</code>,
+      <code>spark.deploy.recoverySerializer</code>, or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
+    </td>
     <td>0.8.1</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.recoverySerializer</code></td>
+    <td>JAVA</td>
+    <td>A serializer for writing/reading objects to/from persistence engines; JAVA (default) or KRYO.
+      Java serializer has been the default mode since Spark 0.8.1.
+      Kryo serializer is a new fast and compact mode from Spark 4.0.0.</td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.recoveryCompressionCodec</code></td>
+    <td>(none)</td>
+    <td>A compression codec for persistence engines. none (default), lz4, lzf, snappy, and zstd. Currently, only FILESYSTEM mode supports this configuration.</td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.recoveryTimeout</code></td>
+    <td>(none)</td>
+    <td>
+      The timeout for recovery process. The default value is the same with
+      <code>spark.worker.timeout</code>.
+    </td>
+    <td>4.0.0</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryMode.factory</code></td>

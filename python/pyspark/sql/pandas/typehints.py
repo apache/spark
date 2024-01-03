@@ -18,7 +18,7 @@ from inspect import Signature
 from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
 
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
-from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors import PySparkNotImplementedError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
@@ -51,12 +51,18 @@ def infer_eval_type(
         annotations[parameter] for parameter in sig.parameters if parameter in annotations
     ]
     if len(parameters_sig) != len(sig.parameters):
-        raise ValueError("Type hints for all parameters should be specified; however, got %s" % sig)
+        raise PySparkValueError(
+            error_class="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            message_parameters={"target": "all parameters", "sig": str(sig)},
+        )
 
     # Check if the return has a type hint
     return_annotation = type_hints.get("return", sig.return_annotation)
     if sig.empty is return_annotation:
-        raise ValueError("Type hint for the return type should be specified; however, got %s" % sig)
+        raise PySparkValueError(
+            error_class="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            message_parameters={"target": "the return type", "sig": str(sig)},
+        )
 
     # Series, Frame or Union[DataFrame, Series], ... -> Series or Frame
     is_series_or_frame = all(

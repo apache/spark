@@ -38,10 +38,13 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BOOLEAN;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 /**
  * Decoder to return values from a single column.
@@ -140,21 +143,33 @@ public class VectorizedColumnReader {
     this.writerVersion = writerVersion;
   }
 
-  private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
+  private boolean isLazyDecodingSupported(
+      PrimitiveType.PrimitiveTypeName typeName,
+      DataType sparkType) {
     boolean isSupported = false;
+    // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date
+    // rebasing.
     switch (typeName) {
-      case INT32:
-        isSupported = !(logicalTypeAnnotation instanceof DateLogicalTypeAnnotation) ||
-          "CORRECTED".equals(datetimeRebaseMode);
+      case INT32: {
+        boolean isDate = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation;
+        boolean needsUpcast = sparkType == LongType || (isDate && sparkType == TimestampNTZType) ||
+          !DecimalType.is32BitDecimalType(sparkType);
+        boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
+          !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase;
         break;
-      case INT64:
-        if (updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS)) {
-          isSupported = "CORRECTED".equals(datetimeRebaseMode);
-        } else {
-          isSupported = !updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
-        }
+      }
+      case INT64: {
+        boolean needsUpcast = !DecimalType.is64BitDecimalType(sparkType) ||
+          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
+        boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
+          !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase;
         break;
+      }
       case FLOAT:
+        isSupported = sparkType == FloatType;
+        break;
       case DOUBLE:
       case BINARY:
         isSupported = true;
@@ -211,7 +226,7 @@ public class VectorizedColumnReader {
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
         if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
-            isLazyDecodingSupported(typeName))) {
+            isLazyDecodingSupported(typeName, column.dataType()))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if startRowId is not the first row index in the page AND the column
           // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
@@ -222,9 +237,10 @@ public class VectorizedColumnReader {
           // WritableColumnVector will throw an exception when trying to decode to an Int when the
           // dictionary is in fact initialized as Long
           LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
-          boolean castLongToInt = typeAnnotation instanceof DecimalLogicalTypeAnnotation &&
-            ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <=
-            Decimal.MAX_INT_DIGITS() && primitiveType.getPrimitiveTypeName() == INT64;
+          boolean castLongToInt =
+            typeAnnotation instanceof DecimalLogicalTypeAnnotation annotation &&
+            annotation.getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+            primitiveType.getPrimitiveTypeName() == INT64;
 
           // We require a long value, but we need to use dictionary to decode the original
           // signed int first
@@ -324,28 +340,24 @@ public class VectorizedColumnReader {
   }
 
   private ValuesReader getValuesReader(Encoding encoding) {
-    switch (encoding) {
-      case PLAIN:
-        return new VectorizedPlainValuesReader();
-      case DELTA_BYTE_ARRAY:
-        return new VectorizedDeltaByteArrayReader();
-      case DELTA_LENGTH_BYTE_ARRAY:
-        return new VectorizedDeltaLengthByteArrayReader();
-      case DELTA_BINARY_PACKED:
-        return new VectorizedDeltaBinaryPackedReader();
-      case RLE:
+    return switch (encoding) {
+      case PLAIN -> new VectorizedPlainValuesReader();
+      case DELTA_BYTE_ARRAY -> new VectorizedDeltaByteArrayReader();
+      case DELTA_LENGTH_BYTE_ARRAY -> new VectorizedDeltaLengthByteArrayReader();
+      case DELTA_BINARY_PACKED -> new VectorizedDeltaBinaryPackedReader();
+      case RLE -> {
         PrimitiveType.PrimitiveTypeName typeName =
           this.descriptor.getPrimitiveType().getPrimitiveTypeName();
         // RLE encoding only supports boolean type `Values`, and  `bitwidth` is always 1.
         if (typeName == BOOLEAN) {
-          return new VectorizedRleValuesReader(1);
+          yield new VectorizedRleValuesReader(1);
         } else {
           throw new UnsupportedOperationException(
             "RLE encoding is not supported for values of type: " + typeName);
         }
-      default:
-        throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
-    }
+      }
+      default -> throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
+    };
   }
 
 

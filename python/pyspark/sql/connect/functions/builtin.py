@@ -96,7 +96,7 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
     Parameters
     ----------
     name Name of the function to be called.
-    args The list of arguments.
+        args The list of arguments.
 
     Returns
     -------
@@ -1928,6 +1928,11 @@ inline_outer.__doc__ = pysparkfuncs.inline_outer.__doc__
 
 
 def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
+    if len(fields) == 0:
+        raise PySparkValueError(
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "field"},
+        )
     return _invoke_function("json_tuple", _to_col(col), *[lit(field) for field in fields])
 
 
@@ -2864,7 +2869,7 @@ current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
 
 
 def now() -> Column:
-    return _invoke_function("current_timestamp")
+    return _invoke_function("now")
 
 
 now.__doc__ = pysparkfuncs.now.__doc__
@@ -3613,6 +3618,13 @@ def user() -> Column:
 user.__doc__ = pysparkfuncs.user.__doc__
 
 
+def session_user() -> Column:
+    return _invoke_function("session_user")
+
+
+session_user.__doc__ = pysparkfuncs.session_user.__doc__
+
+
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
@@ -3677,6 +3689,14 @@ sha1.__doc__ = pysparkfuncs.sha1.__doc__
 
 
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
+    if numBits not in [0, 224, 256, 384, 512]:
+        raise PySparkValueError(
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "numBits",
+                "allowed_values": "[0, 224, 256, 384, 512]",
+            },
+        )
     return _invoke_function("sha2", _to_col(col), lit(numBits))
 
 

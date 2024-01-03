@@ -26,13 +26,14 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
@@ -232,7 +233,7 @@ class SparkSession private(
   /**
    * A collection of methods for registering user-defined data sources.
    */
-  private[sql] def dataSource: DataSourceRegistration = sharedState.dataSourceRegistration
+  private[sql] def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
@@ -242,6 +243,16 @@ class SparkSession private(
    */
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
+
+  /**
+   * Returns an `ArtifactManager` that supports adding, managing and using session-scoped artifacts
+   * (jars, classfiles, etc).
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  @Unstable
+  private[sql] def artifactManager: ArtifactManager = sessionState.artifactManager
 
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered
@@ -689,7 +700,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.view.mapValues(lit(_).expr).toMap)
+          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
         } else {
           parsedPlan
         }
@@ -1206,7 +1217,7 @@ object SparkSession extends Logging {
    */
   def active: SparkSession = {
     getActiveSession.getOrElse(getDefaultSession.getOrElse(
-      throw new IllegalStateException("No active or default Spark session found")))
+      throw SparkException.internalError("No active or default Spark session found")))
   }
 
   /**
@@ -1305,7 +1316,7 @@ object SparkSession extends Logging {
   private def assertOnDriver(): Unit = {
     if (TaskContext.get() != null) {
       // we're accessing it during task execution, fail.
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "SparkSession should only be created and accessed on the driver.")
     }
   }

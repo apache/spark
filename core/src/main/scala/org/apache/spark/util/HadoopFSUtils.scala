@@ -245,7 +245,7 @@ private[spark] object HadoopFSUtils extends Logging {
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val filteredNestedFiles: Seq[FileStatus] = contextOpt match {
-        case Some(context) if dirs.size > parallelismThreshold =>
+        case Some(context) if dirs.length > parallelismThreshold =>
           parallelListLeafFilesInternal(
             context,
             dirs.map(_.getPath).toImmutableArraySeq,
@@ -349,6 +349,7 @@ private[spark] object HadoopFSUtils extends Logging {
   private val underscoreEnd: Regex = "/_[^=/]*$".r
 
   /** Checks if we should filter out this path. */
+  @scala.annotation.tailrec
   def shouldFilterOutPath(path: String): Boolean = {
     if (path.contains("/.") || path.endsWith("._COPYING_")) return true
     underscoreEnd.findFirstIn(path) match {

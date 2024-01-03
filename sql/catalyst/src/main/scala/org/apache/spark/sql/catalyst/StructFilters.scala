@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.StructFilters._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{BooleanType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The class provides API for applying pushed down filters to partially or
@@ -94,7 +95,7 @@ object StructFilters {
   }
 
   private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
-    a.zip(b).headOption
+    a.zip(b)
   }
 
   private def toLiteral(value: Any): Option[Literal] = {
@@ -131,7 +132,7 @@ object StructFilters {
       case sources.IsNotNull(attribute) =>
         toRef(attribute).map(IsNotNull)
       case sources.In(attribute, values) =>
-        val literals = values.toSeq.flatMap(toLiteral)
+        val literals = values.toImmutableArraySeq.flatMap(toLiteral)
         if (literals.length == values.length) {
           toRef(attribute).map(In(_, literals))
         } else {

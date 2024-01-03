@@ -50,8 +50,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
         <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/structured-streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -68,7 +68,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val content =
       resources ++
         basicInfo ++
-        generateStatTable(query)
+        generateStatTable(query, request)
     SparkUIUtils.headerSparkPage(request, "Streaming Query Statistics", content, parent)
   }
 
@@ -251,7 +251,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         new GraphUIData(
           "aggregated-num-removed-state-rows-timeline",
           "aggregated-num-removed-state-rows-histogram",
-          numRowsRemovedData,
+          numRowsRemovedData.toImmutableArraySeq,
           minBatchTime,
           maxBatchTime,
           0,
@@ -386,7 +386,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     result
   }
 
-  def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
+  def generateStatTable(query: StreamingQueryUIData, request: HttpServletRequest): Seq[Node] = {
     val batchToTimestamps = withNoProgress(query,
       query.recentProgress.map(p => (p.batchId, parseProgressTimestamp(p.timestamp))),
       Array.empty[(Long, Long)])
@@ -415,10 +415,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         withNumberInvalid { p.processedRowsPerSecond })), Array.empty[(Long, Double)])
     val inputRowsData = withNoProgress(query,
       query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        withNumberInvalid { p.numInputRows })), Array.empty[(Long, Double)])
+        withNumberInvalid { p.numInputRows.toDouble })), Array.empty[(Long, Double)])
     val batchDurations = withNoProgress(query,
       query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
-        withNumberInvalid { p.batchDuration })), Array.empty[(Long, Double)])
+        withNumberInvalid { p.batchDuration.toDouble })), Array.empty[(Long, Double)])
     val operationDurationData = withNoProgress(
       query,
       query.recentProgress.map { p =>
@@ -429,7 +429,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       },
       Array.empty[(Long, ju.Map[String, JLong])])
 
-    val jsCollector = new JsCollector
+    val jsCollector = new JsCollector(request)
     val graphUIDataForInputRate =
       new GraphUIData(
         "input-rate-timeline",
@@ -437,7 +437,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         inputRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minRecordRate,
+        minRecordRate.toDouble,
         maxRecordRate,
         "records/sec")
     graphUIDataForInputRate.generateDataJs(jsCollector)
@@ -449,7 +449,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         processRateData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minProcessRate,
+        minProcessRate.toDouble,
         maxProcessRate,
         "records/sec")
     graphUIDataForProcessRate.generateDataJs(jsCollector)
@@ -461,8 +461,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         inputRowsData.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minRows,
-        maxRows,
+        minRows.toDouble,
+        maxRows.toDouble,
         "records")
     graphUIDataForInputRows.generateDataJs(jsCollector)
 
@@ -473,8 +473,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         batchDurations.toImmutableArraySeq,
         minBatchTime,
         maxBatchTime,
-        minBatchDuration,
-        maxBatchDuration,
+        minBatchDuration.toDouble,
+        maxBatchDuration.toDouble,
         "ms")
     graphUIDataForBatchDuration.generateDataJs(jsCollector)
 

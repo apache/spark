@@ -138,6 +138,27 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
       Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
+    case be @ BinaryComparison(
+      Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
+        if fromExp.dataType == DateType && AnyTimestampType.acceptsType(ts.dataType) &&
+          value != null =>
+      Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode))
+
+    // Timestamp/Timestamp_NTZ -> Timestamp_NTZ/Timestamp
+    case be @ BinaryComparison(
+      c @ Cast(fromExp, _, timeZoneId, evalMode), Literal(value, literalType))
+        if AnyTimestampType.acceptsType(fromExp.dataType) &&
+          AnyTimestampType.acceptsType(literalType) && value != null =>
+      // datetime with timezone is tricky, do a round trip to check if the rewrite is okay.
+      val newCast = Cast(Literal(value, literalType), fromExp.dataType, timeZoneId, evalMode)
+      val roundTrip = Cast(newCast, literalType, timeZoneId, evalMode)
+      if (roundTrip.eval().asInstanceOf[Long] == value.asInstanceOf[Long]) {
+        val newExpr = be.withNewChildren(Seq(fromExp, newCast))
+        Some(newExpr)
+      } else {
+        None
+      }
+
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:
@@ -325,6 +346,68 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: LessThanOrEqual =>
         LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
+      case _ => exp
+    }
+  }
+
+  private def unwrapTimestampToDate(
+      exp: BinaryComparison,
+      fromExp: Expression,
+      ts: Literal,
+      tz: Option[String],
+      evalMode: EvalMode.Value): Expression = {
+    assert(fromExp.dataType == DateType)
+    val floorDate = Literal(Cast(ts, DateType, tz, evalMode).eval(), DateType)
+    val timePartsAllZero =
+      EqualTo(ts, Cast(floorDate, ts.dataType, tz, evalMode)).eval().asInstanceOf[Boolean]
+
+    exp match {
+      case _: GreaterThan =>
+        // "CAST(date AS TIMESTAMP) > timestamp"  ==>  "date > floor_date", no matter the
+        // timestamp has non-zero time part or not.
+        GreaterThan(fromExp, floorDate)
+      case _: LessThanOrEqual =>
+        // "CAST(date AS TIMESTAMP) <= timestamp"  ==>  "date <= floor_date", no matter the
+        // timestamp has non-zero time part or not.
+        LessThanOrEqual(fromExp, floorDate)
+      case _: GreaterThanOrEqual =>
+        if (!timePartsAllZero) {
+          // "CAST(date AS TIMESTAMP) >= timestamp"  ==>  "date > floor_date", if the timestamp has
+          // non-zero time part.
+          GreaterThan(fromExp, floorDate)
+        } else {
+          // If the timestamp's time parts are all zero, the date can also be the floor_date.
+          GreaterThanOrEqual(fromExp, floorDate)
+        }
+      case _: LessThan =>
+        if (!timePartsAllZero) {
+          // "CAST(date AS TIMESTAMP) < timestamp"  ==>  "date <= floor_date", if the timestamp has
+          // non-zero time part.
+          LessThanOrEqual(fromExp, floorDate)
+        } else {
+          // If the timestamp's time parts are all zero, the date can not be the floor_date.
+          LessThan(fromExp, floorDate)
+        }
+      case _: EqualTo =>
+        if (timePartsAllZero) {
+          // "CAST(date AS TIMESTAMP) = timestamp"  ==>  "date = floor_date", if the timestamp's
+          // time parts are all zero
+          EqualTo(fromExp, floorDate)
+        } else {
+          // if the timestamp has non-zero time part, then we always get false unless the date is
+          // null, in which case the result is also null.
+          falseIfNotNull(fromExp)
+        }
+      case _: EqualNullSafe =>
+        if (timePartsAllZero) {
+          // "CAST(date AS TIMESTAMP) <=> timestamp"  ==>  "date <=> floor_date", if the timestamp's
+          // time parts are all zero
+          EqualNullSafe(fromExp, floorDate)
+        } else {
+          // if the timestamp has non-zero time part, then we always get false because this is
+          // null-safe equal comparison.
+          FalseLiteral
+        }
       case _ => exp
     }
   }

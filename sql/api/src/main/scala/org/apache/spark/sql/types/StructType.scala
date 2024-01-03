@@ -417,7 +417,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
   override def simpleString: String = {
-    val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
+    val fieldTypes = fields.to(LazyList)
+      .map(field => s"${field.name}:${field.dataType.simpleString}")
     SparkStringUtils.truncatedString(
       fieldTypes,
       "struct<", ",", ">",
@@ -560,7 +561,7 @@ object StructType extends AbstractDataType {
     mergeInternal(left, right, (s1: StructType, s2: StructType) => {
       val leftFields = s1.fields
       val rightFields = s2.fields
-      require(leftFields.size == rightFields.size, "To merge nullability, " +
+      require(leftFields.length == rightFields.length, "To merge nullability, " +
         "two structs must have same number of fields.")
 
       val newFields = leftFields.zip(rightFields).map {

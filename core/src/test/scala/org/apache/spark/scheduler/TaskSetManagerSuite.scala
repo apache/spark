@@ -845,7 +845,7 @@ class TaskSetManagerSuite
 
     // multiple 1k result
     val r = sc.makeRDD(0 until 10, 10).map(genBytes(1024)).collect()
-    assert(10 === r.size)
+    assert(10 === r.length)
 
     // single 10M result
     val thrown = intercept[SparkException] {sc.makeRDD(genBytes(10 << 20)(0), 1).collect()}
@@ -863,7 +863,7 @@ class TaskSetManagerSuite
     sc = new SparkContext("local", "test", conf)
     // final result is below limit.
     val r = sc.makeRDD(0 until 2000, 2000).distinct(10).filter(_ == 0).collect()
-    assert(1 === r.size)
+    assert(1 === r.length)
   }
 
   test("[SPARK-13931] taskSetManager should not send Resubmitted tasks after being a zombie") {

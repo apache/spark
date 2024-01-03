@@ -356,9 +356,14 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |CREATE TABLE non_partition_table (id bigint)
                |STORED AS PARQUET LOCATION '$baseDir'
                |""".stripMargin)
-          val e = intercept[AnalysisException](
-            spark.table("non_partition_table")).getMessage
-          assert(e.contains("Converted table has 2 columns, but source Hive table has 1 columns."))
+          checkError(
+            exception = intercept[AnalysisException](spark.table("non_partition_table")),
+            errorClass = "_LEGACY_ERROR_TEMP_3096",
+            parameters = Map(
+              "resLen" -> "2",
+              "relLen" -> "1",
+              "key" -> "spark.sql.hive.convertMetastoreParquet",
+              "ident" -> "`spark_catalog`.`default`.`non_partition_table`"))
         }
       }
     })

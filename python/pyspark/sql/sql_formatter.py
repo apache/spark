@@ -25,6 +25,7 @@ from py4j.java_gateway import is_instance_of
 if typing.TYPE_CHECKING:
     from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import lit
+from pyspark.errors import PySparkValueError
 
 
 class SQLStringFormatter(string.Formatter):
@@ -61,9 +62,9 @@ class SQLStringFormatter(string.Formatter):
             ):
                 return jexpr.sql()
             else:
-                raise ValueError(
-                    "%s in %s should be a plain column reference such as `df.col` "
-                    "or `col('column')`" % (val, field_name)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_PLAIN_COLUMN_REFERENCE",
+                    message_parameters={"val": str(val), "field_name": field_name},
                 )
         elif isinstance(val, DataFrame):
             for df, n in self._temp_views:

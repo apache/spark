@@ -516,6 +516,10 @@ class PlanGenerationTestSuite
     simple.where("a + id < 1000")
   }
 
+  test("between expr") {
+    simple.selectExpr("rand(123) BETWEEN 0.1 AND 0.2")
+  }
+
   test("unpivot values") {
     simple.unpivot(
       ids = Array(fn.col("id"), fn.col("a")),
@@ -3015,6 +3019,12 @@ class PlanGenerationTestSuite
 
   test("pivot without column values") {
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
+  }
+
+  test("groupingSets") {
+    simple
+      .groupingSets(Seq(Seq(fn.col("a")), Seq.empty[Column]), fn.col("a"))
+      .agg("a" -> "max", "a" -> "count")
   }
 
   test("width_bucket") {

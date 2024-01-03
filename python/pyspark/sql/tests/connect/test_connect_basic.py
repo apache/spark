@@ -31,10 +31,11 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
+    RetriesExceeded,
 )
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
-from pyspark.sql.connect.client.retries import RetryPolicy, RetriesExceeded
+from pyspark.sql.connect.client.retries import RetryPolicy
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -514,6 +515,20 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf7.schema, sdf7.schema)
         self.assertEqual(cdf7.collect(), sdf7.collect())
 
+    def test_join_with_cte(self):
+        cte_query = "with dt as (select 1 as ida) select ida as id from dt"
+
+        sdf1 = self.spark.range(10)
+        sdf2 = self.spark.sql(cte_query)
+        sdf3 = sdf1.join(sdf2, sdf1.id == sdf2.id)
+
+        cdf1 = self.connect.range(10)
+        cdf2 = self.connect.sql(cte_query)
+        cdf3 = cdf1.join(cdf2, cdf1.id == cdf2.id)
+
+        self.assertEqual(sdf3.schema, cdf3.schema)
+        self.assertEqual(sdf3.collect(), cdf3.collect())
+
     def test_invalid_column(self):
         # SPARK-41812: fail df1.select(df2.col)
         data1 = [Row(a=1, b=2, c=3)]
@@ -704,11 +719,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 3 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "3", "actual_length": "4"},
+        )
 
     def test_with_local_rows(self):
         # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
@@ -1824,7 +1842,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assert_eq(cdf, df)
 
-        self.assertEquals(cobservation.get, observation.get)
+        self.assertEqual(cobservation.get, observation.get)
 
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
@@ -2000,6 +2018,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # SPARK-41212: Test is empty
         self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
         self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
+
+    def test_is_empty_with_unsupported_types(self):
+        df = self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval")
+        self.assertEqual(df.count(), 1)
+        self.assertFalse(df.isEmpty())
 
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession)
@@ -3429,7 +3452,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.spark.stop()
         spark = (
             PySparkSession.builder.config(conf=self.conf())
-            .config("spark.connect.jvmStacktrace.maxSize", 128)
+            .config("spark.connect.grpc.maxMetadataSize", 128)
             .remote("local[4]")
             .getOrCreate()
         )
@@ -3449,11 +3472,11 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.assertIsNotNone(self.spark._client)
         # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
-        self.assertNotEquals(self.spark, other)
+        self.assertNotEqual(self.spark, other)
 
         # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(other, same)
+        self.assertEqual(other, same)
         same.release_session_on_close = False  # avoid sending release to dummy connection
         same.stop()
 
@@ -3462,6 +3485,17 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         with self.assertRaises(RuntimeError) as e:
             PySparkSession.builder.create()
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
+
+    def test_get_message_parameters_without_enriched_error(self):
+        with self.sql_conf({"spark.sql.connect.enrichError.enabled": False}):
+            exception = None
+            try:
+                self.spark.sql("""SELECT a""")
+            except AnalysisException as e:
+                exception = e
+
+            self.assertIsNotNone(exception)
+            self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
 
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
@@ -3708,9 +3742,7 @@ class ChannelBuilderTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ve:
             chan = ChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
-        self.assertIn(
-            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
-        )
+        self.assertIn("Parameter value session_id must be a valid UUID format", str(ve.exception))
 
         chan = ChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)

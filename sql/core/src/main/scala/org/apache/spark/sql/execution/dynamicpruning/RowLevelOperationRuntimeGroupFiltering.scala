@@ -51,7 +51,8 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
     // apply special dynamic filtering only for group-based row-level operations
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
         DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _))
-        if conf.runtimeRowLevelOperationGroupFilterEnabled && cond != TrueLiteral =>
+        if conf.runtimeRowLevelOperationGroupFilterEnabled && cond != TrueLiteral
+          && scan.filterAttributes().nonEmpty =>
 
       // use reference equality on scan to find required scan relations
       val newQuery = replaceData.query transformUp {
@@ -116,6 +117,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       matchingRowsPlan: LogicalPlan,
       buildKeys: Seq[Attribute],
       pruningKeys: Seq[Attribute]): Expression = {
+    assert(buildKeys.nonEmpty && pruningKeys.nonEmpty)
 
     val buildQuery = Aggregate(buildKeys, buildKeys, matchingRowsPlan)
     DynamicPruningExpression(
@@ -132,7 +134,10 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         .map(scanAttr => tableAttr -> scanAttr)
         .getOrElse {
           throw new AnalysisException(
-            s"Couldn't find scan attribute for $tableAttr in ${scanAttrs.mkString(",")}")
+            errorClass = "_LEGACY_ERROR_TEMP_3075",
+            messageParameters = Map(
+              "tableAttr" -> tableAttr.toString,
+              "scanAttrs" -> scanAttrs.mkString(",")))
         }
     }
     AttributeMap(attrMapping)

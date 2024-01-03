@@ -23,7 +23,7 @@ Pandas API on Spark
 This page gives an overview of all public pandas API on Spark.
 
 .. note::
-   pandas API on Spark follows the API specifications of latest pandas release.
+   pandas API on Spark follows the API specifications of `latest pandas release <https://pandas.pydata.org/docs/reference/index.html>`_.
 
 .. toctree::
    :maxdepth: 2
@@ -36,6 +36,7 @@ This page gives an overview of all public pandas API on Spark.
    window
    groupby
    resampling
+   options
    ml
    extensions
    testing
