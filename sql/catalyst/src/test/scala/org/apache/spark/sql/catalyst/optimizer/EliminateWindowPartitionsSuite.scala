@@ -74,11 +74,7 @@ class EliminateWindowPartitionsSuite extends PlanTest {
           windowExpr(RowNumber(),
             windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
 
-    val correctAnswer =
-      testRelation
-        .select(a, b,
-          windowExpr(RowNumber(),
-            windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
+    val correctAnswer = originalQuery
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

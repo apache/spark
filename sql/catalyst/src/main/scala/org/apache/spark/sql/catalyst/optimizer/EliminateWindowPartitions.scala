@@ -34,7 +34,7 @@ object EliminateWindowPartitions extends Rule[LogicalPlan] {
         case windowExpr @ WindowExpression(_, wsd @ WindowSpecDefinition(ps, _, _))
           if ps.exists(_.foldable) =>
           val newWsd = wsd.copy(partitionSpec = ps.filter(!_.foldable))
-          windowExpr.withNewChildren(Seq(windowExpr.windowFunction, newWsd))
+          windowExpr.copy(windowSpec = newWsd)
       }.asInstanceOf[NamedExpression])
       w.copy(windowExpressions = newWindowExprs, partitionSpec = partitionSpec.filter(!_.foldable))
   }
