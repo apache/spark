@@ -23,6 +23,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -265,31 +266,31 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
       name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def listFunction(): Seq[FunctionIdentifier] = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def clear(): Unit = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 }
 

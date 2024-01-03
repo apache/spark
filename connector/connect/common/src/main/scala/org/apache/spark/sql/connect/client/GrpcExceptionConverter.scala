@@ -199,10 +199,7 @@ private[client] object GrpcExceptionConverter {
     errorConstructor(params =>
       new AnalysisException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3100"),
-        messageParameters = params.errorClass match {
-          case Some(_) => params.messageParameters
-          case None => Map("message" -> params.message)
-        },
+        messageParameters = errorParamsToMessageParameters(params),
         cause = params.cause,
         context = params.queryContext)),
     errorConstructor(params =>
@@ -227,50 +224,32 @@ private[client] object GrpcExceptionConverter {
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3104"),
-        messageParameters = params.errorClass match {
-          case Some(_) => params.messageParameters
-          case None => Map("message" -> params.message)
-        },
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[IllegalArgumentException](params =>
       new SparkIllegalArgumentException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3105"),
-        messageParameters = params.errorClass match {
-          case Some(_) => params.messageParameters
-          case None => Map("message" -> params.message)
-        },
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext,
         cause = params.cause.orNull)),
     errorConstructor[ArithmeticException](params =>
       new SparkArithmeticException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3106"),
-        messageParameters = params.errorClass match {
-          case Some(_) => params.messageParameters
-          case None => Map("message" -> params.message)
-        },
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[UnsupportedOperationException](params =>
       new SparkUnsupportedOperationException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3107"),
-        messageParameters = params.errorClass match {
-          case Some(_) => params.messageParameters
-          case None => Map("message" -> params.message)
-        })),
+        messageParameters = errorParamsToMessageParameters(params))),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
       new SparkArrayIndexOutOfBoundsException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3108"),
-        messageParameters = params.errorClass match {
-          case Some(_) => params.messageParameters
-          case None => Map("message" -> params.message)
-        },
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[DateTimeException](params =>
       new SparkDateTimeException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3109"),
-        messageParameters = params.errorClass match {
-          case Some(_) => params.messageParameters
-          case None => Map("message" -> params.message)
-        },
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor(params =>
       new SparkRuntimeException(
@@ -389,4 +368,21 @@ private[client] object GrpcExceptionConverter {
 
     errorsToThrowable(0, Seq(builder.build()))
   }
+
+  /**
+   * This method is used to convert error parameters to message parameters.
+   *
+   * @param params
+   *   The error parameters to be converted.
+   * @return
+   *   A Map of message parameters. If the error class is defined in the params, it returns the
+   *   message parameters from the params. If the error class is not defined, it returns a new Map
+   *   with a single entry where the key is "message" and the value is the message from the
+   *   params.
+   */
+  private def errorParamsToMessageParameters(params: ErrorParams): Map[String, String] =
+    params.errorClass match {
+      case Some(_) => params.messageParameters
+      case None => Map("message" -> params.message)
+    }
 }

@@ -210,6 +210,19 @@ private[spark] class SparkUnsupportedOperationException private(
     )
   }
 
+  def this(
+    errorClass: String,
+    messageParameters: java.util.Map[String, String]) =
+    this(errorClass, messageParameters.asScala.toMap)
+
+
+  def this(errorClass: String) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, Map.empty[String, String]),
+      Option(errorClass),
+      Map.empty)
+  }
+
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull

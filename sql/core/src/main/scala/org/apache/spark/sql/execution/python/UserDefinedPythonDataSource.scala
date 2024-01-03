@@ -459,7 +459,7 @@ class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.failToPlanDataSourceError(
+      throw QueryCompilationErrors.pythonDataSourceError(
         action = "lookup", tpe = "instance", msg = msg)
     }
 
@@ -524,7 +524,7 @@ class UserDefinedPythonDataSourceRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.failToPlanDataSourceError(
+      throw QueryCompilationErrors.pythonDataSourceError(
         action = "create", tpe = "instance", msg = msg)
     }
 
@@ -587,7 +587,7 @@ class UserDefinedPythonDataSourceReadRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.failToPlanDataSourceError(
+      throw QueryCompilationErrors.pythonDataSourceError(
         action = "plan", tpe = "read", msg = msg)
     }
 
@@ -657,7 +657,7 @@ class UserDefinedPythonDataSourceWriteRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.failToPlanDataSourceError(
+      throw QueryCompilationErrors.pythonDataSourceError(
         action = "plan", tpe = "write", msg = msg)
     }
 
@@ -707,7 +707,7 @@ class UserDefinedPythonDataSourceCommitRunner(
     val code = dataIn.readInt()
     if (code == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.failToPlanDataSourceError(
+      throw QueryCompilationErrors.pythonDataSourceError(
         action = "commit or abort", tpe = "write", msg = msg)
     }
     assert(code == 0, s"Python commit job should run successfully, but got exit code: $code")
