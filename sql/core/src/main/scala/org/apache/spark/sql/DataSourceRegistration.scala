@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceManager}
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Functions for registering user-defined data sources.
@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
  */
 @Evolving
 private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataSourceManager)
-  extends Logging with SQLConfHelper {
+  extends Logging {
 
   protected[sql] def registerPython(
       name: String,
@@ -64,7 +64,7 @@ private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataS
     if (dataSourceManager.dataSourceExists(name)) return
 
     try {
-      DataSource.lookupDataSource(name, conf)
+      DataSource.lookupDataSource(name, SQLConf.get)
       throw QueryCompilationErrors.dataSourceAlreadyExists(name)
     } catch {
       case e: SparkClassNotFoundException if e.getErrorClass == "DATA_SOURCE_NOT_FOUND" => // OK

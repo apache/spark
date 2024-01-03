@@ -284,19 +284,14 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("data source name conflicts") {
+  test("SPARK-46522: data source name conflicts") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
-         |from pyspark.sql.datasource import DataSource, DataSourceReader
-         |$simpleDataSourceReaderScript
+         |from pyspark.sql.datasource import DataSource
          |
          |class $dataSourceName(DataSource):
-         |    def schema(self) -> str:
-         |        return "id INT, partition INT"
-         |
-         |    def reader(self, schema):
-         |        return SimpleDataSourceReader()
+         |    ...
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     Seq(
