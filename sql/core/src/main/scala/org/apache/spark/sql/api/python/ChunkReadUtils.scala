@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
@@ -47,7 +48,7 @@ class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
     maxRecordsPerBatch: Long
-) extends PartitionEvaluator[InternalRow, ChunkMeta] {
+) extends PartitionEvaluator[InternalRow, ChunkMeta] with Logging {
 
   def eval(partitionIndex: Int, inputs: Iterator[InternalRow]*): Iterator[ChunkMeta] = {
     val blockManager = SparkEnv.get.blockManager
@@ -91,7 +92,8 @@ class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
           try {
             blockManager.master.removeBlock(BlockId(chunkMeta.id))
           } catch {
-            case _: Exception => ()
+            case _: Exception =>
+              logWarning(s"Remove arrow batch block of ID '${chunkMeta.id}' failed.")
           }
         }
         throw e
