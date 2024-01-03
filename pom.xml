@@ -223,7 +223,7 @@
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
-    <datasketches.version>3.3.0</datasketches.version>
+    <datasketches.version>5.0.1</datasketches.version>
     <netty.version>4.1.100.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
     <!--
