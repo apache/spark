@@ -629,6 +629,15 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
         "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
     }
+
+    withClue("invalid mode") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).mode("foo").save()
+        },
+        errorClass = "INVALID_SAVE_MODE",
+        parameters = Map("mode" -> "\"foo\""))
+    }
   }
 
   test("data source write - overwrite mode") {
