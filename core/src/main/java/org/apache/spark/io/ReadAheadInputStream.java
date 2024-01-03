@@ -89,8 +89,6 @@ public class ReadAheadInputStream extends InputStream {
 
   private final Condition asyncReadComplete = stateChangeLock.newCondition();
 
-  private static final ThreadLocal<byte[]> oneByte = ThreadLocal.withInitial(() -> new byte[1]);
-
   /**
    * Creates a <code>ReadAheadInputStream</code> with the specified buffer size and read-ahead
    * threshold
@@ -247,7 +245,7 @@ public class ReadAheadInputStream extends InputStream {
       // short path - just get one byte.
       return activeBuffer.get() & 0xFF;
     } else {
-      byte[] oneByteArray = oneByte.get();
+      byte[] oneByteArray = new byte[1];
       return read(oneByteArray, 0, 1) == -1 ? -1 : oneByteArray[0] & 0xFF;
     }
   }
