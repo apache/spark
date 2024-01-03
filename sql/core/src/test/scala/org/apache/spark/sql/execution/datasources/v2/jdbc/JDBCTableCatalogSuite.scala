@@ -587,7 +587,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "FAILED_JDBC.CREATE_TABLE",
       parameters = Map(
-        "url" -> "*********(redacted)",
+        "url" -> url,
         "tableName" -> "`test`.`new_table`"))
   }
 
