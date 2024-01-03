@@ -464,25 +464,32 @@ class ObjectHashAggregateSuite
       SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
       SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"
     ) {
+
       val numRows = 50
 
-      assert(
-        (1 to numRows)
-          .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
-          .toDF("c0")
-          .groupBy("c0")
-          .agg(count("*"))
-          .count() == 1
-      )
+      val dfSame = createAggregate(_ => Tuple1(new CalendarInterval(1, 2, 3)), numRows)
+      assert(getPlanOutput(dfSame).contains("HashAggregate"))
+      assert(dfSame.count() == 1)
 
-      assert(
-        (1 to numRows)
-          .map(i => Tuple1(new CalendarInterval(i, i, i)))
-          .toDF("c0")
-          .groupBy("c0")
-          .agg(count("*"))
-          .count() == numRows
-      )
+      val dfDifferent = createAggregate(i => Tuple1(new CalendarInterval(i, i, i)), numRows)
+      assert(getPlanOutput(dfDifferent).contains("HashAggregate"))
+      assert(dfDifferent.count() == numRows)
+    }
+
+    def createAggregate(f: Int => Tuple1[CalendarInterval], numRows: Int): DataFrame = {
+      (1 to numRows)
+        .map(i => f(i))
+        .toDF("c0")
+        .groupBy("c0")
+        .agg(count("*"))
+    }
+
+    def getPlanOutput(df: DataFrame): String = {
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        df.explain(true)
+      }
+      outputStream.toString
     }
   }
 }
