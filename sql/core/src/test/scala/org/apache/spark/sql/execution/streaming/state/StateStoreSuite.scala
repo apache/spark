@@ -853,8 +853,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       dir: String = newDir(),
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
-      hadoopConf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): HDFSBackedStateStoreProvider = {
+      hadoopConf: Configuration = new Configuration): HDFSBackedStateStoreProvider = {
     val sqlConf = getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)
     val provider = new HDFSBackedStateStoreProvider()
     provider.init(
@@ -875,7 +874,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   override def newStoreProvider(useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
     // TODO: remove multiple col families restriction when we add support for
     // HDFSBackedStateStoreProvider
-    newStoreProvider(opId = Random.nextInt(), partition = 0, useColumnFamilies = false)
+    newStoreProvider(opId = Random.nextInt(), partition = 0)
   }
 
   def checkLoadedVersions(

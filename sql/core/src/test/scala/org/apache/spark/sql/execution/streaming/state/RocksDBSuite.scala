@@ -25,6 +25,7 @@ import scala.language.implicitConversions
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.rocksdb.CompressionType
+import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.SparkException
@@ -67,6 +68,12 @@ trait AlsoTestWithChangelogCheckpointingEnabled
   case object TestWithChangelogCheckpointingEnabled extends TestMode
   case object TestWithChangelogCheckpointingDisabled extends TestMode
   case object TestWithBothChangelogCheckpointingEnabledAndDisabled extends TestMode
+
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
+    testWithChangelogCheckpointingEnabled(testName, testTags: _*)(testBody)
+    testWithChangelogCheckpointingDisabled(testName, testTags: _*)(testBody)
+  }
 
   def testWithChangelogCheckpointingEnabled(testName: String, testTags: Tag*)
                                         (testBody: => Any): Unit = {

@@ -24,6 +24,10 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
+object TransformWithStateSuiteUtils {
+  val NUM_SHUFFLE_PARTITIONS = 5
+}
+
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
   @transient private var _countState: ValueState[Long] = _
@@ -35,7 +39,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     assert(handle.getQueryInfo().getOperatorId == 0)
-    assert(handle.getQueryInfo().getPartitionId >= 0 && handle.getQueryInfo().getPartitionId < 5)
+    assert(handle.getQueryInfo().getPartitionId >= 0 &&
+      handle.getQueryInfo().getPartitionId < TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS)
     _countState = _processorHandle.getValueState[Long]("countState")
   }
 
@@ -79,7 +84,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
   test("transformWithState - streaming with rocksdb and invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName) {
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+      TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       val inputData = MemoryStream[String]
       val result = inputData.toDS()
         .groupByKey(x => x)
@@ -99,7 +106,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
   test("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName) {
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+      TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       val inputData = MemoryStream[String]
       val result = inputData.toDS()
         .groupByKey(x => x)
