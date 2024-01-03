@@ -144,6 +144,21 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           value != null =>
       Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode))
 
+    // Timestamp/Timestamp_NTZ -> Timestamp_NTZ/Timestamp
+    case be @ BinaryComparison(
+      c @ Cast(fromExp, _, timeZoneId, evalMode), Literal(value, literalType))
+        if AnyTimestampType.acceptsType(fromExp.dataType) &&
+          AnyTimestampType.acceptsType(literalType) && value != null =>
+      // datetime with timezone is tricky, do a round trip to check if the rewrite is okay.
+      val newCast = Cast(Literal(value, literalType), fromExp.dataType, timeZoneId, evalMode)
+      val roundTrip = Cast(newCast, literalType, timeZoneId, evalMode)
+      if (roundTrip.eval().asInstanceOf[Long] == value.asInstanceOf[Long]) {
+        val newExpr = be.withNewChildren(Seq(fromExp, newCast))
+        Some(newExpr)
+      } else {
+        None
+      }
+
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:

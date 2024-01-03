@@ -93,6 +93,8 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
 
   protected def runQueriesAndCheckAgainstGoldenFile(
       queries: Seq[String], testCase: TestCase): Unit = {
+    // The local Spark session is needed because we use Spark analyzed plan to check if the query
+    // result is already semantically sorted, below.
     val localSparkSession = spark.newSession()
     val conn = getConnection()
     val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
@@ -119,7 +121,6 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
             }
           }
           val output = rows.map(_.mkString("\t")).toSeq
-          // Use Spark analyzed plan to check if the query result is already semantically sorted.
           if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
             output
           } else {

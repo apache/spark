@@ -24,8 +24,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.IdentityTransform
+import org.apache.spark.sql.connector.read.SupportsReportStatistics
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 case class DescribeTableExec(
@@ -40,6 +42,7 @@ case class DescribeTableExec(
     if (isExtended) {
       addMetadataColumns(rows)
       addTableDetails(rows)
+      addTableStats(rows)
     }
     rows.toSeq
   }
@@ -92,6 +95,23 @@ case class DescribeTableExec(
           column.name,
           column.dataType.simpleString,
           Option(column.comment()).getOrElse(""))
+      }
+    case _ =>
+  }
+
+  private def addTableStats(rows: ArrayBuffer[InternalRow]): Unit = table match {
+    case read: SupportsRead =>
+      read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
+        case s: SupportsReportStatistics =>
+          val stats = s.estimateStatistics()
+          val statsComponents = Seq(
+            Option.when(stats.sizeInBytes().isPresent)(s"${stats.sizeInBytes().getAsLong} bytes"),
+            Option.when(stats.numRows().isPresent)(s"${stats.numRows().getAsLong} rows")
+          ).flatten
+          if (statsComponents.nonEmpty) {
+            rows += toCatalystRow("Statistics", statsComponents.mkString(", "), null)
+          }
+        case _ =>
       }
     case _ =>
   }
