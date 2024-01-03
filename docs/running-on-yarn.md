@@ -884,7 +884,7 @@ The following extra configuration options are available when the shuffle service
     The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
     NodeManager.
   </td>
-  <td></td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.logs.namespace</code></td>
@@ -896,7 +896,7 @@ The following extra configuration options are available when the shuffle service
     may expect the logger name to look like a class name, it's generally recommended to provide a value which
     would be a valid Java package or class name and not include spaces.
   </td>
-  <td></td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>
