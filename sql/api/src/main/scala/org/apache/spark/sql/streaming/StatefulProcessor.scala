@@ -45,14 +45,14 @@ trait StatefulProcessor[K, I, O] extends Serializable {
    * Function that will allow users to interact with input data rows along with the grouping key
    * and current timer values and optionally provide output rows.
    * @param key - grouping key
-   * @param inputRows - iterator of input rows associated with grouping key
+   * @param inputRow - input row associated with grouping key
    * @param timerValues - instance of TimerValues that provides access to current processing/event
    *                    time if available
    * @return - Zero or more output rows
    */
-  def handleInputRows(
+  def handleInputRow(
       key: K,
-      inputRows: Iterator[I],
+      inputRow: I,
       timerValues: TimerValues): Iterator[O]
 
   /**

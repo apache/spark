@@ -63,14 +63,14 @@ class ValueStateSuite extends SharedSparkSession
   private def newStoreProviderWithValueState(
       storeId: StateStoreId,
       numColsPrefixKey: Int,
-      sqlConf: Option[SQLConf] = None,
+      sqlConf: SQLConf = SQLConf.get,
       conf: Configuration = new Configuration,
       useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
       useColumnFamilies,
-      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
+      new StateStoreConf(sqlConf), conf)
     provider
   }
 
