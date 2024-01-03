@@ -622,12 +622,21 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     }
 
     withClue("without mode") {
-      val error = intercept[AnalysisException] {
-        spark.range(1).write.format(dataSourceName).save()
-      }
-      // TODO: improve this error message.
-      assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
-        "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).save()
+        },
+        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"ErrorIfExists\""))
+    }
+
+    withClue("with unsupported mode") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).mode("ignore").save()
+        },
+        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"Ignore\""))
     }
   }
 
