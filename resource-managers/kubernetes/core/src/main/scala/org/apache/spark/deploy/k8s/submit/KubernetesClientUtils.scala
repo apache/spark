@@ -135,7 +135,6 @@ private[spark] object KubernetesClientUtils extends Logging {
           case e: MalformedInputException =>
             logWarning(
               s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
-            None
         } finally {
           source.close()
         }

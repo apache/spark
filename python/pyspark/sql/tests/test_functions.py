@@ -997,6 +997,34 @@ class FunctionsTestsMixin:
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[: len(r)])
 
+    def test_window_functions_moving_average(self):
+        data = [
+            (datetime.datetime(2023, 1, 1), 20),
+            (datetime.datetime(2023, 1, 2), 22),
+            (datetime.datetime(2023, 1, 3), 21),
+            (datetime.datetime(2023, 1, 4), 23),
+            (datetime.datetime(2023, 1, 5), 24),
+            (datetime.datetime(2023, 1, 6), 26),
+        ]
+        df = self.spark.createDataFrame(data, ["date", "temperature"])
+
+        def to_sec(i):
+            return i * 86400
+
+        w = Window.orderBy(F.col("date").cast("timestamp").cast("long")).rangeBetween(-to_sec(3), 0)
+        res = df.withColumn("3_day_avg_temp", F.avg("temperature").over(w))
+        rs = sorted(res.collect())
+        expected = [
+            (datetime.datetime(2023, 1, 1, 0, 0), 20, 20.0),
+            (datetime.datetime(2023, 1, 2, 0, 0), 22, 21.0),
+            (datetime.datetime(2023, 1, 3, 0, 0), 21, 21.0),
+            (datetime.datetime(2023, 1, 4, 0, 0), 23, 21.5),
+            (datetime.datetime(2023, 1, 5, 0, 0), 24, 22.5),
+            (datetime.datetime(2023, 1, 6, 0, 0), 26, 23.5),
+        ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[: len(r)])
+
     def test_window_time(self):
         df = self.spark.createDataFrame(
             [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)], ["date", "val"]
@@ -1423,6 +1451,20 @@ class FunctionsTestsMixin:
         df = self.spark.range(1).select(F.now())
         self.assertIsInstance(df.first()[0], datetime.datetime)
         self.assertEqual(df.schema.names[0], "now()")
+
+    def test_json_tuple_empty_fields(self):
+        df = self.spark.createDataFrame(
+            [
+                ("1", """{"f1": "value1", "f2": "value2"}"""),
+                ("2", """{"f1": "value12"}"""),
+            ],
+            ("key", "jstring"),
+        )
+        self.assertRaisesRegex(
+            PySparkValueError,
+            "At least one field must be specified",
+            lambda: df.select(F.json_tuple(df.jstring)),
+        )
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

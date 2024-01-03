@@ -407,43 +407,99 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("SPARK-46069: Support unwrap timestamp type to date type") {
-    def doTest(
-        tsLit: Literal,
-        isStartOfDay: Boolean,
-        castTimestampFunc: Expression => Expression): Unit = {
-      val floorDate = Cast(tsLit, DateType, Some(conf.sessionLocalTimeZone))
-      val dateAddOne = DateAdd(floorDate, Literal(1, IntegerType))
-      assertEquivalent(castTimestampFunc(f7) > tsLit, f7 > floorDate)
-      if (isStartOfDay) {
-        assertEquivalent(castTimestampFunc(f7) >= tsLit, f7 >= floorDate)
-        assertEquivalent(castTimestampFunc(f7) === tsLit, f7 === floorDate)
-        assertEquivalent(castTimestampFunc(f7) <=> tsLit, f7 <=> floorDate)
-        assertEquivalent(castTimestampFunc(f7) < tsLit, f7 < floorDate)
+    def doTest(tsLit: Literal, timePartsAllZero: Boolean): Unit = {
+      val tz = Some(conf.sessionLocalTimeZone)
+      val floorDate = Literal(Cast(tsLit, DateType, tz).eval(), DateType)
+      val dateToTsCast = Cast(f7, tsLit.dataType, tz)
+
+      assertEquivalent(dateToTsCast > tsLit, f7 > floorDate)
+      assertEquivalent(dateToTsCast <= tsLit, f7 <= floorDate)
+      if (timePartsAllZero) {
+        assertEquivalent(dateToTsCast >= tsLit, f7 >= floorDate)
+        assertEquivalent(dateToTsCast < tsLit, f7 < floorDate)
+        assertEquivalent(dateToTsCast === tsLit, f7 === floorDate)
+        assertEquivalent(dateToTsCast <=> tsLit, f7 <=> floorDate)
       } else {
-        assertEquivalent(castTimestampFunc(f7) >= tsLit, f7 >= dateAddOne)
-        assertEquivalent(castTimestampFunc(f7) === tsLit, f7.isNull && Literal(null, BooleanType))
-        assertEquivalent(castTimestampFunc(f7) <=> tsLit, FalseLiteral)
-        assertEquivalent(castTimestampFunc(f7) < tsLit, f7 < dateAddOne)
+        assertEquivalent(dateToTsCast >= tsLit, f7 > floorDate)
+        assertEquivalent(dateToTsCast < tsLit, f7 <= floorDate)
+        assertEquivalent(dateToTsCast === tsLit, f7.isNull && Literal(null, BooleanType))
+        assertEquivalent(dateToTsCast <=> tsLit, FalseLiteral)
       }
-      assertEquivalent(castTimestampFunc(f7) <= tsLit, f7 <= floorDate)
     }
 
-    // Test isStartOfDay is true cases
+    // Test timestamp with all its time parts as 0.
     val micros = SparkDateTimeUtils.daysToMicros(19704, ZoneId.of(conf.sessionLocalTimeZone))
     val instant = java.time.Instant.ofEpochSecond(micros / 1000000)
     val tsLit = Literal.create(instant, TimestampType)
-    doTest(tsLit, isStartOfDay = true, castTimestamp)
+    doTest(tsLit, timePartsAllZero = true)
 
     val tsNTZ = LocalDateTime.of(2023, 12, 13, 0, 0, 0, 0)
     val tsNTZLit = Literal.create(tsNTZ, TimestampNTZType)
-    doTest(tsNTZLit, isStartOfDay = true, castTimestampNTZ)
+    doTest(tsNTZLit, timePartsAllZero = true)
 
-    // Test isStartOfDay is false cases
+    // Test timestamp with non-zero time parts.
     val tsLit2 = Literal.create(instant.plusSeconds(30), TimestampType)
-    val tsNTZ2 = LocalDateTime.of(2023, 12, 13, 0, 0, 30, 0)
-    doTest(tsLit2, isStartOfDay = false, castTimestamp)
-    val tsNTZLit2 = Literal.create(tsNTZ2, TimestampNTZType)
-    doTest(tsNTZLit2, isStartOfDay = false, castTimestampNTZ)
+    doTest(tsLit2, timePartsAllZero = false)
+    val tsNTZLit2 = Literal.create(tsNTZ.withSecond(30), TimestampNTZType)
+    doTest(tsNTZLit2, timePartsAllZero = false)
+  }
+
+  test("SPARK-46502: Support unwrap timestamp_ntz to timestamp type") {
+    def doTest(tsLit: Literal): Unit = {
+      val tz = Some(conf.sessionLocalTimeZone)
+      val tsNtzData = Cast(tsLit, TimestampNTZType, tz)
+      val tsNTzToTsCast = Cast(f6, tsLit.dataType, tz)
+
+      assertEquivalent(tsNTzToTsCast > tsLit, f6 > tsNtzData)
+      assertEquivalent(tsNTzToTsCast <= tsLit, f6 <= tsNtzData)
+      assertEquivalent(tsNTzToTsCast >= tsLit, f6 >= tsNtzData)
+      assertEquivalent(tsNTzToTsCast < tsLit, f6 < tsNtzData)
+      assertEquivalent(tsNTzToTsCast === tsLit, f6 === tsNtzData)
+      assertEquivalent(tsNTzToTsCast <=> tsLit, f6 <=> tsNtzData)
+    }
+
+    val micros = SparkDateTimeUtils.daysToMicros(19704, ZoneId.of(conf.sessionLocalTimeZone))
+    val instant = java.time.Instant.ofEpochSecond(micros / 1000000)
+    val tsLit = Literal.create(instant, TimestampType)
+    doTest(tsLit)
+
+    val ts = LocalDateTime.of(2023, 12, 13, 0, 0, 0, 0)
+    val tsLit2 = Literal.create(ts, TimestampType)
+    doTest(tsLit2)
+
+    val tsLit3 = Literal.create(instant.plusSeconds(30), TimestampType)
+    doTest(tsLit3)
+    val tsLit4 = Literal.create(ts.withSecond(30), TimestampNTZType)
+    doTest(tsLit4)
+  }
+
+  test("SPARK-46502: Support unwrap timestamp to timestamp_ntz type") {
+    def doTest(tsLit: Literal): Unit = {
+      val tz = Some(conf.sessionLocalTimeZone)
+      val tsData = Cast(tsLit, TimestampType, tz)
+      val tsToTsNtzCast = Cast(f5, tsLit.dataType, tz)
+
+      assertEquivalent(tsToTsNtzCast > tsLit, f5 > tsData)
+      assertEquivalent(tsToTsNtzCast <= tsLit, f5 <= tsData)
+      assertEquivalent(tsToTsNtzCast >= tsLit, f5 >= tsData)
+      assertEquivalent(tsToTsNtzCast < tsLit, f5 < tsData)
+      assertEquivalent(tsToTsNtzCast === tsLit, f5 === tsData)
+      assertEquivalent(tsToTsNtzCast <=> tsLit, f5 <=> tsData)
+    }
+
+    val micros = SparkDateTimeUtils.daysToMicros(19704, ZoneId.of(conf.sessionLocalTimeZone))
+    val instant = java.time.Instant.ofEpochSecond(micros / 1000000)
+    val tsNtzLit = Literal.create(instant, TimestampNTZType)
+    doTest(tsNtzLit)
+
+    val ts = LocalDateTime.of(2023, 12, 13, 0, 0, 0, 0)
+    val tsNtzLit2 = Literal.create(ts, TimestampNTZType)
+    doTest(tsNtzLit2)
+
+    val tsNtzLit3 = Literal.create(instant.plusSeconds(30), TimestampNTZType)
+    doTest(tsNtzLit3)
+    val tsNtzLit4 = Literal.create(ts.withSecond(30), TimestampNTZType)
+    doTest(tsNtzLit4)
   }
 
   private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)

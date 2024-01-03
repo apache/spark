@@ -294,21 +294,16 @@ object SparkBuild extends PomBuild {
 
     javaOptions ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
+      val major = versionParts(0).toInt
       if (major >= 21) {
         Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
-      } else if (major >= 16) {
-        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
       } else {
-        Seq.empty
+        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
       }
     },
 
     (Compile / doc / javacOptions) ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major == 1) major = versionParts(1).toInt
-      if (major >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+      Seq("-Xdoclint:all", "-Xdoclint:-missing")
     },
 
     javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
@@ -951,7 +946,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
+    dependencyOverrides += "com.google.guava" % "guava" % "19.0"
   )
 }
 
@@ -1373,6 +1368,7 @@ object Unidoc {
     classpaths
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka-clients-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka_2\..*-0\.10.*""")))
+      .map(_.filterNot(_.data.getCanonicalPath.contains("apache-rat")))
   }
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
@@ -1411,10 +1407,6 @@ object Unidoc {
     },
 
     (JavaUnidoc / unidoc / javacOptions) := {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major == 1) major = versionParts(1).toInt
-
       Seq(
         "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
         "-public",
@@ -1426,7 +1418,8 @@ object Unidoc {
         "-tag", "constructor:X",
         "-tag", "todo:X",
         "-tag", "groupname:X",
-      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+        "--ignore-source-errors", "-notree"
+      )
     },
 
     // Use GitHub repository for Scaladoc source links

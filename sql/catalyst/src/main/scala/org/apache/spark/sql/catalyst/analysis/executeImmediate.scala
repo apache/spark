@@ -177,7 +177,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
     lookupVariable(nameParts) match {
-      case Some(variable) => variable.copy(canFold = false)
+      case Some(variable) => variable
       case _ =>
         throw QueryCompilationErrors
           .unresolvedVariableError(

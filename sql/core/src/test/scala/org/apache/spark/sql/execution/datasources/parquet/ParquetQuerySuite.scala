@@ -255,6 +255,18 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-46466: write and read TimestampNTZ with legacy rebase mode") {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+      withTable("ts") {
+        sql("create table ts (c1 timestamp_ntz) using parquet")
+        sql("insert into ts values (timestamp_ntz'0900-01-01 01:10:10')")
+        withAllParquetReaders {
+          checkAnswer(spark.table("ts"), sql("select timestamp_ntz'0900-01-01 01:10:10'"))
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling merging partfiles when merging parquet schema") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
@@ -1098,19 +1110,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("row group skipping doesn't overflow when reading into larger type") {
     withTempPath { path =>
       Seq(0).toDF("a").write.parquet(path.toString)
-      // The vectorized and non-vectorized readers will produce different exceptions, we don't need
-      // to test both as this covers row group skipping.
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        // Reading integer 'a' as a long isn't supported. Check that an exception is raised instead
-        // of incorrectly skipping the single row group and producing incorrect results.
-        val exception = intercept[SparkException] {
+      withAllParquetReaders {
+        val result =
           spark.read
             .schema("a LONG")
             .parquet(path.toString)
             .where(s"a < ${Long.MaxValue}")
-            .collect()
-        }
-        assert(exception.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        checkAnswer(result, Row(0))
       }
     }
   }

@@ -772,6 +772,11 @@ ERROR_CLASSES_JSON = """
       "Expected <expected>, but got <actual>."
     ]
   },
+  "PYTHON_DATA_SOURCE_WRITE_ERROR" : {
+    "message" : [
+      "Unable to write to the Python data source: <error>."
+    ]
+  },
   "PYTHON_HASH_SEED_NOT_SET" : {
     "message" : [
       "Randomness of hash of string should be disabled via PYTHONHASHSEED."
