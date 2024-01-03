@@ -750,8 +750,8 @@ private[spark] class Executor(
           logInfo(s"Executor killed $taskName, reason: ${t.reason}")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          // Here and below, put task metric peaks in a ArraySeq to expose them as a Seq
-          // without requiring a copy.
+          // Here and below, put task metric peaks in an immutable.ArraySeq to expose them as an
+          // immutable.Seq without requiring a copy.
           val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId).toImmutableArraySeq
           val reason = TaskKilled(t.reason, accUpdates, accums, metricPeaks)
           plugins.foreach(_.onTaskFailed(reason))
