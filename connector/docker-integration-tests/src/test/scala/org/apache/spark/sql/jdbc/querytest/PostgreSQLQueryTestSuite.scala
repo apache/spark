@@ -55,7 +55,7 @@ class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryT
         |    IMMUTABLE
         |    RETURNS NULL ON NULL INPUT;
         |""".stripMargin
-    )
+    ).executeUpdate()
   }
 
   protected val baseResourcePath = {
@@ -162,11 +162,13 @@ class PostgreSQLQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryT
       val goldenOutput = fileToString(new File(testCase.resultFile))
       val segments = goldenOutput.split("-- !query.*\n")
       outputs.map { output =>
-        val result = ExecutionOutput(
-          segments(curSegment + 1).trim, // SQL
-          None, // Schema
-          normalizeTestResults(segments(curSegment + 3))) // Output
-        curSegment += output.numSegments
+        val result =
+          ExecutionOutput(
+            segments(curSegment + 1).trim, // SQL
+            None, // Schema
+            normalizeTestResults(segments(curSegment + 3))) // Output
+        // Assume that the golden file always has all 3 segments.
+        curSegment += 3
         result
       }
     }
