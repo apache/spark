@@ -18,12 +18,11 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import java.util.Locale
-import javax.xml.stream.XMLEventReader
+import javax.xml.stream.{XMLEventReader, XMLStreamConstants}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
-import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.Exception._
@@ -125,8 +124,11 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
-      val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      val schema = Some(inferObject(parser, rootAttributes))
+      val rootEvent = StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+      val rootAttributes = rootEvent.asStartElement.getAttributes.asScala.toArray
+      val rootStartElementName =
+        StaxXmlParserUtils.getName(rootEvent.asStartElement().getName, options)
+      val schema = Some(inferObject(parser, rootStartElementName, rootAttributes))
       parser.close()
       schema
     } catch {
@@ -164,42 +166,31 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  private def inferField(parser: XMLEventReader): DataType = {
+  private def inferField(parser: XMLEventReader, startElementName: String): DataType = {
     parser.peek match {
       case _: EndElement => NullType
-      case _: StartElement => inferObject(parser)
+      case _: StartElement => inferObject(parser, startElementName)
       case c: Characters if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
         val data = c.getData
         parser.nextEvent()
         parser.peek match {
-          case _: StartElement => inferObject(parser)
+          case _: StartElement => inferObject(parser, startElementName)
           case _: EndElement if data.isEmpty => NullType
           case _: EndElement if options.nullValue == "" => NullType
           case _: EndElement => StringType
-          case _ => inferField(parser)
+          case _ => inferField(parser, startElementName)
         }
       case c: Characters if !c.isWhiteSpace =>
-        val characterType = inferFrom(c.getData)
-        parser.nextEvent()
-        parser.peek match {
-          case _: StartElement =>
-            // Some more elements follow;
-            // This is a mix of values and other elements
-            val innerType = inferObject(parser).asInstanceOf[StructType]
-            addOrUpdateValueTagType(innerType, characterType)
-          case _ =>
-            val fieldType = inferField(parser)
-            fieldType match {
-              case st: StructType => addOrUpdateValueTagType(st, characterType)
-              case _: NullType => characterType
-              case _: DataType =>
-                // The field type couldn't be an array type
-                new StructType()
-                .add(options.valueTag, addOrUpdateType(Some(characterType), fieldType))
-
-            }
+        val structType = inferObject(parser, startElementName).asInstanceOf[StructType]
+        structType match {
+          case simpleType
+              if structType.fields.length == 1
+              && isPrimitiveType(structType.fields.head.dataType)
+              && isValueTagField(structType.fields.head) =>
+            simpleType.fields.head.dataType
+          case _ => structType
         }
       case e: XMLEvent =>
         throw new IllegalArgumentException(s"Failed to parse data with unexpected event $e")
@@ -211,6 +202,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    */
   private def inferObject(
       parser: XMLEventReader,
+      startElementName: String,
       rootAttributes: Array[Attribute] = Array.empty): DataType = {
     /**
      * Retrieves the field name with respect to the case sensitivity setting.
@@ -235,22 +227,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     val nameToDataType =
       collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)
 
-    @tailrec
-    def inferAndCheckEndElement(parser: XMLEventReader): Boolean = {
-      parser.peek match {
-        case _: EndElement | _: EndDocument => true
-        case _: StartElement => false
-        case c: Characters if !c.isWhiteSpace =>
-          val characterType = inferFrom(c.getData)
-          parser.nextEvent()
-          addOrUpdateType(nameToDataType, options.valueTag, characterType)
-          inferAndCheckEndElement(parser)
-        case _ =>
-          parser.nextEvent()
-          inferAndCheckEndElement(parser)
-      }
-    }
-
     // If there are attributes, then we should process them first.
     val rootValuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(rootAttributes, options)
@@ -264,7 +240,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         case e: StartElement =>
           val attributes = e.getAttributes.asScala.toArray
           val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
-          val inferredType = inferField(parser) match {
+          val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+          val inferredType = inferField(parser, field) match {
             case st: StructType if valuesMap.nonEmpty =>
               // Merge attributes to the field
               val nestedBuilder = ArrayBuffer[StructField]()
@@ -288,16 +265,17 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
             case dt: DataType => dt
           }
           // Add the field and datatypes so that we can check if this is ArrayType.
-          val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
           addOrUpdateType(nameToDataType, field, inferredType)
 
         case c: Characters if !c.isWhiteSpace =>
-          // This can be an attribute-only object
+          // This can be a value tag
           val valueTagType = inferFrom(c.getData)
           addOrUpdateType(nameToDataType, options.valueTag, valueTagType)
 
-        case _: EndElement =>
-          shouldStop = inferAndCheckEndElement(parser)
+        case e: EndElement =>
+          // In case of corrupt records, we shouldn't read beyond the EndDocument
+          shouldStop = parser.peek().isInstanceOf[EndDocument] || StaxXmlParserUtils
+              .getName(e.getName, options) == startElementName
 
         case _ => // do nothing
       }
@@ -533,55 +511,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  /**
-   * This helper function merges the data type of value tags and inner elements.
-   * It could only be structure data. Consider the following case,
-   * <a>
-   *   value1
-   *   <b>1</b>
-   *   value2
-   * </a>
-   * Input: ''a struct<b int, _VALUE string>'' and ''_VALUE string''
-   * Return: ''a struct<b int, _VALUE array<string>>''
-   * @param objectType inner elements' type
-   * @param valueTagType value tag's type
-   */
-  private[xml] def addOrUpdateValueTagType(
-      objectType: DataType,
-      valueTagType: DataType): DataType = {
-    (objectType, valueTagType) match {
-      case (st: StructType, _) =>
-        val valueTagIndexOpt = st.getFieldIndex(options.valueTag)
-
-        valueTagIndexOpt match {
-          // If the field name exists in the inner elements,
-          // merge the type and infer the combined field as an array type if necessary
-          case Some(index) if !st(index).dataType.isInstanceOf[ArrayType] =>
-            updateStructField(
-              st,
-              index,
-              ArrayType(compatibleType(st(index).dataType, valueTagType)))
-          case Some(index) =>
-            updateStructField(st, index, compatibleType(st(index).dataType, valueTagType))
-          case None =>
-            st.add(options.valueTag, valueTagType)
-        }
-      case _ =>
-        throw new IllegalStateException(
-          "illegal state when merging value tags types in schema inference"
-        )
-    }
-  }
-
-  private def updateStructField(
-      structType: StructType,
-      index: Int,
-      newType: DataType): StructType = {
-    val newFields: Array[StructField] =
-      structType.fields.updated(index, structType.fields(index).copy(dataType = newType))
-    StructType(newFields)
-  }
-
   private def addOrUpdateType(
       nameToDataType: collection.mutable.TreeMap[String, DataType],
       fieldName: String,
@@ -602,5 +531,18 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       case None =>
         newType
     }
+  }
+
+  private[xml] def isPrimitiveType(dataType: DataType): Boolean = {
+    dataType match {
+      case _: StructType => false
+      case _: ArrayType => false
+      case _: MapType => false
+      case _ => true
+    }
+  }
+
+  private[xml] def isValueTagField(structField: StructField): Boolean = {
+    structField.name.toLowerCase(Locale.ROOT) == options.valueTag.toLowerCase(Locale.ROOT)
   }
 }

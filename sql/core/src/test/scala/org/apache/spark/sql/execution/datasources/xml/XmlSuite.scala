@@ -2477,7 +2477,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(input)
 
     checkAnswer(df, Seq(
-      Row("\" \"", Row(1, "\" \""), Row(Row(null, " ")))))
+      Row("\" \"", Row("\" \"", 1), Row(Row(null, " ")))))
   }
 
   test("capture values interspersed between elements - nested comments") {
