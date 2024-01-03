@@ -875,7 +875,7 @@ The following extra configuration options are available when the shuffle service
     initialization. This prevents application failures caused by running containers on
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
-  <td></td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
