@@ -37,6 +37,7 @@ import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -2125,6 +2126,32 @@ class DataFrameAggregateSuite extends QueryTest
       Seq(Row(1))
     )
   }
+
+  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
+    // forces the use of sort aggregate by using min/max functions
+
+    val numRows = 50
+    val numRepeat = 25
+
+    val df = (0 to numRows)
+      .map(i => Tuple1(new CalendarInterval(i, i, i)))
+      .toDF("c0")
+
+    for (_ <- 0 until numRepeat) {
+      val shuffledDf = df.orderBy(rand())
+
+      checkAnswer(
+        shuffledDf.agg(max("c0")),
+        Row(new CalendarInterval(numRows, numRows, numRows))
+      )
+
+      checkAnswer(
+        shuffledDf.agg(min("c0")),
+        Row(new CalendarInterval(0, 0, 0))
+      )
+    }
+  }
+
 }
 
 case class B(c: Option[Double])

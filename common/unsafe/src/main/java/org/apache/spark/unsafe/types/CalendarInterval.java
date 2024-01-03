@@ -128,6 +128,18 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
    */
   public Duration extractAsDuration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
 
+  /**
+   * This method is not used to order CalendarInterval instances, as they are not orderable and
+   * can't be used in a ORDER BY statement.
+   * Instead, it is used to find identical interval instances for aggregation purposes.
+   * It compares the 'months', 'days', and 'microseconds' fields of this CalendarInterval
+   * with another instance. The comparison is done first on the 'months', then on the 'days',
+   * and finally on the 'microseconds'.
+   *
+   * @param o The CalendarInterval instance to compare with.
+   * @return A negative integer, zero, or a positive integer as this object is less than,
+   *         equal to, or greater than the specified object.
+   */
   @Override
   public int compareTo(CalendarInterval o) {
     if (this.months != o.months) {
