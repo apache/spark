@@ -185,7 +185,7 @@ abstract class CrossDbmsQueryTestSuite extends SQLQueryTestSuite with Logging {
   }
 
   override protected def resultFileForInputFile(file: File): String = {
-    val goldenFilePathsql/core/src/test/resources/sql-tests/crossdbms-results/ = new File(baseResourcePath,
+    val goldenFilePath = new File(baseResourcePath,
       CrossDbmsQueryTestSuite.RESULT_DIR).getAbsolutePath
     file.getAbsolutePath.replace(customInputFilePath, goldenFilePath) + ".out"
   }
