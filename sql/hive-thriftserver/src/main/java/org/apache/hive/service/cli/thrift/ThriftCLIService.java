@@ -44,6 +44,8 @@ import org.apache.thrift.transport.TTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.sql.hive.HiveUtils;
+
 /**
  * ThriftCLIService.
  *
@@ -69,6 +71,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   protected int minWorkerThreads;
   protected int maxWorkerThreads;
   protected long workerKeepAliveTime;
+
+  protected boolean exitOnServerError = true;
 
   protected TServerEventHandler serverEventHandler;
   protected ThreadLocal<ServerContext> currentServerContext;
@@ -166,6 +170,9 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
     minWorkerThreads = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_MIN_WORKER_THREADS);
     maxWorkerThreads = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_MAX_WORKER_THREADS);
+    exitOnServerError = Boolean.parseBoolean(hiveConf.get(
+        HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR().key(),
+        HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR().defaultValueString()));
     super.init(hiveConf);
   }
 

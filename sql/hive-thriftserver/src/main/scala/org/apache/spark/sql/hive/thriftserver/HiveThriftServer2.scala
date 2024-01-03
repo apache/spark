@@ -59,7 +59,10 @@ object HiveThriftServer2 extends Logging {
     // Cleanup the scratch dir before starting
     ServerUtils.cleanUpScratchDir(executionHive.conf)
     val server = new HiveThriftServer2(sqlContext)
-
+    // `conf` here might not be a new copy with all configurations from the sqlContext as
+    // it might from a leaked hive's SessionState.
+    val exitOnError = sqlContext.getConf(HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR.key)
+    executionHive.conf.set(HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR.key, exitOnError)
     server.init(executionHive.conf)
     server.start()
     logInfo("HiveThriftServer2 started")

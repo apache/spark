@@ -201,6 +201,16 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val HIVE_THRIFT_SERVER_EXIT_ON_ERROR =
+    buildConf("spark.sql.hive.thriftServer.exitOnThriftCLIServiceError")
+      .internal()
+      .doc("When true, System.exit(-1) will be called if the underlying TServer/HTTPServer " +
+        "encounters an error when start serving. When false, the error will be thrown which" +
+        "enables error handling of the DeveloperApi `HiveThriftServer2.startWithContext`")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT =
     buildConf("spark.sql.hive.useDelegateForSymlinkTextInputFormat")
       .internal()

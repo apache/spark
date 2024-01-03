@@ -30,12 +30,13 @@ import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.jdbc.HttpBasicAuthInterceptor
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.thrift.{ThriftCLIService, ThriftCLIServiceClient}
+import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftCLIService, ThriftCLIServiceClient}
 import org.apache.hive.service.rpc.thrift.TCLIService.Client
 import org.apache.http.impl.client.HttpClientBuilder
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.{THttpClient, TSocket}
 
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -136,14 +137,28 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, mode.toString)
     sqlContext.setConf(ConfVars.SCRATCHDIR.varname, tempScratchDir.getAbsolutePath)
     sqlContext.setConf(ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname, "true")
+    sqlContext.setConf(HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR.key, "false")
 
     try {
       hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
       hiveServer2.getServices.asScala.foreach {
         case t: ThriftCLIService =>
           serverPort = t.getPortNumber
+          if (t.isInstanceOf[ThriftBinaryCLIService] && mode == ServerMode.http) {
+            logError("A previous Hive's SessionState is leaked, aborting this retry")
+            throw new IllegalStateException("HiveThriftServer2 started in binary mode " +
+              "while the test case is expecting HTTP mode")
+          }
           logInfo(s"Started HiveThriftServer2: mode=$mode, port=$serverPort, attempt=$attempt")
         case _ =>
+      }
+
+      // Hive's SessionState might be leaked in the previous test case, so we make sure the
+      // HiveThriftServer2 is started with the expected configuration set above.
+      if (hiveServer2.getHiveConf.get(HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR.key) != "false") {
+        logError("A previous Hive's SessionState is leaked, aborting this retry")
+        throw new IllegalStateException(
+          s"${HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR.key} should be false")
       }
 
       // the scratch dir will be recreated after the probe sql `SELECT 1` executed, so we
