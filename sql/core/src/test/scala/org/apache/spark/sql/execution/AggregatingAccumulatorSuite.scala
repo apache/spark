@@ -56,18 +56,18 @@ class AggregatingAccumulatorSuite
 
     // Merge empty
     acc1.merge(accEmpty)
-    assert(acc1.isUpdated)
+    assert(!acc1.isUpdated)
 
     // No updates
-    assert(acc1.isUpdated)
+    assert(!acc1.isUpdated)
     checkResult(acc1.value, InternalRow(null, null, 0), expectedSchema, false)
-    assert(acc1.isUpdated)
+    assert(!acc1.isUpdated)
 
     // A few updates
     acc1.add(InternalRow(4L, str("foo"), 4.9d))
     acc1.add(InternalRow(98L, str("bar"), -323.9d))
     acc1.add(InternalRow(-30L, str("baz"), 4129.8d))
-    assert(!acc1.isUpdated)
+    assert(acc1.isUpdated)
     checkResult(acc1.value, InternalRow(73L, str("baz"), 3L), expectedSchema, false)
 
     // Idempotency of result
@@ -77,7 +77,7 @@ class AggregatingAccumulatorSuite
     val updater = acc2.copyAndReset()
     updater.add(InternalRow(-2L, str("qwerty"), -6773.9d))
     updater.add(InternalRow(-35L, str("zzz-top"), -323.9d))
-    assert(acc2.isUpdated)
+    assert(!acc2.isUpdated)
     acc2.setState(updater)
     checkResult(acc2.value, InternalRow(-36L, str("zzz-top"), 2L), expectedSchema, false)
 
@@ -90,7 +90,7 @@ class AggregatingAccumulatorSuite
 
     // Reset
     acc1.reset()
-    assert(acc1.isUpdated)
+    assert(!acc1.isUpdated)
   }
 
   test("non-deterministic expressions") {
@@ -128,7 +128,7 @@ class AggregatingAccumulatorSuite
     acc_driver.merge(acc1)
     acc_driver.merge(acc2)
     acc_driver.merge(acc3)
-    assert(!acc_driver.isUpdated)
+    assert(acc_driver.isUpdated)
     checkResult(acc_driver.value, InternalRow(3, 96, 0), acc_driver.schema, false)
   }
 

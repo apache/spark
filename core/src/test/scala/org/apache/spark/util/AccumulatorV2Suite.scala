@@ -23,13 +23,13 @@ class AccumulatorV2Suite extends SparkFunSuite {
 
   test("LongAccumulator add/avg/sum/count/isZero") {
     val acc = new LongAccumulator
-    assert(acc.isUpdated)
+    assert(!acc.isUpdated)
     assert(acc.count == 0)
     assert(acc.sum == 0)
     assert(acc.avg.isNaN)
 
     acc.add(0)
-    assert(!acc.isUpdated)
+    assert(acc.isUpdated)
     assert(acc.count == 1)
     assert(acc.sum == 0)
     assert(acc.avg == 0.0)
@@ -56,13 +56,13 @@ class AccumulatorV2Suite extends SparkFunSuite {
 
   test("DoubleAccumulator add/avg/sum/count/isZero") {
     val acc = new DoubleAccumulator
-    assert(acc.isUpdated)
+    assert(!acc.isUpdated)
     assert(acc.count == 0)
     assert(acc.sum == 0.0)
     assert(acc.avg.isNaN)
 
     acc.add(0.0)
-    assert(!acc.isUpdated)
+    assert(acc.isUpdated)
     assert(acc.count == 1)
     assert(acc.sum == 0.0)
     assert(acc.avg == 0.0)
@@ -90,40 +90,40 @@ class AccumulatorV2Suite extends SparkFunSuite {
   test("ListAccumulator") {
     val acc = new CollectionAccumulator[Double]
     assert(acc.value.isEmpty)
-    assert(acc.isUpdated)
+    assert(!acc.isUpdated)
 
     acc.add(0.0)
     assert(acc.value.contains(0.0))
-    assert(!acc.isUpdated)
+    assert(acc.isUpdated)
 
     acc.add(java.lang.Double.valueOf(1.0))
 
     val acc2 = acc.copyAndReset()
     assert(acc2.value.isEmpty)
-    assert(acc2.isUpdated)
+    assert(!acc2.isUpdated)
 
     assert(acc.value.contains(1.0))
-    assert(!acc.isUpdated)
+    assert(acc.isUpdated)
     assert(acc.value.size() === 2)
 
     acc2.add(2.0)
     assert(acc2.value.contains(2.0))
-    assert(!acc2.isUpdated)
+    assert(acc2.isUpdated)
     assert(acc2.value.size() === 1)
 
     // Test merging
     acc.merge(acc2)
     assert(acc.value.contains(2.0))
-    assert(!acc.isUpdated)
+    assert(acc.isUpdated)
     assert(acc.value.size() === 3)
 
     val acc3 = acc.copy()
     assert(acc3.value.contains(2.0))
-    assert(!acc3.isUpdated)
+    assert(acc3.isUpdated)
     assert(acc3.value.size() === 3)
 
     acc3.reset()
-    assert(acc3.isUpdated)
+    assert(!acc3.isUpdated)
     assert(acc3.value.isEmpty)
   }
 
