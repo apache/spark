@@ -330,6 +330,12 @@
     ],
     "sqlState" : "42704"
   },
+  "CANNOT_RESOLVE_WITH_PLAN_ID" : {
+    "message" : [
+      "Cannot resolve <expression> with plan id <id> in plan <plan>. It's probably because you reference a non-existent column like `df1.select(df2.col(\"id\"))`."
+    ],
+    "sqlState" : "42704"
+  },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
@@ -6841,11 +6847,6 @@
   "_LEGACY_ERROR_TEMP_3050" : {
     "message" : [
       "Cannot modify the value of a static config: <k>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3051" : {
-    "message" : [
-      "When resolving <u>, fail to find subplan with plan_id=<planId> in <q>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {

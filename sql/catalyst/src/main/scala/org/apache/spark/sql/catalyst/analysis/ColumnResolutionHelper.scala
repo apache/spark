@@ -505,47 +505,34 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
 
-    var result = Option.empty[NamedExpression]
-    var numMatched = 0
-    resolveUnresolvedAttributeByPlanId(u, planId, isMetadataAccess, q).foreach {
-      case Some(resolved) =>
-        numMatched += 1
-        if (result.isEmpty) {
-          result = Some(resolved)
-        } else {
-          throw new AnalysisException(
-            errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
-            messageParameters = Map("name" -> toSQLId(u.nameParts)),
-            origin = u.origin
-          )
-        }
-      case _ => numMatched += 1
-    }
-    if (numMatched == 0) {
+    val resolved = resolveUnresolvedAttributeByPlanId(u, planId, isMetadataAccess, q)
+    if (resolved.isEmpty) {
       // For example:
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
       //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
       //  df1.select(df2.a)   <-   illegal reference df2.a
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3051",
+        errorClass = "CANNOT_RESOLVE_WITH_PLAN_ID",
         messageParameters = Map(
-          "u" -> u.toString,
-          "planId" -> planId.toString,
-          "q" -> q.toString))
+          "expression" -> toSQLId(u.nameParts),
+          "id" -> planId.toString,
+          "plan" -> q.toString
+        ),
+        origin = u.origin
+      )
     }
-    result
+    resolved
   }
 
   private def resolveUnresolvedAttributeByPlanId(
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
-      p: LogicalPlan): Iterator[Option[NamedExpression]] = {
+      p: LogicalPlan): Option[NamedExpression] = {
     if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      Iterator.single(
-        resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess))
+        resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
     } else {
-      p.children.iterator.flatMap { child =>
+      val candidates = p.children.flatMap { child =>
         val outputSet = if (isMetadataAccess) {
           // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
           child.outputSet ++ AttributeSet(child.metadataOutput)
@@ -553,8 +540,16 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           child.outputSet
         }
         resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, child)
-          .map(_.filter(outputSet.contains))
+          .filter(outputSet.contains)
       }
+      if (candidates.length > 1) {
+        throw new AnalysisException(
+          errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+          messageParameters = Map("name" -> toSQLId(u.nameParts)),
+          origin = u.origin
+        )
+      }
+      candidates.headOption
     }
   }
 

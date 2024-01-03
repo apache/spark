@@ -288,6 +288,12 @@ Renaming a `<type>` across schemas is not allowed.
 
 Cannot resolve `<targetString>`.* given input columns `<columns>`. Please check that the specified table or struct exists and is accessible in the input columns.
 
+### CANNOT_RESOLVE_WITH_PLAN_ID
+
+SQLSTATE: 42704
+
+Cannot resolve `<expression>` with plan id `<id>` in plan `<plan>`. It's probably because you reference a non-existent column like `df1.select(df2.col("id"))`.
+
 ### CANNOT_RESTORE_PERMISSIONS_FOR_PATH
 
 SQLSTATE: 58030
