@@ -91,14 +91,14 @@ Project [dept_id#x, count(1)#xL]
    :  +- Project [1 AS 1#x]
    :     +- Filter (bonus_amt#x < outer(min(salary#x)#x))
    :        +- SubqueryAlias bonus
-   :           +- View (`BONUS`, [emp_name#x,bonus_amt#x])
+   :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :              +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
    :                 +- Project [emp_name#x, bonus_amt#x]
    :                    +- SubqueryAlias BONUS
    :                       +- LocalRelation [emp_name#x, bonus_amt#x]
    +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
       +- SubqueryAlias emp
-         +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+         +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
             +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
                +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
                   +- SubqueryAlias EMP
@@ -123,20 +123,20 @@ Project [dept_id#x, dept_name#x, state#x]
    :        :  +- Project [1 AS 1#x]
    :        :     +- Filter (bonus_amt#x < outer(min(salary#x)#x))
    :        :        +- SubqueryAlias bonus
-   :        :           +- View (`BONUS`, [emp_name#x,bonus_amt#x])
+   :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
    :        :                 +- Project [emp_name#x, bonus_amt#x]
    :        :                    +- SubqueryAlias BONUS
    :        :                       +- LocalRelation [emp_name#x, bonus_amt#x]
    :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
    :           +- SubqueryAlias emp
-   :              +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+   :              +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
    :                 +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
    :                    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :                       +- SubqueryAlias EMP
    :                          +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    +- SubqueryAlias dept
-      +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+      +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
          +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
             +- Project [dept_id#x, dept_name#x, state#x]
                +- SubqueryAlias DEPT
@@ -163,7 +163,7 @@ Aggregate [dept_id#x], [dept_id#x, max(salary#x) AS max(salary)#x]
    :        :  +- Project [1 AS 1#x]
    :        :     +- Filter (bonus_amt#x < outer(min(salary#x)#x))
    :        :        +- SubqueryAlias bonus
-   :        :           +- View (`BONUS`, [emp_name#x,bonus_amt#x])
+   :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
    :        :                 +- Project [emp_name#x, bonus_amt#x]
    :        :                    +- SubqueryAlias BONUS
@@ -171,14 +171,14 @@ Aggregate [dept_id#x], [dept_id#x, max(salary#x) AS max(salary)#x]
    :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
    :           +- SubqueryAlias p
    :              +- SubqueryAlias emp
-   :                 +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+   :                 +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
    :                    +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
    :                       +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :                          +- SubqueryAlias EMP
    :                             +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    +- SubqueryAlias gp
       +- SubqueryAlias emp
-         +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+         +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
             +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
                +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
                   +- SubqueryAlias EMP
@@ -203,20 +203,20 @@ Project [dept_id#x, dept_name#x, state#x]
    :        :  +- Project [1 AS 1#x]
    :        :     +- Filter (bonus_amt#x > outer(min(salary#x)#x))
    :        :        +- SubqueryAlias bonus
-   :        :           +- View (`BONUS`, [emp_name#x,bonus_amt#x])
+   :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
    :        :                 +- Project [emp_name#x, bonus_amt#x]
    :        :                    +- SubqueryAlias BONUS
    :        :                       +- LocalRelation [emp_name#x, bonus_amt#x]
    :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
    :           +- SubqueryAlias emp
-   :              +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+   :              +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
    :                 +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
    :                    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :                       +- SubqueryAlias EMP
    :                          +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    +- SubqueryAlias dept
-      +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+      +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
          +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
             +- Project [dept_id#x, dept_name#x, state#x]
                +- SubqueryAlias DEPT
@@ -243,7 +243,7 @@ Project [dept_id#x, dept_name#x, state#x]
    :        :  +- Project [1 AS 1#x]
    :        :     +- Filter ((bonus_amt#x > outer(min(salary#x)#x)) AND (outer(count(dept_id)#xL) > cast(1 as bigint)))
    :        :        +- SubqueryAlias bonus
-   :        :           +- View (`BONUS`, [emp_name#x,bonus_amt#x])
+   :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(emp_name#x as string) AS emp_name#x, cast(bonus_amt#x as double) AS bonus_amt#x]
    :        :                 +- Project [emp_name#x, bonus_amt#x]
    :        :                    +- SubqueryAlias BONUS
@@ -251,13 +251,13 @@ Project [dept_id#x, dept_name#x, state#x]
    :        +- Aggregate [dept_id#x], [dept_id#x, count(dept_id#x) AS count(dept_id)#xL, min(salary#x) AS min(salary#x)#x]
    :           +- Filter (outer(dept_id#x) = dept_id#x)
    :              +- SubqueryAlias emp
-   :                 +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+   :                 +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
    :                    +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
    :                       +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :                          +- SubqueryAlias EMP
    :                             +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    +- SubqueryAlias dept
-      +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+      +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
          +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
             +- Project [dept_id#x, dept_name#x, state#x]
                +- SubqueryAlias DEPT
