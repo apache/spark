@@ -186,10 +186,10 @@ private[hive] class HiveClientImpl(
   def conf: HiveConf = {
     val hiveConf = state.getConf
     // Load session-level config
-    val sessionHiveConfBuffer = HiveContext.getSessionHiveConfBuffer
+    val sessionHiveConfBuffer = HiveContext.getSessionHiveConfBuffer()
     if (sessionHiveConfBuffer != null) {
-      val buffer = new DataInputBuffer
-      buffer.reset(sessionHiveConfBuffer.array, 0, sessionHiveConfBuffer.limit)
+      val buffer = new DataInputBuffer()
+      buffer.reset(sessionHiveConfBuffer.array(), 0, sessionHiveConfBuffer.limit())
       hiveConf.readFields(buffer)
     }
     // Hive changed the default of datanucleus.schema.autoCreateAll from true to false

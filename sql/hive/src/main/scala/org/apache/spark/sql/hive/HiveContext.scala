@@ -80,6 +80,6 @@ object HiveContext {
   }
 
   def getSessionHiveConfBuffer(): ByteBuffer = {
-    sessionHiveConfBuffer.get
+    sessionHiveConfBuffer.get()
   }
 }
