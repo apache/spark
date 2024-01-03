@@ -2040,9 +2040,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def failToPlanDataSourceError(action: String, tpe: String, msg: String): Throwable = {
+  def pythonDataSourceError(action: String, tpe: String, msg: String): Throwable = {
     new AnalysisException(
-      errorClass = "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON",
+      errorClass = "PYTHON_DATA_SOURCE_ERROR",
       messageParameters = Map("action" -> action, "type" -> tpe, "msg" -> msg)
     )
   }
@@ -3182,6 +3182,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "_LEGACY_ERROR_TEMP_1307",
       messageParameters = Map(
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
+  }
+
+  def invalidSaveModeError(saveMode: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SAVE_MODE",
+      messageParameters = Map("mode" -> toDSOption(saveMode))
+    )
   }
 
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {

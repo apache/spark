@@ -2239,6 +2239,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_SAVE_MODE" : {
+    "message" : [
+      "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
@@ -3009,9 +3015,9 @@
     ],
     "sqlState" : "42K0G"
   },
-  "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
+  "PYTHON_DATA_SOURCE_ERROR" : {
     "message" : [
-      "Failed to <action> Python data source <type> in Python: <msg>"
+      "Failed to <action> Python data source <type>: <msg>"
     ],
     "sqlState" : "38000"
   },

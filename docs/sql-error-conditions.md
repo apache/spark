@@ -1271,6 +1271,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 Parameterized query must either use positional, or named parameters, but not both.
 
+### INVALID_SAVE_MODE
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The specified save mode `<mode>` is invalid. Valid save modes include "append", "overwrite", "ignore", "error", "errorifexists", and "default".
+
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
 [SQLSTATE: 42K07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1808,11 +1814,11 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
-### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+### PYTHON_DATA_SOURCE_ERROR
 
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
-Failed to `<action>` Python data source `<type>` in Python: `<msg>`
+Failed to `<action>` Python data source `<type>`: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
