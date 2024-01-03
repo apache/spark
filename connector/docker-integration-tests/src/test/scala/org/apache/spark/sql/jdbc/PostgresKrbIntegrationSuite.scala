@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import javax.security.auth.login.Configuration
 
-import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
+import com.github.dockerjava.api.model.{AccessMode, Bind, ContainerConfig, HostConfig, Volume}
 
 import org.apache.spark.sql.execution.datasources.jdbc.connection.SecureConnectionProvider
 import org.apache.spark.tags.DockerTest
@@ -48,14 +48,14 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
       s"jdbc:postgresql://$ip:$port/postgres?user=$principal&gsslib=gssapi"
 
     override def beforeContainerStart(
-        hostConfigBuilder: HostConfig.Builder,
-        containerConfigBuilder: ContainerConfig.Builder): Unit = {
+        hostConfigBuilder: HostConfig,
+        containerConfigBuilder: ContainerConfig): Unit = {
       copyExecutableResource("postgres_krb_setup.sh", initDbDir, replaceIp)
-
-      hostConfigBuilder.appendBinds(
-        HostConfig.Bind.from(initDbDir.getAbsolutePath)
-          .to("/docker-entrypoint-initdb.d").readOnly(true).build()
-      )
+      val newBind = new Bind(
+        initDbDir.getAbsolutePath,
+        new Volume("/docker-entrypoint-initdb.d"),
+        AccessMode.ro)
+      hostConfigBuilder.withBinds(hostConfigBuilder.getBinds :+ newBind: _*)
     }
   }
 
