@@ -14,33 +14,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
-from pyspark.pandas.config import set_option, reset_option
+import pandas as pd
+
+from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.pandas.tests.diff_frames_ops.test_groupby_rolling import GroupByRollingTestingFuncMixin
 
 
-class GroupByRollingAdvMixin(GroupByRollingTestingFuncMixin):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        set_option("compute.ops_on_diff_frames", True)
+class RepeatMixin:
+    def test_repeat(self):
+        pidx = pd.Index(["a", "b", "c"])
+        psidx = ps.from_pandas(pidx)
 
-    @classmethod
-    def tearDownClass(cls):
-        reset_option("compute.ops_on_diff_frames")
-        super().tearDownClass()
+        self.assert_eq(psidx.repeat(3).sort_values(), pidx.repeat(3).sort_values())
+        self.assert_eq(psidx.repeat(0).sort_values(), pidx.repeat(0).sort_values())
+        self.assert_eq((psidx + "x").repeat(3).sort_values(), (pidx + "x").repeat(3).sort_values())
 
-    def test_groupby_rolling_std(self):
-        self._test_groupby_rolling_func("std")
+        self.assertRaises(ValueError, lambda: psidx.repeat(-1))
+        self.assertRaises(TypeError, lambda: psidx.repeat("abc"))
 
-    def test_groupby_rolling_var(self):
-        self._test_groupby_rolling_func("var")
+        pmidx = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
+        psmidx = ps.from_pandas(pmidx)
+
+        self.assert_eq(psmidx.repeat(3).sort_values(), pmidx.repeat(3).sort_values())
+        self.assert_eq(psmidx.repeat(0).sort_values(), pmidx.repeat(0).sort_values(), almost=True)
+
+        self.assertRaises(ValueError, lambda: psmidx.repeat(-1))
+        self.assertRaises(TypeError, lambda: psmidx.repeat("abc"))
 
 
-class GroupByRollingAdvTests(
-    GroupByRollingAdvMixin,
+class RepeatTests(
+    RepeatMixin,
     PandasOnSparkTestCase,
     SQLTestUtils,
 ):
@@ -48,8 +54,7 @@ class GroupByRollingAdvTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.diff_frames_ops.test_groupby_rolling_adv import *  # noqa
+    from pyspark.pandas.tests.indexes.test_repeat import *  # noqa: F401
 
     try:
         import xmlrunner

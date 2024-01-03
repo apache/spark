@@ -194,6 +194,21 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_INVALID_RETURN_TYPE" : {
+    "message" : [
+      "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
+    ]
+  },
+  "DATA_SOURCE_RETURN_SCHEMA_MISMATCH" : {
+    "message" : [
+      "Return schema mismatch in the result from 'read' method. Expected: <expected> columns, Found: <actual> columns. Make sure the returned values match the required output schema."
+    ]
+  },
+  "DATA_SOURCE_TYPE_MISMATCH" : {
+    "message" : [
+      "Expected <expected>, but got <actual>."
+    ]
+  },
   "DIFFERENT_PANDAS_DATAFRAME" : {
     "message" : [
       "DataFrames are not almost equal:",
@@ -745,36 +760,6 @@ ERROR_CLASSES_JSON = """
   "PIPE_FUNCTION_EXITED" : {
     "message" : [
       "Pipe function `<func_name>` exited with error code <error_code>."
-    ]
-  },
-  "PYTHON_DATA_SOURCE_CREATE_ERROR" : {
-    "message" : [
-        "Unable to create the Python data source <type>: <error>."
-    ]
-  },
-  "PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED" : {
-    "message" : [
-        "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
-    ]
-  },
-  "PYTHON_DATA_SOURCE_READ_INVALID_RETURN_TYPE" : {
-    "message" : [
-        "The data type of the returned value ('<type>') from the Python data source '<name>' is not supported. Supported types: <supported_types>."
-    ]
-  },
-  "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH" : {
-    "message" : [
-      "The number of columns in the result does not match the required schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the 'read' method have the same number of columns as required by the output schema."
-    ]
-  },
-  "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
-    "message" : [
-      "Expected <expected>, but got <actual>."
-    ]
-  },
-  "PYTHON_DATA_SOURCE_WRITE_ERROR" : {
-    "message" : [
-      "Unable to write to the Python data source: <error>."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET" : {

@@ -299,8 +299,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-    assert(err.getMessage.contains("PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED"))
+    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getMessage.contains("PySparkNotImplementedError"))
   }
 
   test("error creating reader") {
@@ -319,8 +319,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-    assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
+    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("error creating reader"))
   }
 
@@ -339,8 +338,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-    assert(err.getMessage.contains("PYTHON_DATA_SOURCE_TYPE_MISMATCH"))
+    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getMessage.contains("DATA_SOURCE_TYPE_MISMATCH"))
     assert(err.getMessage.contains("PySparkAssertionError"))
   }
 
@@ -450,9 +449,35 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       spark.dataSource.registerPython(dataSourceName, dataSource)
       val err = intercept[AnalysisException](
         spark.read.format(dataSourceName).load().collect())
-      assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-      assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
+      assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+      assert(err.getMessage.contains("partitions"))
     }
+  }
+
+  test("SPARK-46540: data source read output named rows") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def read(self, partition):
+         |        from pyspark.sql import Row
+         |        yield Row(x = 0, y = 1)
+         |        yield Row(y = 2, x = 1)
+         |        yield Row(2, 3)
+         |        yield (3, 4)
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "x int, y int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.format(dataSourceName).load()
+    checkAnswer(df, Seq(Row(0, 1), Row(1, 2), Row(2, 3), Row(3, 4)))
   }
 
   test("SPARK-46424: Support Python metrics") {
@@ -592,7 +617,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       val error = intercept[SparkException] {
         spark.range(1).write.format(dataSourceName).mode("append").save()
       }
-      assert(error.getMessage.contains("PYTHON_DATA_SOURCE_WRITE_ERROR"))
+      assert(error.getMessage.contains("DATA_SOURCE_TYPE_MISMATCH"))
+      assert(error.getMessage.contains("WriterCommitMessage"))
     }
 
     withClue("without mode") {

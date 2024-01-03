@@ -1928,6 +1928,11 @@ inline_outer.__doc__ = pysparkfuncs.inline_outer.__doc__
 
 
 def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
+    if len(fields) == 0:
+        raise PySparkValueError(
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "field"},
+        )
     return _invoke_function("json_tuple", _to_col(col), *[lit(field) for field in fields])
 
 

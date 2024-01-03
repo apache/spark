@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.Locale
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
@@ -91,7 +92,7 @@ case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not
     // generate SQL for this join type
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3115")
   }
 }
 

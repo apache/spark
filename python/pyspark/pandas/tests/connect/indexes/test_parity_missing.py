@@ -14,45 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
-from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.pandas.tests.diff_frames_ops.test_groupby_rolling import GroupByRollingTestingFuncMixin
-
-
-class GroupByRollingAdvMixin(GroupByRollingTestingFuncMixin):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        set_option("compute.ops_on_diff_frames", True)
-
-    @classmethod
-    def tearDownClass(cls):
-        reset_option("compute.ops_on_diff_frames")
-        super().tearDownClass()
-
-    def test_groupby_rolling_std(self):
-        self._test_groupby_rolling_func("std")
-
-    def test_groupby_rolling_var(self):
-        self._test_groupby_rolling_func("var")
+from pyspark.pandas.tests.indexes.test_missing import MissingMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class GroupByRollingAdvTests(
-    GroupByRollingAdvMixin,
-    PandasOnSparkTestCase,
-    SQLTestUtils,
+class MissingParityTests(
+    MissingMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.diff_frames_ops.test_groupby_rolling_adv import *  # noqa
+    from pyspark.pandas.tests.connect.indexes.test_parity_missing import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

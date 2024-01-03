@@ -91,8 +91,7 @@ class FuncTestsMixin(GroupbyStatTestingFuncMixin):
             check_exact=False,
         )
 
-        # TODO: fix bug of `sum` and re-enable the test below
-        # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
+        self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
         self.assert_eq(
             psdf.groupby("A").sum().sort_index(),
             pdf.groupby("A").sum().sort_index(),
