@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +45,7 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.thrift.ThriftFormatter;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hive.common.util.HiveVersionInfo;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.FetchOrientation;
@@ -69,6 +71,7 @@ import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
+import org.apache.spark.sql.hive.HiveContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,6 +90,7 @@ public class HiveSessionImpl implements HiveSession {
   private String username;
   private final String password;
   private HiveConf hiveConf;
+  private ByteBuffer hiveConfBuffer;
   private SessionState sessionState;
   private String ipAddress;
   private static final String FETCH_WORK_SERDE_CLASS =
@@ -157,6 +161,13 @@ public class HiveSessionImpl implements HiveSession {
     }
     lastAccessTime = System.currentTimeMillis();
     lastIdleTime = lastAccessTime;
+    try {
+      DataOutputBuffer buffer = new DataOutputBuffer();
+      getHiveConf().write(buffer);
+      this.hiveConfBuffer = ByteBuffer.wrap(buffer.getData(), 0, buffer.getLength());
+    } catch (IOException e) {
+      throw new HiveSQLException(e);
+    }
   }
 
   /**
@@ -360,6 +371,7 @@ public class HiveSessionImpl implements HiveSession {
     // Need to make sure that the this HiveServer2's session's SessionState is
     // stored in the thread local for the handler thread.
     SessionState.setCurrentSessionState(sessionState);
+    HiveContext.setSessionHiveConfBuffer(hiveConfBuffer);
     if (userAccess) {
       lastAccessTime = System.currentTimeMillis();
     }

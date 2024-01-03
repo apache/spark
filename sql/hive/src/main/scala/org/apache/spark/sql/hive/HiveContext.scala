@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
@@ -60,4 +62,24 @@ class HiveContext private[hive](_sparkSession: SparkSession)
     sparkSession.catalog.refreshTable(tableName)
   }
 
+}
+
+object HiveContext {
+  // In spark-thriftserver, session-level config is required. The session-level
+  // config has been set to the thread local variable of SessionState during
+  // HiveSessionImpl::acquire. But the IsolatedClientLoader will reload the new
+  // SessionState for the isolated metastore version, then SessionState::tss
+  // will be reconstructed, then session-level config will be missing. And
+  // sessionHiveConfBuffer will not be loaded by IsolatedClientLoader and use
+  // ByteBuffer to store the config. Therefore sessionHiveConfBuffer is
+  // introduced to ensure that the config is not lost.
+  private val sessionHiveConfBuffer: ThreadLocal[ByteBuffer] = ThreadLocal.withInitial(() => null)
+
+  def setSessionHiveConfBuffer(buffer: ByteBuffer): Unit = {
+    sessionHiveConfBuffer.set(buffer)
+  }
+
+  def getSessionHiveConfBuffer(): ByteBuffer = {
+    sessionHiveConfBuffer.get
+  }
 }
