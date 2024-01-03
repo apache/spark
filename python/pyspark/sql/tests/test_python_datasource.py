@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from typing import Callable, Union
 
-from pyspark.errors import PythonException, PySparkTypeError
+from pyspark.errors import PythonException
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,

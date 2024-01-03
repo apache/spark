@@ -20,7 +20,7 @@ from typing import final, Any, Dict, Iterator, List, Sequence, Tuple, Type, Unio
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
@@ -52,7 +52,6 @@ class DataSource(ABC):
     .. versionadded: 4.0.0
     """
 
-    @final
     def __init__(self, options: Dict[str, str]) -> None:
         """
         Initializes the data source with user-provided options.
@@ -417,8 +416,6 @@ class CaseInsensitiveDict(UserDict):
     A case-insensitive map of string keys to values.
 
     This is used by Python data source options to ensure consistent case insensitivity.
-
-     .. versionadded: 4.0.0
     """
 
     def __init__(self, *args, **kwargs) -> None:
