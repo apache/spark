@@ -226,7 +226,7 @@ class StaxXmlParser(
         // For `ArrayType`, it needs to return the type of element. The values are merged later.
         parser.next
         convertTo(c.getData, st)
-      case (c: Characters, st: StructType) =>
+      case (_: Characters, st: StructType) =>
         convertObject(parser, st, startElementName)
       case (_: Characters, _: StringType) =>
         convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
@@ -236,7 +236,7 @@ class StaxXmlParser(
         val data = c.getData
         parser.next
         parser.peek match {
-          case e: StartElement =>
+          case _: StartElement =>
             convertComplicatedType(dataType, startElementName, attributes)
           case _: EndElement if data.isEmpty => null
           case _: EndElement => convertTo(data, dataType)
