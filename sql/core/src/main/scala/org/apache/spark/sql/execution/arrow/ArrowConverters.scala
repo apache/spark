@@ -92,9 +92,9 @@ private[sql] object ArrowConverters extends Logging {
     private val root = VectorSchemaRoot.create(arrowSchema, allocator)
     protected val unloader = new VectorUnloader(root)
     protected val arrowWriter = ArrowWriter.create(root)
-    private var _lastBatchRowCount: Long = -1L
+    private var rowCountInLastBatch: Long = -1L
 
-    def lastBatchRowCount: Long = _lastBatchRowCount
+    def getRowCountInLastBatch: Long = rowCountInLastBatch
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
       close()
@@ -120,7 +120,7 @@ private[sql] object ArrowConverters extends Logging {
         val batch = unloader.getRecordBatch()
         MessageSerializer.serialize(writeChannel, batch)
         batch.close()
-        _lastBatchRowCount = rowCount
+        rowCountInLastBatch = rowCount
       } {
         arrowWriter.reset()
       }

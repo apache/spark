@@ -28,6 +28,16 @@ import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.storage.{ArrowBatchBlockId, BlockId, BlockManager}
 
 
+/**
+ * A helper class to run cached arrow batch server.
+ * Cached arrow batch server is for serving chunk data, when user calls
+ * `pyspark.sql.chunk.readChunk` API, it creates connection to this server,
+ * then sends chunk_id to the server, then the server responses chunk binary data
+ * to client.
+ * The server queries chuck data using chunk_id from block manager,
+ * for chunk data storage logic, please refer to
+ * `PersistDataFrameAsArrowBatchChunksPartitionEvaluator` class.
+ */
 class CachedArrowBatchServer(
   val sparkConf: SparkConf,
   val blockManager: BlockManager
@@ -101,7 +111,7 @@ class CachedArrowBatchServer(
   def start(): Unit = {
     logTrace("Creating listening socket")
 
-    new Thread(s"CachedArrowBatchServer-listener") {
+    new Thread("CachedArrowBatchServer-listener") {
       setDaemon(true)
 
       override def run(): Unit = {

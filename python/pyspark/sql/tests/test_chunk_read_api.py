@@ -23,7 +23,7 @@ import tempfile
 import unittest
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql import SparkSession
-from pyspark.sql.chunk_api import persist_dataframe_as_chunks, read_chunk, unpersist_chunks
+from pyspark.sql.chunk import persistDataFrameAsChunks, readChunk, unpersistChunks
 
 
 class ChunkReadApiTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class ChunkReadApiTests(unittest.TestCase):
         self.sc = self.spark.sparkContext
 
         self.test_df = self.spark.range(0, 16, 1, 2)
-        self.chunks = persist_dataframe_as_chunks(self.test_df, 3)
+        self.chunks = persistDataFrameAsChunks(self.test_df, 3)
         self.chunk_ids = [chunk.id for chunk in self.chunks]
         self.expected_chunk_data_list = [
             [0, 1, 2],
@@ -54,10 +54,10 @@ class ChunkReadApiTests(unittest.TestCase):
 
         self.child_proc_test_code = """
 import sys
-from pyspark.sql.chunk_api import read_chunk
+from pyspark.sql.chunk import readChunk
 chunk_ids = sys.argv[1].split(",")
 for chunk_id in chunk_ids:
-    chunk_pd = read_chunk(chunk_id).to_pandas()
+    chunk_pd = readChunk(chunk_id).to_pandas()
     chunk_pd.to_pickle(f"{chunk_id}.pkl")
 """
 
@@ -65,14 +65,14 @@ for chunk_id in chunk_ids:
         self.spark.stop()
         sys.path = self._old_sys_path
 
-    def test_read_chunk_in_driver(self):
+    def test_readChunk_in_driver(self):
         for i, chunk in enumerate(self.chunks):
-            chunk_data = list(read_chunk(chunk.id).to_pandas().id)
+            chunk_data = list(readChunk(chunk.id).to_pandas().id)
             self.assertEqual(chunk_data, self.expected_chunk_data_list[i])
 
-    def test_read_chunk_in_executor(self):
+    def test_readChunk_in_executor(self):
         def mapper(chunk_id):
-            return list(read_chunk(chunk_id).to_pandas().id)
+            return list(readChunk(chunk_id).to_pandas().id)
 
         chunk_data_list = self.sc.parallelize(self.chunk_ids, 4).map(mapper).collect()
         self.assertEqual(chunk_data_list, self.expected_chunk_data_list)
@@ -84,26 +84,26 @@ for chunk_id in chunk_ids:
                 chunk_data = list(pdf.id)
                 self.assertEqual(chunk_data, expected_chunk_data)
 
-    def test_read_chunk_in_driver_child_proc(self):
+    def test_readChunk_in_driver_child_proc(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with open(os.path.join(tmp_dir, "read_chunk_and_save.py"), "w") as f:
+            with open(os.path.join(tmp_dir, "readChunk_and_save.py"), "w") as f:
                 f.write(self.child_proc_test_code)
 
             subprocess.check_call(
-                ["python", "./read_chunk_and_save.py", ",".join(self.chunk_ids)],
+                ["python", "./readChunk_and_save.py", ",".join(self.chunk_ids)],
                 cwd=tmp_dir,
             )
 
             self._assert_saved_chunk_data_correct(tmp_dir)
 
-    def test_read_chunk_in_udf_worker_child_proc(self):
+    def test_readChunk_in_udf_worker_child_proc(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with open(os.path.join(tmp_dir, "read_chunk_and_save.py"), "w") as f:
+            with open(os.path.join(tmp_dir, "readChunk_and_save.py"), "w") as f:
                 f.write(self.child_proc_test_code)
 
             def mapper(chunk_id):
                 subprocess.check_call(
-                    ["python", "./read_chunk_and_save.py", chunk_id],
+                    ["python", "./readChunk_and_save.py", chunk_id],
                     cwd=tmp_dir,
                 )
                 return True
@@ -113,10 +113,10 @@ for chunk_id in chunk_ids:
 
     def test_unpersist_chunk(self):
         df = self.spark.range(16)
-        chunks = persist_dataframe_as_chunks(df, 16)
-        unpersist_chunks([chunks[0].id])
+        chunks = persistDataFrameAsChunks(df, 16)
+        unpersistChunks([chunks[0].id])
         with self.assertRaisesRegex(
             PySparkRuntimeError,
             "cache does not exist or has been removed",
         ):
-            read_chunk(chunks[0].id)
+            readChunk(chunks[0].id)

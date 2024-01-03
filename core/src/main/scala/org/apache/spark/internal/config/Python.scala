@@ -72,8 +72,8 @@ private[spark] object Python {
 
   val PYTHON_DATAFRAME_CHUNK_READ_ENABLED =
     ConfigBuilder("spark.python.dataFrameChunkRead.enabled")
-    .doc("When true, driver and executes launch local cached arrow batch servers for serving " +
-      "pyspark DataFrame chunk read requests.")
+    .doc("When true, driver and executors launch local cached arrow batch servers for serving " +
+      "PySpark DataFrame 'pyspark.sql.chunk.read_chunk' API requests.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)

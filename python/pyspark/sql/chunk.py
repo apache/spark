@@ -25,21 +25,36 @@ from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
 from pyspark.serializers import read_with_length, write_with_length
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.errors import PySparkRuntimeError
 
 
 ChunkMeta = namedtuple("ChunkMeta", ["id", "row_count", "byte_count"])
 
+require_minimum_pyarrow_version()
 
-def persist_dataframe_as_chunks(
-    dataframe: DataFrame, max_records_per_batch: int
+
+def persistDataFrameAsChunks(
+    dataframe: DataFrame, max_records_per_chunk: int
 ) -> list[ChunkMeta]:
-    """
-    Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
+    """Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
     It tries to persist data to spark worker memory firstly, if memory is not sufficient,
     then it fallbacks to persist spilled data to spark worker local disk.
     Return the list of tuple (chunk_id, chunk_row_count, chunk_byte_count).
     This function is only available when it is called from spark driver process.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    dataframe : DataFrame
+        the spark DataFrame to be persisted as chunks
+    max_records_per_chunk : int
+        an integer representing max records per chunk
+
+    Notes
+    -----
+    This API is a developer API.
     """
     spark = dataframe.sparkSession
     if spark is None:
@@ -48,12 +63,12 @@ def persist_dataframe_as_chunks(
     sc = spark.sparkContext
     if sc.getConf().get("spark.python.dataFrameChunkRead.enabled", "false").lower() != "true":
         raise PySparkRuntimeError(
-            "In order to use 'persist_dataframe_as_chunks' API, you must set spark "
+            "In order to use 'persistDataFrameAsChunks' API, you must set spark "
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true'."
         )
     chunk_meta_list = list(
         sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(  # type: ignore[union-attr]
-            dataframe._jdf, max_records_per_batch
+            dataframe._jdf, max_records_per_chunk
         )
     )
     return [
@@ -62,10 +77,20 @@ def persist_dataframe_as_chunks(
     ]
 
 
-def unpersist_chunks(chunk_ids: list[str]) -> None:
-    """
-    Unpersist chunks by chunk ids.
+def unpersistChunks(chunk_ids: list[str]) -> None:
+    """Unpersist chunks by chunk ids.
     This function is only available when it is called from spark driver process.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    chunk_ids : list[str]
+        A list of chunk ids
+
+    Notes
+    -----
+    This API is a developer API.
     """
     sc = SparkSession.getActiveSession().sparkContext  # type: ignore[union-attr]
     (
@@ -75,18 +100,28 @@ def unpersist_chunks(chunk_ids: list[str]) -> None:
     )
 
 
-def read_chunk(chunk_id: str) -> pa.Table:
-    """
-    Read chunk by id, return this chunk as an arrow table.
+def readChunk(chunk_id: str) -> pa.Table:
+    """Read chunk by id, return this chunk as an arrow table.
     You can call this function from spark driver, spark python UDF python,
     descendant process of spark driver, or descendant process of spark python UDF worker.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    chunk_id : str
+        a string of chunk id
+
+    Notes
+    -----
+    This API is a developer API.
     """
 
     if "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT" not in os.environ:
         raise PySparkRuntimeError(
             "In order to use dataframe chunk read API, you must set spark "
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true',"
-            "and you must call 'read_chunk' API in pyspark driver, pyspark UDF,"
+            "and you must call 'readChunk' API in pyspark driver, pyspark UDF,"
             "descendant process of pyspark driver, or descendant process of pyspark "
             "UDF worker."
         )

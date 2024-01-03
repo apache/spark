@@ -36,6 +36,12 @@ case class ChunkMeta(
   byteCount: Long
 )
 
+/**
+ * A partition evaluator class to:
+ *  1. convert spark DataFrame partition rows into arrow batches
+ *  2. persist arrow batches to block manager using storage level "MEMORY_AND_DISK",
+ *    each arrow batch is persisted as a "Array[Byte]" type block.
+ */
 class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
     schema: StructType,
     timeZoneId: String,
@@ -56,7 +62,7 @@ class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
     try {
       while (arrowBatchIter.hasNext) {
         val arrowBatch = arrowBatchIter.next()
-        val rowCount = arrowBatchIter.lastBatchRowCount
+        val rowCount = arrowBatchIter.getRowCountInLastBatch
 
         val uuid = java.util.UUID.randomUUID()
         val blockId = ArrowBatchBlockId(uuid)
@@ -95,6 +101,10 @@ class PersistDataFrameAsArrowBatchChunksPartitionEvaluator(
   }
 }
 
+/**
+ * A partition evaluator factory class to create
+ * instance of `PersistDataFrameAsArrowBatchChunksPartitionEvaluator`.
+ */
 class PersistDataFrameAsArrowBatchChunksPartitionEvaluatorFactory(
     schema: StructType,
     timeZoneId: String,
