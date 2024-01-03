@@ -2260,7 +2260,7 @@
     "message" : [
       "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
     ],
-    "sqlState" : "42K10"
+    "sqlState" : "42000"
   },
   "INVALID_SCHEMA" : {
     "message" : [

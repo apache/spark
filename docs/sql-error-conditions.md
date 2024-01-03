@@ -1285,7 +1285,7 @@ Parameterized query must either use positional, or named parameters, but not bot
 
 ### INVALID_SAVE_MODE
 
-[SQLSTATE: 42K10](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The specified save mode `<mode>` is invalid. Valid save modes include "append", "overwrite", "ignore", "error", "errorifexists", and "default".
 
