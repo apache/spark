@@ -20,6 +20,7 @@ import pickle
 import sys
 import subprocess
 import tempfile
+import time
 import unittest
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql import SparkSession
@@ -115,6 +116,7 @@ for chunk_id in chunk_ids:
         df = self.spark.range(16)
         chunks = persistDataFrameAsChunks(df, 16)
         unpersistChunks([chunks[0].id])
+        time.sleep(5)  # ensure chunk removal completes
         with self.assertRaisesRegex(
             PySparkRuntimeError,
             "cache does not exist or has been removed",
