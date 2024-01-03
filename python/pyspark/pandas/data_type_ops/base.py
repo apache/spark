@@ -150,7 +150,7 @@ def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     if isinstance(dtype, extension_dtypes):
         scol = index_ops.spark.column.cast(spark_type)
     else:
-        scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+        scol = F.when(index_ops.spark.column.isNull(), F.lit(True)).otherwise(
             index_ops.spark.column.cast(spark_type)
         )
     return index_ops._with_new_scol(
