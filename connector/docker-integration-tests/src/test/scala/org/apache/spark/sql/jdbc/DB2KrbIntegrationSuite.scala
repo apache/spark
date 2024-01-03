@@ -34,7 +34,8 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.6.0a):
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.6.0a
- *     ./build/sbt -Pdocker-integration-tests "testOnly *DB2KrbIntegrationSuite"
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *DB2KrbIntegrationSuite"
  * }}}
  */
 @DockerTest

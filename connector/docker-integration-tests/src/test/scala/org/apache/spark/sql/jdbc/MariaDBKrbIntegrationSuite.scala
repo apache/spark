@@ -29,7 +29,7 @@ import org.apache.spark.tags.DockerTest
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MARIADB_DOCKER_IMAGE_NAME=mariadb:10.5.12
  *     ./build/sbt -Pdocker-integration-tests
- *     "testOnly org.apache.spark.sql.jdbc.MariaDBKrbIntegrationSuite"
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MariaDBKrbIntegrationSuite"
  * }}}
  */
 @DockerTest
