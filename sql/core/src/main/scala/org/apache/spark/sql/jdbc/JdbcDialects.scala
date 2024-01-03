@@ -159,7 +159,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       val connection =
         ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
       require(connection != null,
-        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+        s"The driver could not open a JDBC connection. Check the URL: ${options.getRedactUrl()}")
       connection
     }
   }
