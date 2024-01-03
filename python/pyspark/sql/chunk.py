@@ -34,9 +34,7 @@ ChunkMeta = namedtuple("ChunkMeta", ["id", "row_count", "byte_count"])
 require_minimum_pyarrow_version()
 
 
-def persistDataFrameAsChunks(
-    dataframe: DataFrame, max_records_per_chunk: int
-) -> list[ChunkMeta]:
+def persistDataFrameAsChunks(dataframe: DataFrame, max_records_per_chunk: int) -> list[ChunkMeta]:
     """Persist and materialize the spark dataframe as chunks, each chunk is an arrow batch.
     It tries to persist data to spark worker memory firstly, if memory is not sufficient,
     then it fallbacks to persist spilled data to spark worker local disk.

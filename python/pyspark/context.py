@@ -302,9 +302,9 @@ class SparkContext:
             os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_PORT"] = str(
                 self._jsc.sc().cachedArrowBatchServerPort().get()
             )
-            os.environ[
-                "PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"
-            ] = self._jsc.sc().cachedArrowBatchServerSecret().get()
+            os.environ["PYSPARK_EXECUTOR_CACHED_ARROW_BATCH_SERVER_SECRET"] = (
+                self._jsc.sc().cachedArrowBatchServerSecret().get()
+            )
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
