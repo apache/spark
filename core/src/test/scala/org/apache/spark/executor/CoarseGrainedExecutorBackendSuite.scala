@@ -45,7 +45,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorRemoved, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.{SerializableBuffer, ThreadUtils, Utils}
+import org.apache.spark.util.{SerializableBuffer, SslTestUtils, ThreadUtils, Utils}
 
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
