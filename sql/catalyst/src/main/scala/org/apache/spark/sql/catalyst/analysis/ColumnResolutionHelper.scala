@@ -505,60 +505,55 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
 
-    if (q.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId)) {
-      resolveUnresolvedAttributeByPlan(u, q, isMetadataAccess)
+    var result = Option.empty[NamedExpression]
+    var numMatched = 0
+    resolveUnresolvedAttributeByPlanId(u, planId, isMetadataAccess, q).foreach {
+      case Some(resolved) =>
+        numMatched += 1
+        if (result.isEmpty) {
+          result = Some(resolved)
+        } else {
+          throw new AnalysisException(
+            errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+            messageParameters = Map("name" -> toSQLId(u.nameParts)),
+            origin = u.origin
+          )
+        }
+      case _ => numMatched += 1
+    }
+    if (numMatched == 0) {
+      // For example:
+      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+      //  df1.select(df2.a)   <-   illegal reference df2.a
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3051",
+        messageParameters = Map(
+          "u" -> u.toString,
+          "planId" -> planId.toString,
+          "q" -> q.toString))
+    }
+    result
+  }
+
+  private def resolveUnresolvedAttributeByPlanId(
+      u: UnresolvedAttribute,
+      id: Long,
+      isMetadataAccess: Boolean,
+      p: LogicalPlan): Iterator[Option[NamedExpression]] = {
+    if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      Iterator.single(
+        resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess))
     } else {
-      val (resolved, found) = q.children.map { child =>
+      p.children.iterator.flatMap { child =>
         val outputSet = if (isMetadataAccess) {
           // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
           child.outputSet ++ AttributeSet(child.metadataOutput)
         } else {
           child.outputSet
         }
-        resolveUnresolvedAttributeByPlanId(
-          u, planId, child, outputSet, isMetadataAccess)
-      }.fold((Seq.empty, 0)) { case ((r1, c1), (r2, c2)) =>
-        (r1 ++ r2, c1 + c2)
-      }
-      if (found == 0) {
-        // For example:
-        //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
-        //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
-        //  df1.select(df2.a)   <-   illegal reference df2.a
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3051",
-          messageParameters = Map(
-            "u" -> u.toString,
-            "planId" -> planId.toString,
-            "q" -> q.toString))
-      }
-      if (resolved.length > 1) {
-        throw new AnalysisException(
-          errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
-          messageParameters = Map("name" -> toSQLId(u.nameParts)),
-          origin = u.origin
-        )
-      }
-      resolved.headOption
-    }
-  }
-
-  private def resolveUnresolvedAttributeByPlanId(
-      u: UnresolvedAttribute,
-      id: Long,
-      p: LogicalPlan,
-      outputSet: AttributeSet,
-      isMetadataAccess: Boolean): (Seq[NamedExpression], Int) = {
-    if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      val resolved = resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
-        .filter(outputSet.contains).toSeq
-      (resolved, 1)
-    } else {
-      p.children.map { child =>
-        resolveUnresolvedAttributeByPlanId(
-          u, id, child, outputSet, isMetadataAccess)
-      }.fold((Seq.empty, 0)) { case ((r1, c1), (r2, c2)) =>
-        (r1 ++ r2, c1 + c2)
+        resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, child)
+          .map(_.filter(outputSet.contains))
       }
     }
   }
