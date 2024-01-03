@@ -164,9 +164,11 @@ class ExecutorResourceRequests:
         _requests: Optional[Dict[str, ExecutorResourceRequest]] = None,
     ):
         from pyspark import SparkContext
+        from pyspark.sql import is_remote
 
         _jvm = _jvm or SparkContext._jvm
-        if _jvm is not None:
+
+        if _jvm is not None and not is_remote():
             self._java_executor_resource_requests = (
                 _jvm.org.apache.spark.resource.ExecutorResourceRequests()
             )
@@ -460,9 +462,11 @@ class TaskResourceRequests:
         _requests: Optional[Dict[str, TaskResourceRequest]] = None,
     ):
         from pyspark import SparkContext
+        from pyspark.sql import is_remote
 
         _jvm = _jvm or SparkContext._jvm
-        if _jvm is not None:
+
+        if _jvm is not None and not is_remote():
             self._java_task_resource_requests: Optional[
                 JavaObject
             ] = _jvm.org.apache.spark.resource.TaskResourceRequests()

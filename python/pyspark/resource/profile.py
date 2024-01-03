@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+from threading import RLock
 from typing import overload, Dict, Union, Optional
 
 from py4j.java_gateway import JavaObject
@@ -99,6 +99,11 @@ class ResourceProfile:
         _exec_req: Optional[Dict[str, ExecutorResourceRequest]] = None,
         _task_req: Optional[Dict[str, TaskResourceRequest]] = None,
     ):
+        # profile id
+        self._id: Optional[int] = None
+        # lock to protect _id
+        self._lock = RLock()
+
         if _java_resource_profile is not None:
             self._java_resource_profile = _java_resource_profile
         else:
@@ -114,14 +119,26 @@ class ResourceProfile:
         int
             A unique id of this :class:`ResourceProfile`
         """
+        with self._lock:
+            if self._id is None:
+                if self._java_resource_profile is not None:
+                    self._id = self._java_resource_profile.id()
+                else:
+                    from pyspark.sql import is_remote
 
-        if self._java_resource_profile is not None:
-            return self._java_resource_profile.id()
-        else:
-            raise RuntimeError(
-                "SparkContext must be created to get the id, get the id "
-                "after adding the ResourceProfile to an RDD"
-            )
+                    if is_remote():
+                        from pyspark.sql.connect.resource.profile import _ResourceProfile
+
+                        rp = _ResourceProfile(
+                            self._executor_resource_requests, self._task_resource_requests
+                        )
+                        self._id = rp.id
+                    else:
+                        raise RuntimeError(
+                            "SparkContext must be created to get the id, get the id "
+                            "after adding the ResourceProfile to an RDD"
+                        )
+            return self._id
 
     @property
     def taskResources(self) -> Dict[str, TaskResourceRequest]:
@@ -185,7 +202,10 @@ class ResourceProfileBuilder:
 
         # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
         _jvm = SparkContext._jvm
-        if _jvm is not None:
+
+        from pyspark.sql import is_remote
+
+        if _jvm is not None and not is_remote():
             self._jvm = _jvm
             self._java_resource_profile_builder = (
                 _jvm.org.apache.spark.resource.ResourceProfileBuilder()

@@ -80,6 +80,11 @@ class SparkConnectServiceStub(object):
             request_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
         )
+        self.BuildResourceProfile = channel.unary_unary(
+            "/spark.connect.SparkConnectService/BuildResourceProfile",
+            request_serializer=spark_dot_connect_dot_base__pb2.BuildResourceProfileRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.BuildResourceProfileResponse.FromString,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -162,6 +167,12 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def BuildResourceProfile(self, request, context):
+        """Build ResourceProfile and get the profile id"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -214,6 +225,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.FetchErrorDetails,
             request_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.SerializeToString,
+        ),
+        "BuildResourceProfile": grpc.unary_unary_rpc_method_handler(
+            servicer.BuildResourceProfile,
+            request_deserializer=spark_dot_connect_dot_base__pb2.BuildResourceProfileRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.BuildResourceProfileResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -506,6 +522,35 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/FetchErrorDetails",
             spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def BuildResourceProfile(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/BuildResourceProfile",
+            spark_dot_connect_dot_base__pb2.BuildResourceProfileRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.BuildResourceProfileResponse.FromString,
             options,
             channel_credentials,
             insecure,

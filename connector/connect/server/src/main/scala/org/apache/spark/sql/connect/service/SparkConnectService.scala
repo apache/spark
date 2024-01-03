@@ -33,7 +33,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, BuildResourceProfileRequest, BuildResourceProfileResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -221,6 +221,20 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
     } catch {
       ErrorUtils.handleError(
         "getErrorInfo",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
+  }
+
+  override def buildResourceProfile(
+      request: BuildResourceProfileRequest,
+      responseObserver: StreamObserver[BuildResourceProfileResponse]): Unit = {
+    try {
+      new SparkConnectBuildResourceProfileHandler(responseObserver).handle(request)
+    } catch {
+      ErrorUtils.handleError(
+        "buildResourceProfile",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)
