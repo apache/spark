@@ -55,23 +55,22 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   import StateStoreTestsHelper._
 
-  Seq(true, false).foreach { useColumnFamilies =>
-    test(s"version encoding with useColumnFamilies=$useColumnFamilies") {
-      import RocksDBStateStoreProvider._
+  testWithColumnFamilies(s"version encoding",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    import RocksDBStateStoreProvider._
 
-      tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
-        val store = provider.getStore(0)
-        val keyRow = dataToKeyRow("a", 0)
-        val valueRow = dataToValueRow(1)
-        store.put(keyRow, valueRow)
-        val iter = provider.rocksDB.iterator()
-        assert(iter.hasNext)
-        val kv = iter.next()
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      val keyRow = dataToKeyRow("a", 0)
+      val valueRow = dataToValueRow(1)
+      store.put(keyRow, valueRow)
+      val iter = provider.rocksDB.iterator()
+      assert(iter.hasNext)
+      val kv = iter.next()
 
-        // Verify the version encoded in first byte of the key and value byte arrays
-        assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-        assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-      }
+      // Verify the version encoded in first byte of the key and value byte arrays
+      assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+      assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
     }
   }
 
@@ -124,38 +123,36 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  Seq(true, false).foreach { useColumnFamilies =>
-    test("rocksdb file manager metrics exposed with " +
-      s"useColumnFamilies=$useColumnFamilies") {
-      import RocksDBStateStoreProvider._
-      def getCustomMetric(metrics: StateStoreMetrics,
-        customMetric: StateStoreCustomMetric): Long = {
-        val metricPair = metrics.customMetrics.find(_._1.name == customMetric.name)
-        assert(metricPair.isDefined)
-        metricPair.get._2
-      }
+  testWithColumnFamilies("rocksdb file manager metrics exposed",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    import RocksDBStateStoreProvider._
+    def getCustomMetric(metrics: StateStoreMetrics,
+      customMetric: StateStoreCustomMetric): Long = {
+      val metricPair = metrics.customMetrics.find(_._1.name == customMetric.name)
+      assert(metricPair.isDefined)
+      metricPair.get._2
+    }
 
-      withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
-        tryWithProviderResource(newStoreProvider(useColumnFamilies)) { provider =>
-          val store = provider.getStore(0)
-          // Verify state after updating
-          put(store, "a", 0, 1)
-          assert(get(store, "a", 0) === Some(1))
-          assert(store.commit() === 1)
-          provider.doMaintenance()
-          assert(store.hasCommitted)
-          val storeMetrics = store.metrics
-          assert(storeMetrics.numKeys === 1)
-          // SPARK-46249 - In the case of changelog checkpointing, the snapshot upload happens in
-          // the context of the background maintenance thread. The file manager metrics are updated
-          // here and will be available as part of the next metrics update. So we cannot rely on
-          // the file manager metrics to be available here for this version.
-          if (!isChangelogCheckpointingEnabled) {
-            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
-            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
-            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
-            assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
-          }
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+      tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+        val store = provider.getStore(0)
+        // Verify state after updating
+        put(store, "a", 0, 1)
+        assert(get(store, "a", 0) === Some(1))
+        assert(store.commit() === 1)
+        provider.doMaintenance()
+        assert(store.hasCommitted)
+        val storeMetrics = store.metrics
+        assert(storeMetrics.numKeys === 1)
+        // SPARK-46249 - In the case of changelog checkpointing, the snapshot upload happens in
+        // the context of the background maintenance thread. The file manager metrics are updated
+        // here and will be available as part of the next metrics update. So we cannot rely on
+        // the file manager metrics to be available here for this version.
+        if (!isChangelogCheckpointingEnabled) {
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
         }
       }
     }
@@ -242,19 +239,21 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  override def testWithAllCodec(name: String)(func: => Any): Unit = {
-    codecsInShortName.foreach { codecName =>
-      super.test(s"$name - with codec $codecName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
-          func
+  override def testWithAllCodec(name: String)(func: Boolean => Any): Unit = {
+    Seq(true, false).foreach { colFamiliesEnabled =>
+      codecsInShortName.foreach { codecName =>
+        super.test(s"$name - with codec $codecName - colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
-    }
 
-    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecName =>
-      super.test(s"$name - with codec $codecName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
-          func
+      CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecName =>
+        super.test(s"$name - with codec $codecName - colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
     }
