@@ -64,8 +64,11 @@ def persistDataFrameAsChunks(dataframe: DataFrame, max_records_per_chunk: int) -
             "In order to use 'persistDataFrameAsChunks' API, you must set spark "
             "cluster config 'spark.python.dataFrameChunkRead.enabled' to 'true'."
         )
+
+    python_api = sc._jvm.org.apache.spark.sql.api.python  # type: ignore[union-attr]
+
     chunk_meta_list = list(
-        sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(  # type: ignore[union-attr]
+        python_api.ChunkReadUtils.persistDataFrameAsArrowBatchChunks(
             dataframe._jdf, max_records_per_chunk
         )
     )
@@ -91,11 +94,8 @@ def unpersistChunks(chunk_ids: list[str]) -> None:
     This API is a developer API.
     """
     sc = SparkSession.getActiveSession().sparkContext  # type: ignore[union-attr]
-    (
-        sc._jvm.org.apache.spark.sql.api.python.ChunkReadUtils.unpersistChunks(  # type: ignore[union-attr]
-            chunk_ids
-        )
-    )
+    python_api = sc._jvm.org.apache.spark.sql.api.python  # type: ignore[union-attr]
+    python_api.ChunkReadUtils.unpersistChunks(chunk_ids)
 
 
 def readChunk(chunk_id: str) -> pa.Table:
