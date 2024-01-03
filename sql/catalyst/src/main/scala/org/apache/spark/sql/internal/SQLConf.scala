@@ -141,12 +141,7 @@ object SQLConf {
    * Default config. Only used when there is no active SparkSession for the thread.
    * See [[get]] for more information.
    */
-  private lazy val fallbackConf = new ThreadLocal[SQLConf] {
-    override def initialValue: SQLConf = new SQLConf
-  }
-
-  /** See [[get]] for more information. */
-  def getFallbackConf: SQLConf = fallbackConf.get()
+  def fallbackConf: SQLConf = new SQLConf
 
   private lazy val existingConf = new ThreadLocal[SQLConf] {
     override def initialValue: SQLConf = null
@@ -170,7 +165,7 @@ object SQLConf {
    * Defines a getter that returns the SQLConf within scope.
    * See [[get]] for more information.
    */
-  private val confGetter = new AtomicReference[() => SQLConf](() => fallbackConf.get())
+  private val confGetter = new AtomicReference[() => SQLConf](() => fallbackConf)
 
   /**
    * Sets the active config object within the current scope.

@@ -27,7 +27,7 @@ class SQLConfGetterSuite extends SparkFunSuite with LocalSparkSession {
     assert(SQLConf.get eq spark.sessionState.conf,
       "SQLConf.get should get the conf from the active spark session.")
     spark.stop()
-    assert(SQLConf.get eq SQLConf.getFallbackConf,
+    assert(SQLConf.get eq SQLConf.fallbackConf,
       "SQLConf.get should not get conf from a stopped spark session.")
   }
 }
