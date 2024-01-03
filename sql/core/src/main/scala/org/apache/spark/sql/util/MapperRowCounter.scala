@@ -37,7 +37,7 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Integer
   /**
    * Returns false if this accumulator has had any values added to it or the sum is non-zero.
    */
-  override def isZero: Boolean = this.synchronized(getOrCreate.isEmpty)
+  override def isUpdated: Boolean = this.synchronized(!getOrCreate.isEmpty)
 
   override def copyAndReset(): MapperRowCounter = new MapperRowCounter
 
@@ -66,7 +66,7 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Integer
 
   def setPartitionId(id: jl.Integer): Unit = {
     this.synchronized {
-      assert(isZero, "agg must not have been initialized")
+      assert(isUpdated, "agg must not have been initialized")
       getOrCreate.add((id, 0))
     }
   }

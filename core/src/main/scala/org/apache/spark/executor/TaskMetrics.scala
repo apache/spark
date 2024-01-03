@@ -274,10 +274,10 @@ class TaskMetrics private[spark] () extends Serializable {
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
 
-  private[spark] def nonZeroInternalAccums(): Seq[AccumulatorV2[_, _]] = {
-    // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
+  private[spark] def updatedInternalAccums(): Seq[AccumulatorV2[_, _]] = {
+    // RESULT_SIZE accumulator is not updated at the executor, we need to send it back as its
     // value will be updated at driver side.
-    internalAccums.filter(a => !a.isZero || a == _resultSize)
+    internalAccums.filter(a => a.isUpdated || a == _resultSize)
   }
 }
 

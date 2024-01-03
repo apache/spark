@@ -114,7 +114,7 @@ class AggregatingAccumulator private(
     joinedRow = null
   }
 
-  override def isZero: Boolean = buffer == null
+  override def isUpdated: Boolean = buffer != null
 
   override def copyAndReset(): AggregatingAccumulator = {
     new AggregatingAccumulator(
@@ -151,7 +151,7 @@ class AggregatingAccumulator private(
 
   override def merge(
       other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(true, ()) {
-    if (!other.isZero) {
+    if (other.isUpdated) {
       other match {
         case agg: AggregatingAccumulator =>
           val buffer = getOrCreateBuffer()
@@ -185,7 +185,7 @@ class AggregatingAccumulator private(
 
   override def value: InternalRow = withSQLConf(false, InternalRow.empty) {
     // Either use the existing buffer or create a temporary one.
-    val input = if (!isZero) {
+    val input = if (!isUpdated) {
       buffer
     } else {
       // Create a temporary buffer because we want to avoid changing the state of the accumulator

@@ -1719,7 +1719,7 @@ private[spark] class DAGScheduler(
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
         // To avoid UI cruft, ignore cases where value wasn't updated
-        if (acc.name.isDefined && !updates.isZero) {
+        if (acc.name.isDefined && updates.isUpdated) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
           event.taskInfo.setAccumulables(
             acc.toInfo(Some(updates.value), Some(acc.value)) +: event.taskInfo.accumulables)
