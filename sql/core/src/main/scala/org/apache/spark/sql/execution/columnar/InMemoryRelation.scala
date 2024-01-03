@@ -285,9 +285,11 @@ case class CachedRDDBuilder(
         cachedPlan.conf)
     }
     val cached = cb.mapPartitionsInternal { it =>
-      TaskContext.get().addTaskCompletionListener[Unit](_ => {
-        materializedPartitions.add(1L)
-      })
+      TaskContext.get().addTaskCompletionListener[Unit] { context =>
+        if (!context.isFailed() && !context.isInterrupted()) {
+          materializedPartitions.add(1L)
+        }
+      }
       new Iterator[CachedBatch] {
         override def hasNext: Boolean = it.hasNext
         override def next(): CachedBatch = {

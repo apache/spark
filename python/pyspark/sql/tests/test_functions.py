@@ -1452,6 +1452,20 @@ class FunctionsTestsMixin:
         self.assertIsInstance(df.first()[0], datetime.datetime)
         self.assertEqual(df.schema.names[0], "now()")
 
+    def test_json_tuple_empty_fields(self):
+        df = self.spark.createDataFrame(
+            [
+                ("1", """{"f1": "value1", "f2": "value2"}"""),
+                ("2", """{"f1": "value12"}"""),
+            ],
+            ("key", "jstring"),
+        )
+        self.assertRaisesRegex(
+            PySparkValueError,
+            "At least one field must be specified",
+            lambda: df.select(F.json_tuple(df.jstring)),
+        )
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass

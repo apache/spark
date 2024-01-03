@@ -474,12 +474,6 @@ For more details see [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-
 
 DataType `<type>` requires a length parameter, for example `<type>`(10). Please specify the length.
 
-### DATA_SOURCE_ALREADY_EXISTS
-
-[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
-
 ### DATA_SOURCE_NOT_EXIST
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -496,7 +490,9 @@ Failed to find the data source: `<provider>`. Please find packages at `https://s
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The schema of the data source table `<tableSchema>` does not match the actual schema `<actualSchema>`. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+The schema of the data source table does not match the expected schema. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+Data Source schema: `<dsSchema>`
+Expected schema: `<expectedSchema>`
 
 ### DATETIME_OVERFLOW
 
@@ -883,12 +879,6 @@ For more details see [INCOMPLETE_TYPE_DEFINITION](sql-error-conditions-incomplet
 You may get a different result due to the upgrading to
 
 For more details see [INCONSISTENT_BEHAVIOR_CROSS_VERSION](sql-error-conditions-inconsistent-behavior-cross-version-error-class.html)
-
-### INCORRECT_END_OFFSET
-
-[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-Max offset with `<rowsPerSecond>` rowsPerSecond is `<maxSeconds>`, but it's `<endSeconds>` now.
 
 ### INCORRECT_RAMP_UP_RATE
 
@@ -1398,6 +1388,12 @@ Rewrite the query to avoid window functions, aggregate functions, and generator 
 
 Cannot specify ORDER BY or a window frame for `<aggFunc>`.
 
+### INVALID_WRITER_COMMIT_MESSAGE
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The data source writer has generated an invalid number of commit messages. Expected exactly one writer commit message from each task, but received `<detail>`.
+
 ### [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-write-distribution-error-class.html)
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1812,11 +1808,11 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
-### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+### PYTHON_DATA_SOURCE_ERROR
 
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
-Failed to `<action>` Python data source `<type>` in Python: `<msg>`
+Failed to `<action>` Python data source `<type>`: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 

@@ -2231,6 +2231,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         limit_direction: Optional[str] = None,
         limit_area: Optional[str] = None,
     ) -> "Series":
+        if self.dtype == "object":
+            warnings.warn(
+                "Series.interpolate with object dtype is deprecated and will raise in a "
+                "future version. Convert to a specific numeric type before interpolating.",
+                FutureWarning,
+            )
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
