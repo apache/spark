@@ -243,8 +243,9 @@ class StaxXmlParser(
           case _ => convertField(parser, dataType, startElementName, attributes)
         }
       case (c: Characters, dt: DataType) =>
+        val value = convertTo(c.getData, dt)
         parser.next
-        convertTo(c.getData, dt)
+        value
       case (e: XMLEvent, dt: DataType) =>
         throw new IllegalArgumentException(
           s"Failed to parse a value for data type $dt with event ${e.toString}"
