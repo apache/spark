@@ -15324,15 +15324,26 @@ def reverse(col: "ColumnOrName") -> Column:
     --------
     Example 1: Reverse a string
 
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('Spark SQL',)], ['data'])
-    >>> df.select(reverse(df.data).alias('s')).collect()
-    [Row(s='LQS krapS')]
+    >>> df.select(sf.reverse(df.data)).show()
+    +-------------+
+    |reverse(data)|
+    +-------------+
+    |    LQS krapS|
+    +-------------+
 
     Example 2: Reverse an array
 
     >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
-    >>> df.select(reverse(df.data).alias('r')).collect()
-    [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
+    >>> df.select(sf.reverse(df.data)).show()
+    +-------------+
+    |reverse(data)|
+    +-------------+
+    |    [3, 1, 2]|
+    |          [1]|
+    |           []|
+    +-------------+
     """
     return _invoke_function_over_columns("reverse", col)
 
@@ -15434,9 +15445,9 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     --------
     Example 1: The key is in the map
 
-    >>> from pyspark.sql.functions import map_contains_key
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
-    >>> df.select(map_contains_key("data", 1)).show()
+    >>> df.select(sf.map_contains_key("data", 1)).show()
     +-------------------------+
     |map_contains_key(data, 1)|
     +-------------------------+
@@ -15445,7 +15456,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
 
     Example 2: The key is not in the map
 
-    >>> df.select(map_contains_key("data", -1)).show()
+    >>> df.select(sf.map_contains_key("data", -1)).show()
     +--------------------------+
     |map_contains_key(data, -1)|
     +--------------------------+
