@@ -1126,9 +1126,3 @@ table tr {
 table tr:nth-child(2n) {
   background-color: #F1F4F5; /* Sets a different background color for even rows */
 }
-
-.property-table {
-  width: 100%;
-  table-layout: fixed;
-  word-wrap: break-word;
-}

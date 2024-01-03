@@ -143,7 +143,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Spark Properties
 
-<table class="property-table">
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
 <thead>
   <tr>
     <th style="width: 30%">Property Name</th>
@@ -772,7 +772,7 @@ staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 
-<table class="property-table">
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
 <thead>
 <tr>
   <th style="width: 30%">Property Name</th>
@@ -876,7 +876,7 @@ to avoid garbage collection issues during shuffle.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
 
-<table class="property-table">
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
 <thead>
   <tr>
     <th style="width: 30%">Property Name</th>

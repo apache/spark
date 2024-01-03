@@ -592,7 +592,7 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table class="property-table">
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
 <thead>
   <tr>
     <th style="width: 30%">Property Name</th>
@@ -1665,7 +1665,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Metadata
 
-<table class="property-table">
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
 <thead>
   <tr>
     <th style="width: 20%">Pod metadata key</th>
@@ -1707,7 +1707,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Spec
 
-<table class="property-table">
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
 <thead>
   <tr>
     <th style="width: 20%">Pod spec key</th>
@@ -1766,7 +1766,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
 
-<table class="property-table">
+<table style="width: 100%; table-layout: fixed;word-wrap: break-word;">
 <thead>
   <tr>
     <th style="width: 20%">Container spec key</th>
