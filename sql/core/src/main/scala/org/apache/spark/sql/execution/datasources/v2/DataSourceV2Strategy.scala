@@ -24,7 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedViewIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable, ViewChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.structTypeToV2Columns
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -513,6 +513,68 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
+
+    case CreateView(ResolvedViewIdentifier(catalog, ident), userSpecifiedColumns, comment,
+        properties, Some(originalText), query, allowExisting, replace) =>
+      CreateViewExec(
+        catalog = catalog,
+        ident = ident,
+        originalText = originalText,
+        query = query,
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = comment,
+        properties = properties,
+        allowExisting = allowExisting,
+        replace = replace) :: Nil
+
+    case AlterViewAs(ResolvedViewIdentifier(catalog, ident), originalText, query) =>
+      CreateViewExec(
+        catalog = catalog,
+        ident = ident,
+        originalText = originalText,
+        query = query,
+        userSpecifiedColumns = Seq.empty,
+        comment = None,
+        properties = Map.empty,
+        allowExisting = false,
+        replace = true) :: Nil
+
+    case DropView(ResolvedViewIdentifier(catalog, ident), ifExists) =>
+      DropViewExec(catalog, ident, ifExists) :: Nil
+
+    case RenameTable(ResolvedViewIdentifier(catalog, oldIdent), newIdent, true) =>
+      RenameViewExec(catalog, oldIdent, newIdent.asIdentifier) :: Nil
+
+    case SetViewProperties(ResolvedViewIdentifier(catalog, ident), props) =>
+      val changes = props.map {
+        case (property, value) => ViewChange.setProperty(property, value)
+      }.toSeq
+      AlterViewExec(catalog, ident, changes) :: Nil
+
+    case UnsetViewProperties(ResolvedViewIdentifier(catalog, ident), propertyKeys, ifExists) =>
+      if (!ifExists) {
+        val view = catalog.loadView(ident)
+        propertyKeys.filterNot(view.properties.containsKey).foreach { property =>
+          QueryCompilationErrors.insufficientTablePropertyError(property)
+        }
+      }
+      val changes = propertyKeys.map(ViewChange.removeProperty)
+      AlterViewExec(catalog, ident, changes) :: Nil
+
+    case DescribeRelation(ResolvedPersistentView(_, _, desc), partitionSpec, isExtended, output) =>
+      if (partitionSpec.nonEmpty) {
+        throw QueryCompilationErrors.describeDoesNotSupportPartitionForViewError()
+      }
+      DescribeViewExec(desc, output, isExtended) :: Nil
+
+    case ShowCreateTable(ResolvedPersistentView(_, _, desc), asSerde, output) =>
+      if (asSerde) {
+        throw QueryCompilationErrors.showCreateTableAsSerdeNotSupportedForV2ViewsError()
+      }
+      ShowCreateViewExec(desc, output) :: Nil
+
+    case ShowTableProperties(ResolvedPersistentView(_, _, desc), propertyKey, output) =>
+      ShowViewPropertiesExec(desc, propertyKey, output) :: Nil
 
     case CreateIndex(ResolvedTable(_, _, table, _),
         indexName, indexType, ifNotExists, columns, properties) =>

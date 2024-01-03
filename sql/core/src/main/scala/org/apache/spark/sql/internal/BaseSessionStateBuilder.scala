@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, ReplaceCharWithVarchar, ResolveSessionCatalog, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, ReplaceCharWithVarchar, ResolveSessionCatalog, TableFunctionRegistry, ViewSubstitution}
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -197,6 +197,10 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `catalog` fields.
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+
+    override val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] =
+      Seq(ViewSubstitution(this.catalogManager, sqlParser))
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
@@ -224,6 +228,16 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         customCheckRules
+  }
+
+  /**
+   * Custom substitution rules to add to the Analyzer. Prefer overriding this instead of creating
+   * your own Analyzer.
+   *
+   * Note that this may NOT depend on the `analyzer` function.
+   */
+  protected def customSubstitutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildResolutionRules(session)
   }
 
   /**

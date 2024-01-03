@@ -2306,6 +2306,11 @@
           "CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed."
         ]
       },
+      "DESCRIBE_PARTITION_FOR_VIEW" : {
+        "message" : [
+          "DESCRIBE does not support partition for view."
+        ]
+      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
@@ -2478,6 +2483,12 @@
       "Variable type must be string type but got <varType>."
     ],
     "sqlState" : "42K09"
+  },
+  "INVALID_VIEW_CURRENT_CATALOG" : {
+    "message" : [
+      "Invalid current catalog <currentCatalog> in view <viewName>"
+    ],
+    "sqlState" : "XX000"
   },
   "INVALID_VIEW_TEXT" : {
     "message" : [
@@ -2798,6 +2809,12 @@
   "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
       "<cmd> is not supported for v2 tables."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NOT_SUPPORTED_COMMAND_FOR_V2_VIEW" : {
+    "message" : [
+      "<cmd> is not supported for v2 views."
     ],
     "sqlState" : "0A000"
   },
@@ -4418,11 +4435,6 @@
   "_LEGACY_ERROR_TEMP_1008" : {
     "message" : [
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1011" : {
-    "message" : [
-      "Writing into a view is not allowed. View: <identifier>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1012" : {
