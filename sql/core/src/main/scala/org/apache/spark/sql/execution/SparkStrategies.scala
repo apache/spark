@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.SparkException
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -42,6 +43,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.CollatedStringType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -205,6 +207,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
     }
 
+    private def hashJoinsSupport(leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
+      !(leftKeys.exists(e => e.dataType.isInstanceOf[CollatedStringType]) ||
+        rightKeys.exists(e => e.dataType.isInstanceOf[CollatedStringType]))
+    }
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
@@ -229,36 +236,44 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond,
           _, left, right, hint) =>
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
-          val buildSide = getBroadcastBuildSide(
-            left, right, joinType, hint, onlyLookingAtHint, conf)
-          checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
-          buildSide.map {
-            buildSide =>
-              Seq(joins.BroadcastHashJoinExec(
-                leftKeys,
-                rightKeys,
-                joinType,
-                buildSide,
-                nonEquiCond,
-                planLater(left),
-                planLater(right)))
+          if (hashJoinsSupport(leftKeys, rightKeys)) {
+            val buildSide = getBroadcastBuildSide(
+              left, right, joinType, hint, onlyLookingAtHint, conf)
+            checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
+            buildSide.map {
+              buildSide =>
+                Seq(joins.BroadcastHashJoinExec(
+                  leftKeys,
+                  rightKeys,
+                  joinType,
+                  buildSide,
+                  nonEquiCond,
+                  planLater(left),
+                  planLater(right)))
+            }
+          } else {
+            None
           }
         }
 
         def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
-          val buildSide = getShuffleHashJoinBuildSide(
-            left, right, joinType, hint, onlyLookingAtHint, conf)
-          checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, false)
-          buildSide.map {
-            buildSide =>
-              Seq(joins.ShuffledHashJoinExec(
-                leftKeys,
-                rightKeys,
-                joinType,
-                buildSide,
-                nonEquiCond,
-                planLater(left),
-                planLater(right)))
+          if (hashJoinsSupport(leftKeys, rightKeys)) {
+            val buildSide = getShuffleHashJoinBuildSide(
+              left, right, joinType, hint, onlyLookingAtHint, conf)
+            checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, false)
+            buildSide.map {
+              buildSide =>
+                Seq(joins.ShuffledHashJoinExec(
+                  leftKeys,
+                  rightKeys,
+                  joinType,
+                  buildSide,
+                  nonEquiCond,
+                  planLater(left),
+                  planLater(right)))
+            }
+          } else {
+            None
           }
         }
 
@@ -282,9 +297,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          // TODO: [HACK] Boosting priority of merge join, since that is the only join type
-          // that works with collations since it doesn't rely on hashing. Do the proper thing here.
-          createSortMergeJoin().orElse(createBroadcastHashJoin(false))
+          createBroadcastHashJoin(false)
             .orElse(createShuffleHashJoin(false))
             .orElse(createSortMergeJoin())
             .orElse(createCartesianProduct())
