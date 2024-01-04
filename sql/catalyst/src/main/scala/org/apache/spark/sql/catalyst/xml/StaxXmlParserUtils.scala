@@ -50,6 +50,12 @@ object StaxXmlParserUtils {
     factory.createFilteredReader(eventReader, filter)
   }
 
+  def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
+    val rootEvent =
+      StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    rootEvent.asStartElement.getAttributes.asScala.toArray
+  }
+
   /**
    * Skips elements until this meets the given type of a element
    */
@@ -170,6 +176,13 @@ object StaxXmlParserUtils {
           shouldStop = checkEndElement(parser)
         case _: XMLEvent => // do nothing
       }
+    }
+  }
+
+  def consumeNextEndElement(parser: XMLEventReader): Unit = {
+    parser.nextEvent() match {
+      case _: EndElement => // do nothing
+      case _ => throw new IllegalStateException("Invalid state")
     }
   }
 }
