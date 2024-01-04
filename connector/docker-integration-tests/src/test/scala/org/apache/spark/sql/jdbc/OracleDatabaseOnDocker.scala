@@ -52,7 +52,7 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
       // TODO: This workaround should be removed once the issue is fixed in the image.
       // https://github.com/gvenzl/oci-oracle-free/issues/35
       writer.write("ALTER SESSION SET DDL_LOCK_TIMEOUT = 30;")
-      writer.write(s"ALTER USER SYSTEM IDENTIFIED BY \"$oracle_password\";")
+      writer.write(s"""ALTER USER SYSTEM IDENTIFIED BY "$oracle_password";""")
       writer.close()
       val newBind = new Bind(
         dir.getAbsolutePath,
