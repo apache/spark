@@ -365,6 +365,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case a if classOf[mutable.ArraySeq[Int]].isAssignableFrom(a) =>
           assert(result == mutable.ArraySeq.make[Int](expected.toArray))
         case a if classOf[immutable.ArraySeq[Int]].isAssignableFrom(a) =>
+          assert(result.isInstanceOf[immutable.ArraySeq[_]])
           assert(result == immutable.ArraySeq.unsafeWrapArray[Int](expected.toArray))
         case s if classOf[Seq[_]].isAssignableFrom(s) =>
           assert(result.asInstanceOf[Seq[_]] == expected)
