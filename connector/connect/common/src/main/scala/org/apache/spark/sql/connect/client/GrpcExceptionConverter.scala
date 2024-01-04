@@ -370,9 +370,11 @@ private[client] object GrpcExceptionConverter {
   }
 
   private def isValidErrorClass(errorClass: Option[String]): Boolean = {
-    errorClass.map { ec =>
-      SparkThrowableHelper.isValidErrorClass(ec)
-    }.getOrElse(false)
+    errorClass
+      .map { ec =>
+        SparkThrowableHelper.isValidErrorClass(ec)
+      }
+      .getOrElse(false)
   }
 
   /**
