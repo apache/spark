@@ -1,6 +1,6 @@
 inner_table = "inner_table"
 outer_table = "outer_table"
-no_match_inner_table = "no_match_inner_table"  # for empty tables to work, need to turn off ConstantFolding/EmptyRelationPropagation
+no_match_inner_table = "no_match_inner_table"
 no_match_outer_table = "no_match_outer_table"
 
 table_creation = """CREATE TEMPORARY VIEW inner_table (a, b) AS VALUES
@@ -46,6 +46,9 @@ subquery_types = [IN, NOT_IN, EXISTS, NOT_EXISTS, SCALAR]
 # Subquery properties - correlated or not
 correlated = [True, False]
 
+# Distinct projection or not
+project_distinct = [True, False]
+
 # Subquery operators
 AGGREGATE, LIMIT, WINDOW, ORDER_BY = "AGGREGATE", "LIMIT", "WINDOW", "ORDER BY"
 operators_within_subquery = [AGGREGATE, LIMIT, ORDER_BY]
@@ -54,46 +57,49 @@ aggregation_functions = ["SUM", "COUNT"]
 group_by = [True, False]
 limit_values = [1, 10]
 
+
 def generate_subquery(
-    innertable,
-    outertable,
-    clause,
-    subquery_type,
-    is_correlated,
-    subquery_operator,
-    aggregate_function=None,
-    group_by=None,
-    limit_value=None,
+        innertable,
+        outertable,
+        clause,
+        subquery_type,
+        is_correlated,
+        distinct,
+        subquery_operator,
+        aggregate_function=None,
+        group_by=None,
+        limit_value=None,
 ):
     subquery_clause = "("
     subquery_projection = ""
+    select_clause = f"SELECT {'DISTINCT' if distinct else ''}"
     if subquery_operator == AGGREGATE:
         subquery_projection = "c "
-        subquery_clause += f"SELECT {aggregate_function}(a) AS c FROM {innertable} "
+        subquery_clause += f"{select_clause} {aggregate_function}(a) AS {subquery_projection} FROM {innertable} "
     else:
         subquery_projection = "a "
-        subquery_clause += f"SELECT {subquery_projection} FROM {innertable} "
+        subquery_clause += f"{select_clause} {subquery_projection} FROM {innertable} "
 
     if is_correlated and clause != FROM:
         subquery_clause += f" WHERE {innertable}.a = {outertable}.a "
 
-    # TODO: add window functions
+    # TODO: add window functions, joins, set operations
     if subquery_operator == AGGREGATE and group_by:
         # Must group by correlated column.
         subquery_clause += "GROUP BY a "
 
     # Scalar subquery to return only one row
     requires_limit = (subquery_type == SCALAR or clause == SELECT) and (
-        (subquery_operator == AGGREGATE and group_by == True)
-        or subquery_operator != LIMIT
-        or (subquery_operator == LIMIT and limit_value != 1)
+            (subquery_operator == AGGREGATE and group_by == True)
+            or subquery_operator != LIMIT
+            or (subquery_operator == LIMIT and limit_value != 1)
     )
 
     if subquery_operator == ORDER_BY or requires_limit:
         if subquery_operator == AGGREGATE:
-            subquery_clause += f"ORDER BY {aggregate_function}(a) DESC "
+            subquery_clause += f"ORDER BY {subquery_projection} DESC "
         else:
-            subquery_clause += "ORDER BY a DESC "
+            subquery_clause += f"ORDER BY {subquery_projection} DESC "
 
     if requires_limit:
         subquery_clause += " LIMIT 1 "
@@ -128,6 +134,7 @@ def generate_subquery(
         f"subquery_type={subquery_type}",
         f"is_correlated={is_correlated}",
         f"subquery_operator={subquery_operator}",
+        f"distinct_projection={distinct}",
         f"aggregate_function(count_bug)={aggregate_function if subquery_operator == AGGREGATE else None}",
         f"group_by={group_by if subquery_operator == AGGREGATE else None}",
         f"has_limit={has_limit}",
@@ -147,24 +154,29 @@ for innertable, outertable in combination_of_tables:
                     for aggregation_function in aggregation_functions:
                         for gb in group_by:
                             for limit_value in limit_values:
-                                query = generate_subquery(
-                                    innertable,
-                                    outertable,
-                                    clause,
-                                    subquery_type,
-                                    is_correlated,
-                                    subquery_operator,
-                                    aggregation_function,
-                                    gb,
-                                    limit_value,
-                                )
-                                if query not in queries:
-                                    queries.append(query)
+                                for distinct in project_distinct:
+                                    query = generate_subquery(
+                                        innertable,
+                                        outertable,
+                                        clause,
+                                        subquery_type,
+                                        is_correlated,
+                                        distinct,
+                                        subquery_operator,
+                                        aggregation_function,
+                                        gb,
+                                        limit_value,
+                                    )
+                                    if query not in queries:
+                                        queries.append(query)
 
 queries = [query.strip() for query in queries if SELECT in query]
+
 result = table_creation + "\n"
 for q in queries:
     result += q + '\n'
+    # print(q)
+    # print()
 
-with open("generated_subqueries.sql", "w") as file:
-	file.write(result)
+with open("sql/core/src/test/resources/sql-tests/inputs/subquery/generated_subqueries_test.sql", "w") as file:
+    file.write(result)
