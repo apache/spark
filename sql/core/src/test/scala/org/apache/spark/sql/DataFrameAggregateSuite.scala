@@ -2133,10 +2133,10 @@ class DataFrameAggregateSuite extends QueryTest
       Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
       Seq("spark.sql.test.forceApplySortAggregate" -> "true"),
     )
+    val numRows = 50
 
     for (conf <- configurations) {
       withSQLConf(conf: _*) {
-        val numRows = 50
 
         val dfSame = createAggregate(_ => Tuple1(new CalendarInterval(1, 2, 3)), numRows)
         dfSame.explain(true)
