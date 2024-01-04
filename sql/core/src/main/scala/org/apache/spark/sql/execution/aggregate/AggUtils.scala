@@ -78,11 +78,10 @@ object AggUtils {
     val useHash = Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
 
-    val forceHashAggregate = forceApplyHashAggregate(child.conf)
     val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
     val forceSortAggregate = forceApplySortAggregate(child.conf)
 
-    if (forceHashAggregate || (useHash && !forceSortAggregate && !forceObjHashAggregate)) {
+    if (useHash && !forceSortAggregate && !forceObjHashAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         isStreaming = isStreaming,
@@ -591,15 +590,6 @@ object AggUtils {
   private def forceApplySortAggregate(conf: SQLConf): Boolean = {
     Utils.isTesting &&
       conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
-  }
-
-  /**
-   * Returns whether a hash aggregate should be force applied.
-   * The config key is hard-coded because it's testing only and should not be exposed.
-   */
-  private def forceApplyHashAggregate(conf: SQLConf): Boolean = {
-    Utils.isTesting &&
-      conf.getConfString("spark.sql.test.forceApplyHashAggregate", "false") == "true"
   }
 
   /**

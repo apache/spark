@@ -2130,29 +2130,30 @@ class DataFrameAggregateSuite extends QueryTest
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
     val numRows = 50
     val configurations = Seq(
-      "spark.sql.test.forceApplyHashAggregate",
-      "spark.sql.test.forceApplyObjectHashAggregate",
-      "spark.sql.test.forceApplySortAggregate"
+      Seq.empty[(String, String)], // hash aggregate is used by default
+      Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
+      Seq(
+        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
+        SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
+      Seq("spark.sql.test.forceApplySortAggregate" -> "true")
     )
 
+    val dfSame = (0 until numRows)
+      .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
+      .toDF("c0")
+
+    val dfDifferent = (0 until numRows)
+      .map(i => Tuple1(new CalendarInterval(i, i, i)))
+      .toDF("c0")
+
     for (conf <- configurations) {
-      withSQLConf(conf -> "true") {
-
-        val dfSame = createAggregate(_ => Tuple1(new CalendarInterval(1, 2, 3)), numRows)
-        assert(dfSame.count() == 1)
-
-        val dfDifferent = createAggregate(i => Tuple1(new CalendarInterval(i, i, i)), numRows)
-        assert(dfDifferent.count() == numRows)
+      withSQLConf(conf: _*) {
+        assert(createAggregate(dfSame).count() == 1)
+        assert(createAggregate(dfDifferent).count() == numRows)
       }
     }
 
-    def createAggregate(f: Int => Tuple1[CalendarInterval], numRows: Int): DataFrame = {
-      (0 until numRows)
-        .map(i => f(i))
-        .toDF("c0")
-        .groupBy("c0")
-        .agg(count("*"))
-    }
+    def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
   }
 }
 
