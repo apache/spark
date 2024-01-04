@@ -16,7 +16,6 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.indexes.test_getattr import IndexGetattrMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -27,9 +26,7 @@ class IndexGetattrParityTests(
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":
