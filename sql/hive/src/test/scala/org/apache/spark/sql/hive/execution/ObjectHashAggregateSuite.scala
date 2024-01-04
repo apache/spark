@@ -33,7 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
-import org.apache.spark.unsafe.types.CalendarInterval
 
 @SlowHiveTest
 class ObjectHashAggregateSuite
@@ -456,40 +455,6 @@ class ObjectHashAggregateSuite
           .agg(typed_count($"c0"), first($"c0")),
         Row(1, 2, Map.empty[Int, Int])
       )
-    }
-  }
-
-  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
-    withSQLConf(
-      SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
-      SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"
-    ) {
-
-      val numRows = 50
-
-      val dfSame = createAggregate(_ => Tuple1(new CalendarInterval(1, 2, 3)), numRows)
-      assert(getPlanOutput(dfSame).contains("HashAggregate"))
-      assert(dfSame.count() == 1)
-
-      val dfDifferent = createAggregate(i => Tuple1(new CalendarInterval(i, i, i)), numRows)
-      assert(getPlanOutput(dfDifferent).contains("HashAggregate"))
-      assert(dfDifferent.count() == numRows)
-    }
-
-    def createAggregate(f: Int => Tuple1[CalendarInterval], numRows: Int): DataFrame = {
-      (1 to numRows)
-        .map(i => f(i))
-        .toDF("c0")
-        .groupBy("c0")
-        .agg(count("*"))
-    }
-
-    def getPlanOutput(df: DataFrame): String = {
-      val outputStream = new java.io.ByteArrayOutputStream()
-      Console.withOut(outputStream) {
-        df.explain(true)
-      }
-      outputStream.toString
     }
   }
 }

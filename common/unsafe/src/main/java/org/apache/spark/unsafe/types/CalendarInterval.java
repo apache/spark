@@ -137,8 +137,7 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
    * and finally on the 'microseconds'.
    *
    * @param o The CalendarInterval instance to compare with.
-   * @return A negative integer, zero, or a positive integer as this object is less than,
-   *         equal to, or greater than the specified object.
+   * @return Zero if this object is equal to the specified object, and non-zero otherwise
    */
   @Override
   public int compareTo(CalendarInterval o) {
