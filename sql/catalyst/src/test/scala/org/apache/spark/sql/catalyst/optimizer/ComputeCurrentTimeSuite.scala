@@ -22,11 +22,14 @@ import java.time.{LocalDateTime, ZoneId}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.MapHasAsScala
 
+import org.apache.spark.SparkException
+
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, EmptyRow, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -49,6 +52,19 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
+  }
+
+  test("analyzer should respect time flow in current timestamp calls") {
+    val inT1 = Project(Alias(CurrentTimestamp(), "t1")() :: Nil, LocalRelation())
+    val planT1 = Optimize.execute(inT1.analyze).asInstanceOf[Project]
+    val t1 = DateTimeUtils.microsToMillis(
+      literals[Long](planT1)(0))
+
+    val inT2 = Project(Alias(CurrentTimestamp(), "t1")() :: Nil, LocalRelation())
+    val planT2 = Optimize.execute(inT2.analyze).asInstanceOf[Project]
+    val t2 = DateTimeUtils.microsToMillis(literals[Long](planT2)(0))
+
+    assert(t2 - t1 <= 1000 && t2 - t1 >= 0)
   }
 
   test("analyzer should replace current_date with literals") {
@@ -162,6 +178,17 @@ class ComputeCurrentTimeSuite extends PlanTest {
     checkLiterals({ _: String => Now() }, 1)
     checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numTimezones)
   }
+
+  test("datetime function CurrentDate and LocalTime are Unevaluable") {
+    checkError(exception = intercept[SparkException] { CurrentDate().eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: current_date(Some(UTC))"))
+
+    checkError(exception = intercept[SparkException] { LocalTimestamp().eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
+  }
+
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {
     val literals = new scala.collection.mutable.ArrayBuffer[T]

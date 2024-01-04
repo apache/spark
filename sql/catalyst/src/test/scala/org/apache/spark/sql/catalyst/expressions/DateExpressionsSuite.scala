@@ -28,14 +28,14 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkUpgradeException}
+
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
-import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.instantToMicros
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -48,8 +48,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private val PST_OPT = Option(PST.getId)
   private val JST_OPT = Option(JST.getId)
-
-  private val CurrentTimestamp = Literal.create(instantToMicros(Instant.now()), TimestampType)
 
   def toMillis(timestamp: String): Long = {
     val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC, isParsing = true)
@@ -79,16 +77,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       case _: TimestampNTZType =>
         LocalDateTime.parse(s.replace(" ", "T"))
     }
-  }
-
-  test("datetime function CurrentDate and LocalTime are Unevaluable") {
-    checkError(exception = intercept[SparkException] { CurrentDate(UTC_OPT).eval(EmptyRow) },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot evaluate expression: current_date(Some(UTC))"))
-
-    checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
 
   test("DayOfYear") {
@@ -945,11 +933,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
-            val t1 = UnixTimestamp(
-              CurrentTimestamp, Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-            val t2 = UnixTimestamp(
-              CurrentTimestamp, Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-            assert(t2 - t1 <= 1)
             checkEvaluation(
               UnixTimestamp(
                 Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId),
@@ -1016,11 +999,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), zid)))
-            val t1 = ToUnixTimestamp(
-              CurrentTimestamp, Literal(fmt1)).eval().asInstanceOf[Long]
-            val t2 = ToUnixTimestamp(
-              CurrentTimestamp, Literal(fmt1)).eval().asInstanceOf[Long]
-            assert(t2 - t1 <= 1)
             checkEvaluation(ToUnixTimestamp(
               Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId), null)
             checkEvaluation(
@@ -1491,7 +1469,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[T](ToUnixTimestamp(Literal("1"), Literal(c)), c)
       checkExceptionInExpression[T](UnixTimestamp(Literal("1"), Literal(c)), c)
       if (!Set("E", "F", "q", "Q").contains(c)) {
-        checkExceptionInExpression[T](DateFormatClass(CurrentTimestamp, Literal(c)), c)
         checkExceptionInExpression[T](FromUnixTime(Literal(0L), Literal(c)), c)
       }
     }
