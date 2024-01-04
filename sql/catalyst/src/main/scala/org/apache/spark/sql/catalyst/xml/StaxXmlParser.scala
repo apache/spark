@@ -221,9 +221,7 @@ class StaxXmlParser(
       case (_: Characters, st: StructType) =>
         convertObject(parser, st)
       case (_: Characters, _: StringType) =>
-        val value = convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
-        StaxXmlParserUtils.consumeNextEndElement(parser)
-        value
+        convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
       case (c: Characters, _: DataType) if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.

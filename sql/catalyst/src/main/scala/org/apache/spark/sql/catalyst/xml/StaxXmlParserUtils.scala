@@ -151,6 +151,7 @@ object StaxXmlParserUtils {
         indent > 0
       case _ => true
     })
+    consumeNextEndElement(parser)
     xmlString.toString()
   }
 
