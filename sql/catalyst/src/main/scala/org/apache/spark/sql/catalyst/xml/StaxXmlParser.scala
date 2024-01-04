@@ -225,11 +225,15 @@ class StaxXmlParser(
       case (c: Characters, ArrayType(st, _)) =>
         // For `ArrayType`, it needs to return the type of element. The values are merged later.
         parser.next
-        convertTo(c.getData, st)
+        val value = convertTo(c.getData, st)
+        consumeNextEndElement(parser)
+        value
       case (_: Characters, st: StructType) =>
         convertObject(parser, st, startElementName)
       case (_: Characters, _: StringType) =>
-        convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
+        val value = convertTo(StaxXmlParserUtils.currentStructureAsString(parser), StringType)
+        consumeNextEndElement(parser)
+        value
       case (c: Characters, _: DataType) if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
@@ -239,12 +243,16 @@ class StaxXmlParser(
           case _: StartElement =>
             convertComplicatedType(dataType, startElementName, attributes)
           case _: EndElement if data.isEmpty => null
-          case _: EndElement => convertTo(data, dataType)
+          case _: EndElement =>
+            val value = convertTo(data, dataType)
+            consumeNextEndElement(parser)
+            value
           case _ => convertField(parser, dataType, startElementName, attributes)
         }
       case (c: Characters, dt: DataType) =>
         val value = convertTo(c.getData, dt)
         parser.next
+        consumeNextEndElement(parser)
         value
       case (e: XMLEvent, dt: DataType) =>
         throw new IllegalArgumentException(
@@ -391,23 +399,12 @@ class StaxXmlParser(
                   case st: StructType =>
                     convertObjectWithAttributes(parser, st, field, attributes)
                   case dt: DataType =>
-                    val value = convertField(parser, dt, field)
-                  // We wanted to consume the ending tag for array type data
-                  parser.nextEvent() match {
-                    case _: EndElement => // do nothing
-                    case _ => throw new IllegalStateException("Invalid state for array type data")
-                  }
-                  value
+                    convertField(parser, dt, field)
                 }
                 row(index) = values :+ newValue
 
               case dt: DataType =>
                 row(index) = convertField(parser, dt, field, attributes)
-                // We wanted to consume the ending tag for array type data
-                parser.nextEvent() match {
-                  case _: EndElement => // do nothing
-                  case _ => throw new IllegalStateException("Invalid state for array type data")
-                }
             }
 
             case None =>
@@ -631,6 +628,13 @@ class StaxXmlParser(
       case None => // do nothing
     }
     InternalRow.fromSeq(row.toIndexedSeq)
+  }
+
+  private def consumeNextEndElement(parser: XMLEventReader): Unit = {
+    parser.nextEvent() match {
+      case _: EndElement => // do nothing
+      case _ => throw new IllegalStateException("Invalid state")
+    }
   }
 }
 
