@@ -32,9 +32,8 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
 
   def apply(logicalPlan: LogicalPlan): LogicalPlan =
     logicalPlan match {
-      case newP@Project(newProjList, p@Project(projList, child))
-        if checkEarlyCollapsePossible(p, newP, child) =>
-        collapseProjectEarly(newP, newProjList, p, projList, child) getOrElse newP
+      case newP @ Project(_, p : Project) if checkEarlyCollapsePossible(newP, p) =>
+        collapseProjectEarly(newP, p) getOrElse newP
 
       case newP@Project(newProjList, f@Filter(_, filterChild: UnaryNode)) =>
         // check if its case of nested filters followed by project
@@ -58,9 +57,8 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
               AttributeSet(newProjList.filter(_.isInstanceOf[AttributeReference])
                 .map(_.toAttribute)))) {
           val p = projectAtEnd.get
-          val child = p.child
-          if (checkEarlyCollapsePossible(p, newP, child)) {
-            val newProjOpt = collapseProjectEarly(newP, newProjList, p, p.projectList, child)
+          if (checkEarlyCollapsePossible(newP, p)) {
+            val newProjOpt = collapseProjectEarly(newP, p)
             newProjOpt.map(collapsedProj => {
               val lastFilterMod = filterNodes.last.copy(child = collapsedProj)
               filterNodes.dropRight(1).foldRight(lastFilterMod)((f, c) => f.copy(child = c))
@@ -77,10 +75,12 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
       case _ => logicalPlan
     }
 
-  private def checkEarlyCollapsePossible(p: Project, newP: Project, child: LogicalPlan): Boolean =
-    p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
-      newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
-      !child.isInstanceOf[Window]
+  private def checkEarlyCollapsePossible(newP: Project, p: Project): Boolean =
+    newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty && !p.child.isInstanceOf[Window] &&
+    p.projectList.forall(_.collectFirst {
+      case ex if !ex.deterministic => ex
+      case ex: UserDefinedExpression => ex
+    }.isEmpty)
 
   private def transferMetadata(from: Attribute, to: NamedExpression): NamedExpression =
     if (from.metadata == Metadata.empty) {
@@ -99,73 +99,47 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
       }
     }
 
-  def collapseProjectEarly(
-                            newP: Project,
-                            newProjList: Seq[NamedExpression],
-                            p: Project,
-                            projList: Seq[NamedExpression],
-                            child: LogicalPlan): Option[Project] = {
-    // In the new column list identify those Named Expressions which are just attributes and
-    // hence pass thru
-    val (_, tinkeredOrNewNamedExprs) = newProjList.partition {
-      case _: Attribute => true
-      case _ => false
-    }
-
+  def collapseProjectEarly(newP: Project, p: Project): Option[Project] = {
+    val child = p.child
+    val newProjList = newP.projectList
+    val projList = p.projectList
     val childOutput = child.outputSet
-    val attribsRemappedInProj = AttributeMap(
+    val attribsToExprInProj = AttributeMap(
       projList.flatMap(ne => ne match {
-        case _: AttributeReference => Seq.empty[(Attribute, Expression)]
+        case al@Alias(child, _) => child match {
+             case attr: Attribute if childOutput.contains(attr) =>
+               Seq(al.toAttribute -> (al, transferMetadata(al.toAttribute, attr)))
 
-        case al@Alias(attr: AttributeReference, _) =>
-          if (childOutput.contains(attr)) {
-            Seq(al.toAttribute -> transferMetadata(al.toAttribute, attr))
-          } else {
-            Seq.empty[(Attribute, Expression)]
+             case _ => Seq(al.toAttribute -> (al, child))
           }
 
-        case _ => Seq.empty[(Attribute, Expression)]
+        case _ => Seq.empty[(Attribute, (NamedExpression, Expression))]
       }))
 
-    if ((tinkeredOrNewNamedExprs ++ p.projectList).exists(_.collectFirst {
-      // we will not flatten if expressions contain windows or aggregate as if they
-      // are collapsed it can cause recalculation of functions and inefficiency with
-      // separate group by clauses
-      case ex if !ex.deterministic => ex
-      case ex: UserDefinedExpression => ex
-    }.nonEmpty)) {
-      None
-    } else {
-      val remappedNewProjListResult = Try {
-        newProjList.map {
-          case attr: AttributeReference => projList.find(
-            _.toAttribute.canonicalized == attr.canonicalized).map {
-            case al: Alias =>
-              if (attr.name == al.name) {
-                transferMetadata(attr, al)
-              } else {
-                // To Handle the case of change of (Caps/lowercase) via toSchema resulting
-                // in rename
-                transferMetadata(attr, al.copy(name = attr.name)(
-                  exprId = al.exprId, qualifier = al.qualifier,
-                  explicitMetadata = al.explicitMetadata,
-                  nonInheritableMetadataKeys = al.nonInheritableMetadataKeys))
-              }
+    val remappedNewProjListResult = Try {
+      newProjList.map {
+        case attr: AttributeReference => attribsToExprInProj.get(attr).map {
+          case (al : Alias, _) => if (attr.name == al.name) {
+            transferMetadata(attr, al)
+          } else {
+            // To Handle the case of change of (Caps/lowercase) via toSchema resulting
+            // in rename
+            transferMetadata(attr, al.copy(name = attr.name)(
+              exprId = al.exprId, qualifier = al.qualifier,
+              explicitMetadata = al.explicitMetadata,
+              nonInheritableMetadataKeys = al.nonInheritableMetadataKeys))
+          }
+        }.getOrElse(attr)
 
-            case _: AttributeReference => attr
-          }.getOrElse(attr)
-
-          case anyOtherExpr =>
-            (anyOtherExpr transformUp {
+        case ne => (ne transformUp {
               case attr: AttributeReference =>
-                attribsRemappedInProj.get(attr).orElse(projList.find(
-                  _.toAttribute.canonicalized == attr.canonicalized).map {
-                  case al: Alias => al.child
-                  case _ => attr
-                }).getOrElse(attr)
+                attribsToExprInProj.get(attr).map {
+                  case (_, expr) => expr
+                }.getOrElse(attr)
             }).asInstanceOf[NamedExpression]
         }
       }
+
       remappedNewProjListResult match {
         case Success(remappedNewProjList) =>
           val newProject = Project(remappedNewProjList, child)
@@ -197,6 +171,6 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
           None
         }
       }
-    }
+
   }
 }
