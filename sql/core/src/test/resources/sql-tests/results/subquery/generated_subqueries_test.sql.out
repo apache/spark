@@ -164,7 +164,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -178,7 +178,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -360,31 +360,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
@@ -556,7 +556,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -570,7 +570,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -752,31 +752,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
@@ -948,7 +948,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -962,7 +962,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -1144,31 +1144,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
@@ -1340,7 +1340,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -1354,7 +1354,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -1536,31 +1536,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
 
 
 -- !query
@@ -1732,7 +1732,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -1746,7 +1746,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -1928,35 +1928,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
--- !query schema
-struct<b:int,subquery:int>
--- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
-
-
--- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
--- !query schema
-struct<b:int,subquery:int>
--- !query output
-100	1
-200	1
-300	1
-400	1
-600	1
-700	1
-1000	1
-
-
--- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -1970,7 +1942,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -2012,6 +1984,34 @@ struct<b:int,subquery:int>
 
 
 -- !query
+SELECT outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+-- !query schema
+struct<b:int,subquery:int>
+-- !query output
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
+
+
+-- !query
+SELECT outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+-- !query schema
+struct<b:int,subquery:int>
+-- !query output
+100	9
+200	9
+300	9
+400	9
+600	9
+700	9
+1000	9
+
+
+-- !query
 SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
 -- !query schema
 struct<c:bigint>
@@ -2094,23 +2094,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -2124,7 +2124,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -2248,23 +2248,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -2278,161 +2278,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-32
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-32
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-1
-1
-1
-1
-1
-1
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-7
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-7
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -2556,23 +2402,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -2586,161 +2432,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-32
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-32
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-1
-1
-1
-1
-1
-1
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-7
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-7
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -2864,23 +2556,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -2894,161 +2586,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-32
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-32
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-1
-1
-1
-1
-1
-1
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-7
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-7
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-1
-2
-3
-4
-5
-8
-9
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -3172,23 +2710,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -3202,7 +2740,469 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+32
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+32
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+1
+1
+1
+1
+1
+1
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+9
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+32
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+32
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+1
+1
+1
+1
+1
+1
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+9
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+32
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+32
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+1
+1
+1
+1
+1
+1
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+9
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+4
+5
+8
+9
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -3308,19 +3308,19 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
@@ -3420,19 +3420,19 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-1
+9
 
 
 -- !query
@@ -3544,7 +3544,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3555,7 +3555,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3566,7 +3566,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3577,7 +3577,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3680,23 +3680,23 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-1	100
+
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-1	100
+
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3707,7 +3707,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3828,7 +3828,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3838,7 +3838,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3848,7 +3848,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3858,7 +3858,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -3988,10 +3988,11 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
+1	100
 2	200
 3	300
 4	400
@@ -4001,10 +4002,11 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
+1	100
 2	200
 3	300
 4	400
@@ -4014,7 +4016,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4024,7 +4026,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4154,7 +4156,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4165,7 +4167,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4176,7 +4178,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4187,7 +4189,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4332,7 +4334,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4346,7 +4348,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4360,7 +4362,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4374,7 +4376,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4488,7 +4490,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4498,7 +4500,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4508,7 +4510,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4518,7 +4520,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4612,7 +4614,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4620,7 +4622,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4628,7 +4630,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4636,7 +4638,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4736,7 +4738,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4747,7 +4749,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM inner_table  WHERE inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4866,23 +4868,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
--- !query schema
-struct<a:int,b:int>
--- !query output
-1	100
-
-
--- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
--- !query schema
-struct<a:int,b:int>
--- !query output
-1	100
-
-
--- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4890,7 +4876,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -4914,6 +4900,22 @@ struct<a:int,b:int>
 
 
 -- !query
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+
+
+
+-- !query
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+
+
+
+-- !query
 SELECT outer_table.b, (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a GROUP BY a ORDER BY c  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:bigint>
@@ -5026,7 +5028,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -5040,7 +5042,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -5222,31 +5224,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
@@ -5418,7 +5420,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -5432,7 +5434,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -5614,31 +5616,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
@@ -5810,7 +5812,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -5824,7 +5826,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -6006,31 +6008,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
@@ -6202,7 +6204,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -6216,7 +6218,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -6398,31 +6400,31 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
 
 
 -- !query
@@ -6594,7 +6596,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -6608,7 +6610,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -6790,35 +6792,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
--- !query schema
-struct<b:int,subquery:int>
--- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
-
-
--- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
--- !query schema
-struct<b:int,subquery:int>
--- !query output
-100	6
-200	6
-300	6
-400	6
-600	6
-700	6
-1000	6
-
-
--- !query
-SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -6832,7 +6806,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -6874,6 +6848,34 @@ struct<b:int,subquery:int>
 
 
 -- !query
+SELECT outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+-- !query schema
+struct<b:int,subquery:int>
+-- !query output
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
+
+
+-- !query
+SELECT outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )  AS subquery FROM outer_table  ORDER BY outer_table.b, subquery
+-- !query schema
+struct<b:int,subquery:int>
+-- !query output
+100	10
+200	10
+300	10
+400	10
+600	10
+700	10
+1000	10
+
+
+-- !query
 SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
 -- !query schema
 struct<c:bigint>
@@ -6944,23 +6946,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -6970,7 +6972,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7070,23 +7072,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7096,133 +7098,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-23
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-23
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-1
-1
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-3
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-3
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7322,23 +7198,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7348,133 +7224,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-23
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-23
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-1
-1
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-3
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-3
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7574,23 +7324,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7600,133 +7350,7 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-23
-
-
--- !query
-SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-23
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-1
-1
-1
-
-
--- !query
-SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-3
-
-
--- !query
-SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
--- !query schema
-struct<c:bigint>
--- !query output
-3
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-
-
--- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
--- !query schema
-struct<a:int>
--- !query output
-6
-7
-10
-
-
--- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7826,23 +7450,23 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7852,7 +7476,385 @@ struct<a:int>
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 10 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+23
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+23
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+1
+1
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+10
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+23
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+23
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+1
+1
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+10
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+23
+
+
+-- !query
+SELECT c  FROM (SELECT  SUM(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+23
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table GROUP BY a )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+1
+1
+
+
+-- !query
+SELECT c  FROM (SELECT DISTINCT COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT c  FROM (SELECT  COUNT(a) AS c  FROM no_match_inner_table )  AS subquery  ORDER BY c
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+10
+
+
+-- !query
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
+-- !query schema
+struct<a:int>
+-- !query output
+6
+7
+10
+
+
+-- !query
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
@@ -7946,19 +7948,19 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
@@ -8058,19 +8060,19 @@ struct<c:bigint>
 
 
 -- !query
-SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
-SELECT a  FROM (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery  ORDER BY a
+SELECT a  FROM (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery  ORDER BY a
 -- !query schema
 struct<a:int>
 -- !query output
-6
+10
 
 
 -- !query
@@ -8178,7 +8180,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8188,7 +8190,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8198,7 +8200,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8208,7 +8210,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8306,23 +8308,23 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-6	600
+10	1000
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-6	600
+10	1000
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8332,7 +8334,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8456,7 +8458,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8467,7 +8469,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8478,7 +8480,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8489,7 +8491,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8624,7 +8626,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8632,12 +8634,12 @@ struct<a:int,b:int>
 2	200
 3	300
 4	400
+6	600
 7	700
-10	1000
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8645,12 +8647,12 @@ struct<a:int,b:int>
 2	200
 3	300
 4	400
+6	600
 7	700
-10	1000
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8661,7 +8663,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8790,7 +8792,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8800,7 +8802,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8810,7 +8812,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8820,7 +8822,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8962,7 +8964,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8976,7 +8978,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -8990,7 +8992,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9004,7 +9006,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9122,7 +9124,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9133,7 +9135,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9144,7 +9146,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9155,7 +9157,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9252,7 +9254,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9260,7 +9262,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9268,7 +9270,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9276,7 +9278,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9372,7 +9374,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9382,7 +9384,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9496,23 +9498,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
--- !query schema
-struct<a:int,b:int>
--- !query output
-6	600
-
-
--- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
--- !query schema
-struct<a:int,b:int>
--- !query output
-6	600
-
-
--- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9520,7 +9506,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -9544,6 +9530,22 @@ struct<a:int,b:int>
 
 
 -- !query
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+10	1000
+
+
+-- !query
+SELECT a, b  FROM outer_table WHERE outer_table.a =(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+10	1000
+
+
+-- !query
 SELECT no_match_outer_table.b, (SELECT DISTINCT SUM(a) AS c  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a GROUP BY a ORDER BY c  DESC  LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:bigint>
@@ -9624,7 +9626,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -9634,7 +9636,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -9764,23 +9766,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
@@ -9904,7 +9906,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -9914,7 +9916,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -10044,23 +10046,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
@@ -10184,7 +10186,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -10194,7 +10196,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -10324,23 +10326,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
@@ -10464,7 +10466,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -10474,7 +10476,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -10604,23 +10606,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
@@ -10744,7 +10746,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -10754,7 +10756,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -10884,23 +10886,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	1
-80	1
-90	1
+50	9
+80	9
+90	9
 
 
 -- !query
@@ -11016,7 +11018,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11026,7 +11028,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11036,7 +11038,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11046,7 +11048,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11144,23 +11146,23 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-
+9	90
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-
+9	90
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11170,7 +11172,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11272,7 +11274,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11280,7 +11282,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11288,7 +11290,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11296,7 +11298,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11396,27 +11398,25 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
 5	50
 8	80
-9	90
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
 5	50
 8	80
-9	90
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11424,7 +11424,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11528,7 +11528,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11538,7 +11538,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11548,7 +11548,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11558,7 +11558,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11668,7 +11668,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11678,7 +11678,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11688,7 +11688,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11698,7 +11698,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11792,7 +11792,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11800,7 +11800,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11808,7 +11808,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11816,7 +11816,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11904,7 +11904,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11912,7 +11912,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11920,7 +11920,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -11928,7 +11928,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -12024,7 +12024,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -12034,7 +12034,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM inner_table  WHERE inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -12148,23 +12148,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM inner_table LIMIT 1 )   ORDER BY a, b
--- !query schema
-struct<a:int,b:int>
--- !query output
-
-
-
--- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM inner_table LIMIT 1 )   ORDER BY a, b
--- !query schema
-struct<a:int,b:int>
--- !query output
-
-
-
--- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -12172,7 +12156,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -12196,6 +12180,22 @@ struct<a:int,b:int>
 
 
 -- !query
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+9	90
+
+
+-- !query
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM inner_table ORDER BY a  DESC  LIMIT 1 )   ORDER BY a, b
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+9	90
+
+
+-- !query
 SELECT no_match_outer_table.b, (SELECT DISTINCT SUM(a) AS c  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a GROUP BY a ORDER BY c  DESC  LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:bigint>
@@ -12276,7 +12276,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -12286,7 +12286,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -12416,23 +12416,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
@@ -12556,7 +12556,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -12566,7 +12566,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -12696,23 +12696,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
@@ -12836,7 +12836,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -12846,7 +12846,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -12976,23 +12976,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
@@ -13116,7 +13116,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -13126,7 +13126,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -13256,23 +13256,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
@@ -13396,7 +13396,7 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -13406,7 +13406,7 @@ struct<b:int,subquery:int>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
@@ -13536,23 +13536,23 @@ struct<b:int,subquery:bigint>
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
-SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
+SELECT no_match_outer_table.b, (SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )  AS subquery FROM no_match_outer_table  ORDER BY no_match_outer_table.b, subquery
 -- !query schema
 struct<b:int,subquery:int>
 -- !query output
-50	6
-80	6
-90	6
+50	10
+80	10
+90	10
 
 
 -- !query
@@ -13660,7 +13660,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13668,7 +13668,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13676,7 +13676,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13684,7 +13684,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13772,7 +13772,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13780,7 +13780,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13788,7 +13788,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13796,7 +13796,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13896,7 +13896,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13906,7 +13906,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13916,7 +13916,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -13926,7 +13926,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14036,7 +14036,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14046,7 +14046,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14056,7 +14056,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14066,7 +14066,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14168,7 +14168,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14176,7 +14176,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14184,7 +14184,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14192,7 +14192,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14296,7 +14296,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14306,7 +14306,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14316,7 +14316,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14326,7 +14326,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14428,7 +14428,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14438,7 +14438,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14448,7 +14448,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14458,7 +14458,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14552,7 +14552,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14560,7 +14560,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14568,7 +14568,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14576,7 +14576,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table LIMIT 10 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE NOT EXISTS(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 10 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14664,7 +14664,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14672,7 +14672,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM no_match_inner_table  WHERE no_match_inner_table.a = no_match_outer_table.a ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14776,7 +14776,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output
@@ -14784,7 +14784,7 @@ struct<a:int,b:int>
 
 
 -- !query
-SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM no_match_inner_table LIMIT 1 )   ORDER BY a, b
+SELECT a, b  FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT  a  FROM no_match_inner_table ORDER BY a  DESC LIMIT 1 )   ORDER BY a, b
 -- !query schema
 struct<a:int,b:int>
 -- !query output

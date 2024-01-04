@@ -37,7 +37,8 @@ combination_of_tables = [
 ]
 
 SELECT, FROM, WHERE, HAVING = "SELECT", "FROM", "WHERE", "HAVING"
-subquery_clauses = [SELECT, FROM, WHERE, HAVING]
+# TODO: support HAVING operations
+subquery_clauses = [SELECT, FROM, WHERE]
 
 # Subquery type
 IN, NOT_IN, EXISTS, NOT_EXISTS, SCALAR = "IN", "NOT IN", "EXISTS", "NOT EXISTS", "="
@@ -49,6 +50,7 @@ correlated = [True, False]
 # Distinct projection or not
 project_distinct = [True, False]
 
+# TODO: add window functions, joins, set operations
 # Subquery operators
 AGGREGATE, LIMIT, WINDOW, ORDER_BY = "AGGREGATE", "LIMIT", "WINDOW", "ORDER BY"
 operators_within_subquery = [AGGREGATE, LIMIT, ORDER_BY]
@@ -83,7 +85,6 @@ def generate_subquery(
     if is_correlated and clause != FROM:
         subquery_clause += f" WHERE {innertable}.a = {outertable}.a "
 
-    # TODO: add window functions, joins, set operations
     if subquery_operator == AGGREGATE and group_by:
         # Must group by correlated column.
         subquery_clause += "GROUP BY a "
@@ -95,7 +96,7 @@ def generate_subquery(
             or (subquery_operator == LIMIT and limit_value != 1)
     )
 
-    if subquery_operator == ORDER_BY or requires_limit:
+    if subquery_operator == ORDER_BY or requires_limit or subquery_operator == LIMIT:
         if subquery_operator == AGGREGATE:
             subquery_clause += f"ORDER BY {subquery_projection} DESC "
         else:
@@ -123,7 +124,6 @@ def generate_subquery(
             query += f"SELECT {projection} FROM {outertable} WHERE {subquery_type}{subquery_clause} "
         else:
             query += f"SELECT {projection} FROM {outertable} WHERE {outertable}.a {subquery_type}{subquery_clause} "
-    # TODO: add having
 
     # Order by all projected columns for determinism
     query += f" ORDER BY {projection};"
