@@ -16,13 +16,13 @@
 #
 import unittest
 
-from pyspark.pandas.tests.frame.test_take import FrameTakeMixin
+from pyspark.pandas.tests.frame.test_take_adv import FrameTakeAdvMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameTakeParityTests(
-    FrameTakeMixin,
+class FrameTakeAdvParityTests(
+    FrameTakeAdvMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
@@ -30,7 +30,7 @@ class FrameTakeParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.frame.test_parity_take import *  # noqa: F401
+    from pyspark.pandas.tests.connect.frame.test_parity_take_adv import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

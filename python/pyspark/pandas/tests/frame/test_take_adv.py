@@ -23,14 +23,19 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class FrameTakeMixin:
-    def test_take(self):
+class FrameTakeAdvMixin:
+    def test_take_adv(self):
         pdf = pd.DataFrame(
             {"A": range(0, 50000), "B": range(100000, 0, -2), "C": range(100000, 50000, -1)}
         )
         psdf = ps.from_pandas(pdf)
 
-        # axis=0 (default)
+        # MultiIndex columns
+        columns = pd.MultiIndex.from_tuples([("A", "Z"), ("B", "X"), ("C", "C")])
+        psdf.columns = columns
+        pdf.columns = columns
+
+        # MultiIndex columns with axis=0 (default)
         self.assert_eq(psdf.take([1, 2]).sort_index(), pdf.take([1, 2]).sort_index())
         self.assert_eq(psdf.take([-1, -2]).sort_index(), pdf.take([-1, -2]).sort_index())
         self.assert_eq(
@@ -72,9 +77,15 @@ class FrameTakeMixin:
             pdf.take([-1, -2], axis=1).sort_index(),
         )
 
+        # Checking the type of indices.
+        self.assertRaises(TypeError, lambda: psdf.take(1))
+        self.assertRaises(TypeError, lambda: psdf.take("1"))
+        self.assertRaises(TypeError, lambda: psdf.take({1, 2}))
+        self.assertRaises(TypeError, lambda: psdf.take({1: None, 2: None}))
 
-class FrameTakeTests(
-    FrameTakeMixin,
+
+class FrameTakeAdvTests(
+    FrameTakeAdvMixin,
     PandasOnSparkTestCase,
     SQLTestUtils,
 ):
@@ -82,7 +93,7 @@ class FrameTakeTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.frame.test_take import *  # noqa: F401
+    from pyspark.pandas.tests.frame.test_take_adv import *  # noqa: F401
 
     try:
         import xmlrunner
