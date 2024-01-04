@@ -25,6 +25,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.StateEncoder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -54,7 +55,23 @@ private[sql] class RocksDBStateStoreProvider
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
+      println(s"i am inside get, encoded key row: ")
+      printArrayContents(encoder.encodeKey(key))
       val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key), colFamilyName))
+      if (!isValidated && value != null) {
+        StateStoreProvider.validateStateRowFormat(
+          key, keySchema, value, valueSchema, storeConf)
+        isValidated = true
+      }
+      value
+    }
+
+    override def get(key: UnsafeRow, userKey: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      verify(key != null, "Key cannot be null")
+      val encodedCompositeKey = encoder.encodeKey(key)
+      println(s"I am inside multiple key get, key row: $key, userkey row: $userKey")
+      println("I am inside multiple key get, decoded user key: " + StateEncoder.decode(userKey))
+      val value = encoder.decodeValue(rocksDB.get(encoder.encodeKeys(key, userKey), colFamilyName))
       if (!isValidated && value != null) {
         StateStoreProvider.validateStateRowFormat(
           key, keySchema, value, valueSchema, storeConf)
@@ -65,6 +82,8 @@ private[sql] class RocksDBStateStoreProvider
 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
       verify(key != null, "Key cannot be null")
+      print(s"inside valuesIterator, row key: ${key}, encoded key: ")
+      printArrayContents(encoder.encodeKey(key))
       val valueIterator = encoder.decodeValues(rocksDB.get(encoder.encodeKey(key), colFamilyName))
 
       if (!isValidated && valueIterator.nonEmpty) {
@@ -89,11 +108,19 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    def printArrayContents(arr: Array[Byte]): Unit = {
+      arr.foreach(byteValue => print(s"$byteValue "))
+      // Add a newline after printing the array elements for better readability
+      println()
+    }
+
     override def merge(key: UnsafeRow, value: UnsafeRow,
                        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
+      print(s"inside merge, row key: $key, encoded key: ")
+      printArrayContents(encoder.encodeKey(key))
       rocksDB.merge(encoder.encodeKey(key), encoder.encodeValue(value), colFamilyName)
     }
 
@@ -101,7 +128,19 @@ private[sql] class RocksDBStateStoreProvider
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
+      print(s"i am inside put, encoded key row: ")
+      printArrayContents(encoder.encodeKey(key))
       rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value), colFamilyName)
+    }
+
+    override def putWithMultipleKeys(key: UnsafeRow, userKey: UnsafeRow, value: UnsafeRow,
+                     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(key != null, "Key cannot be null")
+      require(value != null, "Cannot put a null value")
+      println(s"I am inside putMultipleKeys: key: $key userKey: $userKey value: $value")
+      println(s"decoded userkey inside multiple key: ${StateEncoder.decode(userKey)}")
+      rocksDB.put(encoder.encodeKeys(key, userKey), encoder.encodeValue(value), colFamilyName)
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {

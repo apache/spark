@@ -29,6 +29,10 @@ sealed trait RocksDBStateEncoder {
   def extractPrefixKey(key: UnsafeRow): UnsafeRow
 
   def encodeKey(row: UnsafeRow): Array[Byte]
+
+  def encodeKeys(row1: UnsafeRow, row2: UnsafeRow): Array[Byte] = {
+    throw new UnsupportedOperationException("encoder does not support multiple keys encoder")
+  }
   def encodeValue(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
@@ -298,6 +302,23 @@ class StatefulProcessorStateEncoder(keySchema: StructType, valueSchema: StructTy
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
     encodeUnsafeRow(row)
+  }
+
+  override def encodeKeys(row1: UnsafeRow, row2: UnsafeRow): Array[Byte] = {
+    val prefixKeyEncoded = encodeUnsafeRow(row1)
+    val remainingEncoded = encodeUnsafeRow(row2)
+
+    val encodedBytes = new Array[Byte](prefixKeyEncoded.length + remainingEncoded.length + 4)
+    Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncoded.length)
+    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded.length)
+    // NOTE: We don't put the length of remainingEncoded as we can calculate later
+    // on deserialization.
+    Platform.copyMemory(remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4 + prefixKeyEncoded.length,
+      remainingEncoded.length)
+    // println(s"I am inside encodeKeys: $encodedBytes")
+    encodedBytes
   }
 
   override def encodeValue(row: UnsafeRow): Array[Byte] = {

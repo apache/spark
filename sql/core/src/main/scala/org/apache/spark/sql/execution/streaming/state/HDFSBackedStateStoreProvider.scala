@@ -84,6 +84,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       map.iterator()
     }
 
+    override def get(key: UnsafeRow, userKey: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      throw new UnsupportedOperationException("Multiple keys get is not supported for HDFS")
+    }
+
     override def abort(): Unit = {}
 
     override def toString(): String = {
@@ -125,6 +129,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       mapToUpdate.get(key)
+    }
+
+    override def get(key: UnsafeRow, userKey: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      throw new UnsupportedOperationException("Multiple keys get is not supported for HDFS")
+    }
+
+    override def putWithMultipleKeys(key: UnsafeRow, userKey: UnsafeRow, value: UnsafeRow,
+                            colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      throw new UnsupportedOperationException("Multiple keys put is not supported for HDFS")
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {

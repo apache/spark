@@ -35,8 +35,16 @@ class MemoryStateStore extends StateStore() {
 
   override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
+  override def get(key: UnsafeRow, userKey: UnsafeRow, colFamilyName: String): UnsafeRow =
+    {throw new UnsupportedOperationException("store does not support multiple keys get")}
+
   override def put(key: UnsafeRow, newValue: UnsafeRow, colFamilyName: String): Unit =
     map.put(key.copy(), newValue.copy())
+
+  def putWithMultipleKeys(key: UnsafeRow, userKey: UnsafeRow, value: UnsafeRow,
+                          colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException("store does not support multiple keys put")
+  }
 
   override def remove(key: UnsafeRow, colFamilyName: String): Unit = map.remove(key)
 

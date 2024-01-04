@@ -46,4 +46,6 @@ trait StatefulProcessorHandle extends Serializable {
    * The ListState persists values of type T.
    */
   def getListState[T](stateName: String): ListState[T]
+
+  def getMapState[K, V](stateName: String): MapState[K, V]
 }

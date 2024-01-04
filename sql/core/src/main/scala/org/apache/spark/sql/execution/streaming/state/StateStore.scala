@@ -67,6 +67,8 @@ trait ReadStateStore {
   def get(key: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
+  def get(key: UnsafeRow, userKey: UnsafeRow, colFamilyName: String): UnsafeRow
+
   /**
    * Provides an iterator on values for a particular key. The values are merged together
    * and stored as a byte Array in the underlying state store. This operation relies
@@ -123,6 +125,9 @@ trait StateStore extends ReadStateStore {
   def put(key: UnsafeRow, value: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
+  def putWithMultipleKeys(key: UnsafeRow, userKey: UnsafeRow, value: UnsafeRow,
+          colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
   /**
    * Remove a single non-null key.
    */
@@ -174,6 +179,9 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def get(key: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
+
+  override def get(key: UnsafeRow, userKey: UnsafeRow, colFamilyName: String): UnsafeRow =
+    store.get(key, userKey, colFamilyName)
 
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[UnsafeRowPair] = store.iterator(colFamilyName)

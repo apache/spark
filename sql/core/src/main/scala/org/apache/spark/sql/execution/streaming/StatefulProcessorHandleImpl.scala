@@ -21,7 +21,7 @@ import java.util.UUID
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{ListState, QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -131,6 +131,14 @@ class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
       "initialization is complete")
     store.createColFamilyIfAbsent(stateName)
     val resultState = new ListStateImpl[T](store, stateName)
+    resultState
+  }
+
+  override def getMapState[K, V](stateName: String): MapState[K, V] = {
+    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
+      "initialization is complete")
+    store.createColFamilyIfAbsent(stateName)
+    val resultState = new MapStateImpl[K, V](store, stateName)
     resultState
   }
 }

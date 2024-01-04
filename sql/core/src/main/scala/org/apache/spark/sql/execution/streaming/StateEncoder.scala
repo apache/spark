@@ -41,6 +41,14 @@ object StateEncoder {
     keyRow
   }
 
+  def encodeUserKey[K](userKey: K): UnsafeRow = {
+    val schemaForKeyRow: StructType = new StructType().add("userKey", BinaryType)
+    val keyByteArr = SerializationUtils.serialize(userKey.asInstanceOf[Serializable])
+    val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
+    val keyRow = keyEncoder(InternalRow(keyByteArr))
+    keyRow
+  }
+
   def encodeValue[S] (value: S): UnsafeRow = {
     val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
