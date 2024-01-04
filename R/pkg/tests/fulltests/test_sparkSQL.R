@@ -1414,7 +1414,7 @@ test_that("test HiveContext", {
 
     # Invalid mode
     expect_error(saveAsTable(df, "parquetest", "parquet", mode = "abc", path = parquetDataPath),
-                 "illegal argument - Unknown save mode: abc")
+                 "Error in mode : analysis error - \\[INVALID_SAVE_MODE\\].*")
     unsetHiveContext()
   }
 })

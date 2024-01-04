@@ -69,6 +69,9 @@ def convert_exception(
     if "errorClass" in info.metadata:
         error_class = info.metadata["errorClass"]
 
+    if "messageParameters" in info.metadata:
+        message_parameters = json.loads(info.metadata["messageParameters"])
+
     stacktrace: Optional[str] = None
     if resp is not None and resp.HasField("root_error_idx"):
         message = resp.errors[resp.root_error_idx].message

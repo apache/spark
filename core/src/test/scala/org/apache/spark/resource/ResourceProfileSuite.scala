@@ -357,12 +357,11 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     var taskError = intercept[AssertionError] {
       rprof.require(new TaskResourceRequests().resource("gpu", 1.5))
     }.getMessage()
-    assert(taskError.contains("The resource amount 1.5 must be either <= 0.5, or a whole number."))
+    assert(taskError.contains("The resource amount 1.5 must be either <= 1.0, or a whole number."))
 
-    taskError = intercept[AssertionError] {
-      rprof.require(new TaskResourceRequests().resource("gpu", 0.7))
-    }.getMessage()
-    assert(taskError.contains("The resource amount 0.7 must be either <= 0.5, or a whole number."))
+    rprof.require(new TaskResourceRequests().resource("gpu", 0.7))
+    rprof.require(new TaskResourceRequests().resource("gpu", 1.0))
+    rprof.require(new TaskResourceRequests().resource("gpu", 2.0))
   }
 
   test("ResourceProfile has correct custom executor resources") {
@@ -391,6 +390,33 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
 
     assert(rprof.build().getCustomTaskResources().size === 1,
       "Task resources should have 1 custom resource")
+  }
+
+  test("SPARK-45527 fractional TaskResourceRequests in ResourceProfile") {
+    val ereqs = new ExecutorResourceRequests().cores(6).resource("gpus", 6)
+    var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
+    new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.5)
+    new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.7)
+
+    val msg = intercept[AssertionError] {
+      new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+    }.getMessage
+    assert(msg.contains("The task resource amount 0.7 must be either <= 0.5, or a whole number"))
+  }
+
+  test("SPARK-45527 fractional TaskResourceRequests in TaskResourceProfile") {
+    var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
+    new ResourceProfileBuilder().require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.5)
+    new ResourceProfileBuilder().require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.7)
+    new ResourceProfileBuilder().require(treqs).build()
   }
 
   private def withMockSparkEnv(conf: SparkConf)(f: => Unit): Unit = {

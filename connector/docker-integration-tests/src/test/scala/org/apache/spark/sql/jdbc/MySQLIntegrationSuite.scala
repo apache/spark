@@ -30,7 +30,7 @@ import org.apache.spark.tags.DockerTest
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.0.31
  *     ./build/sbt -Pdocker-integration-tests
- *     "testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
  */
 @DockerTest

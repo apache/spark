@@ -115,6 +115,29 @@ class ArithmeticMixin(ArithmeticTestingFuncMixin):
         )
 
     @property
+    def pdf5(self):
+        return pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "b": [4, 5, 6, 3, 2, 1, 0, 0, 0],
+                "c": [4, 5, 6, 3, 2, 1, 0, 0, 0],
+            },
+            index=[0, 1, 3, 5, 6, 8, 9, 10, 11],
+        ).set_index(["a", "b"])
+
+    @property
+    def pdf6(self):
+        return pd.DataFrame(
+            {
+                "a": [9, 8, 7, 6, 5, 4, 3, 2, 1],
+                "b": [0, 0, 0, 4, 5, 6, 1, 2, 3],
+                "c": [9, 8, 7, 6, 5, 4, 3, 2, 1],
+                "e": [4, 5, 6, 3, 2, 1, 0, 0, 0],
+            },
+            index=list(range(9)),
+        ).set_index(["a", "b"])
+
+    @property
     def pser1(self):
         midx = pd.MultiIndex(
             [["lama", "cow", "falcon", "koala"], ["speed", "weight", "length", "power"]],
@@ -130,9 +153,31 @@ class ArithmeticMixin(ArithmeticTestingFuncMixin):
         )
         return pd.Series([-45, 200, -1.2, 30, -250, 1.5, 320, 1, -0.3], index=midx)
 
+    @property
+    def psdf5(self):
+        return ps.from_pandas(self.pdf5)
+
+    @property
+    def psdf6(self):
+        return ps.from_pandas(self.pdf6)
+
     def test_arithmetic(self):
         self._test_arithmetic_frame(self.pdf1, self.pdf2, check_extension=False)
         self._test_arithmetic_series(self.pser1, self.pser2, check_extension=False)
+
+    def test_multi_index_arithmetic(self):
+        psdf5 = self.psdf5
+        psdf6 = self.psdf6
+        pdf5 = self.pdf5
+        pdf6 = self.pdf6
+
+        # Series
+        self.assert_eq((psdf5.c - psdf6.e).sort_index(), (pdf5.c - pdf6.e).sort_index())
+
+        self.assert_eq((psdf5["c"] / psdf6["e"]).sort_index(), (pdf5["c"] / pdf6["e"]).sort_index())
+
+        # DataFrame
+        self.assert_eq((psdf5 + psdf6).sort_index(), (pdf5 + pdf6).sort_index(), almost=True)
 
 
 class ArithmeticTests(
