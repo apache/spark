@@ -15336,6 +15336,8 @@ def reverse(col: "ColumnOrName") -> Column:
     Example 2: Reverse an array
 
     >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
     >>> df.select(sf.reverse(df.data)).show()
     +-------------+
     |reverse(data)|
@@ -15456,6 +15458,8 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
 
     Example 2: The key is not in the map
 
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
     >>> df.select(sf.map_contains_key("data", -1)).show()
     +--------------------------+
     |map_contains_key(data, -1)|
