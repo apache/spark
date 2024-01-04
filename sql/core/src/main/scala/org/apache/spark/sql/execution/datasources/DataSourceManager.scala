@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
 
@@ -91,8 +90,7 @@ object DataSourceManager extends Logging {
   private lazy val shouldLoadPythonDataSources: Boolean = {
     Utils.checkCommandAvailable(PythonUtils.defaultPythonExec) &&
       // Make sure PySpark zipped files also exist.
-      PythonUtils.sparkPythonPath
-        .split(Pattern.quote(File.separator)).forall(new File(_).exists())
+      PythonUtils.sparkPythonPaths.forall(new File(_).exists())
   }
 
   private def initialDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
