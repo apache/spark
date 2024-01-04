@@ -1361,10 +1361,14 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 # If even one StructField is null, that row should be dropped.
                 index_spark_column_names = self._internal.index_spark_column_names
                 spark_column = self.spark.column
+                sdf = self._internal.spark_frame.select(spark_column)
+                spark_column_name = sdf.columns[0]
                 cond = F.lit(False)
                 for index_spark_column_name in index_spark_column_names:
-                    cond = cond | spark_column.getItem(index_spark_column_name).isNull()
-                sdf = self._internal.spark_frame.select(spark_column)
+                    cond = (
+                        cond
+                        | scol_for(sdf, spark_column_name).getItem(index_spark_column_name).isNull()
+                    )
                 sdf_dropna = sdf.filter(~cond)
             else:
                 sdf_dropna = self._internal.spark_frame.select(self.spark.column).dropna()
