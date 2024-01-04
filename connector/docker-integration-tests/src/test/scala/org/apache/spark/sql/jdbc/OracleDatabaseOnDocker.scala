@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.io.{File, PrintWriter}
 
-import com.github.dockerjava.api.model.{AccessMode, Bind, ContainerConfig, HostConfig, Volume}
+import com.github.dockerjava.api.model._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -45,7 +45,14 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
     try {
       val dir = Utils.createTempDir()
       val writer = new PrintWriter(new File(dir, "install.sql"))
-      writer.write("ALTER SESSIONXX SET DDL_LOCK_TIMEOUT = 10")
+      // SPARK-46592: gvenzl/oracle-free occasionally fails to start with the following error:
+      // 'ORA-04021: timeout occurred while waiting to lock object', when initializing the
+      // SYSTEM user. This is due to the fact that the default DDL_LOCK_TIMEOUT is 0, which
+      // means that the lock will no wait. We set the timeout to 30 seconds to try again.
+      // TODO: This workaround should be removed once the issue is fixed in the image.
+      // https://github.com/gvenzl/oci-oracle-free/issues/35
+      writer.write("ALTER SESSION SET DDL_LOCK_TIMEOUT = 30;")
+      writer.write(s"ALTER USER SYSTEM IDENTIFIED BY \"$oracle_password\";")
       writer.close()
       val newBind = new Bind(
         dir.getAbsolutePath,
