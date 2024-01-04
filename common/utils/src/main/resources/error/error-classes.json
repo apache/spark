@@ -3588,6 +3588,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DATA_SOURCE_SAVE_MODE" : {
+    "message" : [
+      "The data source '<source>' cannot be written in the <createMode> mode. Please use either the \"Append\" or \"Overwrite\" mode instead."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
       "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
@@ -5401,11 +5407,6 @@
   "_LEGACY_ERROR_TEMP_1307" : {
     "message" : [
       "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1308" : {
-    "message" : [
-      "TableProvider implementation <source> cannot be written with <createMode> mode, please use Append or Overwrite modes instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1309" : {
