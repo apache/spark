@@ -174,7 +174,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         parser.nextEvent()
         parser.peek match {
           case _: StartElement => inferObject(parser)
-          case _: EndElement if data.isEmpty =>
+          case _: EndElement if data.trim.isEmpty =>
             StaxXmlParserUtils.consumeNextEndElement(parser)
             NullType
           case _: EndElement if options.nullValue == "" =>
@@ -257,7 +257,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
             case dt: DataType if valuesMap.nonEmpty =>
               // We need to manually add the field for value.
               val nestedBuilder = ArrayBuffer[StructField]()
-              nestedBuilder += StructField(options.valueTag, dt, nullable = true)
+              if (!dt.isInstanceOf[NullType]) {
+                nestedBuilder += StructField(options.valueTag, dt, nullable = true)
+              }
               valuesMap.foreach {
                 case (f, v) =>
                   nestedBuilder += StructField(f, inferFrom(v), nullable = true)
