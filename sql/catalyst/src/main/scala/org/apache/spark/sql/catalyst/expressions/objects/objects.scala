@@ -946,9 +946,6 @@ case class MapObjects private(
         builder.sizeHint(input.size)
         executeFuncOnCollection(input).foreach(builder += _)
         immutable.ArraySeq.unsafeWrapArray(builder.result())
-        builder.sizeHint(input.size)
-        executeFuncOnCollection(input).foreach(builder += _)
-        immutable.ArraySeq.unsafeWrapArray(builder.result().unsafeArray)
       }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
@@ -1123,7 +1120,7 @@ case class MapObjects private(
         case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
           val tag = ctx.addReferenceObj("tag", elementClassTag())
           val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
-          val getBuilder = s"$arraySeqClassName$$.MODULE$$.newBuilder($tag)"
+          val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
           val builder = ctx.freshName("collectionBuilder")
           (
             s"""
@@ -1133,7 +1130,6 @@ case class MapObjects private(
             (genValue: String) => s"$builder.$$plus$$eq($genValue);",
             s"(${cls.getName}) ${classOf[immutable.ArraySeq[_]].getName}$$." +
               s"MODULE$$.unsafeWrapArray($builder.result());"
-              s"unsafeWrapArray((($arraySeqClassName)($builder.result())).unsafeArray());"
           )
         case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>

@@ -847,10 +847,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     Row(ArrayBuffer(1, 2, 3, 5, 6)))
   }
 
-  test("SPARK-46586 - X: UDF should not fail on immutable.ArraySeq") {
-
-  }
-
   test("SPARK-34388: UDF name is propagated with registration for ScalaUDF") {
     spark.udf.register("udf34388", udf((value: Int) => value > 2))
     spark.sessionState.catalog.lookupFunction(
