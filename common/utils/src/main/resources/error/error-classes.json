@@ -332,7 +332,7 @@
   },
   "CANNOT_RESOLVE_WITH_PLAN_ID" : {
     "message" : [
-      "Cannot resolve <expression> with plan id <id> in plan <plan>. It's probably because you reference a non-existent column like `df1.select(df2.col(\"id\"))`."
+      "Cannot resolve <expression> with plan id <id> in plan <plan>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
     ],
     "sqlState" : "42704"
   },

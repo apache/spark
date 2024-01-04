@@ -290,9 +290,9 @@ Cannot resolve `<targetString>`.* given input columns `<columns>`. Please check 
 
 ### CANNOT_RESOLVE_WITH_PLAN_ID
 
-SQLSTATE: 42704
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot resolve `<expression>` with plan id `<id>` in plan `<plan>`. It's probably because you reference a non-existent column like `df1.select(df2.col("id"))`.
+Cannot resolve `<expression>` with plan id `<id>` in plan `<plan>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
 
 ### CANNOT_RESTORE_PERMISSIONS_FOR_PATH
 

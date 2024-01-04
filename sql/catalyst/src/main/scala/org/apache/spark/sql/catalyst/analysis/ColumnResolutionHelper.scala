@@ -540,7 +540,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           child.outputSet
         }
         resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, child)
-          .filter(outputSet.contains)
+          .filter(_.references.subsetOf(outputSet))
       }
       if (candidates.length > 1) {
         throw new AnalysisException(
