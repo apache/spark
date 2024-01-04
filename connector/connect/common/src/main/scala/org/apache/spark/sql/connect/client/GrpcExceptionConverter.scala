@@ -392,7 +392,7 @@ private[client] object GrpcExceptionConverter {
     if (isValidErrorClass(params.errorClass)) {
       params.messageParameters
     } else {
-      Map("message" -> params.message)
+      Map("message" -> Option(params.message).getOrElse("No message"))
     }
   }
 
