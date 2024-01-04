@@ -4612,16 +4612,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val CLASSIFY_JDBC_EXCEPTION_IN_DIALECT =
-    buildConf("spark.sql.legacy.classifyJDBCExceptionInDialect")
-      .internal()
-      .doc("When set to true, Spark delegates classification of JDBC exceptions to a dialect. " +
-        "If it is false, the JDBC table catalog converts exceptions from JDBC dialects " +
-        "to Spark exceptions.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5044,8 +5034,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
-
-  def classifyJDBCExceptionInDialect: Boolean = getConf(CLASSIFY_JDBC_EXCEPTION_IN_DIALECT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

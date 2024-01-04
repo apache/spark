@@ -28,7 +28,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkThrowable, TaskContext}
+import org.apache.spark.{SparkThrowable, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
@@ -43,7 +43,6 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -1185,15 +1184,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
       errorClass: String,
       messageParameters: Map[String, String],
       dialect: JdbcDialect,
-      legacyMessage: String)(f: => T): T = {
+      description: String)(f: => T): T = {
     try {
       f
     } catch {
       case e: SparkThrowable with Throwable => throw e
-      case e: Throwable if SQLConf.get.classifyJDBCExceptionInDialect =>
-        throw dialect.classifyException(legacyMessage, e)
       case e: Throwable =>
-        throw new SparkException(errorClass, messageParameters, cause = e)
+        throw dialect.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

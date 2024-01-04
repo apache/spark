@@ -21,7 +21,7 @@ import java.util.Properties
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -127,23 +127,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         withConnection { conn =>
           conn.prepareStatement("""CREATE TABLE "test"."src_table" (id INTEGER)""").executeUpdate()
         }
-        withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "true") {
-          val exp = intercept[TableAlreadyExistsException] {
-            sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
-          }
-          checkErrorTableAlreadyExists(exp, "`dst_table`")
+        val exp = intercept[TableAlreadyExistsException] {
+          sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
         }
-        withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
-          checkError(
-            exception = intercept[SparkException] {
-              sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
-            },
-            errorClass = "FAILED_JDBC.RENAME_TABLE",
-            parameters = Map(
-              "url" -> url,
-              "oldName" -> "`test`.`src_table`",
-              "newName" -> "`test`.`dst_table`"))
-        }
+        checkErrorTableAlreadyExists(exp, "`dst_table`")
       }
     }
   }
@@ -179,24 +166,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkErrorTableAlreadyExists(e, "`test`.`new_table`")
     }
-    withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "true") {
-      val exp = intercept[NoSuchNamespaceException] {
-        sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
-      }
-      checkError(exp,
-        errorClass = "SCHEMA_NOT_FOUND",
-        parameters = Map("schemaName" -> "`bad_test`"))
+    val exp = intercept[NoSuchNamespaceException] {
+      sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
     }
-    withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
-      val exp = intercept[SparkException] {
-        sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
-      }
-      checkError(exp,
-        errorClass = "FAILED_JDBC.CREATE_TABLE",
-        parameters = Map(
-          "url" -> url,
-          "tableName" -> "`bad_test`.`new_table`"))
-    }
+    checkError(exp,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`bad_test`"))
   }
 
   test("ALTER TABLE ... add column") {
@@ -580,14 +555,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("CREATE TABLE with table property") {
     withTable("h2.test.new_table") {
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[AnalysisException] {
           sql("CREATE TABLE h2.test.new_table(i INT, j STRING)" +
             " TBLPROPERTIES('ENGINE'='tableEngineName')")
         },
-        errorClass = "FAILED_JDBC.CREATE_TABLE",
+        errorClass = "FAILED_JDBC.UNCLASSIFIED",
         parameters = Map(
-          "url" -> url,
-          "tableName" -> "`test`.`new_table`"))
+          "url" -> "jdbc:",
+          "message" -> "Failed table creation: test.new_table"))
     }
   }
 
@@ -600,13 +575,13 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-42904: CREATE TABLE with char/varchar with invalid char length") {
     checkError(
-      exception = intercept[SparkException]{
+      exception = intercept[AnalysisException]{
         sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
       },
-      errorClass = "FAILED_JDBC.CREATE_TABLE",
+      errorClass = "FAILED_JDBC.UNCLASSIFIED",
       parameters = Map(
-        "url" -> url,
-        "tableName" -> "`test`.`new_table`"))
+        "url" -> "jdbc:",
+        "message" -> "Failed table creation: test.new_table"))
   }
 
   test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {

@@ -2918,31 +2918,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(indexes1.isEmpty)
 
     sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
-    withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "true") {
-      checkError(
-        exception = intercept[IndexAlreadyExistsException] {
-          sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
-        },
-        errorClass = "INDEX_ALREADY_EXISTS",
-        parameters = Map(
-          "indexName" -> "people_index",
-          "tableName" -> "test.people"
-        )
+    checkError(
+      exception = intercept[IndexAlreadyExistsException] {
+        sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
+      },
+      errorClass = "INDEX_ALREADY_EXISTS",
+      parameters = Map(
+        "indexName" -> "people_index",
+        "tableName" -> "test.people"
       )
-    }
-    withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
-      checkError(
-        exception = intercept[SparkException] {
-          sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
-        },
-        errorClass = "FAILED_JDBC.CREATE_INDEX",
-        parameters = Map(
-          "url" -> url,
-          "indexName" -> "`people_index`",
-          "tableName" -> "`test`.`people`"
-        )
-      )
-    }
+    )
     assert(jdbcTable.indexExists("people_index"))
     val indexes2 = jdbcTable.listIndexes()
     assert(!indexes2.isEmpty)
@@ -2951,27 +2936,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(tableIndex.indexName() == "people_index")
 
     sql(s"DROP INDEX people_index ON TABLE h2.test.people")
-    withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "true") {
-      checkError(
-        exception = intercept[NoSuchIndexException] {
-          sql(s"DROP INDEX people_index ON TABLE h2.test.people")
-        },
-        errorClass = "INDEX_NOT_FOUND",
-        parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
-      )
-    }
-    withSQLConf(SQLConf.CLASSIFY_JDBC_EXCEPTION_IN_DIALECT.key -> "false") {
-      checkError(
-        exception = intercept[SparkException] {
-          sql(s"DROP INDEX people_index ON TABLE h2.test.people")
-        },
-        errorClass = "FAILED_JDBC.DROP_INDEX",
-        parameters = Map(
-          "url" -> url,
-          "indexName" -> "`people_index`",
-          "tableName" -> "`test`.`people`")
-      )
-    }
+    checkError(
+      exception = intercept[NoSuchIndexException] {
+        sql(s"DROP INDEX people_index ON TABLE h2.test.people")
+      },
+      errorClass = "INDEX_NOT_FOUND",
+      parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
+    )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
     assert(indexes3.isEmpty)
