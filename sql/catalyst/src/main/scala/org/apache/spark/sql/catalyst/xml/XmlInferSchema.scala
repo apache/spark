@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import java.util.Locale
-import javax.xml.stream.{XMLEventReader, XMLStreamConstants}
+import javax.xml.stream.XMLEventReader
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
