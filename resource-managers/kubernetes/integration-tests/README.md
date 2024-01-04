@@ -13,9 +13,10 @@ directory:
 
     ./dev/dev-run-integration-tests.sh
 
-To run tests with Java 21 instead of Java 17, use `--java-image-tag` to specify the base image.
+To run tests with a specific Java version instead of Java 21, use `--java-image-tag` to specify the 
+[base image](https://hub.docker.com/r/azul/zulu-openjdk/tags) accordingly.
 
-    ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
+    ./dev/dev-run-integration-tests.sh --java-image-tag 17-jre
 
 To run tests with a custom docker image, use `--docker-file` to specify the Dockerfile.
 Note that if both `--docker-file` and `--java-image-tag` are used, `--docker-file` is preferred,
