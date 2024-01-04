@@ -1,10 +1,10 @@
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 constructor:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-arrayOfAny                                            5              5           0       1841.7           0.5       1.0X
-arrayOfAnyAsObject                                    5              5           0       1842.0           0.5       1.0X
-arrayOfAnyAsSeq                                     287            288           1         34.9          28.7       0.0X
-arrayOfInt                                          355            356           0         28.2          35.5       0.0X
-arrayOfIntAsObject                                  355            356           1         28.2          35.5       0.0X
+arrayOfAny                                            6              6           0       1621.0           0.6       1.0X
+arrayOfAnyAsObject                                    6              6           0       1621.0           0.6       1.0X
+arrayOfAnyAsSeq                                     216            217           1         46.3          21.6       0.0X
+arrayOfInt                                          271            271           0         36.9          27.1       0.0X
+arrayOfIntAsObject                                  250            253           3         39.9          25.0       0.0X
 

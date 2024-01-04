@@ -1271,6 +1271,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 Parameterized query must either use positional, or named parameters, but not both.
 
+### INVALID_SAVE_MODE
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The specified save mode `<mode>` is invalid. Valid save modes include "append", "overwrite", "ignore", "error", "errorifexists", and "default".
+
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
 [SQLSTATE: 42K07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2325,6 +2331,12 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
+
+### UNSUPPORTED_DATA_SOURCE_SAVE_MODE
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+The data source '`<source>`' cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

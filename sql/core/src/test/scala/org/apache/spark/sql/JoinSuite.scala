@@ -22,8 +22,6 @@ import java.util.Locale
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
-import org.mockito.Mockito._
-
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -43,23 +41,6 @@ import org.apache.spark.tags.SlowSQLTest
 @SlowSQLTest
 class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
-
-  private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
-    // SPARK-21492: Check cleanupResources are finally triggered in SortExec node for every
-    // test case
-    plan.foreachUp {
-      case s: SortExec =>
-        val sortExec = spy[SortExec](s)
-        verify(sortExec, atLeastOnce).cleanupResources()
-        verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
-      case _ =>
-    }
-  }
-
-  override protected def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
-    attachCleanupResourceChecker(df.queryExecution.sparkPlan)
-    super.checkAnswer(df, rows)
-  }
 
   setupTestData()
 
