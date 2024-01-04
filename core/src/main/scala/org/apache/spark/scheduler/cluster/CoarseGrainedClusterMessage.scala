@@ -75,7 +75,7 @@ private[spark] object CoarseGrainedClusterMessages {
       state: TaskState,
       data: SerializableBuffer,
       taskCpus: Int,
-      resources: Map[String, ResourceInformation] = Map.empty)
+      resources: Map[String, Map[String, Long]] = Map.empty)
     extends CoarseGrainedClusterMessage
 
   object StatusUpdate {
@@ -86,7 +86,7 @@ private[spark] object CoarseGrainedClusterMessages {
         state: TaskState,
         data: ByteBuffer,
         taskCpus: Int,
-        resources: Map[String, ResourceInformation]): StatusUpdate = {
+        resources: Map[String, Map[String, Long]]): StatusUpdate = {
       StatusUpdate(executorId, taskId, state, new SerializableBuffer(data), taskCpus, resources)
     }
   }

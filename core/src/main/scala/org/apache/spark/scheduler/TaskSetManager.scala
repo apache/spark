@@ -21,7 +21,6 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
 
-import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
@@ -33,7 +32,6 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.PercentileHeap
@@ -444,7 +442,7 @@ private[spark] class TaskSetManager(
       host: String,
       maxLocality: TaskLocality.TaskLocality,
       taskCpus: Int = sched.CPUS_PER_TASK,
-      taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
+      taskResourceAssignments: Map[String, Map[String, Long]] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
     val offerExcluded = taskSetExcludelistHelperOpt.exists { excludeList =>
@@ -512,7 +510,7 @@ private[spark] class TaskSetManager(
       taskLocality: TaskLocality.Value,
       speculative: Boolean,
       taskCpus: Int,
-      taskResourceAssignments: Map[String, ResourceInformation],
+      taskResourceAssignments: Map[String, Map[String, Long]],
       launchTime: Long): TaskDescription = {
     // Found a task; do some bookkeeping and return a task description
     val task = tasks(index)
@@ -1381,7 +1379,7 @@ private[scheduler] case class BarrierPendingLaunchTask(
     host: String,
     index: Int,
     taskLocality: TaskLocality.TaskLocality,
-    assignedResources: Map[String, ResourceInformation]) {
+    assignedResources: Map[String, Map[String, Long]]) {
   // Stored the corresponding index of the WorkerOffer which is responsible to launch the task.
   // Used to revert the assigned resources (e.g., cores, custome resources) when the barrier
   // task set doesn't launch successfully in a single resourceOffers round.
