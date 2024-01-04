@@ -597,17 +597,14 @@ class StaxXmlParser(
         schema(index).dataType match {
           case ArrayType(elementType, _) =>
             val value = convertTo(data, elementType)
-            val result = if (row(index) == null) {
-              ArrayBuffer(value)
-            } else {
-              val genericArrayData = row(index).asInstanceOf[GenericArrayData]
-              if (addToTail) {
-                genericArrayData.toArray(elementType) :+ value
+            val values = Option(row(index))
+              .map(_.asInstanceOf[ArrayBuffer[Any]])
+              .getOrElse(ArrayBuffer.empty[Any])
+            row(index) = if (addToTail) {
+                values :+ value
               } else {
-                value +: genericArrayData.toArray(elementType)
+                value +: values
               }
-            }
-            row(index) = new GenericArrayData(result)
           case dataType =>
             row(index) = convertTo(data, dataType)
         }
