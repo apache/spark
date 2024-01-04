@@ -17,13 +17,15 @@
 import unittest
 
 from pyspark import pandas as ps
-from pyspark.pandas.tests.indexes.test_base import IndexesTestsMixin
+from pyspark.pandas.tests.indexes.test_getattr import IndexGetattrMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class IndexesParityTests(
-    IndexesTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+class IndexGetattrParityTests(
+    IndexGetattrMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     @property
     def psdf(self):
@@ -31,7 +33,7 @@ class IndexesParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_base import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_getattr import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
