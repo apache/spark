@@ -120,8 +120,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def isUpdated: Boolean
 
   /**
-   * Creates a new copy of this accumulator, which is zero value. i.e. call `isUpdated` on the copy
-   * must return false.
+   * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
+   * must return true.
    */
   def copyAndReset(): AccumulatorV2[IN, OUT] = {
     val copyAcc = copy()
@@ -135,8 +135,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def copy(): AccumulatorV2[IN, OUT]
 
   /**
-   * Resets this accumulator, which is zero value. i.e. call `isUpdated` must
-   * return false.
+   * Resets this accumulator, which is zero value. i.e. call `isZero` must
+   * return true.
    */
   def reset(): Unit
 

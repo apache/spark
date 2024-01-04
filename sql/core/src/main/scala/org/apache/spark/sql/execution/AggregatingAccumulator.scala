@@ -185,7 +185,7 @@ class AggregatingAccumulator private(
 
   override def value: InternalRow = withSQLConf(false, InternalRow.empty) {
     // Either use the existing buffer or create a temporary one.
-    val input = if (isUpdated) {
+    val input = if (!isUpdated) {
       buffer
     } else {
       // Create a temporary buffer because we want to avoid changing the state of the accumulator

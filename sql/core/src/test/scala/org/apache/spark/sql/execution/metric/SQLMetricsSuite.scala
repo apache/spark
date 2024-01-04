@@ -940,25 +940,25 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).value === 0)
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = 5).value === 5)
 
-    assert(!SQLMetrics.createSizeMetric(sparkContext, name = "m").isUpdated)
-    assert(!SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).isUpdated)
-    assert(!SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = 5).isUpdated)
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").isUpdated)
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).isUpdated)
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = 5).isUpdated)
 
     assert(SQLMetrics.createTimingMetric(sparkContext, name = "m").value === 0)
     assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = -1).value === 0)
     assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = 5).value === 5)
 
-    assert(!SQLMetrics.createTimingMetric(sparkContext, name = "m").isUpdated)
-    assert(!SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = -1).isUpdated)
-    assert(!SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = 5).isUpdated)
+    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m").isUpdated)
+    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = -1).isUpdated)
+    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = 5).isUpdated)
 
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m").value === 0)
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).value === 0)
     assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5).value === 5)
 
-    assert(!SQLMetrics.createNanoTimingMetric(sparkContext, name = "m").isUpdated)
-    assert(!SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).isUpdated)
-    assert(!SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5).isUpdated)
+    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m").isUpdated)
+    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).isUpdated)
+    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5).isUpdated)
   }
 }
 
