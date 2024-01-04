@@ -619,13 +619,17 @@ private[spark] class Executor(
           threadMXBean.getCurrentThreadCpuTime
         } else 0L
         var threwException = true
+        // Convert resources amounts info to ResourceInformation
+        val resources = taskDescription.resources.map { case (rName, addressesAmounts) =>
+          rName -> new ResourceInformation(rName, addressesAmounts.keys.toSeq.sorted.toArray)
+        }
         val value = Utils.tryWithSafeFinally {
           val res = task.run(
             taskAttemptId = taskId,
             attemptNumber = taskDescription.attemptNumber,
             metricsSystem = env.metricsSystem,
             cpus = taskDescription.cpus,
-            resources = taskDescription.resources,
+            resources = resources,
             plugins = plugins)
           threwException = false
           res
