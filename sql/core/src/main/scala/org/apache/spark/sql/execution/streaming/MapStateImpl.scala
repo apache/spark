@@ -31,7 +31,6 @@ class MapStateImpl[K, V](store: StateStore,
   override def getValue(key: K): V = {
     val encodedGroupingKey = StateEncoder.encodeKey(stateName) // unsafe rows of grouping key
     val encodeUserKey = StateEncoder.encodeUserKey(key)
-    println(s"I am inside getValue: userkey: $encodeUserKey")
     val unsafeRowValue = store.get(encodedGroupingKey, encodeUserKey, stateName)
     if (unsafeRowValue == null) {
       throw new UnsupportedOperationException("Cannot get value on empty key")
@@ -42,7 +41,6 @@ class MapStateImpl[K, V](store: StateStore,
   /** Check if the user key is contained in the map */
   override def containsKey(key: K): Boolean = {
     try {
-      println(s"I am inside containsKey: ${getValue(key)}")
       getValue(key) != null
     } catch {
       case e: Exception => false
@@ -54,17 +52,23 @@ class MapStateImpl[K, V](store: StateStore,
     val encodedValue = StateEncoder.encodeValue(value)
     val encodedKey = StateEncoder.encodeKey(stateName)
     val encodedUserKey = StateEncoder.encodeUserKey(key)
-    println(s"Hey I am actually inside updateValue: userKey: $key value: $value")
-    println(s"I am inside updateValue, encoded row userKey: $encodedUserKey")
     store.putWithMultipleKeys(encodedKey, encodedUserKey, encodedValue, stateName)
   }
 
-  /* Get the map associated with grouping key
+  /* Get the map associated with grouping key */
   override def getMap(): Map[K, V] = {
+    val encodedKey = StateEncoder.encodeKey(stateName)
 
+    // try to get all key-value pairs from rocksDB
+    val iter = store.iterator()
+    // this always returns false
+    println("I am inside getMap(): " + iter.hasNext)
+    iter.map { pair =>
+      (StateEncoder.decode(pair.key), StateEncoder.decode(pair.value))
+    }.toMap
   }
 
-  /** Get the list of keys present in map associated with grouping key */
+  /* Get the list of keys present in map associated with grouping key
   override def getKeys(): Iterator[K] = {}
 
   /** Get the list of values present in map associated with grouping key */

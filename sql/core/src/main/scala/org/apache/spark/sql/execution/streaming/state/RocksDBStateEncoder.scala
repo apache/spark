@@ -317,7 +317,6 @@ class StatefulProcessorStateEncoder(keySchema: StructType, valueSchema: StructTy
     Platform.copyMemory(remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
       encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4 + prefixKeyEncoded.length,
       remainingEncoded.length)
-    // println(s"I am inside encodeKeys: $encodedBytes")
     encodedBytes
   }
 

@@ -49,6 +49,10 @@ class TestMapStateProcessor
       } else if (row.action == "updateValue") {
         _mapState.updateValue(row.value._1, row.value._2)
         output = (key, row.value._1, row.value._2) :: output
+      } else if (row.action == "getMap") {
+        _mapState.getMap().foreach { pair =>
+          output = (key, pair._1, pair._2) :: output
+        }
       }
     }
     output.iterator
@@ -72,13 +76,21 @@ class TransformWithMapStateSuite extends StreamTest {
           TimeoutMode.noTimeouts(),
           OutputMode.Append())
       testStream(result, OutputMode.Append())(
-        AddData(inputData, InputMapRow("k2", "updateValue", ("v1", 10))),
+        AddData(inputData, InputMapRow("k1", "updateValue", ("v1", 10))),
         AddData(inputData, InputMapRow("k2", "updateValue", ("v2", 3))),
         AddData(inputData, InputMapRow("k2", "updateValue", ("v2", 12))),
-        // AddData(inputData, InputMapRow("k2", "updateValue", ("v4", 1))),
-        CheckAnswer(("k2", "v1", 10), ("k2", "v2", 3), ("k2", "v2", 12)),
-        AddData(inputData, InputMapRow("k2", "getValue", ("v2", 12))),
-        CheckNewAnswer(("k2", "v2", 12))
+        AddData(inputData, InputMapRow("k2", "updateValue", ("v3", 13))),
+        CheckAnswer(("k1", "v1", 10), ("k2", "v2", 3), ("k2", "v2", 12), ("k2", "v3", 13)),
+
+        // getValue are working well
+        AddData(inputData, InputMapRow("k2", "getValue", ("v2", -1))),
+        CheckNewAnswer(("k2", "v2", 12)),
+        AddData(inputData, InputMapRow("k1", "getValue", ("v1", -1))),
+        CheckNewAnswer(("k1", "v1", 10)),
+
+        // getMap is empty
+        AddData(inputData, InputMapRow("k2", "getMap", ("", -1))),
+        CheckNewAnswer(("k2", "v2", 3), ("k2", "v3", 13))
       )
 
     }
