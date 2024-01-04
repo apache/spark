@@ -45,7 +45,7 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
     try {
       val dir = Utils.createTempDir()
       val writer = new PrintWriter(new File(dir, "install.sql"))
-      writer.write("ALTER SESSION SET DDL_LOCK_TIMEOUT = 10")
+      writer.write("ALTER SESSIONXX SET DDL_LOCK_TIMEOUT = 10")
       writer.close()
       val newBind = new Bind(
         dir.getAbsolutePath,
