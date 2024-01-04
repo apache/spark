@@ -1401,7 +1401,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("StructType with missing optional StructType child") {
-    val df = spark.read.option("rowTag", "Foo")
+    val df = spark.read.option("rowTag", "Foo").option("nullValue", "")
       .xml(getTestResourcePath(resDir + "struct_with_optional_child.xml"))
     val res = df.collect()
     assert(res.length == 1)
@@ -2477,7 +2477,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(input)
 
     checkAnswer(df, Seq(
-      Row("\" \"", Row("\" \"", 1), Row(Row(null, " ")))))
+      Row("\" \"", Row("\" \"", 1), Row(Row(" ")))))
   }
 
   test("capture values interspersed between elements - nested comments") {
