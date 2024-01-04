@@ -71,7 +71,7 @@ class JDBCTableCatalog extends TableCatalog
       val rs = JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.GET_TABLES",
         messageParameters = Map(
-          "url" -> options.url,
+          "url" -> options.getRedactUrl(),
           "namespace" -> toSQLId(namespace.toSeq)),
         dialect) {
         conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
@@ -90,7 +90,7 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.classifyException(
       errorClass = "FAILED_JDBC.TABLE_EXISTS",
       messageParameters = Map(
-        "url" -> options.url,
+        "url" -> options.getRedactUrl(),
         "tableName" -> toSQLId(ident)),
       dialect) {
       JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
@@ -115,7 +115,7 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.RENAME_TABLE",
         messageParameters = Map(
-          "url" -> options.url,
+          "url" -> options.getRedactUrl(),
           "oldName" -> toSQLId(oldIdent),
           "newName" -> toSQLId(newIdent)),
         dialect) {
@@ -181,7 +181,7 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.CREATE_TABLE",
         messageParameters = Map(
-          "url" -> options.url,
+          "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
         dialect) {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
@@ -197,7 +197,7 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.ALTER_TABLE",
         messageParameters = Map(
-          "url" -> options.url,
+          "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
         dialect) {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
@@ -212,7 +212,7 @@ class JDBCTableCatalog extends TableCatalog
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.NAMESPACE_EXISTS",
           messageParameters = Map(
-            "url" -> options.url,
+            "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(namespace.toSeq)),
           dialect) {
           JdbcUtils.schemaExists(conn, options, db)
@@ -225,7 +225,7 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.LIST_NAMESPACES",
-        messageParameters = Map("url" -> options.url),
+        messageParameters = Map("url" -> options.getRedactUrl()),
         dialect) {
         JdbcUtils.listSchemas(conn, options)
       }
@@ -277,7 +277,7 @@ class JDBCTableCatalog extends TableCatalog
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.CREATE_NAMESPACE",
           messageParameters = Map(
-            "url" -> options.url,
+            "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),
           dialect) {
           JdbcUtils.createSchema(conn, options, db, comment)
@@ -301,7 +301,7 @@ class JDBCTableCatalog extends TableCatalog
                 JdbcUtils.classifyException(
                   errorClass = "FAILED_JDBC.CREATE_NAMESPACE_COMMENT",
                   messageParameters = Map(
-                    "url" -> options.url,
+                    "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
                   dialect) {
                   JdbcUtils.alterSchemaComment(conn, options, db, set.value)
@@ -317,7 +317,7 @@ class JDBCTableCatalog extends TableCatalog
                 JdbcUtils.classifyException(
                   errorClass = "FAILED_JDBC.REMOVE_NAMESPACE_COMMENT",
                   messageParameters = Map(
-                    "url" -> options.url,
+                    "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
                   dialect) {
                   JdbcUtils.removeSchemaComment(conn, options, db)
@@ -344,7 +344,7 @@ class JDBCTableCatalog extends TableCatalog
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.DROP_NAMESPACE",
           messageParameters = Map(
-            "url" -> options.url,
+            "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),
           dialect) {
           JdbcUtils.dropSchema(conn, options, db, cascade)

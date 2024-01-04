@@ -223,7 +223,7 @@
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
-    <datasketches.version>3.3.0</datasketches.version>
+    <datasketches.version>5.0.1</datasketches.version>
     <netty.version>4.1.100.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
     <!--
@@ -1238,21 +1238,30 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>com.spotify</groupId>
-        <artifactId>docker-client</artifactId>
-        <version>8.14.1</version>
+        <groupId>com.github.docker-java</groupId>
+        <artifactId>docker-java</artifactId>
+        <version>3.3.4</version>
         <scope>test</scope>
-        <classifier>shaded</classifier>
         <exclusions>
-          <exclusion>
-            <artifactId>guava</artifactId>
-            <groupId>com.google.guava</groupId>
-          </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-jersey</artifactId>
+          </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.github.docker-java</groupId>
+        <artifactId>docker-java-transport-zerodep</artifactId>
+        <version>3.3.4</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.mysql</groupId>
