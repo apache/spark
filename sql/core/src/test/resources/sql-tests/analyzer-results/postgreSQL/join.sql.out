@@ -621,8 +621,8 @@ Sort [i#x ASC NULLS FIRST, k#x ASC NULLS FIRST, t#x ASC NULLS FIRST], true
 SELECT '' AS `xxx`, *
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (k = 1)
 -- !query analysis
-Filter (k#x = 1)
-+- Project [ AS xxx#x, i#x, j#x, t#x, k#x]
+Project [ AS xxx#x, i#x, j#x, t#x, k#x]
++- Filter (k#x = 1)
    +- Join LeftOuter, (i#x = i#x)
       :- SubqueryAlias spark_catalog.default.j1_tbl
       :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
@@ -634,8 +634,8 @@ Filter (k#x = 1)
 SELECT '' AS `xxx`, *
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (i = 1)
 -- !query analysis
-Filter (i#x = 1)
-+- Project [ AS xxx#x, i#x, j#x, t#x, k#x]
+Project [ AS xxx#x, i#x, j#x, t#x, k#x]
++- Filter (i#x = 1)
    +- Join LeftOuter, (i#x = i#x)
       :- SubqueryAlias spark_catalog.default.j1_tbl
       :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet

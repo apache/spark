@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, LeafExpression, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, Project, ResolvedHint, SubqueryAlias, UnaryNode, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, IgnoreCachedData, LogicalPlan, Project, ResolvedHint, SubqueryAlias, UnaryNode, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -39,6 +41,7 @@ import org.apache.spark.sql.types.DataType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 import org.apache.spark.util.ArrayImplicits._
+
 
 /** Holds a cached logical plan and its data */
 case class CachedData(plan: LogicalPlan,
@@ -326,7 +329,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     for (cd <- cachedData if !foundMatch) {
       (plan, cd.plan) match {
         case (incomingPlan: UnaryNode, cachedPlan: UnaryNode) =>
-          if (incomingPlan.child.sameResult(cachedPlan.child)) {
+          val (incmngchild, skippedFilters) = extractChildIgnoringFilters(incomingPlan)
+          if (incmngchild.sameResult(cachedPlan.child)) {
             if (incomingPlan.getClass == cachedPlan.getClass &&
               incomingPlan.isInstanceOf[Project]) {
               val incomingProject = incomingPlan.asInstanceOf[Project]
@@ -336,7 +340,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
               // canonicalize the cachedPlan's project list in terms of the incoming plan's child
               // so that we can map correctly.
               val cdPlanToIncomngPlanChildOutputMapping =
-              cdPlanProject.child.output.zip(incomingProject.child.output).toMap
+              cdPlanProject.child.output.zip(incmngchild.output).toMap
 
               val canonicalizedCdProjList = cdPlanProject.projectList.map(_.transformUp {
                 case attr: Attribute => cdPlanToIncomngPlanChildOutputMapping(attr)
@@ -402,15 +406,31 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                     cdAttribToCommonAttribForIncmngNe.getOrElse(cdAttr,
                       unusedAttribsOfCDPlanToGenIncomingAttr.find(_._1 == i).map(_._2).get)
                 }
-
-                val modifiedInProj = replacementProjectListForIncomingProject(incomingProject,
-                  directlyMappedincomingToCachedPlanIndx, cdPlanProject,
-                  cdAttribToCommonAttribForIncmngNe, transformedIndirectlyMappableExpr)
-
-                val newPartialPlan = Project(modifiedInProj, cd.cachedRepresentation.toOption.
-                  get.withOutput(projectionToForceOnCdPlan))
-                partialMatch = Option(cd.copy(cachedRepresentation = Left(newPartialPlan)))
-                foundMatch = true
+                val transformedIntermediateFilters = transformFilters(skippedFilters,
+                  projectionToForceOnCdPlan, canonicalizedCdProjList)
+                if (transformedIntermediateFilters.forall(_.references.isEmpty)) {
+                  val modifiedInProj = replacementProjectListForIncomingProject(incomingProject,
+                    directlyMappedincomingToCachedPlanIndx, cdPlanProject,
+                    cdAttribToCommonAttribForIncmngNe, transformedIndirectlyMappableExpr)
+                  val actualTransformedFilters = transformedIntermediateFilters.map(
+                    _.transformExpressions {
+                      case Replaceable(attr) => attr
+                    })
+                  val root = cd.cachedRepresentation.toOption.get.withOutput(
+                    projectionToForceOnCdPlan)
+                  val newPartialPlan = if (actualTransformedFilters.isEmpty) {
+                    Project(modifiedInProj, root)
+                  } else {
+                    val lastFilterNode = actualTransformedFilters.last
+                    val lastFilterMod = lastFilterNode.copy(
+                      child = root)
+                    val filterChain = actualTransformedFilters.dropRight(1).foldRight(
+                      lastFilterMod)((f, c) => f.copy( child = c))
+                    Project(modifiedInProj, filterChain)
+                  }
+                  partialMatch = Option(cd.copy(cachedRepresentation = Left(newPartialPlan)))
+                  foundMatch = true
+                }
               }
             }
           }
@@ -419,6 +439,40 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
     }
     partialMatch
+  }
+
+  private def transformFilters(skippedFilters: Seq[Filter],
+      projectionToForceOnCdPlan: Seq[Attribute],
+      canonicalizedCdProjList: Seq[NamedExpression]): Seq[Filter] = {
+    val canonicalizedCdProjAsExpr = canonicalizedCdProjList.map {
+      case Alias(child, _) => child
+      case x => x
+    }
+    skippedFilters.map(f => {
+      val transformedCondn = f.condition.transformDown {
+        case expr => val matchedIndex = canonicalizedCdProjAsExpr.indexWhere(_ == expr)
+          if (matchedIndex != -1) {
+            Replaceable(projectionToForceOnCdPlan(matchedIndex))
+          } else {
+            expr
+          }
+      }
+      f.copy(condition = transformedCondn)
+    })
+  }
+
+  private def extractChildIgnoringFilters(incomingPlan: UnaryNode): (LogicalPlan, Seq[Filter]) = {
+    val collectedFilters = mutable.ListBuffer[Filter]()
+    var child: LogicalPlan = incomingPlan.child
+    var keepChecking = true
+    while(keepChecking) {
+      child match {
+        case f: Filter => child = f.child
+            collectedFilters += f
+        case _ => keepChecking = false
+      }
+    }
+    (child, collectedFilters.toSeq)
   }
 
   private def replacementProjectListForIncomingProject(

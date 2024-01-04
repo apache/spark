@@ -627,12 +627,11 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(udf(k))
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as int) AS udf(udf(k))#x]
 +- Filter (cast(udf(cast(k#x as string)) as int) = 1)
-   +- Project [i#x, j#x, t#x, k#x]
-      +- Join LeftOuter, (i#x = i#x)
-         :- SubqueryAlias spark_catalog.default.j1_tbl
-         :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-         +- SubqueryAlias spark_catalog.default.j2_tbl
-            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
+   +- Join LeftOuter, (i#x = i#x)
+      :- SubqueryAlias spark_catalog.default.j1_tbl
+      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+      +- SubqueryAlias spark_catalog.default.j2_tbl
+         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -641,12 +640,11 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query analysis
 Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x]
 +- Filter (cast(udf(cast(cast(udf(cast(i#x as string)) as int) as string)) as int) = cast(udf(cast(1 as string)) as int))
-   +- Project [i#x, j#x, t#x, k#x]
-      +- Join LeftOuter, (i#x = i#x)
-         :- SubqueryAlias spark_catalog.default.j1_tbl
-         :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-         +- SubqueryAlias spark_catalog.default.j2_tbl
-            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
+   +- Join LeftOuter, (i#x = i#x)
+      :- SubqueryAlias spark_catalog.default.j1_tbl
+      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+      +- SubqueryAlias spark_catalog.default.j2_tbl
+         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query

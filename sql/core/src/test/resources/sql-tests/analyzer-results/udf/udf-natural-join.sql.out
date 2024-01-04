@@ -36,8 +36,8 @@ CreateViewCommand `nt2`, select * from values
 -- !query
 SELECT * FROM nt1 natural join nt2 where udf(k) = "one"
 -- !query analysis
-Filter (cast(udf(cast(k#x as string)) as string) = one)
-+- Project [k#x, v1#x, v2#x]
+Project [k#x, v1#x, v2#x]
++- Filter (cast(udf(cast(k#x as string)) as string) = one)
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])

@@ -89,8 +89,8 @@ Project [k#x, v1#x, v2#x]
 -- !query
 SELECT * FROM nt1 natural join nt2 where k = "one"
 -- !query analysis
-Filter (k#x = one)
-+- Project [k#x, v1#x, v2#x]
+Project [k#x, v1#x, v2#x]
++- Filter (k#x = one)
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
@@ -190,8 +190,8 @@ Project [k#x]
 -- !query
 SELECT k FROM nt1 natural join nt2 where k = "one"
 -- !query analysis
-Filter (k#x = one)
-+- Project [k#x]
+Project [k#x]
++- Filter (k#x = one)
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
@@ -392,8 +392,8 @@ Sort [key#x ASC NULLS FIRST], true
 -- !query
 SELECT nt1.k, nt2.k FROM nt1 natural join nt2 where k = "one"
 -- !query analysis
-Filter (k#x = one)
-+- Project [k#x, k#x]
+Project [k#x, k#x]
++- Filter (k#x = one)
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])

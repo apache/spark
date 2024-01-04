@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
@@ -29,13 +29,20 @@ import org.apache.spark.util.Utils
 
 
 private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
-
+  val expressionRemapper: (Expression, AttributeMap[(NamedExpression, Expression)]) => Expression =
+    (expr, mappings) => {
+      expr transformUp {
+        case attr: AttributeReference => mappings.get(attr).map {
+          case (_, expr) => expr
+        }.getOrElse(attr)
+      }
+    }
   def apply(logicalPlan: LogicalPlan): LogicalPlan =
     logicalPlan match {
       case newP @ Project(_, p : Project) if checkEarlyCollapsePossible(newP, p) =>
         collapseProjectEarly(newP, p) getOrElse newP
 
-      case newP@Project(newProjList, f@Filter(_, filterChild: UnaryNode)) =>
+      case newP@Project(_, f@Filter(_, filterChild: UnaryNode)) =>
         // check if its case of nested filters followed by project
         val filterNodes = mutable.ListBuffer(f)
         var projectAtEnd: Option[Project] = None
@@ -45,23 +52,28 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
           currentChild match {
             case p: Project => projectAtEnd = Option(p)
               keepGoing = false
-            case filter@Filter(_, u: UnaryNode) =>
+            case filter @ Filter(expr, u: UnaryNode) if expr.deterministic =>
               filterNodes += filter
               currentChild = u
             case _ => keepGoing = false
           }
         }
-        if (projectAtEnd.isDefined &&
-          filterNodes.map(_.condition.references).reduce(_ ++ _).
-            subsetOf(
-              AttributeSet(newProjList.filter(_.isInstanceOf[AttributeReference])
-                .map(_.toAttribute)))) {
+        if (projectAtEnd.isDefined) {
           val p = projectAtEnd.get
           if (checkEarlyCollapsePossible(newP, p)) {
             val newProjOpt = collapseProjectEarly(newP, p)
+            val mappingFilterExpr = AttributeMap(p.projectList.flatMap(ne => ne match {
+              case _: Attribute => Seq.empty[(Attribute, (NamedExpression, Expression))]
+              case al: Alias => Seq(al.toAttribute -> (al, al.child))
+            }))
             newProjOpt.map(collapsedProj => {
-              val lastFilterMod = filterNodes.last.copy(child = collapsedProj)
-              filterNodes.dropRight(1).foldRight(lastFilterMod)((f, c) => f.copy(child = c))
+              val lastFilterNode = filterNodes.last
+              val lastFilterMod = lastFilterNode.copy(
+                  condition = expressionRemapper(lastFilterNode.condition, mappingFilterExpr),
+                  child = collapsedProj.child)
+              val filterChain = filterNodes.dropRight(1).foldRight(lastFilterMod)((f, c) =>
+                  f.copy(condition = expressionRemapper(f.condition, mappingFilterExpr), child = c))
+              collapsedProj.copy(child = filterChain)
             }).getOrElse {
               newP
             }
@@ -76,7 +88,9 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
     }
 
   private def checkEarlyCollapsePossible(newP: Project, p: Project): Boolean =
-    newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty && !p.child.isInstanceOf[Window] &&
+    newP.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
+    p.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty &&
+   !p.child.isInstanceOf[Window] &&
     p.projectList.forall(_.collectFirst {
       case ex if !ex.deterministic => ex
       case ex: UserDefinedExpression => ex
@@ -98,6 +112,8 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
           exprId = attr.exprId, qualifier = from.qualifier)
       }
     }
+
+
 
   def collapseProjectEarly(newP: Project, p: Project): Option[Project] = {
     val child = p.child
@@ -131,14 +147,9 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
           }
         }.getOrElse(attr)
 
-        case ne => (ne transformUp {
-              case attr: AttributeReference =>
-                attribsToExprInProj.get(attr).map {
-                  case (_, expr) => expr
-                }.getOrElse(attr)
-            }).asInstanceOf[NamedExpression]
-        }
+        case ne => expressionRemapper(ne, attribsToExprInProj).asInstanceOf[NamedExpression]
       }
+    }
 
       remappedNewProjListResult match {
         case Success(remappedNewProjList) =>
@@ -174,3 +185,4 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
 
   }
 }
+
