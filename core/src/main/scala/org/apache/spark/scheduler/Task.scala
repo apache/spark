@@ -207,7 +207,7 @@ private[spark] abstract class Task[T](
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
       // Note: internal accumulators representing task metrics always count failed values
-      context.taskMetrics().updatedInternalAccums() ++
+      context.taskMetrics().nonZeroInternalAccums() ++
         // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
         // filter them out.
         context.taskMetrics().externalAccums.filter(a => !taskFailed || a.countFailedValues)

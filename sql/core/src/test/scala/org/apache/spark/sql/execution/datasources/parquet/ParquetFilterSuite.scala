@@ -2365,7 +2365,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
   private var _sum = 0
 
-  override def isUpdated: Boolean = _sum != 0
+  override def isZero: Boolean = _sum == 0
 
   override def copy(): AccumulatorV2[Integer, Integer] = {
     val acc = new NumRowGroupsAcc()

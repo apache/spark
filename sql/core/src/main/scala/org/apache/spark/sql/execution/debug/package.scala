@@ -210,7 +210,7 @@ package object debug {
   class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
     private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
 
-    override def isUpdated: Boolean = !_set.isEmpty
+    override def isZero: Boolean = _set.isEmpty
 
     override def copy(): AccumulatorV2[T, java.util.Set[T]] = {
       val newAcc = new SetAccumulator[T]()

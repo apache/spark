@@ -22,7 +22,7 @@ class MapperRowCounterSuite extends SparkFunSuite {
 
   test("Test MapperRowCounter") {
     val counter = new MapperRowCounter()
-    assert(counter.isUpdated)
+    assert(counter.isZero)
 
     counter.setPartitionId(0)
     counter.add(1L)
@@ -31,7 +31,7 @@ class MapperRowCounterSuite extends SparkFunSuite {
     assert(counter.value.get(0)._2 == 2L)
 
     counter.reset()
-    assert(counter.isUpdated)
+    assert(counter.isZero)
     counter.setPartitionId(100)
     counter.add(1L)
     assert(counter.value.get(0)._1 == 100L)

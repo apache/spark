@@ -62,7 +62,7 @@ object EventTimeStats {
 class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTimeStats.zero)
   extends AccumulatorV2[Long, EventTimeStats] {
 
-  override def isUpdated: Boolean = value != EventTimeStats.zero
+  override def isZero: Boolean = value == EventTimeStats.zero
   override def value: EventTimeStats = currentStats
   override def copy(): AccumulatorV2[Long, EventTimeStats] = new EventTimeStatsAccum(currentStats)
 

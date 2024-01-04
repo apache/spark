@@ -114,10 +114,10 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
 
   /**
-   * Returns if whether this accumulator has been updated. This is not necessarily true for
-   * accumulators with a zero value, which may have been updated with a zero value.
+   * Returns false if this accumulator has been updated. Note that this can be true even when
+   * the value is a zero value, if the accumulator was updated with a zero value.
    */
-  def isUpdated: Boolean
+  def isZero: Boolean
 
   /**
    * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
@@ -168,7 +168,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
           "Accumulator must be registered before send to executor")
       }
       val copyAcc = copyAndReset()
-      assert(!copyAcc.isUpdated, "copyAndReset must return a non-updated copy")
+      assert(copyAcc.isZero, "copyAndReset must return a zero value copy")
       val isInternalAcc = name.isDefined && name.get.startsWith(InternalAccumulator.METRICS_PREFIX)
       if (isInternalAcc) {
         // Do not serialize the name of internal accumulator and send it to executor.
@@ -316,11 +316,11 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private var _count = 0L
 
   /**
-   * Returns true if this accumulator has had any values added to it or the sum is non-zero.
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
    *
    * @since 2.0.0
    */
-  override def isUpdated: Boolean = _sum != 0L || _count != 0
+  override def isZero: Boolean = _sum == 0L && _count == 0
 
   override def copy(): LongAccumulator = {
     val newAcc = new LongAccumulator
@@ -396,9 +396,9 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private var _count = 0L
 
   /**
-   * Returns true if this accumulator has had any values added to it or the sum is non-zero.
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
    */
-  override def isUpdated: Boolean = _sum != 0.0 || _count != 0
+  override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copy(): DoubleAccumulator = {
     val newAcc = new DoubleAccumulator
@@ -479,7 +479,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   /**
    * Returns false if this accumulator instance has any values in it.
    */
-  override def isUpdated: Boolean = this.synchronized(!getOrCreate.isEmpty)
+  override def isZero: Boolean = this.synchronized(getOrCreate.isEmpty)
 
   override def copyAndReset(): CollectionAccumulator[T] = new CollectionAccumulator
 

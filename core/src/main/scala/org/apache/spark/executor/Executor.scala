@@ -268,7 +268,7 @@ private[spark] class Executor(
 
   /**
    * Whether to drop empty accumulators from heartbeats sent to the driver. Including the empty
-   * accumulators (where isUpdated is false) can make the size of the heartbeat message very large.
+   * accumulators (that satisfy isZero) can make the size of the heartbeat message very large.
    */
   private val HEARTBEAT_DROP_ZEROES = conf.get(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES)
 
@@ -1217,7 +1217,7 @@ private[spark] class Executor(
         taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
         val accumulatorsToReport =
           if (HEARTBEAT_DROP_ZEROES) {
-            taskRunner.task.metrics.accumulators().filter(_.isUpdated)
+            taskRunner.task.metrics.accumulators().filterNot(_.isZero)
           } else {
             taskRunner.task.metrics.accumulators()
           }

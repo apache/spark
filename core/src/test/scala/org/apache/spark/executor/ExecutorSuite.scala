@@ -360,8 +360,8 @@ class ExecutorSuite extends SparkFunSuite
       val accumsSent = updates(0)._2.length
       assert(accumsSent > 0, "The nonzero accumulator we added should be sent")
       if (dropZeroMetrics) {
-        assert(accumsSent == metrics.accumulators().count(_.isUpdated),
-          "The number of accumulators sent should match the number of updated accumulators")
+        assert(accumsSent == metrics.accumulators().count(!_.isZero),
+          "The number of accumulators sent should match the number of nonzero accumulators")
       } else {
         assert(accumsSent == metrics.accumulators().length,
           "The number of accumulators sent should match the number of total accumulators")

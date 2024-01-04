@@ -42,9 +42,9 @@ class SQLMetric(
     initValue: Long = 0L,
     defaultValidValue: Long = 0L) extends AccumulatorV2[Long, Long] {
   // initValue defines the initial value of the metric. defaultValidValue defines the lowest value
-  // considered valid. If a SQLMetric is invalid, it is set to defaultValidValue upon receiving
-  // any updates, and it also reports defaultValidValue as its value to avoid exposing it to the
-  // user programmatically.
+  // considered valid. If a SQLMetric is invalid, it is set to defaultValidValue upon receiving any
+  // updates, and it also reports defaultValidValue as its value to avoid exposing it to the user
+  // programatically.
   //
   // For many SQLMetrics, we use initValue = -1 and defaultValidValue = 0 to indicate that the
   // metric is by default invalid. At the end of a task, we will update the metric making it valid,
@@ -75,7 +75,7 @@ class SQLMetric(
   // the aggregation defined in [[SQLMetrics.stringValue]].
   // Note that we don't use defaultValidValue here since we may want to collect
   // defaultValidValue metrics for calculating min, max, etc. See SPARK-11013.
-  override def isUpdated: Boolean = _value != initValue
+  override def isZero: Boolean = _value == initValue
 
   def isValid: Boolean = _value >= defaultValidValue
 
