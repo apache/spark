@@ -391,12 +391,23 @@ class StaxXmlParser(
                   case st: StructType =>
                     convertObjectWithAttributes(parser, st, field, attributes)
                   case dt: DataType =>
-                  convertField(parser, dt, field)
+                    val value = convertField(parser, dt, field)
+                  // We wanted to consume the ending tag for array type data
+                  parser.nextEvent() match {
+                    case _: EndElement => // do nothing
+                    case _ => throw new IllegalStateException("Invalid state for array type data")
+                  }
+                  value
                 }
                 row(index) = values :+ newValue
 
               case dt: DataType =>
                 row(index) = convertField(parser, dt, field, attributes)
+                // We wanted to consume the ending tag for array type data
+                parser.nextEvent() match {
+                  case _: EndElement => // do nothing
+                  case _ => throw new IllegalStateException("Invalid state for array type data")
+                }
             }
 
             case None =>
@@ -428,8 +439,7 @@ class StaxXmlParser(
           addOrUpdate(row, schema, options.valueTag, c.getData)
 
         case endElement: EndElement =>
-          shouldStop =
-            StaxXmlParserUtils.getName(endElement.getName, options) == startElementName
+          shouldStop = true
 
         case _ => // do nothing
       }

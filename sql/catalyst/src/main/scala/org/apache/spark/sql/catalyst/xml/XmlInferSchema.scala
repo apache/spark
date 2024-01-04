@@ -22,12 +22,10 @@ import javax.xml.stream.{XMLEventReader, XMLStreamConstants}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
-
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.Exception._
 import scala.util.control.NonFatal
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -35,6 +33,8 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, Timest
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+
+//import scala.annotation.tailrec
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
@@ -218,14 +218,22 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
      * In case-insensitive mode, we will infer an array named by foo
      * (as it's the first one we encounter)
      */
-    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) {
-      (x: String, y: String) => x.compareTo(y)
-    } else {
-      (x: String, y: String) => x.compareToIgnoreCase(y)
+    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) { (x: String, y: String) =>
+      x.compareTo(y)
+    } else { (x: String, y: String) =>
+      x.compareToIgnoreCase(y)
     }
 
     val nameToDataType =
       collection.mutable.TreeMap.empty[String, DataType](caseSensitivityOrdering)
+
+//    @tailrec
+    def inferAndCheckEndElement(parser: XMLEventReader): Boolean = {
+      parser.peek match {
+        case _: EndElement | _: EndDocument => true
+        case _ => false
+      }
+    }
 
     // If there are attributes, then we should process them first.
     val rootValuesMap =
@@ -234,10 +242,13 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       case (f, v) =>
         addOrUpdateType(nameToDataType, f, inferFrom(v))
     }
+    var firstEventIsStartElementOpt: Option[Boolean] = None
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
+          firstEventIsStartElementOpt =
+            setFirstEventIsStartElement(firstEventIsStartElementOpt, true)
           val attributes = e.getAttributes.asScala.toArray
           val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
@@ -268,14 +279,15 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           addOrUpdateType(nameToDataType, field, inferredType)
 
         case c: Characters if !c.isWhiteSpace =>
+          firstEventIsStartElementOpt =
+            setFirstEventIsStartElement(firstEventIsStartElementOpt, false)
           // This can be a value tag
           val valueTagType = inferFrom(c.getData)
           addOrUpdateType(nameToDataType, options.valueTag, valueTagType)
 
-        case e: EndElement =>
+        case _: EndElement =>
           // In case of corrupt records, we shouldn't read beyond the EndDocument
-          shouldStop = parser.peek().isInstanceOf[EndDocument] || StaxXmlParserUtils
-              .getName(e.getName, options) == startElementName
+          shouldStop = true
 
         case _ => // do nothing
       }
@@ -544,5 +556,15 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
   private[xml] def isValueTagField(structField: StructField): Boolean = {
     structField.name.toLowerCase(Locale.ROOT) == options.valueTag.toLowerCase(Locale.ROOT)
+  }
+
+  private[xml] def setFirstEventIsStartElement(
+      firstEventIsStartElementOpt: Option[Boolean],
+      value: Boolean): Option[Boolean] = {
+    if (firstEventIsStartElementOpt.isEmpty) {
+      Some(value)
+    } else {
+      firstEventIsStartElementOpt
+    }
   }
 }
