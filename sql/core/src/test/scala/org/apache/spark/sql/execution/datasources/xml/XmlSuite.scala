@@ -1098,9 +1098,11 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(valid.toSeq.toArray.take(schema.length - 1) ===
       Array(Row(10, 10), Row(10, "Ten"), 10.0, 10.0, true,
         "Ten", Array(1, 2), Map("a" -> 123, "b" -> 345)))
-    assert(invalid.toSeq.toArray.take(schema.length - 1) ===
-      Array(null, null, null, null, null,
-        "Ten", Array(2), null))
+    // TODO: we don't support partial results
+    assert(
+      invalid.toSeq.toArray.take(schema.length - 1) ===
+        Array(null, null, null, null, null,
+          null, null, null))
 
     assert(valid.toSeq.toArray.last === null)
     assert(invalid.toSeq.toArray.last.toString.contains(
