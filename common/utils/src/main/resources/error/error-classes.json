@@ -3274,7 +3274,7 @@
     "message" : [
       "Implicit key not found for operation on stateName=<stateName>"
     ],
-    "sqlState" : "00000"
+    "sqlState" : "55019"
   },
   "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY" : {
     "message" : [
@@ -3286,19 +3286,19 @@
     "message" : [
       "Store does not support multiple values per key"
     ],
-    "sqlState" : "00000"
+    "sqlState" : "42802"
   },
   "STV2_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
     ],
-    "sqlState" : "00000"
+    "sqlState" : "000A0"
   },
   "STV2_VALUE_SHOULD_BE_NONNULL" : {
     "message" : [
       "New value should be non-null for <typeOfState>"
     ],
-    "sqlState" : "00000"
+    "sqlState" : "22004"
   },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
