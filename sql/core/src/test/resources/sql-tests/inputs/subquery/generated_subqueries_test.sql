@@ -41,12 +41,12 @@ SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table WHERE inne
 SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -65,12 +65,12 @@ SELECT outer_table.b, (SELECT inner_table.a FROM inner_table WHERE inner_table.a
 SELECT outer_table.b, (SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -89,12 +89,12 @@ SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY
 SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -113,12 +113,12 @@ SELECT outer_table.b, (SELECT inner_table.a FROM inner_table   ORDER BY inner_ta
 SELECT outer_table.b, (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -137,12 +137,12 @@ SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDE
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -161,12 +161,12 @@ SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inne
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -185,12 +185,12 @@ SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDE
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -209,12 +209,12 @@ SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inne
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -231,12 +231,12 @@ SELECT c FROM (SELECT DISTINCT COUNT(inner_table.a) AS c FROM inner_table  GROUP
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -253,12 +253,12 @@ SELECT c FROM (SELECT COUNT(inner_table.a) AS c FROM inner_table  GROUP BY a ORD
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -275,12 +275,12 @@ SELECT c FROM (SELECT DISTINCT COUNT(inner_table.a) AS c FROM inner_table  GROUP
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -297,12 +297,12 @@ SELECT c FROM (SELECT COUNT(inner_table.a) AS c FROM inner_table  GROUP BY a ORD
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT inner_table.a FROM (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -321,12 +321,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -345,12 +345,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM in
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -369,12 +369,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -393,12 +393,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM in
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -417,12 +417,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_ta
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -441,12 +441,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FRO
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -465,12 +465,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_ta
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -489,12 +489,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FRO
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -513,12 +513,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inn
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -537,12 +537,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table 
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -561,12 +561,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inn
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -585,12 +585,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table 
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -609,12 +609,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -633,12 +633,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_ta
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -657,12 +657,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -681,12 +681,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_ta
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -705,12 +705,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -729,12 +729,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inn
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -753,12 +753,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -777,12 +777,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inn
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -801,12 +801,12 @@ SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inne
 SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -825,12 +825,12 @@ SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table W
 SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -849,12 +849,12 @@ SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inne
 SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -873,12 +873,12 @@ SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table  
 SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -897,12 +897,12 @@ SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM 
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -921,12 +921,12 @@ SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -945,12 +945,12 @@ SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM 
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -969,12 +969,12 @@ SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -991,12 +991,12 @@ SELECT c FROM (SELECT DISTINCT COUNT(no_match_inner_table.a) AS c FROM no_match_
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1013,12 +1013,12 @@ SELECT c FROM (SELECT COUNT(no_match_inner_table.a) AS c FROM no_match_inner_tab
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1035,12 +1035,12 @@ SELECT c FROM (SELECT DISTINCT COUNT(no_match_inner_table.a) AS c FROM no_match_
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1057,12 +1057,12 @@ SELECT c FROM (SELECT COUNT(no_match_inner_table.a) AS c FROM no_match_inner_tab
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
--- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
+-- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_inner_table.a FROM (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias ORDER BY no_match_inner_table.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT set_alias.a FROM (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias ORDER BY set_alias.a;
 -- subquery_in=FROM,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1081,12 +1081,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inn
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1105,12 +1105,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1129,12 +1129,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inn
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1153,12 +1153,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1177,12 +1177,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1201,12 +1201,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_ta
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1225,12 +1225,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1249,12 +1249,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_ta
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1273,12 +1273,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1297,12 +1297,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1321,12 +1321,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1345,12 +1345,12 @@ SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1369,12 +1369,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_tab
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1393,12 +1393,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1417,12 +1417,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_tab
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1441,12 +1441,12 @@ SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1465,12 +1465,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inne
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1489,12 +1489,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1513,12 +1513,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inne
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1537,12 +1537,12 @@ SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM outer_table WHERE outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1561,12 +1561,12 @@ SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table W
 SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1585,12 +1585,12 @@ SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table WHERE inne
 SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1609,12 +1609,12 @@ SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table  
 SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1633,12 +1633,12 @@ SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table   ORDER BY
 SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1657,12 +1657,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DIS
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1681,12 +1681,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inn
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1705,12 +1705,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DIS
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1729,12 +1729,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inn
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1753,12 +1753,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1777,12 +1777,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1801,12 +1801,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1825,12 +1825,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1849,12 +1849,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1873,12 +1873,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inn
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1897,12 +1897,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1921,12 +1921,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inn
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1945,12 +1945,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_tab
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1969,12 +1969,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -1993,12 +1993,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_tab
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2017,12 +2017,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2041,12 +2041,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DIST
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2065,12 +2065,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inne
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b) WHERE inner_table.a = no_match_outer_table.a  ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2089,12 +2089,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DIST
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2113,12 +2113,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inne
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table INNER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table INNER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table LEFT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT inner_table.a FROM inner_table RIGHT OUTER JOIN join_table ON inner_table.b = join_table.b)   ORDER BY inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2137,12 +2137,12 @@ SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_m
 SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2161,12 +2161,12 @@ SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inne
 SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2185,12 +2185,12 @@ SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_m
 SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2209,12 +2209,12 @@ SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inne
 SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
--- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
+-- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT no_match_outer_table.b, (SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT no_match_outer_table.b, (SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) AS subquery_alias FROM no_match_outer_table ORDER BY no_match_outer_table.b, subquery_alias;
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2233,12 +2233,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DIS
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2257,12 +2257,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2281,12 +2281,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DIS
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2305,12 +2305,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2329,12 +2329,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2353,12 +2353,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2377,12 +2377,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2401,12 +2401,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a NOT IN(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT IN,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2425,12 +2425,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inne
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2449,12 +2449,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2473,12 +2473,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inne
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2497,12 +2497,12 @@ SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2521,12 +2521,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2545,12 +2545,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_tab
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a   ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2569,12 +2569,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2593,12 +2593,12 @@ SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_tab
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 10) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE NOT EXISTS(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias    ) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type=NOT EXISTS,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2617,12 +2617,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DIST
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2641,12 +2641,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_m
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b) WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias WHERE no_match_inner_table.a = no_match_outer_table.a  ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=True,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2665,12 +2665,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DIST
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT DISTINCT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=True,subquery_operator=SET_OP,subquery_operator_type=UNION
@@ -2689,12 +2689,12 @@ SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_m
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=ORDER BY,subquery_operator_type=None
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
--- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER
-SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=INNER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table INNER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=LEFT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table LEFT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
+-- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=JOIN,subquery_operator_type=RIGHT OUTER JOIN
+SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT no_match_inner_table.a FROM no_match_inner_table RIGHT OUTER JOIN join_table ON no_match_inner_table.b = join_table.b)   ORDER BY no_match_inner_table.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=INTERSECT
 SELECT a, b FROM no_match_outer_table WHERE no_match_outer_table.a =(SELECT set_alias.a FROM (SELECT a, b FROM no_match_inner_table INTERSECT SELECT a, b FROM join_table) AS set_alias   ORDER BY set_alias.a DESC LIMIT 1) ORDER BY a, b;
 -- subquery_in=WHERE,subquery_type==,is_correlated=False,distinct=False,subquery_operator=SET_OP,subquery_operator_type=UNION
