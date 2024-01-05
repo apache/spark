@@ -15,6 +15,7 @@ join_table = "join_table"
 
 table_creation_sql = f"""CREATE TEMPORARY VIEW {inner_table} (a, b) AS VALUES
     (1, 10),
+    (1, 10),
     (2, 20),
     (3, 30),
     (4, 40),
@@ -23,6 +24,7 @@ table_creation_sql = f"""CREATE TEMPORARY VIEW {inner_table} (a, b) AS VALUES
     (9, 90);
 CREATE TEMPORARY VIEW {outer_table} (a, b) AS VALUES
     (1, 100),
+    (2, 200),
     (2, 200),
     (3, 300),
     (4, 400),
@@ -66,7 +68,7 @@ table_combinations = [
 ]
 
 # Subquery types.
-subquery_types = [IN, NOT_IN, EXISTS, NOT_EXISTS, SCALAR]
+subquery_predicates = [IN, NOT_IN, EXISTS, NOT_EXISTS, SCALAR]
 
 # Subquery properties - correlated or not.
 correlated = [True, False]
@@ -191,8 +193,19 @@ def generate_subquery(
     )
 
     sql_string = (
-        f"({select_clause} {from_clause} {where_clause} "
-        f"{group_by_clause} {order_by_clause} {limit_clause})"
+        "("
+        + " ".join(
+            clause.strip()
+            for clause in [
+                select_clause,
+                from_clause,
+                where_clause,
+                group_by_clause,
+                order_by_clause,
+                limit_clause,
+            ]
+        )
+        + ")"
     )
     return sql_string, projection_column
 
@@ -249,8 +262,18 @@ def generate_query(
     order_by_clause = "ORDER BY " + ", ".join(
         [p + " NULLS FIRST" for p in query_projection]
     )
-    complete_query = f"{select_clause} {from_clause} {where_clause} {order_by_clause};"
-
+    complete_query = (
+        " ".join(
+            clause.strip()
+            for clause in [
+                select_clause,
+                from_clause,
+                where_clause,
+                order_by_clause,
+            ]
+        )
+        + ";"
+    )
     comment_tags = [
         f"inner_table={innertable}",
         f"outer_table={outertable}",
@@ -274,7 +297,7 @@ if __name__ == "__main__":
     for input_table, output_table in table_combinations:
         for subquery_clause in subquery_clauses:
             subquery_type_choices = (
-                [SCALAR] if subquery_clause == SELECT else subquery_types
+                [SCALAR] if subquery_clause == SELECT else subquery_predicates
             )
             for subquery_type in subquery_type_choices:
                 correlated_choices = [False] if subquery_clause == FROM else correlated
