@@ -25,9 +25,12 @@ CREATE TEMPORARY VIEW no_match_outer_table (a, b) AS VALUES
 CREATE TEMPORARY VIEW join_table (a, b) AS VALUES
     (1, 10),
     (3, 30),
+    (2, 200),
+    (3, 300),
+    (4, 40),
     (4, 400),
-    (6, 600),
-    (8, 80);
+    (5, 50),
+    (6, 600);
 
 -- subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=AGGREGATE,subquery_operator_type=('SUM', True)
 SELECT outer_table.b, (SELECT DISTINCT SUM(inner_table.a) AS subquery_column_alias FROM inner_table WHERE inner_table.a = outer_table.a GROUP BY a ORDER BY subquery_column_alias DESC NULLS FIRST LIMIT 1) AS subquery_alias FROM outer_table ORDER BY outer_table.b, subquery_alias NULLS FIRST;
