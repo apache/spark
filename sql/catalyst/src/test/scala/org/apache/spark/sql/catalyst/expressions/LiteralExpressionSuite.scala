@@ -479,8 +479,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-46604: Literal support immutable ArraySeq") {
-    import org.apache.spark.util.ArrayImplicits._
-    val immArraySeq = Array(1.0, 4.0).toImmutableArraySeq
+    val immArraySeq = immutable.ArraySeq.unsafeWrapArray(Array(1.0, 4.0))
     val expected = toCatalyst(immArraySeq)
     checkEvaluation(Literal(immArraySeq), expected)
     checkEvaluation(Literal.create(immArraySeq), expected)
