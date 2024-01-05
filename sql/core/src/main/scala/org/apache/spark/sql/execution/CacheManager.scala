@@ -24,10 +24,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, LeafExpression, NamedExpression, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, IgnoreCachedData, LogicalPlan, Project, ResolvedHint, SubqueryAlias, UnaryNode, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -37,7 +35,6 @@ import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 import org.apache.spark.util.ArrayImplicits._
@@ -400,31 +397,29 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 directlyMappedincomingToCachedPlanIndx, cdAttribToCommonAttribForIncmngNe,
                 unusedAttribsOfCDPlanToGenIncomingAttr, canonicalizedCdProjList)
 
-              if (transformedIndirectlyMappableExpr.forall(_._2.references.isEmpty)) {
-                val projectionToForceOnCdPlan = cachedPlan.output.zipWithIndex.map {
-                  case (cdAttr, i) =>
-                    cdAttribToCommonAttribForIncmngNe.getOrElse(cdAttr,
-                      unusedAttribsOfCDPlanToGenIncomingAttr.find(_._1 == i).map(_._2).get)
-                }
+              val projectionToForceOnCdPlan = cachedPlan.output.zipWithIndex.map {
+                case (cdAttr, i) =>
+                  cdAttribToCommonAttribForIncmngNe.getOrElse(cdAttr,
+                    unusedAttribsOfCDPlanToGenIncomingAttr.find(_._1 == i).map(_._2).get)
+              }
+              val forcedAttribset = AttributeSet(projectionToForceOnCdPlan)
+              if (transformedIndirectlyMappableExpr.forall(
+                  _._2.references.subsetOf(forcedAttribset))) {
                 val transformedIntermediateFilters = transformFilters(skippedFilters,
                   projectionToForceOnCdPlan, canonicalizedCdProjList)
-                if (transformedIntermediateFilters.forall(_.references.isEmpty)) {
+                if (transformedIntermediateFilters.forall(_.references.subsetOf(forcedAttribset))) {
                   val modifiedInProj = replacementProjectListForIncomingProject(incomingProject,
                     directlyMappedincomingToCachedPlanIndx, cdPlanProject,
                     cdAttribToCommonAttribForIncmngNe, transformedIndirectlyMappableExpr)
-                  val actualTransformedFilters = transformedIntermediateFilters.map(
-                    _.transformExpressions {
-                      case Replaceable(attr) => attr
-                    })
                   val root = cd.cachedRepresentation.toOption.get.withOutput(
                     projectionToForceOnCdPlan)
-                  val newPartialPlan = if (actualTransformedFilters.isEmpty) {
+                  val newPartialPlan = if (transformedIntermediateFilters.isEmpty) {
                     Project(modifiedInProj, root)
                   } else {
-                    val lastFilterNode = actualTransformedFilters.last
+                    val lastFilterNode = transformedIntermediateFilters.last
                     val lastFilterMod = lastFilterNode.copy(
                       child = root)
-                    val filterChain = actualTransformedFilters.dropRight(1).foldRight(
+                    val filterChain = transformedIntermediateFilters.dropRight(1).foldRight(
                       lastFilterMod)((f, c) => f.copy( child = c))
                     Project(modifiedInProj, filterChain)
                   }
@@ -452,7 +447,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       val transformedCondn = f.condition.transformDown {
         case expr => val matchedIndex = canonicalizedCdProjAsExpr.indexWhere(_ == expr)
           if (matchedIndex != -1) {
-            Replaceable(projectionToForceOnCdPlan(matchedIndex))
+            projectionToForceOnCdPlan(matchedIndex)
           } else {
             expr
           }
@@ -497,9 +492,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
                 )
             }
         }.getOrElse({
-          transformedIndirectlyMappableExpr(indx).transformUp {
-            case Replaceable(attribToUse) => attribToUse
-          }.asInstanceOf[NamedExpression]
+          transformedIndirectlyMappableExpr(indx)
         })
     }
   }
@@ -531,7 +524,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
               case (i, _) => val cdNe = canonicalizedCdProjList(i)
                 cdNe.children.headOption.contains(expr)
             }.map(_._2)).
-            map(ne => Replaceable(ne.toAttribute)).getOrElse(expr)
+            map(ne => ne.toAttribute).getOrElse(expr)
         }.asInstanceOf[NamedExpression]
 
         incomngIndex -> modifiedNe
@@ -685,14 +678,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
     }
   }
-}
-
-private case class Replaceable(attribToUse: Attribute) extends LeafExpression {
-  override def nullable: Boolean = false
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException()
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException()
-  override def dataType: DataType = attribToUse.dataType
 }
 
 object CacheManager {

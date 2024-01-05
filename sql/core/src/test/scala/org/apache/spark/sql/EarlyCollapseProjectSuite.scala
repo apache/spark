@@ -194,6 +194,15 @@ class EarlyCollapseProjectSuite extends QueryTest
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.withColumnsRenamed(
       Map("c" -> "c1", "a" -> "a1", "b" -> "b1", "d" -> "d1")))
   }
+  
+  test("early collapse of filter chain with project ") {
+    val baseDfCreator = () => spark.range(20).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b")
+
+    checkProjectCollapseAndCacheUse(baseDfCreator, df => df.filter($"a" > 4).
+      filter($"c" * $"b" < 60).
+      select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e"))
+  }
 
   test("resurrection of intermediate dropped cols when used in filter") {
     val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" as "b").
