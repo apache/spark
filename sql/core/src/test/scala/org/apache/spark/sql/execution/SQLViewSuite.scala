@@ -173,7 +173,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         val futures = (0 to concurrency).map { _ =>
           Future {
             Try {
-              sql(s"CREATE VIEW IF NOT EXISTS $viewName AS SELECT * FROM tab")
+              sql(s"CREATE VIEW IF NOT EXISTS $viewName AS SELECT * FROM $tableName")
             }
           }
         }
