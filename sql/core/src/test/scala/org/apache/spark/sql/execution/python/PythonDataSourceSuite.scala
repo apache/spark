@@ -790,4 +790,47 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-46568: case insensitive options") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import (
+         |    DataSource, DataSourceReader, DataSourceWriter, WriterCommitMessage)
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def read(self, partition):
+         |        foo = self.options.get("Foo")
+         |        bar = self.options.get("BAR")
+         |        baz = "BaZ" in self.options
+         |        yield (foo, bar, baz)
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def write(self, row):
+         |        if "FOO" not in self.options or "BAR" not in self.options:
+         |            raise Exception("FOO or BAR not found")
+         |        return WriterCommitMessage()
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "a string, b string, c string"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader(self.options)
+         |
+         |    def writer(self, schema, overwrite):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.option("foo", 1).option("bar", 2).option("BAZ", 3)
+      .format(dataSourceName).load()
+    checkAnswer(df, Row("1", "2", "true"))
+    df.write.option("foo", 1).option("bar", 2).format(dataSourceName).mode("append").save()
+  }
 }
