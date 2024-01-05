@@ -262,7 +262,7 @@ class StaxXmlParser(
           kvPairs +=
           // TODO: We don't support an array value tags in map yet.
           (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
-        case _: EndElement =>
+        case _: EndElement | _: EndDocument =>
           shouldStop = true
         case _ => // do nothing
       }
@@ -403,13 +403,12 @@ class StaxXmlParser(
           case e: SparkUpgradeException => throw e
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
-            StaxXmlParserUtils.skipChildren(parser)
         }
 
         case c: Characters if !c.isWhiteSpace =>
           addOrUpdate(row, schema, options.valueTag, c.getData)
 
-        case _: EndElement =>
+        case _: EndElement | _: EndDocument =>
           shouldStop = true
 
         case _ => // do nothing
