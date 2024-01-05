@@ -167,27 +167,11 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     parser.peek match {
       case _: EndElement => NullType
       case _: StartElement => inferObject(parser)
-      case c: Characters if c.isWhiteSpace =>
-        // When `Characters` is found, we need to look further to decide
-        // if this is really data or space between other elements.
-        val data = c.getData
-        parser.nextEvent()
-        parser.peek match {
-          case _: StartElement => inferObject(parser)
-          case _: EndElement if data.trim.isEmpty =>
-            StaxXmlParserUtils.consumeNextEndElement(parser)
-            NullType
-          case _: EndElement if options.nullValue == "" =>
-            StaxXmlParserUtils.consumeNextEndElement(parser)
-            NullType
-          case _: EndElement =>
-            StaxXmlParserUtils.consumeNextEndElement(parser)
-            StringType
-          case _ => inferField(parser)
-        }
-      case c: Characters if !c.isWhiteSpace =>
+      case c: Characters =>
         val structType = inferObject(parser).asInstanceOf[StructType]
         structType match {
+          case _ if structType.fields.isEmpty =>
+            NullType
           case simpleType
               if structType.fields.length == 1
               && isPrimitiveType(structType.fields.head.dataType)

@@ -225,17 +225,8 @@ class StaxXmlParser(
       case (c: Characters, _: DataType) if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
-        val data = c.getData
         parser.next
-        parser.peek match {
-          case _: StartElement => convertComplicatedType(dataType, attributes)
-          case _: EndElement if data.isEmpty => null
-          case _: EndElement =>
-            val value = convertTo(data, dataType)
-            StaxXmlParserUtils.consumeNextEndElement(parser)
-            value
-          case _ => convertField(parser, dataType, attributes)
-        }
+        convertField(parser, dataType, attributes)
       case (c: Characters, dt: DataType) =>
         val value = convertTo(c.getData, dt)
         parser.next
