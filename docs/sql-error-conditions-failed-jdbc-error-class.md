@@ -79,6 +79,6 @@ Check that the table `<tableName>` exists.
 
 ## UNCLASSIFIED
 
-`<msg>`
+`<message>`
 
 
