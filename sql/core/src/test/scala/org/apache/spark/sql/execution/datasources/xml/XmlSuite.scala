@@ -1337,7 +1337,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(getTestResourcePath(resDir + "whitespace_error.xml"))
 
     assert(whitespaceDF.count() === 1)
-    assert(whitespaceDF.take(1).head.getAs[String]("_corrupt_record") !== null)
+    assert(whitespaceDF.take(1).head.getAs[String]("_corrupt_record") === null)
   }
 
   test("struct with only attributes and no value tag does not crash") {
@@ -1401,7 +1401,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("StructType with missing optional StructType child") {
-    val df = spark.read.option("rowTag", "Foo").option("nullValue", "")
+    val df = spark.read.option("rowTag", "Foo")
       .xml(getTestResourcePath(resDir + "struct_with_optional_child.xml"))
     val res = df.collect()
     assert(res.length == 1)
