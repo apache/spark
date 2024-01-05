@@ -167,7 +167,7 @@ case class CreateViewCommand(
       }
     } else {
       // Create the view if it doesn't exist.
-      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
+      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = allowExisting)
     }
     Seq.empty[Row]
   }
