@@ -53,12 +53,8 @@ private[sql] object SqlApiConf {
   val SESSION_LOCAL_TIMEZONE_KEY: String = SqlApiConfHelper.SESSION_LOCAL_TIMEZONE_KEY
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String =
     SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
-  /**
-   * Defines a getter that returns the [[SqlApiConf]] within scope.
-   */
-  private val confGetter = SqlApiConfHelper.getConfGetter
 
-  def get: SqlApiConf = confGetter.get()()
+  def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
   // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
   Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))

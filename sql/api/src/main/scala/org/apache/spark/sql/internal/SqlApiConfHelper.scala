@@ -35,7 +35,7 @@ private[sql] object SqlApiConfHelper {
   /**
    * Sets the active config getter.
    */
-  private[sql] def setConfGetter(getter: () => SqlApiConf): Unit = {
+  def setConfGetter(getter: () => SqlApiConf): Unit = {
     confGetter.set(getter)
   }
 }
