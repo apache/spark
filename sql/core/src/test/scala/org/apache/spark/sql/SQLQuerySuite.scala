@@ -4713,6 +4713,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val df6 = df3.join(df2, col("df3.zaak_id") === col("df2.customer_id"), "outer")
     df5.crossJoin(df6)
   }
+
+  test("fds") {
+    sql(
+      """
+        |create table test_table
+        |using my_data_source
+        |options (
+        |  user 'user',
+        |  password, 'password' -- invalid key-value pair
+        |)
+        |""".stripMargin)
+  }
 }
 
 case class Foo(bar: Option[String])
