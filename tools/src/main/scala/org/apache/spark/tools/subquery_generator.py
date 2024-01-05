@@ -75,7 +75,7 @@ correlated = [True, False]
 project_distinct = [True, False]
 
 # Query clause in which subquery is in.
-subquery_sqls = [SELECT, FROM, WHERE]
+subquery_clauses = [SELECT, FROM, WHERE]
 
 # Subquery operators
 AGGREGATE, LIMIT, WINDOW, ORDER_BY, JOIN, SET_OP = (
@@ -108,91 +108,93 @@ subquery_operators = {
 def generate_subquery(
     innertable,
     outertable,
-    clause,
     subquery_type,
     is_correlated,
     distinct,
-    subquery_operator,
-    subquery_operator_specification,
+    operator,
+    operator_specification,
 ):
+    """
+    Generate a subquery with specified parameters.
+
+    Parameters:
+    - innertable: Inner table for the subquery.
+    - outertable: Outer table for correlation conditions.
+    - subquery_type: Type of subquery (SCALAR, EXISTS, etc.).
+    - is_correlated: True if the subquery is correlated, False otherwise.
+    - distinct: True if DISTINCT is applied, False otherwise.
+    - operator: Subquery operator (JOIN, SET_OP, AGGREGATE, etc.).
+    - operator_specification: Specification for the subquery operator.
+      - For AGGREGATE: Tuple (aggregate_function, group_by).
+      - For LIMIT: Limit value.
+      - For JOIN: Join operator.
+    - Returns a tuple containing the generated SQL string and the projection column alias.
+    """
     aggregate_function, group_by = (
-        subquery_operator_specification
-        if subquery_operator == AGGREGATE
-        else (None, None)
+        operator_specification if operator == AGGREGATE else (None, None)
     )
-    limit_value = (
-        subquery_operator_specification if subquery_operator == LIMIT else (None, None)
-    )
+    limit_value = operator_specification if operator == LIMIT else (None, None)
 
     # FROM CLAUSE OF SUBQUERY - apply JOINS and SET OPERATIONS
-    subquery_table_alias = (
-        subquery_set_operation_alias if subquery_operator == SET_OP else innertable
-    )
-    subquery_from_clause = "FROM "
-    if subquery_operator == SET_OP:
-        set_operator = subquery_operator_specification
-        subquery_from_clause += (
+    table_alias = subquery_set_operation_alias if operator == SET_OP else innertable
+    from_clause = "FROM "
+    if operator == SET_OP:
+        set_operator = operator_specification
+        from_clause += (
             f"(SELECT a, b FROM {innertable} {set_operator} "
-            f"SELECT a, b FROM {join_table}) AS {subquery_table_alias}"
+            f"SELECT a, b FROM {join_table}) AS {table_alias}"
         )
-    elif subquery_operator == JOIN:
-        join_operator = subquery_operator_specification
-        subquery_from_clause += (
+    elif operator == JOIN:
+        join_operator = operator_specification
+        from_clause += (
             f"{innertable} {join_operator} {join_table}"
             f" ON {innertable}.{other_column} = {join_table}.{other_column}"
         )
     else:
-        subquery_from_clause += innertable
+        from_clause += innertable
 
     # SELECT CLAUSE OF SUBQUERY -- apply DISTINCT and AGGREGATES
-    subquery_select_clause = f"SELECT{' DISTINCT' if distinct else ''} "
+    select_clause = f"SELECT{' DISTINCT' if distinct else ''} "
     projection_column = subquery_column_alias
-    if subquery_operator == AGGREGATE:
-        # TODO: Use correlated column?
-        subquery_select_clause += f"{aggregate_function}({subquery_table_alias}." \
-                                  f"{correlated_column}) AS {projection_column}"
-    else:
-        # TODO: Use correlated column?
-        subquery_select_clause += (
-            f"{subquery_table_alias}.{correlated_column} AS {projection_column}"
+    if operator == AGGREGATE:
+        select_clause += (
+            f"{aggregate_function}({table_alias}."
+            f"{correlated_column}) AS {projection_column}"
         )
+    else:
+        select_clause += f"{table_alias}.{correlated_column} AS {projection_column}"
 
     # WHERE CLAUSE OF SUBQUERY -- apply CORRELATION CONDITION if applicable
-    subquery_where_clause = ""
-    if is_correlated and clause != FROM:
-        subquery_where_clause += f"WHERE {subquery_table_alias}.a = {outertable}.a"
+    where_clause = f"WHERE {table_alias}.a = {outertable}.a" if is_correlated else ""
 
     # GROUP BY CLAUSE OF SUBQUERY -- apply GROUP BY if applicable
-    subquery_group_by_clause = ""
-    if group_by:
-        # Must group by correlated column.
-        subquery_group_by_clause = "GROUP BY a"
+    group_by_clause = "GROUP BY a" if group_by else ""
 
-    requires_limit_one = (subquery_type == SCALAR or clause == SELECT) and (
-        (subquery_operator == AGGREGATE and group_by is True)
-        or subquery_operator != LIMIT
-        or (subquery_operator == LIMIT and limit_value != 1)
+    # ORDER BY CLAUSE OF SUBQUERY -- ADD SORT IF THE OPERATOR IS AN ORDER-BY OR, THERE IS A LIMIT.
+    requires_limit_one = subquery_type == SCALAR and (
+        (operator == AGGREGATE and group_by is True)
+        or operator != LIMIT
+        or (operator == LIMIT and limit_value != 1)
     )
-
-    # ORDER BY CLAUSE OF SUBQUERY
-    subquery_order_by_clause = (
+    order_by_clause = (
         f"ORDER BY {projection_column} DESC NULLS FIRST"
-        if subquery_operator == ORDER_BY
-        or requires_limit_one
-        or subquery_operator == LIMIT
+        if operator == ORDER_BY or requires_limit_one or operator == LIMIT
         else ""
     )
 
-    # LIMIT CLAUSE OF SUBQUERY
-    subquery_limit_clause = (
+    # LIMIT CLAUSE OF SUBQUERY -- ADD LIMIT IF THE OPERATOR IS A LIMIT, OR IS REQUIRED FOR TEST
+    # DETERMINISM.
+    limit_clause = (
         "LIMIT 1"
         if requires_limit_one
-        else (f"LIMIT {limit_value}" if subquery_operator == LIMIT else "")
+        else (f"LIMIT {limit_value}" if operator == LIMIT else "")
     )
 
-    subquery_sql = f"({subquery_select_clause} {subquery_from_clause} {subquery_where_clause} " \
-                   f"{subquery_group_by_clause} {subquery_order_by_clause} {subquery_limit_clause})"
-    return subquery_sql, projection_column
+    sql_string = (
+        f"({select_clause} {from_clause} {where_clause} "
+        f"{group_by_clause} {order_by_clause} {limit_clause})"
+    )
+    return sql_string, projection_column
 
 
 def generate_query(
@@ -208,7 +210,6 @@ def generate_query(
     subquery_sql, subquery_projection_column = generate_subquery(
         innertable,
         outertable,
-        clause,
         subquery_type,
         is_correlated,
         distinct,
@@ -216,25 +217,43 @@ def generate_query(
         subquery_operator_specification,
     )
 
-    query = ""
-    query_projection = ""
+    select_clause, from_clause, where_clause, query_projection = "", "", "", []
     if clause == SELECT:
-        query_projection = f"{outertable}.b, {subquery_alias}"
-        query += f"SELECT {outertable}.b, {subquery_sql} AS {subquery_alias} FROM {outertable}"
+        query_projection = [
+            f"{outertable}.{correlated_column}",
+            f"{outertable}.{other_column}",
+            subquery_alias,
+        ]
+        from_clause = f"FROM {outertable}"
+        select_clause = (
+            f"SELECT {outertable}.{correlated_column}, {outertable}.{other_column}, "
+            f"{subquery_sql} AS subquery_alias"
+        )
     elif clause == FROM:
-        query_projection = subquery_projection_column
-        query += f"SELECT {query_projection} FROM {subquery_sql} AS {subquery_alias}"
+        query_projection = [subquery_projection_column]
+        select_clause = "SELECT " + ", ".join(query_projection)
+        from_clause = f"FROM {subquery_sql} AS {subquery_alias}"
     elif clause == WHERE:
-        query_projection = "a, b"
+        query_projection = [
+            f"{outertable}.{correlated_column}",
+            f"{outertable}.{other_column}",
+        ]
+        select_clause = "SELECT " + ", ".join(query_projection)
+        from_clause = f"FROM {outertable}"
         if subquery_type in [EXISTS, NOT_EXISTS]:
-            query += f"SELECT {query_projection} FROM {outertable} WHERE {subquery_type}{subquery_sql}"
+            where_clause = f"WHERE {subquery_type}{subquery_sql}"
         else:
-            query += f"SELECT {query_projection} FROM {outertable} WHERE {outertable}.a {subquery_type}{subquery_sql}"
+            where_clause = f"WHERE {outertable}.a {subquery_type}{subquery_sql}"
 
     # Order by all projected columns for determinism
-    query += f" ORDER BY {query_projection} NULLS FIRST;"
+    order_by_clause = "ORDER BY " + ", ".join(
+        [p + " NULLS FIRST" for p in query_projection]
+    )
+    complete_query = f"{select_clause} {from_clause} {where_clause} {order_by_clause};"
 
     comment_tags = [
+        f"inner_table={innertable}",
+        f"outer_table={outertable}",
         f"subquery_in={clause}",
         f"subquery_type={subquery_type if clause == WHERE else 'NA'}",
         f"is_correlated={is_correlated}",
@@ -244,7 +263,7 @@ def generate_query(
     ]
     comment = "-- " + ",".join(comment_tags) + "\n"
 
-    return comment + query
+    return comment + complete_query
 
 
 # ============================= SQL GENERATION =============================
@@ -252,34 +271,31 @@ def generate_query(
 if __name__ == "__main__":
     queries = []
 
-    for itble, otble in table_combinations:
-        for cl in subquery_sqls:
-            for st in subquery_types:
-                for ic in correlated:
-                    for d in project_distinct:
-                        for so in subquery_operators:
-                            for ot in subquery_operators[so]:
-                                query = generate_query(
-                                    itble,
-                                    otble,
-                                    cl,
-                                    st,
-                                    ic,
-                                    d,
-                                    so,
-                                    ot,
+    for input_table, output_table in table_combinations:
+        for subquery_clause in subquery_clauses:
+            subquery_type_choices = (
+                [SCALAR] if subquery_clause == SELECT else subquery_types
+            )
+            for subquery_type in subquery_type_choices:
+                correlated_choices = [False] if subquery_clause == FROM else correlated
+                for is_correlated in correlated_choices:
+                    for is_project_distinct in project_distinct:
+                        for subquery_operator in subquery_operators:
+                            for operator_type in subquery_operators[subquery_operator]:
+                                generated_query = generate_query(
+                                    input_table,
+                                    output_table,
+                                    subquery_clause,
+                                    subquery_type,
+                                    is_correlated,
+                                    is_project_distinct,
+                                    subquery_operator,
+                                    operator_type,
                                 )
-                                if query not in queries:
-                                    queries.append(query)
+                                if generated_query not in queries:
+                                    queries.append(generated_query)
 
-    queries = [query.strip() for query in queries if SELECT in query]
-
-    result = table_creation_sql + "\n"
-    for q in queries:
-        result += q + "\n"
-        # print(q)
-        # print()
-
+    result = table_creation_sql + "\n" + "\n".join(queries) + "\n"
     with open(
         "sql/core/src/test/resources/sql-tests/inputs/subquery/generated_subqueries_test.sql",
         "w",
