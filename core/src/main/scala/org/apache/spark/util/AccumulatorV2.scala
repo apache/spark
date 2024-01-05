@@ -114,8 +114,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
 
   /**
-   * Returns false if this accumulator has been updated. Note that this can be true even when
-   * the value is a zero value, if the accumulator was updated with a zero value.
+   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+   * value; for a list accumulator, Nil is zero value.
    */
   def isZero: Boolean
 
