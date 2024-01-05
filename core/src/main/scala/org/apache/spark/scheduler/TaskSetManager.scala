@@ -793,7 +793,7 @@ private[spark] class TaskSetManager(
       if (dropTaskInfoAccumulablesOnTaskCompletion) {
         // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
         // lifetime.
-        info.resetAccumulables()
+        info.setAccumulables(Nil)
       }
       return
     }
@@ -926,7 +926,7 @@ private[spark] class TaskSetManager(
       if (dropTaskInfoAccumulablesOnTaskCompletion) {
         // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
         // lifetime.
-        info.resetAccumulables()
+        info.setAccumulables(Nil)
       }
       return
     }

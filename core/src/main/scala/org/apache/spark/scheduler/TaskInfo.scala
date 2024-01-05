@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.SparkException
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.annotation.DeveloperApi
@@ -85,18 +84,6 @@ class TaskInfo(
   }
 
   override def clone(): TaskInfo = super.clone().asInstanceOf[TaskInfo]
-
-  /**
-   * For testing only. Allows probing accumulables without triggering the exception when
-   * `throwOnAccumulablesCall` is set.
-   */
-  private[scheduler] def isAccumulablesEmpty(): Boolean = {
-    _accumulables.isEmpty
-  }
-
-  private[scheduler] def resetAccumulables(): Unit = {
-    setAccumulables(Nil)
-  }
 
   private[scheduler] def cloneWithEmptyAccumulables(): TaskInfo = {
     val cloned = clone()
