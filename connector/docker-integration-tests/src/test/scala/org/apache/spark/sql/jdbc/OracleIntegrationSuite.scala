@@ -148,7 +148,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
   test("show logs") {
-    assert(condition = false)
+    assert("".nonEmpty)
   }
 
   test("SPARK-16625 : Importing Oracle numeric types") {
