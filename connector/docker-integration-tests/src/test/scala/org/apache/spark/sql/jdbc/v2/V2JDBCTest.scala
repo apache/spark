@@ -19,7 +19,6 @@ package org.apache.spark.sql.jdbc.v2
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
@@ -225,7 +224,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val e = intercept[AnalysisException] {
         sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
       }
-      assert(e.getErrorClass == "FAILED_JDBC.CREATE_TABLE")
+      assert(e.getErrorClass == "FAILED_JDBC.UNCLASSIFIED")
       testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
@@ -249,10 +248,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(jdbcTable.indexExists("i2") == false)
 
         val indexType = "DUMMY"
-        val e = intercept[SparkException] {
+        var m = intercept[UnsupportedOperationException] {
           sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
-        }
-        assert(e.getErrorClass == "FAILED_JDBC.CREATE_INDEX")
+        }.getMessage
+        assert(m.contains(s"Index Type $indexType is not supported." +
+          s" The supported Index Types are:"))
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         assert(jdbcTable.indexExists("i1"))
