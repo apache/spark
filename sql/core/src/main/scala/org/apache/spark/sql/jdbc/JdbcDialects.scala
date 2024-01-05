@@ -650,6 +650,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param e The dialect specific exception.
    * @return `AnalysisException` or its sub-class.
    */
+  @deprecated("Please override the classifyException method with an error class", "4.0.0")
   def classifyException(message: String, e: Throwable): AnalysisException = {
     new AnalysisException(
       errorClass = "FAILED_JDBC.UNCLASSIFIED",
