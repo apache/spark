@@ -330,7 +330,7 @@
     ],
     "sqlState" : "42704"
   },
-  "CANNOT_RESOLVE_WITH_PLAN_ID" : {
+  "CANNOT_RESOLVE_DATAFRAME_COLUMN" : {
     "message" : [
       "Cannot resolve dataframe column <colName>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
     ],
