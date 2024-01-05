@@ -2577,7 +2577,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |        </struct2>
          |        value15
          |    </struct1>
+         |     <!--First comment-->
          |    value16
+         |     <!--Second comment-->
          |</ROW>
          |""".stripMargin
     val input = spark.createDataset(Seq(xmlString))
