@@ -126,7 +126,10 @@ object StaxXmlParserUtils {
   /**
    * Convert the current structure of XML document to a XML string.
    */
-  def currentStructureAsString(parser: XMLEventReader): String = {
+  def currentStructureAsString(
+      parser: XMLEventReader,
+      startElementName: String,
+      options: XmlOptions): String = {
     val xmlString = new StringBuilder()
     var indent = 0
     do {
@@ -156,7 +159,7 @@ object StaxXmlParserUtils {
         indent > 0
       case _ => true
     })
-    skipNextEndElement(parser)
+    skipNextEndElement(parser, startElementName, options)
     xmlString.toString()
   }
 
@@ -186,11 +189,19 @@ object StaxXmlParserUtils {
   }
 
   @tailrec
-  def skipNextEndElement(parser: XMLEventReader): Unit = {
+  def skipNextEndElement(
+      parser: XMLEventReader,
+      expectedNextEndElementName: String,
+      options: XmlOptions): Unit = {
     parser.nextEvent() match {
-      case c: Characters if c.isWhiteSpace => skipNextEndElement(parser)
-      case _: EndElement => // do nothing
-      case _ => throw new IllegalStateException("Invalid state")
+      case c: Characters if c.isWhiteSpace =>
+        skipNextEndElement(parser, expectedNextEndElementName, options)
+      case endElement: EndElement =>
+        assert(
+          getName(endElement.getName, options) == expectedNextEndElementName,
+          s"Expected EndElement </$expectedNextEndElementName>")
+      case _ => throw new IllegalStateException(
+        s"Expected EndElement </$expectedNextEndElementName>")
     }
   }
 }
