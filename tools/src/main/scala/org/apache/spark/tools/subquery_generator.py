@@ -6,48 +6,75 @@ subquery_column_alias = "subquery_column_alias"
 
 inner_table = "inner_table"
 outer_table = "outer_table"
-# No matching rows for correlated column with outer tables
-no_match_inner_table = "no_match_inner_table"
-# No matching rows for correlated column with inner tables
-no_match_outer_table = "no_match_outer_table"
+# No matching rows for correlated column with other tables.
+no_match_table = "no_match_table"
+# Table with only one row, (NULL, NULL).
+null_table = "null_table"
 # Used for join and set operations
 join_table = "join_table"
 
-# Query clauses
+table_creation_sql = f"""CREATE TEMPORARY VIEW {inner_table} (a, b) AS VALUES
+    (1, 10),
+    (2, 20),
+    (3, 30),
+    (4, 40),
+    (5, 50),
+    (8, 80),
+    (9, 90);
+CREATE TEMPORARY VIEW {outer_table} (a, b) AS VALUES
+    (1, 100),
+    (2, 200),
+    (3, 300),
+    (4, 400),
+    (6, 600),
+    (7, 700),
+    (10, 1000);
+CREATE TEMPORARY VIEW {no_match_table} (a, b) AS VALUES
+    (9999, 9999);
+CREATE TEMPORARY VIEW {join_table} (a, b) AS VALUES
+    (1, 10),
+    (3, 30),
+    (4, 400),
+    (6, 600),
+    (8, 80);
+CREATE TEMPORARY VIEW null_table (a, b) AS SELECT CAST(null AS int), CAST(null as int);
+"""
+
+# Query clauses.
 SELECT, FROM, WHERE = "SELECT", "FROM", "WHERE"
 
-# Subquery type
+# Subquery type.
 IN, NOT_IN, EXISTS, NOT_EXISTS, SCALAR = "IN", "NOT IN", "EXISTS", "NOT EXISTS", "="
 
-# Aggregate function types
+# Aggregate function types.
 SUM, COUNT = "SUM", "COUNT"
 
-# Join types
+# Join types.
 INNER, LEFT_OUTER, RIGHT_OUTER = "INNER JOIN", "LEFT OUTER JOIN", "RIGHT OUTER JOIN"
 
-# Set operations
+# Set operations.
 INTERSECT, UNION, EXCEPT = "INTERSECT", "UNION", "EXCEPT"
 
 # ============================= SUBQUERY VARIATIONS =============================
 
 table_combinations = [
     (inner_table, outer_table),
-    (no_match_inner_table, outer_table),
-    (inner_table, no_match_outer_table),
-    (no_match_inner_table, no_match_outer_table),
+    (inner_table, null_table),
+    (null_table, outer_table),
+    (no_match_table, outer_table),
+    (inner_table, no_match_table),
 ]
 
-# Subquery types
+# Subquery types.
 subquery_types = [IN, NOT_IN, EXISTS, NOT_EXISTS, SCALAR]
 
-# Subquery properties - correlated or not
+# Subquery properties - correlated or not.
 correlated = [True, False]
 
-# Distinct projection or not
+# Distinct subquery projection.
 project_distinct = [True, False]
 
 # Query clause in which subquery is in.
-# TODO: support HAVING operations
 subquery_sqls = [SELECT, FROM, WHERE]
 
 # Subquery operators
@@ -63,7 +90,7 @@ AGGREGATE, LIMIT, WINDOW, ORDER_BY, JOIN, SET_OP = (
 # Tuples of (aggregateFunction, groupBy: bool)
 aggregation_functions = [(SUM, True), (SUM, False), (COUNT, True), (SUM, False)]
 
-# Tuples of (limit, limitValue)
+# Values for limit.
 limit_values = [1, 10]
 
 # TODO: add window functions
@@ -86,13 +113,16 @@ def generate_subquery(
     is_correlated,
     distinct,
     subquery_operator,
-    subquery_operator_type,
+    subquery_operator_specification,
 ):
-    aggregate_function = (
-        subquery_operator_type[0] if subquery_operator == AGGREGATE else None
+    aggregate_function, group_by = (
+        subquery_operator_specification
+        if subquery_operator == AGGREGATE
+        else (None, None)
     )
-    group_by = subquery_operator_type[1] if subquery_operator == AGGREGATE else None
-    limit_value = subquery_operator_type if subquery_operator == LIMIT else None
+    limit_value = (
+        subquery_operator_specification if subquery_operator == LIMIT else (None, None)
+    )
 
     # FROM CLAUSE OF SUBQUERY - apply JOINS and SET OPERATIONS
     subquery_table_alias = (
@@ -100,13 +130,15 @@ def generate_subquery(
     )
     subquery_from_clause = "FROM "
     if subquery_operator == SET_OP:
+        set_operator = subquery_operator_specification
         subquery_from_clause += (
-            f"(SELECT a, b FROM {innertable} {subquery_operator_type} "
+            f"(SELECT a, b FROM {innertable} {set_operator} "
             f"SELECT a, b FROM {join_table}) AS {subquery_table_alias}"
         )
     elif subquery_operator == JOIN:
+        join_operator = subquery_operator_specification
         subquery_from_clause += (
-            f"{innertable} {subquery_operator_type} {join_table}"
+            f"{innertable} {join_operator} {join_table}"
             f" ON {innertable}.{other_column} = {join_table}.{other_column}"
         )
     else:
@@ -117,7 +149,8 @@ def generate_subquery(
     projection_column = subquery_column_alias
     if subquery_operator == AGGREGATE:
         # TODO: Use correlated column?
-        subquery_select_clause += f"{aggregate_function}({subquery_table_alias}.{correlated_column}) AS {projection_column}"
+        subquery_select_clause += f"{aggregate_function}({subquery_table_alias}." \
+                                  f"{correlated_column}) AS {projection_column}"
     else:
         # TODO: Use correlated column?
         subquery_select_clause += (
@@ -131,7 +164,7 @@ def generate_subquery(
 
     # GROUP BY CLAUSE OF SUBQUERY -- apply GROUP BY if applicable
     subquery_group_by_clause = ""
-    if subquery_operator == AGGREGATE and group_by:
+    if group_by:
         # Must group by correlated column.
         subquery_group_by_clause = "GROUP BY a"
 
@@ -141,23 +174,24 @@ def generate_subquery(
         or (subquery_operator == LIMIT and limit_value != 1)
     )
 
-    subquery_order_by_clause = ""
     # ORDER BY CLAUSE OF SUBQUERY
-    if (
-        subquery_operator == ORDER_BY
+    subquery_order_by_clause = (
+        f"ORDER BY {projection_column} DESC NULLS FIRST"
+        if subquery_operator == ORDER_BY
         or requires_limit_one
         or subquery_operator == LIMIT
-    ):
-        subquery_order_by_clause = f"ORDER BY {projection_column} DESC NULLS FIRST"
+        else ""
+    )
 
     # LIMIT CLAUSE OF SUBQUERY
-    subquery_limit_clause = ""
-    if requires_limit_one:
-        subquery_limit_clause = "LIMIT 1"
-    elif subquery_operator == LIMIT:
-        subquery_limit_clause = f"LIMIT {limit_value}"
+    subquery_limit_clause = (
+        "LIMIT 1"
+        if requires_limit_one
+        else (f"LIMIT {limit_value}" if subquery_operator == LIMIT else "")
+    )
 
-    subquery_sql = f"({subquery_select_clause} {subquery_from_clause} {subquery_where_clause} {subquery_group_by_clause} {subquery_order_by_clause} {subquery_limit_clause})"
+    subquery_sql = f"({subquery_select_clause} {subquery_from_clause} {subquery_where_clause} " \
+                   f"{subquery_group_by_clause} {subquery_order_by_clause} {subquery_limit_clause})"
     return subquery_sql, projection_column
 
 
@@ -169,7 +203,7 @@ def generate_query(
     is_correlated,
     distinct,
     subquery_operator,
-    subquery_operator_type,
+    subquery_operator_specification,
 ):
     subquery_sql, subquery_projection_column = generate_subquery(
         innertable,
@@ -179,7 +213,7 @@ def generate_query(
         is_correlated,
         distinct,
         subquery_operator,
-        subquery_operator_type,
+        subquery_operator_specification,
     )
 
     query = ""
@@ -206,7 +240,7 @@ def generate_query(
         f"is_correlated={is_correlated}",
         f"distinct={distinct}",
         f"subquery_operator={subquery_operator}",
-        f"subquery_operator_type={subquery_operator_type}",
+        f"subquery_operator_specification={subquery_operator_specification}",
     ]
     comment = "-- " + ",".join(comment_tags) + "\n"
 
@@ -214,38 +248,6 @@ def generate_query(
 
 
 # ============================= SQL GENERATION =============================
-
-table_creation_sql = f"""CREATE TEMPORARY VIEW {inner_table} (a, b) AS VALUES
-    (1, 10),
-    (2, 20),
-    (3, 30),
-    (4, 40),
-    (5, 50),
-    (8, 80),
-    (9, 90);
-CREATE TEMPORARY VIEW {outer_table} (a, b) AS VALUES
-    (1, 100),
-    (2, 200),
-    (3, 300),
-    (4, 400),
-    (6, 600),
-    (7, 700),
-    (10, 1000);
-CREATE TEMPORARY VIEW {no_match_inner_table} (a, b) AS VALUES
-    (5, 50),
-    (8, 80),
-    (9, 90);
-CREATE TEMPORARY VIEW {no_match_outer_table} (a, b) AS VALUES
-    (6, 600),
-    (7, 700),
-    (10, 1000);
-CREATE TEMPORARY VIEW {join_table} (a, b) AS VALUES
-    (1, 10),
-    (3, 30),
-    (4, 400),
-    (6, 600),
-    (8, 80);
-"""
 
 if __name__ == "__main__":
     queries = []
