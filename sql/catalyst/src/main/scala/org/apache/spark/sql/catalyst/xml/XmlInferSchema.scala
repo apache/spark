@@ -175,7 +175,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case simpleType
               if structType.fields.length == 1
               && isPrimitiveType(structType.fields.head.dataType)
-              && isValueTagField(structType.fields.head) =>
+              && isValueTagField(structType.fields.head, caseSensitive) =>
             simpleType.fields.head.dataType
           case _ => structType
         }
@@ -260,7 +260,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           val valueTagType = inferFrom(c.getData)
           addOrUpdateType(nameToDataType, options.valueTag, valueTagType)
 
-        case _: EndElement =>
+        case _: EndElement | _: EndDocument =>
           shouldStop = true
 
         case _ => // do nothing
@@ -528,7 +528,11 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  private[xml] def isValueTagField(structField: StructField): Boolean = {
-    structField.name.toLowerCase(Locale.ROOT) == options.valueTag.toLowerCase(Locale.ROOT)
+  private[xml] def isValueTagField(structField: StructField, caseSensitive: Boolean): Boolean = {
+    if (!caseSensitive) {
+      structField.name.toLowerCase(Locale.ROOT) == options.valueTag.toLowerCase(Locale.ROOT)
+    } else {
+      structField.name == options.valueTag
+    }
   }
 }
