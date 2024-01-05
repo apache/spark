@@ -222,7 +222,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
-      val e = intercept[SparkException] {
+      val e = intercept[AnalysisException] {
         sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
       }
       assert(e.getErrorClass == "FAILED_JDBC.CREATE_TABLE")
