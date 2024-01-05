@@ -30,8 +30,7 @@ class StateStoreErrors {
     new StateV2ImplicitKeyNotFound(stateName)
   }
 
-  def encoderPrefixKey(
-      stateName: String): StateV2EncoderPrefixKey = {
+  def encoderPrefixKey(): StateV2EncoderPrefixKey = {
     new StateV2EncoderPrefixKey()
   }
 
