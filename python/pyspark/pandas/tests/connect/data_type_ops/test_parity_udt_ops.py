@@ -17,14 +17,13 @@
 import unittest
 
 from pyspark.pandas.tests.data_type_ops.test_udt_ops import UDTOpsTestsMixin
-from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
+from pyspark.pandas.tests.connect.data_type_ops.testing_utils import OpsTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class UDTOpsParityTests(
-    UDTOpsTestsMixin,
-    OpsTestBase,
-    ReusedConnectTestCase,
+    UDTOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
 ):
     pass
 

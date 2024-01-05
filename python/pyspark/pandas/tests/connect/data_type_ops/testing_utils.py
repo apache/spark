@@ -27,7 +27,6 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-from pyspark.testing.pandasutils import ComparisonTestBase
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -39,7 +38,7 @@ if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
 
 
-class OpsTestBase(ComparisonTestBase):
+class OpsTestBase:
     """The test base for arithmetic operations of different data types."""
 
     @property
