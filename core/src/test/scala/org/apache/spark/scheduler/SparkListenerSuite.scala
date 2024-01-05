@@ -291,6 +291,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("SPARK-46383: Track TaskInfo objects") {
+    // Test that the same TaskInfo object is sent to the `DAGScheduler` in the `onTaskStart` and
+    // `onTaskEnd` events.
     val conf = new SparkConf().set(DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
     sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveActiveTaskInfos
