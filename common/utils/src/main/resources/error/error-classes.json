@@ -332,7 +332,7 @@
   },
   "CANNOT_RESOLVE_WITH_PLAN_ID" : {
     "message" : [
-      "Cannot resolve <expression> with plan id <id> in plan <plan>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
+      "Cannot resolve dataframe column <colName>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
     ],
     "sqlState" : "42704"
   },
