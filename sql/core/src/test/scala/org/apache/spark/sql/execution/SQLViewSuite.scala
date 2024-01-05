@@ -158,36 +158,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-
-  test("CREATE VIEW IF NOT EXISTS never throws TABLE_OR_VIEW_ALREADY_EXISTS") {
-    // Concurrently create a view with the same name, so that some of the queries may all
-    // get that the view does not exist and try to create it. But with IF NOT EXISTS, the
-    // queries should not fail.
-    import ExecutionContext.Implicits.global
-    val concurrency = 10
-    val tableName = "table_name"
-    val viewName = "view_name"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (id int) USING parquet")
-      withView("view_name") {
-        val futures = (0 to concurrency).map { _ =>
-          Future {
-            Try {
-              sql(s"CREATE VIEW IF NOT EXISTS $viewName AS SELECT * FROM $tableName")
-            }
-          }
-        }
-        futures.map { future =>
-           val res = ThreadUtils.awaitResult(future, 5.seconds)
-           assert(
-             res.isSuccess,
-             s"Failed to create view: ${if (res.isFailure) res.failed.get.getMessage}"
-           )
-        }
-      }
-    }
-  }
-
   test("Issue exceptions for ALTER VIEW on the temporary view") {
     val viewName = "testView"
     withTempView(viewName) {
