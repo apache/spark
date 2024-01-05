@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+import scala.util.Try
+
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -27,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.util.ThreadUtils
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
@@ -150,6 +155,36 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       sql("CREATE TABLE tab1 (id int) USING parquet")
       sql("CREATE VIEW IF NOT EXISTS tab1 AS SELECT * FROM jt")
       checkAnswer(sql("select count(*) FROM tab1"), Row(0))
+    }
+  }
+
+
+  test("CREATE VIEW IF NOT EXISTS never throws TABLE_OR_VIEW_ALREADY_EXISTS") {
+    // Concurrently create a view with the same name, so that some of the queries may all
+    // get that the view does not exist and try to create it. But with IF NOT EXISTS, the
+    // queries should not fail.
+    import ExecutionContext.Implicits.global
+    val concurrency = 10
+    val tableName = "table_name"
+    val viewName = "view_name"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id int) USING parquet")
+      withView("view_name") {
+        val futures = (0 to concurrency).map { _ =>
+          Future {
+            Try {
+              sql(s"CREATE VIEW IF NOT EXISTS $viewName AS SELECT * FROM tab")
+            }
+          }
+        }
+        futures.map { future =>
+           val res = ThreadUtils.awaitResult(future, 5.seconds)
+           assert(
+             res.isSuccess,
+             s"Failed to create view: ${if (res.isFailure) res.failed.get.getMessage}"
+           )
+        }
+      }
     }
   }
 
