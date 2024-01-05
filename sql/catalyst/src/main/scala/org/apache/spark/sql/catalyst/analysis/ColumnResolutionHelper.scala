@@ -512,12 +512,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
       //  df1.select(df2.a)   <-   illegal reference df2.a
       throw new AnalysisException(
-        errorClass = "CANNOT_RESOLVE_WITH_PLAN_ID",
-        messageParameters = Map(
-          "expression" -> toSQLId(u.nameParts),
-          "id" -> planId.toString,
-          "plan" -> q.toString
-        ),
+        errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        messageParameters = Map("name" -> toSQLId(u.nameParts)),
         origin = u.origin
       )
     }

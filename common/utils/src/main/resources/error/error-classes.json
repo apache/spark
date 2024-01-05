@@ -324,15 +324,15 @@
     ],
     "sqlState" : "0AKD0"
   },
-  "CANNOT_RESOLVE_STAR_EXPAND" : {
+  "CANNOT_RESOLVE_DATAFRAME_COLUMN" : {
     "message" : [
-      "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."
+      "Cannot resolve dataframe column <name>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
     ],
     "sqlState" : "42704"
   },
-  "CANNOT_RESOLVE_DATAFRAME_COLUMN" : {
+  "CANNOT_RESOLVE_STAR_EXPAND" : {
     "message" : [
-      "Cannot resolve dataframe column <colName>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
+      "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."
     ],
     "sqlState" : "42704"
   },

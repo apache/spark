@@ -282,17 +282,17 @@ Cannot recognize hive type string: `<fieldType>`, column: `<fieldName>`. The spe
 
 Renaming a `<type>` across schemas is not allowed.
 
+### CANNOT_RESOLVE_DATAFRAME_COLUMN
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve dataframe column `<name>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
+
 ### CANNOT_RESOLVE_STAR_EXPAND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot resolve `<targetString>`.* given input columns `<columns>`. Please check that the specified table or struct exists and is accessible in the input columns.
-
-### CANNOT_RESOLVE_WITH_PLAN_ID
-
-[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot resolve `<expression>` with plan id `<id>` in plan `<plan>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
 
 ### CANNOT_RESTORE_PERMISSIONS_FOR_PATH
 

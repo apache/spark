@@ -545,7 +545,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "CANNOT_RESOLVE_WITH_PLAN_ID",
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
         ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
