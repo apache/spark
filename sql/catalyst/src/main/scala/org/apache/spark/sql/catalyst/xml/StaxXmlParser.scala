@@ -402,6 +402,7 @@ class StaxXmlParser(
         } catch {
           case e: SparkUpgradeException => throw e
           case NonFatal(e) =>
+            // TODO: we don't support partial results now
             badRecordException = badRecordException.orElse(Some(e))
         }
 
