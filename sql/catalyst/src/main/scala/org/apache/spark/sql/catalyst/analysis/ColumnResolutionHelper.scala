@@ -529,14 +529,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
     } else {
       val candidates = p.children.flatMap { child =>
-        val outputSet = if (isMetadataAccess) {
-          // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
-          child.outputSet ++ AttributeSet(child.metadataOutput)
+        val candidate = resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, child)
+        if (candidate.nonEmpty) {
+          val outputSet = if (isMetadataAccess) {
+            // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
+            child.outputSet ++ AttributeSet(child.metadataOutput)
+          } else {
+            child.outputSet
+          }
+          candidate.filter(_.references.subsetOf(outputSet))
         } else {
-          child.outputSet
+          None
         }
-        resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, child)
-          .filter(_.references.subsetOf(outputSet))
       }
       if (candidates.length > 1) {
         throw new AnalysisException(
