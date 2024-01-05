@@ -545,7 +545,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         with self.assertRaisesRegex(
             AnalysisException,
-            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+            "MISSING_ATTRIBUTES",
         ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema

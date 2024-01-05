@@ -894,7 +894,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       // df1("i") is not ambiguous, but it's not valid in the projected df.
       df1.select((df1("i") + 1).as("plus")).select(df1("i")).collect()
     }
-    assert(e1.getMessage.contains("CANNOT_RESOLVE_DATAFRAME_COLUMN"))
+    assert(e1.getMessage.contains("MISSING_ATTRIBUTES"))
 
     checkSameResult(
       Seq(Row(1, "a")),

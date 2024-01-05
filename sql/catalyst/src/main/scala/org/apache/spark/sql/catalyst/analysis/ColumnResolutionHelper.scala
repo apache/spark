@@ -426,7 +426,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       throws: Boolean = false,
       includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      tryResolveColumnByPlanId(expr, plan),
+      tryResolveColumnByPlanId(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, conf.resolver)
       },
@@ -448,7 +448,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       q: LogicalPlan,
       includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      tryResolveColumnByPlanId(e, q),
+      tryResolveColumnByPlanId(e, q.children),
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, conf.resolver)
       },
@@ -487,9 +487,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //       original expression as it is.
   private def tryResolveColumnByPlanId(
       e: Expression,
-      q: LogicalPlan): Expression = e match {
+      q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
-      resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
+      u.getTagValue(LogicalPlan.PLAN_ID_TAG) match {
+        case Some(id) =>
+          resolveUnresolvedAttributeByPlanId(u, id, q)
+        case _ => u
+      }
     case _ if e.containsPattern(UNRESOLVED_ATTRIBUTE) =>
       e.mapChildren(c => tryResolveColumnByPlanId(c, q))
     case _ => e
@@ -497,20 +501,20 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   private def resolveUnresolvedAttributeByPlanId(
       u: UnresolvedAttribute,
-      q: LogicalPlan): Option[NamedExpression] = {
-    val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-    if (planIdOpt.isEmpty) return None
-    val planId = planIdOpt.get
-    logDebug(s"Extract plan_id $planId from $u")
-
+      id: Long,
+      q: Seq[LogicalPlan]): NamedExpression = {
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
-
-    val resolved = resolveUnresolvedAttributeByPlanId(u, planId, isMetadataAccess, q)
+    // resolve at most 2 ambiguous references
+    val resolved = q.iterator
+      .flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
+      .take(2).toSeq
     if (resolved.isEmpty) {
       //  e.g. df1.select(df2.a)   <-   illegal reference df2.a
       throw QueryCompilationErrors.cannotResolveColumn(u)
+    } else if (resolved.length > 1) {
+      throw QueryCompilationErrors.ambiguousColumnReferences(u)
     }
-    resolved
+    resolved.head
   }
 
   private def resolveUnresolvedAttributeByPlanId(
