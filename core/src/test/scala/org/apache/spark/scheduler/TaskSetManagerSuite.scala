@@ -234,32 +234,6 @@ class TaskSetManagerSuite
     super.afterEach()
   }
 
-  test("SPARK-46383: Accumulables of TaskInfo objects held by TaskSetManager must not be " +
-    "accessed once the task has completed") {
-    val conf = new SparkConf().
-      set(config.DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
-    sc = new SparkContext("local", "test", conf)
-    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
-    val taskSet = FakeTask.createTaskSet(1)
-    val clock = new ManualClock
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-    val accumUpdates = taskSet.tasks.head.metrics.internalAccums
-
-    // Offer a host. This will launch the first task.
-    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption.isDefined)
-
-    clock.advance(1)
-    // Tell it the first task has finished successfully
-    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
-    assert(sched.endedTasks(0) === Success)
-
-    val e = intercept[SparkException]{
-      manager.taskInfos.head._2.accumulables
-    }
-    assert(e.getMessage.contains("Accumulables for the TaskInfo have been cleared"))
-  }
-
   test("SPARK-46383: TaskInfo accumulables are cleared upon task completion") {
     val conf = new SparkConf().
       set(config.DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
