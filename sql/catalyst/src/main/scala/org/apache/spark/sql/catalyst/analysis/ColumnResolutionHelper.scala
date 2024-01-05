@@ -530,7 +530,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       isMetadataAccess: Boolean,
       p: LogicalPlan): Option[NamedExpression] = {
     if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-        resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
+      resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
     } else {
       val candidates = p.children.flatMap { child =>
         val outputSet = if (isMetadataAccess) {
