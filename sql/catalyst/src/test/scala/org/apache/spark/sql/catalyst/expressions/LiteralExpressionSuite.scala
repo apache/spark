@@ -22,7 +22,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
-import scala.collection.{immutable, mutable}
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -479,7 +479,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-46604: Literal support immutable ArraySeq") {
-    val immArraySeq = immutable.ArraySeq.unsafeWrapArray(Array(1.0, 4.0))
+    import org.apache.spark.util.ArrayImplicits._
+    val immArraySeq = Array(1.0, 4.0).toImmutableArraySeq
     val expected = toCatalyst(immArraySeq)
     checkEvaluation(Literal(immArraySeq), expected)
     checkEvaluation(Literal.create(immArraySeq), expected)
