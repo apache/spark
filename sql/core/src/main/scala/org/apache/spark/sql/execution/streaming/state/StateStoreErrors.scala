@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
@@ -25,5 +25,45 @@ import org.apache.spark.SparkRuntimeException
  * ERROR_CLASS has a prefix of "STV2_" representing State API V2.
  */
 class StateStoreErrors {
+  def implicitKeyNotFound(
+      stateName: String): StateV2ImplicitKeyNotFound = {
+    new StateV2ImplicitKeyNotFound(stateName)
+  }
 
+  def encoderPrefixKey(
+      stateName: String): StateV2EncoderPrefixKey = {
+    new StateV2EncoderPrefixKey()
+  }
+
+  def multipleValuesPerKey(): StateV2MultipleValuesPerKey = {
+    new StateV2MultipleValuesPerKey()
+  }
+
+  def valueShouldBeNonNull(typeOfState: String): StateV2ValueShouldBeNonNull = {
+    new StateV2ValueShouldBeNonNull(typeOfState)
+  }
 }
+class StateV2ImplicitKeyNotFound(stateName: String)
+  extends SparkRuntimeException(
+    "STV2_IMPLICIT_KEY_NOT_FOUND",
+    Map("stateName" -> stateName),
+    cause = null
+  )
+class StateV2EncoderPrefixKey()
+  extends SparkUnsupportedOperationException(
+    "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY",
+    Map()
+  )
+
+class StateV2MultipleValuesPerKey()
+  extends SparkUnsupportedOperationException(
+    "STV2_STORE_MULTIPLE_VALUES_PER_KEY",
+    Map()
+  )
+
+class StateV2ValueShouldBeNonNull(typeOfState: String)
+  extends SparkRuntimeException(
+    "STV2_VALUE_SHOULD_BE_NONNULL",
+    Map("typeOfState" -> typeOfState),
+    cause = null
+  )
