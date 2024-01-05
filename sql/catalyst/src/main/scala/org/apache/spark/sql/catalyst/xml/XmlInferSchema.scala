@@ -260,7 +260,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           val valueTagType = inferFrom(c.getData)
           addOrUpdateType(nameToDataType, options.valueTag, valueTagType)
 
-        case _: EndElement =>
+        case _: EndElement | _: EndDocument =>
           shouldStop = true
 
         case _ => // do nothing
