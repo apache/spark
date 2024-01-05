@@ -258,6 +258,9 @@ private[spark] class TaskSetManager(
 
   private[scheduler] var emittedTaskSizeWarning = false
 
+  private[scheduler] val dropTaskInfoAccumulablesOnTaskCompletion =
+    conf.get(DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION)
+
   /** Add a task to all the pending-task lists that it should be on. */
   private[spark] def addPendingTask(
       index: Int,
@@ -787,9 +790,11 @@ private[spark] class TaskSetManager(
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause successful and tasksSuccessful wrong result.
     if(info.finished) {
-      // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
-      // lifetime.
-      info.resetAccumulables()
+      if (dropTaskInfoAccumulablesOnTaskCompletion) {
+        // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
+        // lifetime.
+        info.resetAccumulables()
+      }
       return
     }
     val index = info.index
@@ -853,7 +858,7 @@ private[spark] class TaskSetManager(
     // here "result.value()" just returns the value and won't block other threads.
 
     emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), Success, result.value(),
-      result.accumUpdates, result.metricPeaks, info)
+      result.accumUpdates, result.metricPeaks)
     maybeFinishTaskSet()
   }
 
@@ -881,17 +886,18 @@ private[spark] class TaskSetManager(
       reason: TaskEndReason,
       result: Any,
       accumUpdates: Seq[AccumulatorV2[_, _]],
-      metricPeaks: Array[Long],
-      taskInfo: TaskInfo): Unit = {
-    val index = taskInfo.index
-    if (conf.get(DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION)) {
-      val clonedTaskInfo = taskInfo.cloneWithEmptyAccumulables()
+      metricPeaks: Array[Long]): Unit = {
+    val taskInfoWithAccumulables = taskInfos(taskId);
+    if (dropTaskInfoAccumulablesOnTaskCompletion) {
+      val index = taskInfoWithAccumulables.index
+      val clonedTaskInfo = taskInfoWithAccumulables.cloneWithEmptyAccumulables()
       // Update this task's taskInfo while preserving its position in the list
       taskAttempts(index) =
-        taskAttempts(index).map { i => if (i eq taskInfo) clonedTaskInfo else i }
+        taskAttempts(index).map { i => if (i eq taskInfoWithAccumulables) clonedTaskInfo else i }
       taskInfos(taskId) = clonedTaskInfo
     }
-    sched.dagScheduler.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
+    sched.dagScheduler.taskEnded(task, reason, result, accumUpdates, metricPeaks,
+      taskInfoWithAccumulables)
   }
 
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
@@ -917,9 +923,11 @@ private[spark] class TaskSetManager(
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause copiesRunning wrong result.
     if (info.finished) {
-      // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
-      // lifetime.
-      info.resetAccumulables()
+      if (dropTaskInfoAccumulablesOnTaskCompletion) {
+        // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
+        // lifetime.
+        info.resetAccumulables()
+      }
       return
     }
     removeRunningTask(tid)
@@ -955,7 +963,7 @@ private[spark] class TaskSetManager(
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
           logError(s"$task had a not serializable result: ${ef.description}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
-            accumUpdates, metricPeaks, info)
+            accumUpdates, metricPeaks)
           abort(s"$task had a not serializable result: ${ef.description}")
           return
         }
@@ -965,7 +973,7 @@ private[spark] class TaskSetManager(
           logError("Task %s in stage %s (TID %d) can not write to output file: %s; not retrying"
             .format(info.id, taskSet.id, tid, ef.description))
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
-            accumUpdates, metricPeaks, info)
+            accumUpdates, metricPeaks)
           abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
             info.id, taskSet.id, tid, ef.description))
           return
@@ -1019,7 +1027,7 @@ private[spark] class TaskSetManager(
     }
 
     emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
-      accumUpdates, metricPeaks, info)
+      accumUpdates, metricPeaks)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
@@ -1136,7 +1144,7 @@ private[spark] class TaskSetManager(
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid,
-            tasks(index), Resubmitted, null, Seq.empty, Array.empty, info)
+            tasks(index), Resubmitted, null, Seq.empty, Array.empty)
         }
       }
     }
