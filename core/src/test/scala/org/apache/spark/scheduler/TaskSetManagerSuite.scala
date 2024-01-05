@@ -281,8 +281,8 @@ class TaskSetManagerSuite
 
     // Only one task was launched and it completed successfully, thus the TaskInfo accumulables
     // should be empty.
-    assert(!manager.taskInfos.exists(l => !l._2.accumulables.isEmpty))
-    assert(manager.taskAttempts.flatMap(l => l.filter(!_.accumulables.isEmpty)).isEmpty)
+    assert(!manager.taskInfos.exists(t => !t._2.accumulables.isEmpty))
+    assert(manager.taskAttempts.flatMap(t => t.filter(!_.accumulables.isEmpty)).isEmpty)
 
     // Fail the second task (MAX_TASK_FAILURES - 1) times.
     (1 to manager.maxTaskFailures - 1).foreach { index =>
@@ -299,8 +299,8 @@ class TaskSetManagerSuite
     manager.handleSuccessfulTask(taskOption1.get.taskId, createTaskResult(1, accumUpdates))
     assert(sched.endedTasks(1) === Success)
     // The TaskInfo accumulables should be empty as the second task has now completed successfully.
-    assert(!manager.taskInfos.exists(l => !l._2.accumulables.isEmpty))
-    assert(manager.taskAttempts.flatMap(l => l.filter(!_.accumulables.isEmpty)).isEmpty)
+    assert(!manager.taskInfos.exists(t => !t._2.accumulables.isEmpty))
+    assert(manager.taskAttempts.flatMap(t => t.filter(!_.accumulables.isEmpty)).isEmpty)
 
     assert(sched.finishedManagers.contains(manager))
   }
