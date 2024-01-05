@@ -40,10 +40,11 @@ object PhysicalDataType {
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
-    case VarcharType(_) => PhysicalStringType
-    case CharType(_) => PhysicalStringType
-    case StringType => PhysicalStringType
-    case CollatedStringType(collation) => PhysicalCollatedStringType(collation)
+    // TODO: Can Varchar and Char be collated?
+    case VarcharType(_) => PhysicalStringType()
+    case CharType(_) => PhysicalStringType()
+    case StringType => PhysicalStringType()
+    case CollatedStringType(collation) => PhysicalStringType(collation)
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType
     case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
@@ -259,7 +260,7 @@ class PhysicalShortType() extends PhysicalIntegralType with PhysicalPrimitiveTyp
 }
 case object PhysicalShortType extends PhysicalShortType
 
-class PhysicalStringType() extends PhysicalDataType {
+case class PhysicalStringType(collation: Option[String]) extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -267,19 +268,12 @@ class PhysicalStringType() extends PhysicalDataType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalStringType extends PhysicalStringType
+object PhysicalStringType {
+  def apply(collation: String): PhysicalStringType =
+    new PhysicalStringType(Some(collation))
 
-case class PhysicalCollatedStringType(collation: String) extends PhysicalDataType {
-  // TODO: Store collation id (pointer to collator cache) instead of collation name
-  // to get quick lookups.
-  private[sql] type InternalType = UTF8String
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-}
-
-object PhysicalCollatedStringType {
-    def apply(collation: String): PhysicalCollatedStringType =
-      new PhysicalCollatedStringType(collation)
+  def apply(): PhysicalStringType =
+    new PhysicalStringType(None)
 }
 
 case class PhysicalArrayType(

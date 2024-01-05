@@ -1640,8 +1640,8 @@ object CodeGenerator extends Logging {
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
-        case PhysicalStringType => s"$input.getUTF8String($ordinal)"
-        case PhysicalCollatedStringType(collation) =>
+        case PhysicalStringType(None) => s"$input.getUTF8String($ordinal)"
+        case PhysicalStringType(Some(collation)) =>
           s"$input.getUTF8String($ordinal).installCollationAwareComparator(\"$collation\")"
         case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case PhysicalVariantType => s"$input.getVariant($ordinal)"
@@ -1930,7 +1930,7 @@ object CodeGenerator extends Logging {
       case PhysicalLongType => JAVA_LONG
       case _: PhysicalMapType => "MapData"
       case PhysicalShortType => JAVA_SHORT
-      case PhysicalStringType | PhysicalCollatedStringType(_) => "UTF8String"
+      case PhysicalStringType(_) => "UTF8String"
       case _: PhysicalStructType => "InternalRow"
       case _: PhysicalVariantType => "VariantVal"
       case _ => "Object"

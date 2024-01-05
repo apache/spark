@@ -219,9 +219,6 @@ class CollationSuite extends QueryTest
   }
 
   test("join operator") {
-    // TODO: For joins we are faking it a bit since hashjoins still doesn't work.
-    // Here we forced merge join.
-
     // Ignore accents and casing.
     sql(
       """

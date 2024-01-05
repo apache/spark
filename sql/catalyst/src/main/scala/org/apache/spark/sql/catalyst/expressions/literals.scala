@@ -236,7 +236,7 @@ object Literal {
           }
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
-        case PhysicalStringType | PhysicalCollatedStringType(_) => v.isInstanceOf[UTF8String]
+        case PhysicalStringType(_) => v.isInstanceOf[UTF8String]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
