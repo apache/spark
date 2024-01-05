@@ -2,10 +2,10 @@ package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import com.ibm.icu.text.Collator;
 
 
 // TODO: Using singleton for now. See what is the proper pattern here.
@@ -69,6 +69,9 @@ public class CollatorFactory {
     var comparator = new Comparator<UTF8String>() {
       @Override
       public int compare(UTF8String o1, UTF8String o2) {
+        // TODO: Both Java's collator and ICU's 4j collator work only with UTF16.
+        // Hence we do UTF8 -> UTF16 conversion here, which is very expensive.
+        // ICU4c has direct UTF8 comparison. Solution is probably to use native library here.
         return collator.compare(o1.toString(), o2.toString());
       }
     };
