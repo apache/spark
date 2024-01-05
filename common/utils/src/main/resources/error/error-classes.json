@@ -3288,6 +3288,12 @@
     ],
     "sqlState" : "00000"
   },
+  "STV2_UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "00000"
+  },
   "STV2_VALUE_SHOULD_BE_NONNULL" : {
     "message" : [
       "New value should be non-null for <typeOfState>"
