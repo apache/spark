@@ -256,7 +256,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           addOrUpdateType(nameToDataType, field, inferredType)
 
         case c: Characters if !c.isWhiteSpace =>
-          // This can be a value tag
+          // This is a value tag
           val valueTagType = inferFrom(c.getData)
           addOrUpdateType(nameToDataType, options.valueTag, valueTagType)
 
