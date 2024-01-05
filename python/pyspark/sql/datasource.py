@@ -418,25 +418,27 @@ class CaseInsensitiveDict(UserDict):
     This is used by Python data source options to ensure consistent case insensitivity.
     """
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.update(*args, **kwargs)
 
-    def __setitem__(self, key: str, value) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         super().__setitem__(key.lower(), value)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return super().__getitem__(key.lower())
 
-    def __delitem__(self, key) -> None:
+    def __delitem__(self, key: str) -> None:
         super().__delitem__(key.lower())
 
-    def __contains__(self, key: str) -> bool:
-        return super().__contains__(key.lower())
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            return super().__contains__(key.lower())
+        return False
 
-    def update(self, *args, **kwargs):
+    def update(self, *args: Any, **kwargs: Any) -> None:
         for k, v in dict(*args, **kwargs).items():
             self[k] = v
 
-    def copy(self):
+    def copy(self) -> "CaseInsensitiveDict":
         return type(self)(self)
