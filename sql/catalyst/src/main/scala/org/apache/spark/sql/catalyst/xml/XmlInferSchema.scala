@@ -167,7 +167,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     parser.peek match {
       case _: EndElement => NullType
       case _: StartElement => inferObject(parser)
-      case c: Characters =>
+      case _: Characters =>
         val structType = inferObject(parser).asInstanceOf[StructType]
         structType match {
           case _ if structType.fields.isEmpty =>
