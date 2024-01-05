@@ -507,15 +507,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     val resolved = resolveUnresolvedAttributeByPlanId(u, planId, isMetadataAccess, q)
     if (resolved.isEmpty) {
-      // For example:
-      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
-      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
-      //  df1.select(df2.a)   <-   illegal reference df2.a
-      throw new AnalysisException(
-        errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
-        messageParameters = Map("name" -> toSQLId(u.nameParts)),
-        origin = u.origin
-      )
+      //  e.g. df1.select(df2.a)   <-   illegal reference df2.a
+      throw QueryCompilationErrors.cannotResolveColumn(u)
     }
     resolved
   }
@@ -543,11 +536,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         }
       }
       if (candidates.length > 1) {
-        throw new AnalysisException(
-          errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
-          messageParameters = Map("name" -> toSQLId(u.nameParts)),
-          origin = u.origin
-        )
+        throw QueryCompilationErrors.ambiguousColumnReferences(u)
       }
       candidates.headOption
     }
