@@ -15335,7 +15335,6 @@ def reverse(col: "ColumnOrName") -> Column:
 
     Example 2: Reverse an array
 
-    >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
     >>> df.select(sf.reverse(df.data)).show()
