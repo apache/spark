@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
-import scala.util.Try
-
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -31,7 +27,6 @@ import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.util.ThreadUtils
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
