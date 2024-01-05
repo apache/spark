@@ -151,7 +151,7 @@ object StaxXmlParserUtils {
         indent > 0
       case _ => true
     })
-    consumeNextEndElement(parser)
+    skipNextEndElement(parser)
     xmlString.toString()
   }
 
@@ -180,8 +180,10 @@ object StaxXmlParserUtils {
     }
   }
 
-  def consumeNextEndElement(parser: XMLEventReader): Unit = {
+  @tailrec
+  def skipNextEndElement(parser: XMLEventReader): Unit = {
     parser.nextEvent() match {
+      case c: Characters if c.isWhiteSpace => skipNextEndElement(parser)
       case _: EndElement => // do nothing
       case _ => throw new IllegalStateException("Invalid state")
     }

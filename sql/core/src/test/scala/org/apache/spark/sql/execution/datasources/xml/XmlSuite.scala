@@ -2550,7 +2550,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |                value4
          |                <struct3>
          |                    value5
-         |                    <array2>1<!--A comment within tags--></array2>
+         |                    <array2>1<!--First comment--> <!--Second comment--></array2>
          |                    value6
          |                    <array2>2</array2>
          |                    value7
@@ -2561,10 +2561,10 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |            </array1>
          |            value10
          |            <array1>
-         |                <struct3><!--A comment within tags-->
+         |                <struct3><!--First comment--> <!--Second comment-->
          |                    <array2>3</array2>
          |                    value11
-         |                    <array2>4</array2><!--A comment within tags-->
+         |                    <array2>4</array2><!--First comment--> <!--Second comment-->
          |                </struct3>
          |                <string>string</string>
          |                value12

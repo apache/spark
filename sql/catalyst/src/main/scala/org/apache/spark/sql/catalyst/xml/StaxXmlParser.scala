@@ -202,7 +202,7 @@ class StaxXmlParser(
     (parser.peek, dataType) match {
       case (_: StartElement, dt: DataType) => convertComplicatedType(dt, attributes)
       case (_: EndElement, _: StringType) =>
-        StaxXmlParserUtils.consumeNextEndElement(parser)
+        StaxXmlParserUtils.skipNextEndElement(parser)
         // Empty. It's null if "" is the null value
         if (options.nullValue == "") {
           null
@@ -210,13 +210,13 @@ class StaxXmlParser(
           UTF8String.fromString("")
         }
       case (_: EndElement, _: DataType) =>
-        StaxXmlParserUtils.consumeNextEndElement(parser)
+        StaxXmlParserUtils.skipNextEndElement(parser)
         null
       case (c: Characters, ArrayType(st, _)) =>
         // For `ArrayType`, it needs to return the type of element. The values are merged later.
         parser.next
         val value = convertTo(c.getData, st)
-        StaxXmlParserUtils.consumeNextEndElement(parser)
+        StaxXmlParserUtils.skipNextEndElement(parser)
         value
       case (_: Characters, st: StructType) =>
         convertObject(parser, st)
@@ -230,7 +230,7 @@ class StaxXmlParser(
       case (c: Characters, dt: DataType) =>
         val value = convertTo(c.getData, dt)
         parser.next
-        StaxXmlParserUtils.consumeNextEndElement(parser)
+        StaxXmlParserUtils.skipNextEndElement(parser)
         value
       case (e: XMLEvent, dt: DataType) =>
         throw new IllegalArgumentException(
@@ -396,7 +396,7 @@ class StaxXmlParser(
                 }
               } else {
                 StaxXmlParserUtils.skipChildren(parser)
-                StaxXmlParserUtils.consumeNextEndElement(parser)
+                StaxXmlParserUtils.skipNextEndElement(parser)
               }
           }
         } catch {
