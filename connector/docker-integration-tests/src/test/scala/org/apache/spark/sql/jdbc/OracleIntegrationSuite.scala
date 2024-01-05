@@ -147,6 +147,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     conn.commit()
   }
 
+  test("show logs") {
+    assert(condition = false)
+  }
+
   test("SPARK-16625 : Importing Oracle numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
     val rows = df.collect()

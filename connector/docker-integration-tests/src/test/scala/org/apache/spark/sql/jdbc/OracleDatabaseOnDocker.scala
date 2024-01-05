@@ -51,7 +51,7 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
       // means that the lock will no wait. We set the timeout to 30 seconds to try again.
       // TODO: This workaround should be removed once the issue is fixed in the image.
       // https://github.com/gvenzl/oci-oracle-free/issues/35
-      writer.write("ALTER SESSION SET DDL_LOCK_TIMEOUT = 30;")
+      writer.write("ALTER SESSION SET DDL_LOCK_TIMEOUT = 30;\n")
       writer.write(s"""ALTER USER SYSTEM IDENTIFIED BY "$oracle_password";""")
       writer.close()
       val newBind = new Bind(
