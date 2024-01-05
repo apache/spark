@@ -38,9 +38,14 @@ object StaxXmlParserUtils {
   def filteredReader(xml: String): XMLEventReader = {
     val filter = new EventFilter {
       override def accept(event: XMLEvent): Boolean =
-        // Ignore comments and processing instructions
         event.getEventType match {
+          // Ignore comments and processing instructions
           case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
+          // unsupported events
+          case XMLStreamConstants.DTD |
+               XMLStreamConstants.ENTITY_DECLARATION |
+               XMLStreamConstants.ENTITY_REFERENCE |
+               XMLStreamConstants.NOTATION_DECLARATION => false
           case _ => true
         }
     }

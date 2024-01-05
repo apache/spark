@@ -2551,6 +2551,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |                <struct3>
          |                    value5
          |                    <array2>1<!--First comment--> <!--Second comment--></array2>
+         |                    <![CDATA[This is a CDATA section containing <sample1> text.]]>
+         |                    <![CDATA[This is a CDATA section containing <sample2> text.]]>
          |                    value6
          |                    <array2>2</array2>
          |                    value7
@@ -2592,14 +2594,22 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         Row(
           ArraySeq("value3", "value10", "value13", "value14"),
           Array(
-            Row(
-              ArraySeq("value4", "value8", "value9"),
-              "string",
-              Row(ArraySeq("value5", "value6", "value7"), ArraySeq(1, 2))),
-            Row(
-              ArraySeq("value12"),
-              "string",
-              Row(ArraySeq("value11"), ArraySeq(3, 4)))),
+              Row(
+                ArraySeq("value4", "value8", "value9"),
+                "string",
+                Row(
+                  ArraySeq(
+                    "value5",
+                    "This is a CDATA section containing <sample1> text." +
+                      "\n                    This is a CDATA section containing <sample2> text.\n" +
+                      "                    value6",
+                    "value7"
+                  ),
+                  ArraySeq(1, 2)
+                )
+              ),
+              Row(ArraySeq("value12"), "string", Row(ArraySeq("value11"), ArraySeq(3, 4)))
+            ),
           3))))
 
     checkAnswer(df, expectedAns)
