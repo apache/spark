@@ -404,7 +404,6 @@ class StaxXmlParser(
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
             StaxXmlParserUtils.skipChildren(parser)
-            StaxXmlParserUtils.consumeNextEndElement(parser)
         }
 
         case c: Characters if !c.isWhiteSpace =>

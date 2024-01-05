@@ -2535,6 +2535,20 @@ class XmlSuite extends QueryTest with SharedSparkSession {
               Array("value1", "value2"),
               Array(1, 2),
               3)))))
+
+    val schema = new StructType()
+      .add("struct1", new StructType().add("struct2",
+        new StructType()
+          .add("array", ArrayType(LongType))
+          .add("_VALUE", LongType)))
+    val resultWithException = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .schema(schema)
+      .xml(input)
+    // TODO: we don't handle the value tag when they're bad records
+    checkAnswer(resultWithException, Seq(Row(null)))
   }
 
   test("capture values interspersed between elements - deeply nested") {
