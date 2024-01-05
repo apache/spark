@@ -11153,30 +11153,96 @@ def parse_url(
     url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
 ) -> Column:
     """
-    Extracts a part from a URL.
+    URL function: Extracts a specified part from a URL. If a key is provided,
+    it returns the associated query parameter value.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     url : :class:`~pyspark.sql.Column` or str
-        A column of string.
+        A column of strings, each representing a URL.
     partToExtract : :class:`~pyspark.sql.Column` or str
-        A column of string, the path.
+        A column of strings, each representing the part to extract from the URL.
     key : :class:`~pyspark.sql.Column` or str, optional
-        A column of string, the key.
+        A column of strings, each representing the key of a query parameter in the URL.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the value of the extracted part from the URL.
 
     Examples
     --------
-    >>> df = spark.createDataFrame(
-    ...     [("http://spark.apache.org/path?query=1", "QUERY", "query",)],
-    ...     ["a", "b", "c"]
-    ... )
-    >>> df.select(parse_url(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r='1')]
+    Example 1: Extracting the query part from a URL
 
-    >>> df.select(parse_url(df.a, df.b).alias('r')).collect()
-    [Row(r='query=1')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |             query=1|
+    +--------------------+
+
+    Example 2: Extracting the value of a specific query parameter from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   ["url", "part", "key"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part, df.key)).show()
+    +-------------------------+
+    |parse_url(url, part, key)|
+    +-------------------------+
+    |                        1|
+    +-------------------------+
+
+    Example 3: Extracting the protocol part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PROTOCOL")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |               https|
+    +--------------------+
+
+    Example 4: Extracting the host part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "HOST")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |    spark.apache.org|
+    +--------------------+
+
+    Example 5: Extracting the path part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PATH")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |               /path|
+    +--------------------+
     """
     if key is not None:
         return _invoke_function_over_columns("parse_url", url, partToExtract, key)
@@ -11217,21 +11283,77 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 @_try_remote_functions
 def url_decode(str: "ColumnOrName") -> Column:
     """
-    Decodes a `str` in 'application/x-www-form-urlencoded' format
-    using a specific encoding scheme.
+    URL function: Decodes a URL-encoded string in 'application/x-www-form-urlencoded'
+    format to its original format.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of string to decode.
+        A column of strings, each representing a URL-encoded string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the decoded string.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["a"])
-    >>> df.select(url_decode(df.a).alias('r')).collect()
-    [Row(r='https://spark.apache.org')]
+    Example 1: Decoding a URL-encoded string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show(truncate=False)
+    +------------------------+
+    |url_decode(url)         |
+    +------------------------+
+    |https://spark.apache.org|
+    +------------------------+
+
+    Example 2: Decoding a URL-encoded string with spaces
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Hello%20World%21",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |   Hello World!|
+    +---------------+
+
+    Example 3: Decoding a URL-encoded string with special characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("A%2BB%3D%3D",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |          A+B==|
+    +---------------+
+
+    Example 4: Decoding a URL-encoded string with non-ASCII characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("%E4%BD%A0%E5%A5%BD",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |           你好|
+    +---------------+
+
+    Example 5: Decoding a URL-encoded string with hexadecimal values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("%7E%21%40%23%24%25%5E%26%2A%28%29%5F%2B",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |  ~!@#$%^&*()_+|
+    +---------------+
     """
     return _invoke_function_over_columns("url_decode", str)
 
@@ -11239,21 +11361,77 @@ def url_decode(str: "ColumnOrName") -> Column:
 @_try_remote_functions
 def url_encode(str: "ColumnOrName") -> Column:
     """
-    Translates a string into 'application/x-www-form-urlencoded' format
-    using a specific encoding scheme.
+    URL function: Encodes a string into a URL-encoded string in
+    'application/x-www-form-urlencoded' format.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of string to encode.
+        A column of strings, each representing a string to be URL-encoded.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the URL-encoded string.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("https://spark.apache.org",)], ["a"])
-    >>> df.select(url_encode(df.a).alias('r')).collect()
-    [Row(r='https%3A%2F%2Fspark.apache.org')]
+    Example 1: Encoding a simple URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https://spark.apache.org",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show(truncate=False)
+    +------------------------------+
+    |url_encode(url)               |
+    +------------------------------+
+    |https%3A%2F%2Fspark.apache.org|
+    +------------------------------+
+
+    Example 2: Encoding a URL with spaces
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Hello World!",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show()
+    +---------------+
+    |url_encode(url)|
+    +---------------+
+    | Hello+World%21|
+    +---------------+
+
+    Example 3: Encoding a URL with special characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("A+B==",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show()
+    +---------------+
+    |url_encode(url)|
+    +---------------+
+    |    A%2BB%3D%3D|
+    +---------------+
+
+    Example 4: Encoding a URL with non-ASCII characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("你好",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show()
+    +------------------+
+    |   url_encode(url)|
+    +------------------+
+    |%E4%BD%A0%E5%A5%BD|
+    +------------------+
+
+    Example 5: Encoding a URL with hexadecimal values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("~!@#$%^&*()_+",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show(truncate=False)
+    +-----------------------------------+
+    |url_encode(url)                    |
+    +-----------------------------------+
+    |%7E%21%40%23%24%25%5E%26*%28%29_%2B|
+    +-----------------------------------+
     """
     return _invoke_function_over_columns("url_encode", str)
 
