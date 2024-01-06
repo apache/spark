@@ -3380,6 +3380,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val options = ctx.expressionProperty.asScala.map { property =>
       val key: String = visitPropertyKey(property.key)
       val value: Expression = Option(property.value).map(expression).orNull
+      if (value == null) {
+        operationNotAllowed(
+          s"Value must be specified for key: $key.", ctx)
+      }
       key -> value
     }.toSeq
     OptionList(options)
