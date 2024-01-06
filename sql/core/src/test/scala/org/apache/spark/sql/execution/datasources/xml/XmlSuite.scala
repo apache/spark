@@ -2697,8 +2697,8 @@ class XmlSuite
       // create data
       val data =
         spark.sparkContext.parallelize(
-          (0 until numRecords).map(i => Row(i.toString, (i * 2).toString)))
-      val schema = buildSchema(field("a1"), field("a2"))
+          (0 until numRecords).map(i => Row(i.toLong, (i * 2).toLong)))
+      val schema = buildSchema(field("a1", LongType), field("a2", LongType))
       val df = spark.createDataFrame(data, schema)
 
       df.coalesce(4)
