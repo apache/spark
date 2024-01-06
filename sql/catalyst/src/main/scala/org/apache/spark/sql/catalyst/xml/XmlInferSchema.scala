@@ -78,13 +78,26 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       xml
     }
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
+    val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
       iter.flatMap { xml =>
         infer(xml, xsdSchema)
+      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
+    }
+
+    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
+    // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
+    var rootType: DataType = StructType(Nil)
+    val foldPartition = (iter: Iterator[DataType]) =>
+      iter.fold(StructType(Nil))(compatibleType(caseSensitive, options.valueTag))
+    val mergeResult = (index: Int, taskResult: DataType) => {
+      rootType = SQLConf.withExistingConf(existingConf) {
+        compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
       }
-    }.fold(StructType(Seq()))(compatibleType(caseSensitive, options.valueTag))
+    }
+    xml.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -315,21 +328,10 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       return None
     }
 
-    try {
-      // The conversion can fail when the `field` is not a form of number.
-      val bigDecimal = decimalParser(signSafeValue)
-      // Because many other formats do not support decimal, it reduces the cases for
-      // decimals by disallowing values having scale (e.g. `1.1`).
-      if (bigDecimal.scale <= 0) {
-        // `DecimalType` conversion can fail when
-        //   1. The precision is bigger than 38.
-        //   2. scale is bigger than precision.
-        return Some(DecimalType(bigDecimal.precision, bigDecimal.scale))
-      }
-    } catch {
-      case _ : Exception =>
+    allCatch opt {
+      val bigDecimal = decimalParser(value)
+      DecimalType(Math.max(bigDecimal.precision, bigDecimal.scale), bigDecimal.scale)
     }
-    None
   }
 
   private def isDouble(value: String): Boolean = {
