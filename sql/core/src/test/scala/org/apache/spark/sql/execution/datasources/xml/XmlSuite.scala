@@ -2657,19 +2657,12 @@ class XmlSuite
         assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        spark.read
-          .option("rowTag", "ROW")
-          .option("multiLine", false)
-          .xml(inputFile.toURI.toString)
-          .collect()
-        assert(
-          spark.read
-            .option("rowTag", "ROW")
-            .option("multiLine", true)
-            .xml(inputFile.toURI.toString)
-            .collect()
-            .isEmpty
-        )
+        val result = spark.read
+           .option("rowTag", "ROW")
+           .option("multiLine", false)
+           .xml(inputFile.toURI.toString)
+           .collect()
+        assert(result.isEmpty)
       }
     })
     withTempPath { dir =>
@@ -2724,7 +2717,9 @@ class XmlSuite
             .option("compression", "gzip")
             .option("rowTag", "row")
             .load(corruptedDir.getCanonicalPath)
-          assert(dfCorrupted.collect().length > 100)
+          val results = dfCorrupted.collect()
+          assert(results(1) === Row(1, 2))
+          assert(results.length > 100)
           val dfCorruptedWSchema = spark.read
             .format(format)
             .schema(schema)
@@ -2732,7 +2727,8 @@ class XmlSuite
             .option("compression", "gzip")
             .option("rowTag", "row")
             .load(corruptedDir.getCanonicalPath)
-          dfCorrupted.equals(dfCorruptedWSchema)
+          assert(dfCorrupted.dtypes === dfCorruptedWSchema.dtypes)
+          checkAnswer(dfCorrupted, dfCorruptedWSchema)
         }
       }
     }
