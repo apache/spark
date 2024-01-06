@@ -504,8 +504,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       q: Seq[LogicalPlan]): NamedExpression = {
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
-
-    // resolve at most 2 ambiguous references
     val resolved = q.iterator
       .flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
       .take(2).toSeq
@@ -524,25 +522,23 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan): Option[NamedExpression] = {
-    val outputSet = if (isMetadataAccess) {
-      // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
-      AttributeSet(p.output ++ p.metadataOutput)
+    val candidates = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess).toSeq
     } else {
-      p.outputSet
+      p.children.flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
     }
-    if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
-        .filter(_.references.subsetOf(outputSet))
+    if (candidates.isEmpty) {
+      None
+    } else if (candidates.length > 1) {
+      throw QueryCompilationErrors.ambiguousColumnReferences(u)
     } else {
-      val candidates = p.children
-        .flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
-      if (candidates.isEmpty) {
-        None
-      } else if (candidates.length > 1) {
-        throw QueryCompilationErrors.ambiguousColumnReferences(u)
+      val outputSet = if (isMetadataAccess) {
+        // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
+        AttributeSet(p.output ++ p.metadataOutput)
       } else {
-        candidates.find(_.references.subsetOf(outputSet))
+        p.outputSet
       }
+      candidates.find(_.references.subsetOf(outputSet))
     }
   }
 

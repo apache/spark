@@ -7577,7 +7577,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "first"): Column.desc_nulls_first,
             (False, "last"): Column.desc_nulls_last,
         }
-        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
+
+        sdf = self._internal.spark_frame
+        new_by = []
+        new_by_2 = []
+        new_by_names = []
+        for i, (scol, asc) in enumerate(zip(by, ascending)):
+            name = verify_temp_column_name(sdf, f"__data_frame_sort_by_{i}_temp_column__")
+            new_by_names.append(name)
+            new_by.append(scol.alias(name))
+            new_by_2.append(mapper[(asc, na_position)](F.col(name)))
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
@@ -7587,7 +7596,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
             raise ValueError('keep must be either "first", "last" or "all".')
-        sdf = self._internal.resolved_copy.spark_frame.sort(*by, natural_order_scol)
+
+        sdf = (
+            sdf.select(self._internal.spark_columns + list(HIDDEN_COLUMNS) + new_by)
+            .sort(*new_by_2, natural_order_scol)
+            .drop(*new_by_names)
+        )
+
         return DataFrame(self._internal.with_new_sdf(sdf))
 
     def sort_values(
