@@ -31,12 +31,11 @@ import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.mapred.OrcInputFormat;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import org.apache.spark.sql.execution.datasources.orc.OrcShimUtils.VectorizedRowBatchWrap;
-import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.execution.vectorized.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
@@ -73,11 +72,14 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   @VisibleForTesting
   public ColumnarBatch columnarBatch;
 
+  private final MemoryMode memoryMode;
+
   // The wrapped ORC column vectors.
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
 
-  public OrcColumnarBatchReader(int capacity) {
+  public OrcColumnarBatchReader(int capacity, MemoryMode memoryMode) {
     this.capacity = capacity;
+    this.memoryMode = memoryMode;
   }
 
 
@@ -177,7 +179,12 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         int colId = requestedDataColIds[i];
         // Initialize the missing columns once.
         if (colId == -1) {
-          OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
+          final WritableColumnVector missingCol;
+          if (memoryMode == MemoryMode.OFF_HEAP) {
+            missingCol = new OffHeapColumnVector(capacity, dt);
+          } else {
+            missingCol = new OnHeapColumnVector(capacity, dt);
+          }
           // Check if the missing column has an associated default value in the schema metadata.
           // If so, fill the corresponding column vector with the value.
           Object defaultValue = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)[i];
