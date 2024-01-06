@@ -25,11 +25,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, NamedExpression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, IgnoreCachedData, LogicalPlan, Project, ResolvedHint, SubqueryAlias, UnaryNode, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, IgnoreCachedData, LeafNode, LogicalPlan, Project, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.analysis.EarlyCollapseProject
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
@@ -317,119 +318,113 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
     val fullMatch = cachedData.find(cd => plan.sameResult(cd.plan))
-    fullMatch.map(Option(_)).getOrElse(lookUpPartiallyMatchedCachedPlan(plan))
+    fullMatch.map(Option(_)).getOrElse(
+      plan match {
+        case p: Project => lookUpPartiallyMatchedCachedPlan(p)
+        case _ => None
+      })
   }
 
-  private def lookUpPartiallyMatchedCachedPlan(plan: LogicalPlan): Option[CachedData] = {
+  private def lookUpPartiallyMatchedCachedPlan(incomingProject: Project): Option[CachedData] = {
     var foundMatch = false
     var partialMatch: Option[CachedData] = None
+    val (incmngchild, incomingFilterChain) =
+      CompatibilityChecker.extractChildIgnoringFiltersFromIncomingProject(incomingProject)
     for (cd <- cachedData if !foundMatch) {
-      (plan, cd.plan) match {
-        case (incomingPlan: UnaryNode, cachedPlan: UnaryNode) =>
-          val (incmngchild, skippedFilters) = extractChildIgnoringFilters(incomingPlan)
-          if (incmngchild.sameResult(cachedPlan.child)) {
-            if (incomingPlan.getClass == cachedPlan.getClass &&
-              incomingPlan.isInstanceOf[Project]) {
-              val incomingProject = incomingPlan.asInstanceOf[Project]
-              val cdPlanProject = cachedPlan.asInstanceOf[Project]
-              // since the child of both incoming and cached plan are same
-              // that is why we are here. for mapping and comparison purposes lets
-              // canonicalize the cachedPlan's project list in terms of the incoming plan's child
-              // so that we can map correctly.
-              val cdPlanToIncomngPlanChildOutputMapping =
-              cdPlanProject.child.output.zip(incmngchild.output).toMap
+      (incmngchild, incomingFilterChain, cd.plan) match {
+        case CompatibilityChecker(residualIncomingFilterChain, cdPlanProject) =>
+          // since the child of both incoming and cached plan are same
+          // that is why we are here. for mapping and comparison purposes lets
+          // canonicalize the cachedPlan's project list in terms of the incoming plan's child
+          // so that we can map correctly.
+          val cdPlanToIncomngPlanChildOutputMapping =
+            cdPlanProject.child.output.zip(incmngchild.output).toMap
 
-              val canonicalizedCdProjList = cdPlanProject.projectList.map(_.transformUp {
-                case attr: Attribute => cdPlanToIncomngPlanChildOutputMapping(attr)
-              }.asInstanceOf[NamedExpression])
+          val canonicalizedCdProjList = cdPlanProject.projectList.map(_.transformUp {
+            case attr: Attribute => cdPlanToIncomngPlanChildOutputMapping(attr)
+          }.asInstanceOf[NamedExpression])
 
-              // matchIndexInCdPlanProj remains  -1 in the end, it indicates it is
-              // new cols created out of existing output attribs
-              val (directlyMappedincomingToCachedPlanIndx, inComingProjNoDirectMapping) =
-              getDirectAndIndirectMappingOfIncomingToCachedProjectAttribs(
-                incomingProject, canonicalizedCdProjList)
+          // matchIndexInCdPlanProj remains  -1 in the end, it indicates it is
+          // new cols created out of existing output attribs
+          val (directlyMappedincomingToCachedPlanIndx, inComingProjNoDirectMapping) =
+          getDirectAndIndirectMappingOfIncomingToCachedProjectAttribs(
+            incomingProject, canonicalizedCdProjList)
 
-              // Now there is a possible case where a literal is present in IMR as attribute
-              // and the incoming project also has that literal somewhere in the alias. Though
-              // we do not need to read it but looks like the deserializer fails if we skip that
-              // literal in the projection enforced on IMR. so in effect even if we do not
-              // require an attribute it still needs to be present in the projection forced
-              // also its possible that some attribute from IMR can be used in subexpression
-              // of the incoming projection. so we have to handle that
-              val unusedAttribsOfCDPlanToGenIncomingAttr =
-              cdPlanProject.projectList.indices.filterNot(i =>
-                directlyMappedincomingToCachedPlanIndx.exists(_._2 == i)).map(i => {
-                val cdAttrib = cdPlanProject.projectList(i)
-                i -> AttributeReference(cdAttrib.name, cdAttrib.dataType,
-                  cdAttrib.nullable, cdAttrib.metadata)(qualifier = cdAttrib.qualifier)
-              })
+          // Now there is a possible case where a literal is present in IMR as attribute
+          // and the incoming project also has that literal somewhere in the alias. Though
+          // we do not need to read it but looks like the deserializer fails if we skip that
+          // literal in the projection enforced on IMR. so in effect even if we do not
+          // require an attribute it still needs to be present in the projection forced
+          // also its possible that some attribute from IMR can be used in subexpression
+          // of the incoming projection. so we have to handle that
+          val unusedAttribsOfCDPlanToGenIncomingAttr =
+          cdPlanProject.projectList.indices.filterNot(i =>
+            directlyMappedincomingToCachedPlanIndx.exists(_._2 == i)).map(i => {
+            val cdAttrib = cdPlanProject.projectList(i)
+            i -> AttributeReference(cdAttrib.name, cdAttrib.dataType,
+              cdAttrib.nullable, cdAttrib.metadata)(qualifier = cdAttrib.qualifier)
+          })
 
-              // Because in case of rename multiple incmong named exprs ( attribute or aliases)
-              // will point to a common cdplan attrib, we need to ensure they do not create
-              // separate attribute in the the modifiedProject for incoming plan..
-              // that is a single attribute ref is present in all mixes of rename and  pass thru
-              // attributes.
-              // so we will use the first attribute ref in the incoming directly mapped project
-              // or if no attrib exists ( only case of rename) we will pick the child expr which
-              // is bound to be an attribute as the common ref.
-              val cdAttribToCommonAttribForIncmngNe = directlyMappedincomingToCachedPlanIndx.map {
-                case (inAttribIndex, cdAttribIndex) =>
-                  cdPlanProject.projectList(cdAttribIndex).toAttribute ->
-                    incomingProject.projectList(inAttribIndex)
-              }.groupBy(_._1).map {
-                case (cdAttr, incomngSeq) =>
-                  val incmngCommonAttrib = incomngSeq.map(_._2).flatMap {
-                    case attr: Attribute => Seq(attr)
-                    case Alias(attr: Attribute, _) => Seq(attr)
-                    case _ => Seq.empty
-                  }.headOption.getOrElse(
-                    AttributeReference(cdAttr.name, cdAttr.dataType, cdAttr.nullable)())
-                  cdAttr -> incmngCommonAttrib
-              }
-
-              // If expressions of inComingProjNoDirectMapping can be expressed in terms of the
-              // incoming attribute refs or incoming alias exprs,  which can be mapped directly
-              // to the CachedPlan's output, we are good. so lets transform such indirectly
-              // mappable named expressions in terms of mappable attributes of the incoming plan
-              val transformedIndirectlyMappableExpr =
-              transformIndirectlyMappedExpressionsToUseCachedPlanAttributes(
-                inComingProjNoDirectMapping, incomingProject, cdPlanProject,
-                directlyMappedincomingToCachedPlanIndx, cdAttribToCommonAttribForIncmngNe,
-                unusedAttribsOfCDPlanToGenIncomingAttr, canonicalizedCdProjList)
-
-              val projectionToForceOnCdPlan = cachedPlan.output.zipWithIndex.map {
-                case (cdAttr, i) =>
-                  cdAttribToCommonAttribForIncmngNe.getOrElse(cdAttr,
-                    unusedAttribsOfCDPlanToGenIncomingAttr.find(_._1 == i).map(_._2).get)
-              }
-              val forcedAttribset = AttributeSet(projectionToForceOnCdPlan)
-              if (transformedIndirectlyMappableExpr.forall(
-                  _._2.references.subsetOf(forcedAttribset))) {
-                val transformedIntermediateFilters = transformFilters(skippedFilters,
-                  projectionToForceOnCdPlan, canonicalizedCdProjList)
-                if (transformedIntermediateFilters.forall(_.references.subsetOf(forcedAttribset))) {
-                  val modifiedInProj = replacementProjectListForIncomingProject(incomingProject,
-                    directlyMappedincomingToCachedPlanIndx, cdPlanProject,
-                    cdAttribToCommonAttribForIncmngNe, transformedIndirectlyMappableExpr)
-                  val root = cd.cachedRepresentation.toOption.get.withOutput(
-                    projectionToForceOnCdPlan)
-                  val newPartialPlan = if (transformedIntermediateFilters.isEmpty) {
-                    Project(modifiedInProj, root)
-                  } else {
-                    val lastFilterNode = transformedIntermediateFilters.last
-                    val lastFilterMod = lastFilterNode.copy(
-                      child = root)
-                    val filterChain = transformedIntermediateFilters.dropRight(1).foldRight(
-                      lastFilterMod)((f, c) => f.copy( child = c))
-                    Project(modifiedInProj, filterChain)
-                  }
-                  partialMatch = Option(cd.copy(cachedRepresentation = Left(newPartialPlan)))
-                  foundMatch = true
-                }
-              }
-            }
+          // Because in case of rename multiple incmong named exprs ( attribute or aliases)
+          // will point to a common cdplan attrib, we need to ensure they do not create
+          // separate attribute in the the modifiedProject for incoming plan..
+          // that is a single attribute ref is present in all mixes of rename and  pass thru
+          // attributes.
+          // so we will use the first attribute ref in the incoming directly mapped project
+          // or if no attrib exists ( only case of rename) we will pick the child expr which
+          // is bound to be an attribute as the common ref.
+          val cdAttribToCommonAttribForIncmngNe = directlyMappedincomingToCachedPlanIndx.map {
+            case (inAttribIndex, cdAttribIndex) =>
+              cdPlanProject.projectList(cdAttribIndex).toAttribute ->
+                incomingProject.projectList(inAttribIndex)
+          }.groupBy(_._1).map {
+            case (cdAttr, incomngSeq) =>
+              val incmngCommonAttrib = incomngSeq.map(_._2).flatMap {
+                case attr: Attribute => Seq(attr)
+                case Alias(attr: Attribute, _) => Seq(attr)
+                case _ => Seq.empty
+              }.headOption.getOrElse(
+                AttributeReference(cdAttr.name, cdAttr.dataType, cdAttr.nullable)())
+              cdAttr -> incmngCommonAttrib
           }
 
+          // If expressions of inComingProjNoDirectMapping can be expressed in terms of the
+          // incoming attribute refs or incoming alias exprs,  which can be mapped directly
+          // to the CachedPlan's output, we are good. so lets transform such indirectly
+          // mappable named expressions in terms of mappable attributes of the incoming plan
+          val transformedIndirectlyMappableExpr =
+          transformIndirectlyMappedExpressionsToUseCachedPlanAttributes(
+            inComingProjNoDirectMapping, incomingProject, cdPlanProject,
+            directlyMappedincomingToCachedPlanIndx, cdAttribToCommonAttribForIncmngNe,
+            unusedAttribsOfCDPlanToGenIncomingAttr, canonicalizedCdProjList)
+
+          val projectionToForceOnCdPlan = cdPlanProject.output.zipWithIndex.map {
+            case (cdAttr, i) =>
+              cdAttribToCommonAttribForIncmngNe.getOrElse(cdAttr,
+                unusedAttribsOfCDPlanToGenIncomingAttr.find(_._1 == i).map(_._2).get)
+          }
+          val forcedAttribset = AttributeSet(projectionToForceOnCdPlan)
+          if (transformedIndirectlyMappableExpr.forall(
+            _._2.references.subsetOf(forcedAttribset))) {
+            val transformedIntermediateFilters = transformFilters(residualIncomingFilterChain,
+              projectionToForceOnCdPlan, canonicalizedCdProjList)
+            if (transformedIntermediateFilters.forall(_.references.subsetOf(forcedAttribset))) {
+              val modifiedInProj = replacementProjectListForIncomingProject(incomingProject,
+                directlyMappedincomingToCachedPlanIndx, cdPlanProject,
+                cdAttribToCommonAttribForIncmngNe, transformedIndirectlyMappableExpr)
+              val root = cd.cachedRepresentation.toOption.get.withOutput(
+                projectionToForceOnCdPlan)
+              val newPartialPlan = if (transformedIntermediateFilters.isEmpty) {
+                Project(modifiedInProj, root)
+              } else {
+                val chainedFilter = CompatibilityChecker.combineFilterChainUsingRoot(
+                  transformedIntermediateFilters, root)
+                Project(modifiedInProj, chainedFilter)
+              }
+              partialMatch = Option(cd.copy(cachedRepresentation = Left(newPartialPlan)))
+              foundMatch = true
+            }
+          }
         case _ =>
       }
     }
@@ -454,20 +449,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
       f.copy(condition = transformedCondn)
     })
-  }
-
-  private def extractChildIgnoringFilters(incomingPlan: UnaryNode): (LogicalPlan, Seq[Filter]) = {
-    val collectedFilters = mutable.ListBuffer[Filter]()
-    var child: LogicalPlan = incomingPlan.child
-    var keepChecking = true
-    while(keepChecking) {
-      child match {
-        case f: Filter => child = f.child
-            collectedFilters += f
-        case _ => keepChecking = false
-      }
-    }
-    (child, collectedFilters.toSeq)
   }
 
   private def replacementProjectListForIncomingProject(
@@ -683,4 +664,88 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 object CacheManager {
   val inMemoryRelationExtractor: LogicalPlan => InMemoryRelation =
     plan => plan.collectLeaves().head.asInstanceOf[InMemoryRelation]
+}
+
+object CompatibilityChecker {
+  def unapply(data: (LogicalPlan, Seq[Filter], LogicalPlan)): Option[(Seq[Filter], Project)] = {
+    val(incomingChild, incomingFilterChain, cachedPlan) = data
+    cachedPlan match {
+      case p: Project if incomingChild.sameResult(p.child) => Option(incomingFilterChain -> p)
+
+      case f: Filter =>
+        val collectedFilters = mutable.ListBuffer[Filter](f)
+        var projectFound: Option[Project] = None
+        var child: LogicalPlan = f.child
+        var keepChecking = true
+        while (keepChecking) {
+          child match {
+            case x: Filter => child = x.child
+              collectedFilters += x
+            case p: Project => projectFound = Option(p)
+              keepChecking = false
+            case _ => keepChecking = false
+          }
+        }
+        if (collectedFilters.size <= incomingFilterChain.size &&
+          projectFound.exists(_.child.sameResult(incomingChild))) {
+          val (residualIncomingFilterChain, otherFilterChain) = incomingFilterChain.splitAt(
+            incomingFilterChain.size - collectedFilters.size)
+          val isCompatible = if (otherFilterChain.isEmpty) {
+            true
+          } else {
+            // the other filter chain must be equal to the collected filter chain
+            // But we need to transform the collected Filter chain such that it is below
+            // the project of the cached plan, we have found, as the incoming filters are also below
+            // the incoming project.
+            val mappingFilterExpr = AttributeMap(projectFound.get.projectList.flatMap {
+              case _: Attribute => Seq.empty[(Attribute, (NamedExpression, Expression))]
+              case al: Alias => Seq(al.toAttribute -> (al, al.child))
+            })
+
+            val modifiedCdFilters = collectedFilters.map(f =>
+              f.copy(condition = EarlyCollapseProject.expressionRemapper(
+                f.condition, mappingFilterExpr))).toSeq
+            val chainedFilter1 = combineFilterChainUsingRoot(otherFilterChain,
+              EmptyRelation(incomingChild.output))
+            val chainedFilter2 = combineFilterChainUsingRoot(modifiedCdFilters,
+              EmptyRelation(projectFound.map(_.child).get.output))
+            chainedFilter1.sameResult(chainedFilter2)
+          }
+          if (isCompatible) {
+            Option(residualIncomingFilterChain -> projectFound.get)
+          } else {
+            None
+          }
+        } else {
+          None
+        }
+
+      case _ => None
+    }
+  }
+
+  def combineFilterChainUsingRoot(filters: Seq[Filter], root: LogicalPlan): Filter = {
+    val lastFilterNode = filters.last
+    val lastFilterMod = lastFilterNode.copy(child = root)
+    filters.dropRight(1).foldRight(lastFilterMod)((f, c) => f.copy(child = c))
+  }
+
+  def extractChildIgnoringFiltersFromIncomingProject(incomingProject: Project):
+      (LogicalPlan, Seq[Filter]) = {
+    val collectedFilters = mutable.ListBuffer[Filter]()
+    var child: LogicalPlan = incomingProject.child
+    var keepChecking = true
+    while (keepChecking) {
+      child match {
+        case f: Filter => child = f.child
+          collectedFilters += f
+        case _ => keepChecking = false
+      }
+    }
+    (child, collectedFilters.toSeq)
+  }
+
+  case class EmptyRelation(output: Seq[Attribute]) extends LeafNode {
+    override def maxRows: Option[Long] = Some(0)
+  }
 }
