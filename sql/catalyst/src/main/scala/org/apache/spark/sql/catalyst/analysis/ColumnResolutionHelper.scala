@@ -505,15 +505,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       q: Seq[LogicalPlan]): NamedExpression = {
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
 
-    val outputSet = if (isMetadataAccess) {
-      AttributeSet(q.flatMap(p => p.output ++ p.metadataOutput))
-    } else {
-      AttributeSet(q.flatMap(p => p.output))
-    }
     // resolve at most 2 ambiguous references
     val resolved = q.iterator
       .flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
-      .filter(_.references.subsetOf(outputSet))
       .take(2).toSeq
     if (resolved.isEmpty) {
       //  e.g. df1.select(df2.a)   <-   illegal reference df2.a
@@ -530,8 +524,15 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan): Option[NamedExpression] = {
+    val outputSet = if (isMetadataAccess) {
+      // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
+      AttributeSet(p.output ++ p.metadataOutput)
+    } else {
+      p.outputSet
+    }
     if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
       resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess)
+        .filter(_.references.subsetOf(outputSet))
     } else {
       val candidates = p.children
         .flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
@@ -540,12 +541,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       } else if (candidates.length > 1) {
         throw QueryCompilationErrors.ambiguousColumnReferences(u)
       } else {
-        val outputSet = if (isMetadataAccess) {
-          // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
-          AttributeSet(p.output ++ p.metadataOutput)
-        } else {
-          p.outputSet
-        }
         candidates.find(_.references.subsetOf(outputSet))
       }
     }
