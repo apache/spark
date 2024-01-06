@@ -2421,7 +2421,7 @@ class DDLParserSuite extends AnalysisTest {
         stop = 42))
   }
 
-  test("dfs") {
+  test("SPARK-46610: throw exception when no value for a key in create table options") {
     val createTableSql = "create table test_table using my_data_source options (password)"
     checkError(
       exception = parseException(createTableSql),
