@@ -172,9 +172,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
               executorInfo.freeCores += taskCpus
-              resources.foreach { case (k, v) =>
-                executorInfo.resourcesInfo.get(k).foreach { r =>
-                  r.release(v.addresses.toImmutableArraySeq)
+              resources.foreach { case (rName, addressAmount) =>
+                executorInfo.resourcesInfo.get(rName).foreach { r =>
+                  r.release(addressAmount)
                 }
               }
               makeOffers(executorId)
@@ -271,12 +271,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map { case (rName, info) =>
-            // tell the executor it can schedule resources up to numSlotsPerAddress times,
-            // as configured by the user, or set to 1 as that is the default (1 task/resource)
-            val numParts = scheduler.sc.resourceProfileManager
-              .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
-            (info.name,
-              new ExecutorResourceInfo(info.name, info.addresses.toImmutableArraySeq, numParts))
+            (info.name, new ExecutorResourceInfo(info.name, info.addresses.toIndexedSeq))
           }
           // If we've requested the executor figure out when we did.
           val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
@@ -385,9 +380,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     private def buildWorkerOffer(executorId: String, executorData: ExecutorData) = {
-      val resources = executorData.resourcesInfo.map { case (rName, rInfo) =>
-        (rName, rInfo.availableAddrs.toBuffer)
-      }
+      val resources = ExecutorResourcesAmounts(executorData.resourcesInfo)
       WorkerOffer(
         executorId,
         executorData.executorHost,
@@ -446,11 +439,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
           executorData.freeCores -= task.cpus
-          task.resources.foreach { case (rName, rInfo) =>
-            assert(executorData.resourcesInfo.contains(rName))
-            executorData.resourcesInfo(rName).acquire(rInfo.addresses.toImmutableArraySeq)
+          task.resources.foreach { case (rName, addressAmounts) =>
+            executorData.resourcesInfo(rName).acquire(addressAmounts)
           }
-
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")
 
@@ -766,7 +757,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           (
             executor.resourceProfileId,
             executor.totalCores,
-            executor.resourcesInfo.map { case (name, rInfo) => (name, rInfo.totalAddressAmount) }
+            executor.resourcesInfo.map { case (name, rInfo) =>
+              val taskAmount = rp.taskResources.get(name).get.amount
+              (name, rInfo.totalParts(taskAmount))
+            }
           )
         }.unzip3
     }

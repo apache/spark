@@ -253,7 +253,7 @@ jobs:
     - name: Install Python packages (Python 3.9)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
+        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
         python3.9 -m pip list
     # Run the tests.
     - name: Run tests
@@ -264,7 +264,7 @@ jobs:
         export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
-        // SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
+        # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
         if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
         fi
@@ -272,13 +272,13 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
@@ -346,11 +346,9 @@ jobs:
           - ${{ inputs.java }}
         modules:
           - >-
-            pyspark-errors
-          - >-
             pyspark-sql, pyspark-resource, pyspark-testing
           - >-
-            pyspark-core, pyspark-streaming
+            pyspark-core, pyspark-errors, pyspark-streaming
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
@@ -431,12 +429,16 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
-    - name: List Python packages (Python 3.9, PyPy3)
+    - name: List Python packages (${{ env.PYTHON_TO_TEST }})
+      shell: 'script -q -e -c "bash {0}"'
       run: |
-        python3.9 -m pip list
-        pypy3 -m pip list
+        for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
+        do
+          echo $py
+          $py -m pip list
+        done
     - name: Install Conda for pip packaging test
-      if: ${{ matrix.modules == 'pyspark-errors' }}
+      if: contains(matrix.modules, 'pyspark-errors')
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
@@ -446,7 +448,7 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "$MODULES_TO_TEST" == "pyspark-errors" ]]; then
+        if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
           export PATH=$PATH:$HOME/miniconda/bin
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
@@ -466,13 +468,13 @@ jobs:
         name: PySpark
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -551,7 +553,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
@@ -772,7 +774,7 @@ jobs:
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
       if: github.repository != 'apache/spark'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: site
         path: site.tar.bz2
@@ -925,13 +927,13 @@ jobs:
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -994,13 +996,13 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -1075,7 +1077,7 @@ jobs:
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"

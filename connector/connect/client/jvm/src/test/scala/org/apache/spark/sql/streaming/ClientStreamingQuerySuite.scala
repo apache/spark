@@ -176,9 +176,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
   }
 
   test("throw exception in streaming") {
-    // Disable spark.sql.pyspark.jvmStacktrace.enabled to avoid hitting the
-    // netty header limit.
-    withSQLConf("spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+    try {
       val session = spark
       import session.implicits._
 
@@ -204,14 +202,57 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       }
 
       assert(exception.getErrorClass != null)
-      assert(!exception.getMessageParameters.isEmpty)
+      assert(exception.getMessageParameters().get("id") == query.id.toString)
+      assert(exception.getMessageParameters().get("runId") == query.runId.toString)
+      assert(!exception.getMessageParameters().get("startOffset").isEmpty)
+      assert(!exception.getMessageParameters().get("endOffset").isEmpty)
       assert(exception.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
       assert(
         exception.getCause.getCause.getCause.getMessage
           .contains("java.lang.RuntimeException: Number 2 encountered!"))
+    } finally {
+      spark.streams.resetTerminated()
     }
+  }
+
+  test("throw exception in streaming, check with StreamingQueryManager") {
+    val session = spark
+    import session.implicits._
+
+    val checkForTwo = udf((value: Int) => {
+      if (value == 2) {
+        throw new RuntimeException("Number 2 encountered!")
+      }
+      value
+    })
+
+    val query = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "1")
+      .load()
+      .select(checkForTwo($"value").as("checkedValue"))
+      .writeStream
+      .outputMode("append")
+      .format("console")
+      .start()
+
+    val exception = intercept[StreamingQueryException] {
+      spark.streams.awaitAnyTermination()
+    }
+
+    assert(exception.getErrorClass != null)
+    assert(exception.getMessageParameters().get("id") == query.id.toString)
+    assert(exception.getMessageParameters().get("runId") == query.runId.toString)
+    assert(!exception.getMessageParameters().get("startOffset").isEmpty)
+    assert(!exception.getMessageParameters().get("endOffset").isEmpty)
+    assert(exception.getCause.isInstanceOf[SparkException])
+    assert(exception.getCause.getCause.isInstanceOf[SparkException])
+    assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
+    assert(
+      exception.getCause.getCause.getCause.getMessage
+        .contains("java.lang.RuntimeException: Number 2 encountered!"))
   }
 
   test("foreach Row") {

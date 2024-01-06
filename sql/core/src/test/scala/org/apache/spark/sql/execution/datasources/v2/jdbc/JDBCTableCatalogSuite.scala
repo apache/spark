@@ -554,15 +554,22 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("CREATE TABLE with table property") {
     withTable("h2.test.new_table") {
+      val sqlText = "CREATE TABLE h2.test.new_table(i INT, j STRING)" +
+        " TBLPROPERTIES('ENGINE'='tableEngineName')"
       checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE h2.test.new_table(i INT, j STRING)" +
-            " TBLPROPERTIES('ENGINE'='tableEngineName')")
-        },
+        exception = intercept[AnalysisException] { sql(sqlText) },
         errorClass = "FAILED_JDBC.CREATE_TABLE",
         parameters = Map(
           "url" -> url,
           "tableName" -> "`test`.`new_table`"))
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> ".*password=.*") {
+        checkError(
+          exception = intercept[AnalysisException] { sql(sqlText) },
+          errorClass = "FAILED_JDBC.CREATE_TABLE",
+          parameters = Map(
+            "url" -> "*********(redacted)",
+            "tableName" -> "`test`.`new_table`"))
+      }
     }
   }
 

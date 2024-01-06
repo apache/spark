@@ -4,6 +4,7 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=true
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
@@ -125,3 +126,12 @@ FROM BONUS
 WHERE EXISTS(SELECT RANK() OVER (PARTITION BY hiredate ORDER BY salary) AS s
                     FROM EMP, DEPT where EMP.dept_id = DEPT.dept_id
                         AND DEPT.dept_name < BONUS.emp_name);
+
+-- SPARK-46468: Aggregate always returns 1 row, so EXISTS is always true.
+SELECT tt1.emp_name
+FROM EMP as tt1
+WHERE EXISTS (
+  select max(tt2.id)
+  from EMP as tt2
+  where tt1.emp_name is null
+);
