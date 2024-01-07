@@ -16,9 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.StringReader
+import java.io.{CharConversionException, FileNotFoundException, IOException, StringReader}
+import java.nio.charset.MalformedInputException
 import java.util.Locale
-import javax.xml.stream.XMLEventReader
+import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
@@ -27,14 +28,16 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.Exception._
 import scala.util.control.NonFatal
+import scala.xml.SAXException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.XmlInferSchema.compatibleType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -63,6 +66,20 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private def handleXmlErrorsByParseMode(
+      parseMode: ParseMode,
+      columnNameOfCorruptRecord: String,
+      e: Throwable): Option[StructType] = {
+    parseMode match {
+      case PermissiveMode =>
+        Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
+      case DropMalformedMode =>
+        None
+      case FailFastMode =>
+        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+    }
+  }
 
   /**
    * Infer the type of a collection of XML records in three stages:
@@ -107,21 +124,44 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
   }
 
   def infer(xml: String, xsdSchema: Option[Schema] = None): Option[DataType] = {
+    var parser: XMLEventReader = null
     try {
       val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
       xsd.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
-      val parser = StaxXmlParserUtils.filteredReader(xml)
+      parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
       val schema = Some(inferObject(parser, rootAttributes))
       parser.close()
       schema
     } catch {
-      case NonFatal(_) if options.parseMode == PermissiveMode =>
-        Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
-      case NonFatal(_) =>
-        None
+      case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
+        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """XML parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        handleXmlErrorsByParseMode(
+          options.parseMode,
+          options.columnNameOfCorruptRecord,
+          wrappedCharException)
+      case e: FileNotFoundException if options.ignoreMissingFiles =>
+        logWarning("Skipped missing file", e)
+        Some(StructType(Nil))
+      case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
+      case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
+        logWarning("Skipped the rest of the content in the corrupted file", e)
+        Some(StructType(Nil))
+      case NonFatal(e) =>
+        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+    } finally {
+      if (parser != null) {
+        parser.close()
+      }
     }
   }
 
