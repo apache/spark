@@ -185,8 +185,8 @@ class TextSocketContinuousStream(
             TextSocketContinuousStream.this.synchronized {
               currentOffset += 1
               val newData = (line,
-                Timestamp.valueOf(
-                  TextSocketReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+                Timestamp.valueOf(TextSocketReader.DATE_TIME_FORMATTER.format(
+                  Calendar.getInstance().getTime().toInstant))
               )
               buckets(currentOffset % numPartitions) += toRow(newData)
                 .copy().asInstanceOf[UnsafeRow]
