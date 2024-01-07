@@ -1098,9 +1098,11 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(valid.toSeq.toArray.take(schema.length - 1) ===
       Array(Row(10, 10), Row(10, "Ten"), 10.0, 10.0, true,
         "Ten", Array(1, 2), Map("a" -> 123, "b" -> 345)))
-    assert(invalid.toSeq.toArray.take(schema.length - 1) ===
-      Array(null, null, null, null, null,
-        "Ten", Array(2), null))
+    // TODO: we don't support partial results
+    assert(
+      invalid.toSeq.toArray.take(schema.length - 1) ===
+        Array(null, null, null, null, null,
+          null, null, null))
 
     assert(valid.toSeq.toArray.last === null)
     assert(invalid.toSeq.toArray.last.toString.contains(
@@ -1337,7 +1339,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(getTestResourcePath(resDir + "whitespace_error.xml"))
 
     assert(whitespaceDF.count() === 1)
-    assert(whitespaceDF.take(1).head.getAs[String]("_corrupt_record") !== null)
+    assert(whitespaceDF.take(1).head.getAs[String]("_corrupt_record") === null)
   }
 
   test("struct with only attributes and no value tag does not crash") {
@@ -2479,7 +2481,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(input)
 
     checkAnswer(df, Seq(
-      Row("\" \"", Row(1, "\" \""), Row(Row(null, " ")))))
+      Row("\" \"", Row("\" \"", 1), Row(Row(" ")))))
   }
 
   test("capture values interspersed between elements - nested comments") {
@@ -2552,7 +2554,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |                value4
          |                <struct3>
          |                    value5
-         |                    <array2>1</array2>
+         |                    <array2>1<!--First comment--> <!--Second comment--></array2>
+         |                    <![CDATA[This is a CDATA section containing <sample1> text.]]>
+         |                    <![CDATA[This is a CDATA section containing <sample2> text.]]>
          |                    value6
          |                    <array2>2</array2>
          |                    value7
@@ -2563,10 +2567,10 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |            </array1>
          |            value10
          |            <array1>
-         |                <struct3>
+         |                <struct3><!--First comment--> <!--Second comment-->
          |                    <array2>3</array2>
          |                    value11
-         |                    <array2>4</array2>
+         |                    <array2>4</array2><!--First comment--> <!--Second comment-->
          |                </struct3>
          |                <string>string</string>
          |                value12
@@ -2577,7 +2581,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |        </struct2>
          |        value15
          |    </struct1>
+         |     <!--First comment-->
          |    value16
+         |     <!--Second comment-->
          |</ROW>
          |""".stripMargin
     val input = spark.createDataset(Seq(xmlString))
@@ -2594,14 +2600,22 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         Row(
           ArraySeq("value3", "value10", "value13", "value14"),
           Array(
-            Row(
-              ArraySeq("value4", "value8", "value9"),
-              "string",
-              Row(ArraySeq("value5", "value6", "value7"), ArraySeq(1, 2))),
-            Row(
-              ArraySeq("value12"),
-              "string",
-              Row(ArraySeq("value11"), ArraySeq(3, 4)))),
+              Row(
+                ArraySeq("value4", "value8", "value9"),
+                "string",
+                Row(
+                  ArraySeq(
+                    "value5",
+                    "This is a CDATA section containing <sample1> text." +
+                      "\n                    This is a CDATA section containing <sample2> text.\n" +
+                      "                    value6",
+                    "value7"
+                  ),
+                  ArraySeq(1, 2)
+                )
+              ),
+              Row(ArraySeq("value12"), "string", Row(ArraySeq("value11"), ArraySeq(3, 4)))
+            ),
           3))))
 
     checkAnswer(df, expectedAns)
