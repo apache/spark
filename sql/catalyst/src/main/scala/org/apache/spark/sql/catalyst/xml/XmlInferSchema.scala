@@ -475,55 +475,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  /**
-   * This helper function merges the data type of value tags and inner elements.
-   * It could only be structure data. Consider the following case,
-   * <a>
-   *   value1
-   *   <b>1</b>
-   *   value2
-   * </a>
-   * Input: ''a struct<b int, _VALUE string>'' and ''_VALUE string''
-   * Return: ''a struct<b int, _VALUE array<string>>''
-   * @param objectType inner elements' type
-   * @param valueTagType value tag's type
-   */
-  private[xml] def addOrUpdateValueTagType(
-      objectType: DataType,
-      valueTagType: DataType): DataType = {
-    (objectType, valueTagType) match {
-      case (st: StructType, _) =>
-        val valueTagIndexOpt = st.getFieldIndex(options.valueTag)
-
-        valueTagIndexOpt match {
-          // If the field name exists in the inner elements,
-          // merge the type and infer the combined field as an array type if necessary
-          case Some(index) if !st(index).dataType.isInstanceOf[ArrayType] =>
-            updateStructField(
-              st,
-              index,
-              ArrayType(compatibleType(st(index).dataType, valueTagType)))
-          case Some(index) =>
-            updateStructField(st, index, compatibleType(st(index).dataType, valueTagType))
-          case None =>
-            st.add(options.valueTag, valueTagType)
-        }
-      case _ =>
-        throw new IllegalStateException(
-          "illegal state when merging value tags types in schema inference"
-        )
-    }
-  }
-
-  private def updateStructField(
-      structType: StructType,
-      index: Int,
-      newType: DataType): StructType = {
-    val newFields: Array[StructField] =
-      structType.fields.updated(index, structType.fields(index).copy(dataType = newType))
-    StructType(newFields)
-  }
-
   private def addOrUpdateType(
       nameToDataType: collection.mutable.TreeMap[String, DataType],
       fieldName: String,
