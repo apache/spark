@@ -21,6 +21,7 @@ import java.util.Arrays;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.SortValue;
 import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
@@ -53,17 +54,17 @@ public final class GeneralAggregateFunc extends ExpressionWithToString implement
   private final String name;
   private final boolean isDistinct;
   private final Expression[] children;
-  private final Expression[] orderingWithinGroups;
+  private final SortValue[] orderingWithinGroups;
 
   public GeneralAggregateFunc(String name, boolean isDistinct, Expression[] children) {
     this.name = name;
     this.isDistinct = isDistinct;
     this.children = children;
-    this.orderingWithinGroups = null;
+    this.orderingWithinGroups = new SortValue[]{};
   }
 
   public GeneralAggregateFunc(
-      String name, boolean isDistinct, Expression[] children, Expression[] orderingWithinGroups) {
+      String name, boolean isDistinct, Expression[] children, SortValue[] orderingWithinGroups) {
     this.name = name;
     this.isDistinct = isDistinct;
     this.children = children;
@@ -76,7 +77,7 @@ public final class GeneralAggregateFunc extends ExpressionWithToString implement
   @Override
   public Expression[] children() { return children; }
 
-  public Expression[] orderingWithinGroups() { return orderingWithinGroups; }
+  public SortValue[] orderingWithinGroups() { return orderingWithinGroups; }
 
   @Override
   public boolean equals(Object o) {

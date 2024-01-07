@@ -144,7 +144,7 @@ public class V2ExpressionSQLBuilder {
       return visitAggregateFunction("AVG", avg.isDistinct(),
         expressionsToStringArray(avg.children()));
     } else if (expr instanceof GeneralAggregateFunc f) {
-      if (f.orderingWithinGroups() == null) {
+      if (f.orderingWithinGroups().length == 0) {
         return visitAggregateFunction(f.name(), f.isDistinct(),
           expressionsToStringArray(f.children()));
       } else {
