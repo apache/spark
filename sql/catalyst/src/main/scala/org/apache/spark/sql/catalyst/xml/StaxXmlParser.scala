@@ -698,6 +698,8 @@ class XmlTokenizer(
                   " the content in the corrupted file during schema inference",
                 e)
             case e: Throwable =>
+              reader.close()
+              reader = null
               throw e
           }
       } finally {
