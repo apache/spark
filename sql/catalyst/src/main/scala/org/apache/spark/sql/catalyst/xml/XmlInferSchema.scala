@@ -37,8 +37,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.catalyst.xml.XmlInferSchema.compatibleType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -67,6 +67,20 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private def handleXmlErrorsByParseMode(
+      parseMode: ParseMode,
+      columnNameOfCorruptRecord: String,
+      e: Throwable): Option[StructType] = {
+    parseMode match {
+      case PermissiveMode =>
+        Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
+      case DropMalformedMode =>
+        None
+      case FailFastMode =>
+        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+    }
+  }
 
   /**
    * Infer the type of a collection of XML records in three stages:

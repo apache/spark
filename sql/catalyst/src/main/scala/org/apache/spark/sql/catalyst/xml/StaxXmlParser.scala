@@ -703,7 +703,7 @@ class XmlTokenizer(
               throw e
           }
       } finally {
-        if (nextString.isEmpty) {
+        if (nextString.isEmpty && reader != null) {
           reader.close()
           reader = null
         }
