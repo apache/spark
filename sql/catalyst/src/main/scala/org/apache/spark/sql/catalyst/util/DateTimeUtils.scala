@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time._
+import java.time.format.TextStyle
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields, Temporal}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
@@ -194,6 +195,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def dateAddMonths(days: Int, months: Int): Int = {
     localDateToDays(daysToLocalDate(days).plusMonths(months))
+  }
+
+  /**
+   * Returns the three-letter abbreviated month name for the given number of days since 1970-01-01.
+   */
+  def getMonthName(days: Int): UTF8String = {
+    val monthName = Month
+      .of(getMonth(days))
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
+
+    UTF8String.fromString(monthName)
   }
 
   /**

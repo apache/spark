@@ -20,6 +20,7 @@ SELECT * EXCEPT (data) FROM tbl_view;
 SELECT * EXCEPT (data.f1) FROM tbl_view;
 SELECT * EXCEPT (data.s2) FROM tbl_view;
 SELECT * EXCEPT (data.s2.f2) FROM tbl_view;
+SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view;
 -- EXCEPT all columns
 SELECT * EXCEPT (id, name, data) FROM tbl_view;
 -- EXCEPT special character names

@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -828,6 +829,22 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .toDF("col")
       .select(myUdf(Column("col"))),
       Row(ArrayBuffer(100)))
+  }
+
+  test("SPARK-46586: UDF should not fail on immutable.ArraySeq") {
+    val myUdf1 = udf((a: immutable.ArraySeq[Int]) =>
+      immutable.ArraySeq.unsafeWrapArray[Int](Array(a.head + 99)))
+    checkAnswer(Seq(Array(1))
+      .toDF("col")
+      .select(myUdf1(Column("col"))),
+    Row(ArrayBuffer(100)))
+
+     val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
+      immutable.ArraySeq.unsafeWrapArray[Int](a.appended(5).appended(6).toArray))
+    checkAnswer(Seq(Array(1, 2, 3))
+      .toDF("col")
+      .select(myUdf2(Column("col"))),
+    Row(ArrayBuffer(1, 2, 3, 5, 6)))
   }
 
   test("SPARK-34388: UDF name is propagated with registration for ScalaUDF") {

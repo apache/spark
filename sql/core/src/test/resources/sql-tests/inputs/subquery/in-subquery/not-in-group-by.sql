@@ -1,5 +1,6 @@
 -- A test suite for NOT IN GROUP BY in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
+--ONLY_IF spark
 
 -- Test aggregate operator with codegen on and off.
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=true

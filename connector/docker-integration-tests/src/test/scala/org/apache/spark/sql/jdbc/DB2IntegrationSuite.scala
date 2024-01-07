@@ -33,7 +33,7 @@ import org.apache.spark.tags.DockerTest
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.6.0a
  *     ./build/sbt -Pdocker-integration-tests
- *     "testOnly org.apache.spark.sql.jdbc.DB2IntegrationSuite"
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.DB2IntegrationSuite"
  * }}}
  */
 @DockerTest

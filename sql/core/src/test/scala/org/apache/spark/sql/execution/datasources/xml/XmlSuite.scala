@@ -2129,7 +2129,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         <string>this is a simple string.</string>
         <integer>10</integer>
         <long>21474836470</long>
-        <decimal>92233720368547758070</decimal>
+        <bigInteger>92233720368547758070</bigInteger>
         <double>1.7976931348623157</double>
         <boolean>true</boolean>
         <null>null</null>
@@ -2139,7 +2139,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val dfWithNodecimal = spark.read
       .option("nullValue", "null")
       .xml(primitiveFieldAndType)
-    assert(dfWithNodecimal.schema("decimal").dataType === DoubleType)
+    assert(dfWithNodecimal.schema("bigInteger").dataType === DoubleType)
+    assert(dfWithNodecimal.schema("double").dataType === DoubleType)
 
     val df = spark.read
       .option("nullValue", "null")
@@ -2147,9 +2148,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(primitiveFieldAndType)
 
     val expectedSchema = StructType(
+      StructField("bigInteger", DecimalType(20, 0), true) ::
       StructField("boolean", BooleanType, true) ::
-      StructField("decimal", DecimalType(20, 0), true) ::
-      StructField("double", DoubleType, true) ::
+      StructField("double", DecimalType(17, 16), true) ::
       StructField("integer", LongType, true) ::
       StructField("long", LongType, true) ::
       StructField("null", StringType, true) ::
@@ -2159,8 +2160,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df,
-      Row(true,
+      Row(
         new java.math.BigDecimal("92233720368547758070"),
+        true,
         1.7976931348623157,
         10,
         21474836470L,
@@ -2617,5 +2619,84 @@ class XmlSuite extends QueryTest with SharedSparkSession {
           3))))
 
     checkAnswer(df, expectedAns)
+  }
+
+  test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
+    val mixedIntegerAndDoubleRecords = Seq(
+      """<ROW><a>3</a><b>1.1</b></ROW>""",
+      s"""<ROW><a>3.1</a><b>0.${"0" * 38}1</b></ROW>""").toDS()
+    val xmlDF = spark.read
+      .option("prefersDecimal", "true")
+      .option("rowTag", "ROW")
+      .xml(mixedIntegerAndDoubleRecords)
+
+    // The values in `a` field will be decimals as they fit in decimal. For `b` field,
+    // they will be doubles as `1.0E-39D` does not fit.
+    val expectedSchema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+        StructField("b", DoubleType, true) :: Nil)
+
+    assert(xmlDF.schema === expectedSchema)
+    checkAnswer(
+      xmlDF,
+      Row(BigDecimal("3"), 1.1D) ::
+        Row(BigDecimal("3.1"), 1.0E-39D) :: Nil
+    )
+  }
+
+  def bigIntegerRecords: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize(
+      s"""<ROW><a>1${"0" * 38}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
+
+  test("Infer big integers correctly even when it does not fit in decimal") {
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("prefersDecimal", "true")
+      .xml(bigIntegerRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `92233720368547758070`.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DecimalType(20, 0), true) :: Nil)
+
+    assert(df.schema === expectedSchema)
+    checkAnswer(df, Row(1.0E38D, BigDecimal("92233720368547758070")))
+  }
+
+  def floatingValueRecords: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize(
+      s"""<ROW><a>0.${"0" * 38}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
+
+  test("Infer floating-point values correctly even when it does not fit in decimal") {
+    val df = spark.read
+      .option("prefersDecimal", "true")
+      .option("rowTag", "ROW")
+      .xml(floatingValueRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `0.01` by having a precision equal to the scale.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DecimalType(2, 2), true) :: Nil)
+
+    assert(df.schema === expectedSchema)
+    checkAnswer(df, Row(1.0E-39D, BigDecimal("0.01")))
+
+    val mergedDF = spark.read
+      .option("prefersDecimal", "true")
+      .option("rowTag", "ROW")
+      .xml(floatingValueRecords.union(bigIntegerRecords))
+
+    val expectedMergedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DecimalType(22, 2), true) :: Nil)
+
+    assert(expectedMergedSchema === mergedDF.schema)
+    checkAnswer(
+      mergedDF,
+      Row(1.0E-39D, BigDecimal("0.01")) ::
+        Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
+    )
   }
 }

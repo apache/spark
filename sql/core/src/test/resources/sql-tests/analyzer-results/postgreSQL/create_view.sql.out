@@ -124,7 +124,7 @@ SELECT * FROM viewtest
 -- !query analysis
 Project [a#x, b#x]
 +- SubqueryAlias spark_catalog.default.viewtest
-   +- View (`spark_catalog`.`default`.`viewtest`, [a#x,b#x])
+   +- View (`spark_catalog`.`default`.`viewtest`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- Filter (a#x > 10)
@@ -149,7 +149,7 @@ SELECT * FROM viewtest
 -- !query analysis
 Project [a#x, b#x]
 +- SubqueryAlias spark_catalog.default.viewtest
-   +- View (`spark_catalog`.`default`.`viewtest`, [a#x,b#x])
+   +- View (`spark_catalog`.`default`.`viewtest`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Sort [b#x DESC NULLS LAST], true
             +- Project [a#x, b#x]
@@ -937,7 +937,7 @@ SELECT * FROM tt1
 -- !query analysis
 Project [a#x, b#x, c#x, d#x]
 +- SubqueryAlias spark_catalog.testviewschm2.tt1
-   +- View (`spark_catalog`.`testviewschm2`.`tt1`, [a#x,b#x,c#x,d#x])
+   +- View (`spark_catalog`.`testviewschm2`.`tt1`, [a#x, b#x, c#x, d#x])
       +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as decimal(12,2)) AS c#x, cast(d#x as string) AS d#x]
          +- Project [a#x, b#x, c#x, d#x]
             +- SubqueryAlias vv
@@ -950,7 +950,7 @@ SELECT string(a) FROM tt1
 -- !query analysis
 Project [cast(a#x as string) AS a#x]
 +- SubqueryAlias spark_catalog.testviewschm2.tt1
-   +- View (`spark_catalog`.`testviewschm2`.`tt1`, [a#x,b#x,c#x,d#x])
+   +- View (`spark_catalog`.`testviewschm2`.`tt1`, [a#x, b#x, c#x, d#x])
       +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as decimal(12,2)) AS c#x, cast(d#x as string) AS d#x]
          +- Project [a#x, b#x, c#x, d#x]
             +- SubqueryAlias vv

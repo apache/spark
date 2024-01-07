@@ -285,6 +285,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 
+  test("MonthName") {
+    checkEvaluation(MonthName(Literal.create(null, DateType)), null)
+    checkEvaluation(MonthName(Literal(d)), "Apr")
+    checkEvaluation(MonthName(Cast(Literal(date), DateType, UTC_OPT)), "Apr")
+    checkEvaluation(MonthName(Cast(Literal(ts), DateType, UTC_OPT)), "Nov")
+    checkEvaluation(MonthName(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), "May")
+    checkEvaluation(MonthName(Literal(new Date(toMillis("2017-01-27 13:10:15")))), "Jan")
+    checkEvaluation(MonthName(Literal(new Date(toMillis("1582-12-15 13:10:15")))), "Dec")
+    checkConsistencyBetweenInterpretedAndCodegen(MonthName, DateType)
+  }
+
   test("DateFormat") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {

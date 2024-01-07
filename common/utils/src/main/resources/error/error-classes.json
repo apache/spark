@@ -2239,6 +2239,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_SAVE_MODE" : {
+    "message" : [
+      "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
@@ -3009,9 +3015,9 @@
     ],
     "sqlState" : "42K0G"
   },
-  "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
+  "PYTHON_DATA_SOURCE_ERROR" : {
     "message" : [
-      "Failed to <action> Python data source <type> in Python: <msg>"
+      "Failed to <action> Python data source <type>: <msg>"
     ],
     "sqlState" : "38000"
   },
@@ -3579,6 +3585,12 @@
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATA_SOURCE_SAVE_MODE" : {
+    "message" : [
+      "The data source '<source>' cannot be written in the <createMode> mode. Please use either the \"Append\" or \"Overwrite\" mode instead."
     ],
     "sqlState" : "0A000"
   },
@@ -5395,11 +5407,6 @@
   "_LEGACY_ERROR_TEMP_1307" : {
     "message" : [
       "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1308" : {
-    "message" : [
-      "TableProvider implementation <source> cannot be written with <createMode> mode, please use Append or Overwrite modes instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1309" : {

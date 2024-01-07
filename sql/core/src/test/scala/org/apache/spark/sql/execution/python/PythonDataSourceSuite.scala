@@ -299,8 +299,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-    assert(err.getMessage.contains("PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED"))
+    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getMessage.contains("PySparkNotImplementedError"))
   }
 
   test("error creating reader") {
@@ -319,8 +319,7 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-    assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
+    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("error creating reader"))
   }
 
@@ -339,8 +338,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-    assert(err.getMessage.contains("PYTHON_DATA_SOURCE_TYPE_MISMATCH"))
+    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getMessage.contains("DATA_SOURCE_TYPE_MISMATCH"))
     assert(err.getMessage.contains("PySparkAssertionError"))
   }
 
@@ -450,8 +449,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       spark.dataSource.registerPython(dataSourceName, dataSource)
       val err = intercept[AnalysisException](
         spark.read.format(dataSourceName).load().collect())
-      assert(err.getErrorClass == "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON")
-      assert(err.getMessage.contains("PYTHON_DATA_SOURCE_CREATE_ERROR"))
+      assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+      assert(err.getMessage.contains("partitions"))
     }
   }
 
@@ -618,16 +617,35 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       val error = intercept[SparkException] {
         spark.range(1).write.format(dataSourceName).mode("append").save()
       }
-      assert(error.getMessage.contains("PYTHON_DATA_SOURCE_WRITE_ERROR"))
+      assert(error.getMessage.contains("DATA_SOURCE_TYPE_MISMATCH"))
+      assert(error.getMessage.contains("WriterCommitMessage"))
     }
 
     withClue("without mode") {
-      val error = intercept[AnalysisException] {
-        spark.range(1).write.format(dataSourceName).save()
-      }
-      // TODO: improve this error message.
-      assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
-        "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).save()
+        },
+        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"ErrorIfExists\""))
+    }
+
+    withClue("with unsupported mode") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).mode("ignore").save()
+        },
+        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"Ignore\""))
+    }
+
+    withClue("invalid mode") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).mode("foo").save()
+        },
+        errorClass = "INVALID_SAVE_MODE",
+        parameters = Map("mode" -> "\"foo\""))
     }
   }
 
@@ -771,5 +789,48 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
           Seq(Row("failed")))
       }
     }
+  }
+
+  test("SPARK-46568: case insensitive options") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import (
+         |    DataSource, DataSourceReader, DataSourceWriter, WriterCommitMessage)
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def read(self, partition):
+         |        foo = self.options.get("Foo")
+         |        bar = self.options.get("BAR")
+         |        baz = "BaZ" in self.options
+         |        yield (foo, bar, baz)
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def write(self, row):
+         |        if "FOO" not in self.options or "BAR" not in self.options:
+         |            raise Exception("FOO or BAR not found")
+         |        return WriterCommitMessage()
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "a string, b string, c string"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader(self.options)
+         |
+         |    def writer(self, schema, overwrite):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.option("foo", 1).option("bar", 2).option("BAZ", 3)
+      .format(dataSourceName).load()
+    checkAnswer(df, Row("1", "2", "true"))
+    df.write.option("foo", 1).option("bar", 2).format(dataSourceName).mode("append").save()
   }
 }

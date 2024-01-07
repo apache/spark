@@ -45,7 +45,8 @@ private[jdbc] class BasicConnectionProvider extends JdbcConnectionProvider with 
     jdbcOptions.asConnectionProperties.asScala.foreach { case(k, v) =>
       properties.put(k, v)
     }
-    logDebug(s"JDBC connection initiated with URL: ${jdbcOptions.url} and properties: $properties")
+    logDebug(s"JDBC connection initiated with URL: ${jdbcOptions.getRedactUrl()} " +
+      s"and properties: $properties")
     driver.connect(jdbcOptions.url, properties)
   }
 

@@ -30,9 +30,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.xml.XmlInferSchema.compatibleType
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -63,32 +65,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     isParsing = true)
 
   /**
-   * Copied from internal Spark api
-   * [[org.apache.spark.sql.catalyst.analysis.TypeCoercion]]
-   */
-  private val numericPrecedence: IndexedSeq[DataType] =
-    IndexedSeq[DataType](
-      ByteType,
-      ShortType,
-      IntegerType,
-      LongType,
-      FloatType,
-      DoubleType,
-      TimestampType,
-      DecimalType.SYSTEM_DEFAULT)
-
-  private val findTightestCommonTypeOfTwo: (DataType, DataType) => Option[DataType] = {
-    case (t1, t2) if t1 == t2 => Some(t1)
-
-    // Promote numeric types to the highest of the two
-    case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
-      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
-      Some(numericPrecedence(index))
-
-    case _ => None
-  }
-
-  /**
    * Infer the type of a collection of XML records in three stages:
    *   1. Infer the type of each record
    *   2. Merge types by choosing the lowest type necessary to cover equal keys
@@ -101,13 +77,26 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       xml
     }
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
+    val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
       iter.flatMap { xml =>
         infer(xml, xsdSchema)
+      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
+    }
+
+    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
+    // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
+    var rootType: DataType = StructType(Nil)
+    val foldPartition = (iter: Iterator[DataType]) =>
+      iter.fold(StructType(Nil))(compatibleType(caseSensitive, options.valueTag))
+    val mergeResult = (index: Int, taskResult: DataType) => {
+      rootType = SQLConf.withExistingConf(existingConf) {
+        compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
       }
-    }.fold(StructType(Seq()))(compatibleType)
+    }
+    xml.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -303,21 +292,10 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       return None
     }
 
-    try {
-      // The conversion can fail when the `field` is not a form of number.
-      val bigDecimal = decimalParser(signSafeValue)
-      // Because many other formats do not support decimal, it reduces the cases for
-      // decimals by disallowing values having scale (e.g. `1.1`).
-      if (bigDecimal.scale <= 0) {
-        // `DecimalType` conversion can fail when
-        //   1. The precision is bigger than 38.
-        //   2. scale is bigger than precision.
-        return Some(DecimalType(bigDecimal.precision, bigDecimal.scale))
-      }
-    } catch {
-      case _ : Exception =>
+    allCatch opt {
+      val bigDecimal = decimalParser(value)
+      DecimalType(Math.max(bigDecimal.precision, bigDecimal.scale), bigDecimal.scale)
     }
-    None
   }
 
   private def isDouble(value: String): Boolean = {
@@ -497,6 +475,55 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  /**
+   * This helper function merges the data type of value tags and inner elements.
+   * It could only be structure data. Consider the following case,
+   * <a>
+   *   value1
+   *   <b>1</b>
+   *   value2
+   * </a>
+   * Input: ''a struct<b int, _VALUE string>'' and ''_VALUE string''
+   * Return: ''a struct<b int, _VALUE array<string>>''
+   * @param objectType inner elements' type
+   * @param valueTagType value tag's type
+   */
+  private[xml] def addOrUpdateValueTagType(
+      objectType: DataType,
+      valueTagType: DataType): DataType = {
+    (objectType, valueTagType) match {
+      case (st: StructType, _) =>
+        val valueTagIndexOpt = st.getFieldIndex(options.valueTag)
+
+        valueTagIndexOpt match {
+          // If the field name exists in the inner elements,
+          // merge the type and infer the combined field as an array type if necessary
+          case Some(index) if !st(index).dataType.isInstanceOf[ArrayType] =>
+            updateStructField(
+              st,
+              index,
+              ArrayType(compatibleType(st(index).dataType, valueTagType)))
+          case Some(index) =>
+            updateStructField(st, index, compatibleType(st(index).dataType, valueTagType))
+          case None =>
+            st.add(options.valueTag, valueTagType)
+        }
+      case _ =>
+        throw new IllegalStateException(
+          "illegal state when merging value tags types in schema inference"
+        )
+    }
+  }
+
+  private def updateStructField(
+      structType: StructType,
+      index: Int,
+      newType: DataType): StructType = {
+    val newFields: Array[StructField] =
+      structType.fields.updated(index, structType.fields(index).copy(dataType = newType))
+    StructType(newFields)
+  }
+
   private def addOrUpdateType(
       nameToDataType: collection.mutable.TreeMap[String, DataType],
       fieldName: String,
@@ -511,9 +538,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       // If the field name already exists,
       // merge the type and infer the combined field as an array type if necessary
       case Some(oldType) if !oldType.isInstanceOf[ArrayType] && !newType.isInstanceOf[NullType] =>
-        ArrayType(compatibleType(oldType, newType))
+        ArrayType(compatibleType(caseSensitive, options.valueTag)(oldType, newType))
       case Some(oldType) =>
-        compatibleType(oldType, newType)
+        compatibleType(caseSensitive, options.valueTag)(oldType, newType)
       case None =>
         newType
     }
@@ -533,6 +560,97 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       structField.name.toLowerCase(Locale.ROOT) == options.valueTag.toLowerCase(Locale.ROOT)
     } else {
       structField.name == options.valueTag
+    }
+  }
+}
+
+object XmlInferSchema {
+  def normalize(name: String, caseSensitive: Boolean): String = {
+    if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
+  }
+
+  /**
+   * Returns the most general data type for two given data types.
+   */
+  private[xml] def compatibleType(caseSensitive: Boolean, valueTag: String)
+    (t1: DataType, t2: DataType): DataType = {
+
+    // TODO: Optimise this logic.
+    TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
+      // t1 or t2 is a StructType, ArrayType, or an unexpected type.
+      (t1, t2) match {
+        // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
+        // in most case, also have better precision.
+        case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) =>
+          DoubleType
+
+        case (t1: DecimalType, t2: DecimalType) =>
+          val scale = math.max(t1.scale, t2.scale)
+          val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
+          if (range + scale > 38) {
+            // DecimalType can't support precision > 38
+            DoubleType
+          } else {
+            DecimalType(range + scale, scale)
+          }
+        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
+
+        case (StructType(fields1), StructType(fields2)) =>
+          val newFields = (fields1 ++ fields2)
+           // normalize field name and pair it with original field
+           .map(field => (normalize(field.name, caseSensitive), field))
+           .groupBy(_._1) // group by normalized field name
+           .map { case (_: String, fields: Array[(String, StructField)]) =>
+             val fieldTypes = fields.map(_._2)
+             val dataType = fieldTypes.map(_.dataType)
+               .reduce(compatibleType(caseSensitive, valueTag))
+             // we pick up the first field name that we've encountered for the field
+             StructField(fields.head._2.name, dataType)
+           }
+           StructType(newFields.toArray.sortBy(_.name))
+
+        case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
+          ArrayType(
+            compatibleType(caseSensitive, valueTag)(
+              elementType1, elementType2), containsNull1 || containsNull2)
+
+        // In XML datasource, since StructType can be compared with ArrayType.
+        // In this case, ArrayType wraps the StructType.
+        case (ArrayType(ty1, _), ty2) =>
+          ArrayType(compatibleType(caseSensitive, valueTag)(ty1, ty2))
+
+        case (ty1, ArrayType(ty2, _)) =>
+          ArrayType(compatibleType(caseSensitive, valueTag)(ty1, ty2))
+
+        // As this library can infer an element with attributes as StructType whereas
+        // some can be inferred as other non-structural data types, this case should be
+        // treated.
+        case (st: StructType, dt: DataType) if st.fieldNames.contains(valueTag) =>
+          val valueIndex = st.fieldNames.indexOf(valueTag)
+          val valueField = st.fields(valueIndex)
+          val valueDataType = compatibleType(caseSensitive, valueTag)(valueField.dataType, dt)
+          st.fields(valueIndex) = StructField(valueTag, valueDataType, nullable = true)
+          st
+
+        case (dt: DataType, st: StructType) if st.fieldNames.contains(valueTag) =>
+          val valueIndex = st.fieldNames.indexOf(valueTag)
+          val valueField = st.fields(valueIndex)
+          val valueDataType = compatibleType(caseSensitive, valueTag)(dt, valueField.dataType)
+          st.fields(valueIndex) = StructField(valueTag, valueDataType, nullable = true)
+          st
+
+        // The case that given `DecimalType` is capable of given `IntegralType` is handled in
+        // `findTightestCommonType`. Both cases below will be executed only when the given
+        // `DecimalType` is not capable of the given `IntegralType`.
+        case (t1: IntegralType, t2: DecimalType) =>
+          compatibleType(caseSensitive, valueTag)(DecimalType.forType(t1), t2)
+        case (t1: DecimalType, t2: IntegralType) =>
+          compatibleType(caseSensitive, valueTag)(t1, DecimalType.forType(t2))
+
+        // strings and every string is a XML object.
+        case (_, _) => StringType
+      }
     }
   }
 }
