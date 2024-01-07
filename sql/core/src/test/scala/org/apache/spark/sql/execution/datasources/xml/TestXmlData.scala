@@ -55,7 +55,6 @@ private[xml] trait TestXmlData {
       file.delete()
       assert(!file.exists())
     }
-    fs.close()
 
     // corrupt the file
     val fileSize = raf.length()
@@ -67,5 +66,6 @@ private[xml] trait TestXmlData {
     }
     raf.close()
     f(dir)
+    fs.setVerifyChecksum(true)
   }
 }
