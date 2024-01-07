@@ -193,10 +193,10 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
      * In case-insensitive mode, we will infer an array named by foo
      * (as it's the first one we encounter)
      */
-    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) { (x: String, y: String) =>
-      x.compareTo(y)
-    } else { (x: String, y: String) =>
-      x.compareToIgnoreCase(y)
+    val caseSensitivityOrdering: Ordering[String] = if (caseSensitive) {
+      (x: String, y: String) => x.compareTo(y)
+    } else {
+      (x: String, y: String) => x.compareToIgnoreCase(y)
     }
 
     val nameToDataType =
@@ -393,87 +393,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     case other => Some(other)
   }
 
-  /**
-   * Returns the most general data type for two given data types.
-   */
-  private[xml] def compatibleType(t1: DataType, t2: DataType): DataType = {
-
-    def normalize(name: String): String = {
-      if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
-    }
-
-    // TODO: Optimise this logic.
-    findTightestCommonTypeOfTwo(t1, t2).getOrElse {
-      // t1 or t2 is a StructType, ArrayType, or an unexpected type.
-      (t1, t2) match {
-        // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
-        // in most case, also have better precision.
-        case (DoubleType, _: DecimalType) =>
-          DoubleType
-        case (_: DecimalType, DoubleType) =>
-          DoubleType
-        case (t1: DecimalType, t2: DecimalType) =>
-          val scale = math.max(t1.scale, t2.scale)
-          val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
-          if (range + scale > 38) {
-            // DecimalType can't support precision > 38
-            DoubleType
-          } else {
-            DecimalType(range + scale, scale)
-          }
-        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
-          TimestampType
-
-        case (StructType(fields1), StructType(fields2)) =>
-          val newFields = (fields1 ++ fields2)
-            // normalize field name and pair it with original field
-            .map(field => (normalize(field.name), field))
-            .groupBy(_._1) // group by normalized field name
-            .map { case (_: String, fields: Array[(String, StructField)]) =>
-              val fieldTypes = fields.map(_._2)
-              val dataType = fieldTypes.map(_.dataType).reduce(compatibleType)
-              // we pick up the first field name that we've encountered for the field
-              StructField(fields.head._2.name, dataType)
-          }
-          StructType(newFields.toArray.sortBy(_.name))
-
-        case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
-          ArrayType(
-            compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
-
-        // In XML datasource, since StructType can be compared with ArrayType.
-        // In this case, ArrayType wraps the StructType.
-        case (ArrayType(ty1, _), ty2) =>
-          ArrayType(compatibleType(ty1, ty2))
-
-        case (ty1, ArrayType(ty2, _)) =>
-          ArrayType(compatibleType(ty1, ty2))
-
-        // As this library can infer an element with attributes as StructType whereas
-        // some can be inferred as other non-structural data types, this case should be
-        // treated.
-        case (st: StructType, dt: DataType) if st.fieldNames.contains(options.valueTag) =>
-          val valueIndex = st.fieldNames.indexOf(options.valueTag)
-          val valueField = st.fields(valueIndex)
-          val valueDataType = compatibleType(valueField.dataType, dt)
-          st.fields(valueIndex) = StructField(options.valueTag, valueDataType, nullable = true)
-          st
-
-        case (dt: DataType, st: StructType) if st.fieldNames.contains(options.valueTag) =>
-          val valueIndex = st.fieldNames.indexOf(options.valueTag)
-          val valueField = st.fields(valueIndex)
-          val valueDataType = compatibleType(dt, valueField.dataType)
-          st.fields(valueIndex) = StructField(options.valueTag, valueDataType, nullable = true)
-          st
-
-        // TODO: These null type checks should be in `findTightestCommonTypeOfTwo`.
-        case (_, NullType) => t1
-        case (NullType, _) => t2
-        // strings and every string is a XML object.
-        case (_, _) => StringType
-      }
-    }
-  }
 
   private def addOrUpdateType(
       nameToDataType: collection.mutable.TreeMap[String, DataType],
