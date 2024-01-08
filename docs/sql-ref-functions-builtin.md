@@ -17,10 +17,15 @@ license: |
   limitations under the License.
 ---
 
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'generated-agg-funcs-table.html' %}
 ### Aggregate Functions
 {% include_relative generated-agg-funcs-table.html %}
 #### Examples
 {% include_relative generated-agg-funcs-examples.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
 
 {% for static_file in site.static_files %}
     {% if static_file.name == 'generated-window-funcs-table.html' %}
