@@ -489,11 +489,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       e: Expression,
       q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
-      u.getTagValue(LogicalPlan.PLAN_ID_TAG) match {
-        case Some(id) =>
-          resolveUnresolvedAttributeByPlanId(u, id, q)
-        case _ => u
-      }
+      resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
     case _ if e.containsPattern(UNRESOLVED_ATTRIBUTE) =>
       e.mapChildren(c => tryResolveColumnByPlanId(c, q))
     case _ => e
@@ -501,45 +497,67 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   private def resolveUnresolvedAttributeByPlanId(
       u: UnresolvedAttribute,
-      id: Long,
-      q: Seq[LogicalPlan]): NamedExpression = {
+      q: Seq[LogicalPlan]): Option[NamedExpression] = {
+    val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
+    if (planIdOpt.isEmpty) return None
+    val planId = planIdOpt.get
+    logDebug(s"Extract plan_id $planId from $u")
+
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
-    val resolved = q.iterator
-      .flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
-      .take(2).toSeq
-    if (resolved.isEmpty) {
-      //  e.g. df1.select(df2.a)   <-   illegal reference df2.a
+
+    val (resolved, matched) =
+      q.iterator.map(resolveUnresolvedAttributeByPlanId(u, planId, isMetadataAccess, _))
+        .foldLeft[(Option[NamedExpression], Boolean)]((None, false)) {
+          case ((r1, m1), (r2, m2)) =>
+            if (r1.nonEmpty && r2.nonEmpty) {
+              throw QueryCompilationErrors.ambiguousColumnReferences(u)
+            }
+            (if (r1.isEmpty) r2 else r1, m1 | m2)
+        }
+
+    if (!matched) {
+      // Can not find the target plan node with plan id, e.g.
+      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+      //  df1.select(df2.a)   <-   illegal reference df2.a
       throw QueryCompilationErrors.cannotResolveColumn(u)
-    } else if (resolved.length > 1) {
-      throw QueryCompilationErrors.ambiguousColumnReferences(u)
-    } else {
-      resolved.head
     }
+
+    // Even with the target plan node, resolveUnresolvedAttributeByPlanId still
+    // can not guarantee successfully resolve u:
+    // this method is invoked in rules which support missing column resolution
+    // (e.g. ResolveReferencesInSort), then the resolved attribute maybe filtered
+    // out by the output attribute set.
+    // In this case, fall back to column resolution without plan id.
+    resolved
   }
 
   private def resolveUnresolvedAttributeByPlanId(
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
-      p: LogicalPlan): Option[NamedExpression] = {
-    val candidates = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess).toSeq
+      p: LogicalPlan): (Option[NamedExpression], Boolean) = {
+    val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      (resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess), true)
     } else {
-      p.children.flatMap(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
+      p.children.iterator.map(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
+        .foldLeft[(Option[NamedExpression], Boolean)]((None, false)) {
+          case ((r1, m1), (r2, m2)) =>
+            if (r1.nonEmpty && r2.nonEmpty) {
+              throw QueryCompilationErrors.ambiguousColumnReferences(u)
+            }
+            (if (r1.isEmpty) r2 else r1, m1 | m2)
+        }
     }
-    if (candidates.isEmpty) {
-      None
-    } else if (candidates.length > 1) {
-      throw QueryCompilationErrors.ambiguousColumnReferences(u)
-    } else {
-      val outputSet = if (isMetadataAccess) {
-        // NOTE: A metadata column might appear in `output` instead of `metadataOutput`.
-        AttributeSet(p.output ++ p.metadataOutput)
+
+    val filtered = resolved.filter { r =>
+      if (isMetadataAccess) {
+        r.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
       } else {
-        p.outputSet
+        r.references.subsetOf(p.outputSet)
       }
-      candidates.find(_.references.subsetOf(outputSet))
     }
+    (filtered, matched)
   }
 
   private def resolveUnresolvedAttributeByPlan(
