@@ -503,17 +503,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
-
-    val (resolved, matched) =
-      q.iterator.map(resolveUnresolvedAttributeByPlanId(u, planId, isMetadataAccess, _))
-        .foldLeft[(Option[NamedExpression], Boolean)]((None, false)) {
-          case ((r1, m1), (r2, m2)) =>
-            if (r1.nonEmpty && r2.nonEmpty) {
-              throw QueryCompilationErrors.ambiguousColumnReferences(u)
-            }
-            (if (r1.isEmpty) r2 else r1, m1 | m2)
-        }
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
+    val (resolved, matched) = resolveByPlanId(u, planId, isMetadataAccess, q)
 
     if (!matched) {
       // Can not find the target plan node with plan id, e.g.
@@ -522,34 +513,41 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df1.select(df2.a)   <-   illegal reference df2.a
       throw QueryCompilationErrors.cannotResolveColumn(u)
     }
-
-    // Even with the target plan node, resolveUnresolvedAttributeByPlanId still
-    // can not guarantee successfully resolve u:
-    // this method is invoked in rules which support missing column resolution
-    // (e.g. ResolveReferencesInSort), then the resolved attribute maybe filtered
-    // out by the output attribute set.
-    // In this case, fall back to column resolution without plan id.
     resolved
   }
 
-  private def resolveUnresolvedAttributeByPlanId(
+  private def resolveByPlanId(
+      u: UnresolvedAttribute,
+      id: Long,
+      isMetadataAccess: Boolean,
+      q: Seq[LogicalPlan]): (Option[NamedExpression], Boolean) = {
+    q.iterator.map(resolveByPlanId(u, id, isMetadataAccess, _))
+      .foldLeft((Option.empty[NamedExpression], false)) {
+        case ((r1, m1), (r2, m2)) =>
+          if (r1.nonEmpty && r2.nonEmpty) {
+            throw QueryCompilationErrors.ambiguousColumnReferences(u)
+          }
+          (if (r1.nonEmpty) r1 else r2, m1 | m2)
+      }
+  }
+
+  private def resolveByPlanId(
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan): (Option[NamedExpression], Boolean) = {
     val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      (resolveUnresolvedAttributeByPlan(u, p, isMetadataAccess), true)
+      (resolveByPlan(u, p, isMetadataAccess), true)
     } else {
-      p.children.iterator.map(resolveUnresolvedAttributeByPlanId(u, id, isMetadataAccess, _))
-        .foldLeft[(Option[NamedExpression], Boolean)]((None, false)) {
-          case ((r1, m1), (r2, m2)) =>
-            if (r1.nonEmpty && r2.nonEmpty) {
-              throw QueryCompilationErrors.ambiguousColumnReferences(u)
-            }
-            (if (r1.isEmpty) r2 else r1, m1 | m2)
-        }
+      resolveByPlanId(u, id, isMetadataAccess, p.children)
     }
 
+    // Even with the target plan node, resolveUnresolvedAttributeByPlanId still
+    // can not guarantee successfully resolving u:
+    // there are several rules supporting missing column resolution
+    // (e.g. ResolveReferencesInSort), but the resolved attribute maybe filtered
+    // out by the output attribute set.
+    // In this case, fall back to column resolution without plan id.
     val filtered = resolved.filter { r =>
       if (isMetadataAccess) {
         r.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
@@ -560,7 +558,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     (filtered, matched)
   }
 
-  private def resolveUnresolvedAttributeByPlan(
+  private def resolveByPlan(
       u: UnresolvedAttribute,
       plan: LogicalPlan,
       isMetadataAccess: Boolean): Option[NamedExpression] = {

@@ -543,7 +543,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        # Can find the plan id, but fail to resolve it
+        # Can find the target plan node, but fail to resolve with it
         with self.assertRaisesRegex(
             AnalysisException,
             "UNRESOLVED_COLUMN.WITH_SUGGESTION",
@@ -551,7 +551,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
 
-        # Can not find the plan id
+        # Can not find the target plan node by plan id
         with self.assertRaisesRegex(
             AnalysisException,
             "CANNOT_RESOLVE_DATAFRAME_COLUMN",
