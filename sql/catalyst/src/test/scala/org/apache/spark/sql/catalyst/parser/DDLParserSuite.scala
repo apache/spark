@@ -2426,7 +2426,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(createTableSql),
       errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Value must be specified for key: password."),
+      parameters = Map("message" -> "A value must be specified for the key: password."),
       context = ExpectedContext(
         fragment = createTableSql,
         start = 0,
