@@ -30,8 +30,8 @@ class StateStoreErrors {
     new StateV2ImplicitKeyNotFound(stateName)
   }
 
-  def encoderPrefixKey(): StateV2EncoderPrefixKey = {
-    new StateV2EncoderPrefixKey()
+  def encoderPrefixKey(stateStoreEncoder: String): StateV2EncoderPrefixKey = {
+    new StateV2EncoderPrefixKey(stateStoreEncoder)
   }
 
   def multipleValuesPerKey(): StateV2MultipleValuesPerKey = {
@@ -48,10 +48,10 @@ class StateV2ImplicitKeyNotFound(stateName: String)
     messageParameters = Map("stateName" -> stateName),
     cause = null
   )
-class StateV2EncoderPrefixKey()
+class StateV2EncoderPrefixKey(stateStoreEncoder: String)
   extends SparkRuntimeException(
     errorClass = "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY",
-    messageParameters = Map.empty
+    messageParameters = Map("stateStoreEncoder" -> stateStoreEncoder)
   )
 
 class StateV2MultipleValuesPerKey()
