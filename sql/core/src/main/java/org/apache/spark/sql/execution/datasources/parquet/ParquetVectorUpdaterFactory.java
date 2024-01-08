@@ -34,7 +34,9 @@ import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupporte
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.*;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -108,6 +110,8 @@ public class ParquetVectorUpdaterFactory {
           }
         } else if (sparkType instanceof YearMonthIntervalType) {
           return new IntegerUpdater();
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new IntegerToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
       }
       case INT64 -> {
@@ -153,6 +157,8 @@ public class ParquetVectorUpdaterFactory {
           return new LongAsMicrosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new LongToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
       }
       case FLOAT -> {
@@ -194,6 +200,8 @@ public class ParquetVectorUpdaterFactory {
         if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
           canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new BinaryUpdater();
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new BinaryToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
       }
       case FIXED_LEN_BYTE_ARRAY -> {
@@ -206,6 +214,8 @@ public class ParquetVectorUpdaterFactory {
           return new FixedLenByteArrayUpdater(arrayLen);
         } else if (sparkType == DataTypes.BinaryType) {
           return new FixedLenByteArrayUpdater(arrayLen);
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new FixedLenByteArrayToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
       }
       default -> {}
@@ -1358,6 +1368,188 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
+  private abstract static class DecimalUpdater implements ParquetVectorUpdater {
+
+    private final DecimalType sparkType;
+
+    DecimalUpdater(DecimalType sparkType) {
+      this.sparkType = sparkType;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    protected void writeDecimal(int offset, WritableColumnVector values, BigDecimal decimal) {
+      BigDecimal scaledDecimal = decimal.setScale(sparkType.scale(), RoundingMode.UNNECESSARY);
+      if (DecimalType.is32BitDecimalType(sparkType)) {
+        values.putInt(offset, scaledDecimal.unscaledValue().intValue());
+      } else if (DecimalType.is64BitDecimalType(sparkType)) {
+        values.putLong(offset, scaledDecimal.unscaledValue().longValue());
+      } else {
+        values.putByteArray(offset, scaledDecimal.unscaledValue().toByteArray());
+      }
+    }
+  }
+
+  private static class IntegerToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+
+    IntegerToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigDecimal decimal = BigDecimal.valueOf(valuesReader.readInteger(), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigDecimal decimal =
+        BigDecimal.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
+private static class LongToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+
+   LongToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigDecimal decimal = BigDecimal.valueOf(valuesReader.readLong(), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigDecimal decimal =
+        BigDecimal.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
+private static class BinaryToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+
+  BinaryToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipBinary(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      valuesReader.readBinary(1, values, offset);
+      BigInteger value = new BigInteger(values.getBinary(offset));
+      BigDecimal decimal = new BigDecimal(value, parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value =
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+      BigDecimal decimal = new BigDecimal(value, parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
+private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+    private final int arrayLen;
+
+   FixedLenByteArrayToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      this.arrayLen = descriptor.getPrimitiveType().getTypeLength();
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipFixedLenByteArray(total, arrayLen);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigInteger value = new BigInteger(valuesReader.readBinary(arrayLen).getBytes());
+      BigDecimal decimal = new BigDecimal(value, this.parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value =
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+      BigDecimal decimal = new BigDecimal(value, this.parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
   private static int rebaseDays(int julianDays, final boolean failIfRebase) {
     if (failIfRebase) {
       if (julianDays < RebaseDateTime.lastSwitchJulianDay()) {
@@ -1418,16 +1610,21 @@ public class ParquetVectorUpdaterFactory {
 
   private static boolean canReadAsIntDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!DecimalType.is32BitDecimalType(dt)) return false;
-    return isDecimalTypeMatched(descriptor, dt);
+    return isDecimalTypeMatched(descriptor, dt) && isSameDecimalScale(descriptor, dt);
   }
 
   private static boolean canReadAsLongDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!DecimalType.is64BitDecimalType(dt)) return false;
-    return isDecimalTypeMatched(descriptor, dt);
+    return isDecimalTypeMatched(descriptor, dt) && isSameDecimalScale(descriptor, dt);
   }
 
   private static boolean canReadAsBinaryDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!DecimalType.isByteArrayDecimalType(dt)) return false;
+    return isDecimalTypeMatched(descriptor, dt) && isSameDecimalScale(descriptor, dt);
+  }
+
+  private static boolean canReadAsDecimal(ColumnDescriptor descriptor, DataType dt) {
+    if (!(dt instanceof DecimalType)) return false;
     return isDecimalTypeMatched(descriptor, dt);
   }
 
@@ -1444,14 +1641,29 @@ public class ParquetVectorUpdaterFactory {
   }
 
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {
-    DecimalType d = (DecimalType) dt;
+    DecimalType requestedType = (DecimalType) dt;
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation decimalType) {
-      // It's OK if the required decimal precision is larger than or equal to the physical decimal
-      // precision in the Parquet metadata, as long as the decimal scale is the same.
-      return decimalType.getPrecision() <= d.precision() && decimalType.getScale() == d.scale();
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+      DecimalLogicalTypeAnnotation parquetType = (DecimalLogicalTypeAnnotation) typeAnnotation;
+      // If the required scale is larger than or equal to the physical decimal scale in the Parquet
+      // metadata, we can upscale the value as long as the precision also increases by as much so
+      // that there is no loss of precision.
+      int scaleIncrease = requestedType.scale() - parquetType.getScale();
+      int precisionIncrease = requestedType.precision() - parquetType.getPrecision();
+      return scaleIncrease >= 0 && precisionIncrease >= scaleIncrease;
     }
     return false;
   }
+
+  private static boolean isSameDecimalScale(ColumnDescriptor descriptor, DataType dt) {
+    DecimalType d = (DecimalType) dt;
+    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+      DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
+      return decimalType.getScale() == d.scale();
+    }
+    return false;
+  }
+
 }
 

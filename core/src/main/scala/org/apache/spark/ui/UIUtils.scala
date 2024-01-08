@@ -147,30 +147,14 @@ private[spark] object UIUtils extends Logging {
       batchInterval: Long,
       showYYYYMMSS: Boolean = true,
       timezone: TimeZone = null): String = {
-    val oldTimezones = (batchTimeFormat.getZone, batchTimeFormatWithMilliseconds.getZone)
-    if (timezone != null) {
-      val zoneId = timezone.toZoneId
-      batchTimeFormat.withZone(zoneId)
-      batchTimeFormatWithMilliseconds.withZone(zoneId)
-    }
-    try {
-      val formattedBatchTime =
-        if (batchInterval < 1000) {
-          batchTimeFormatWithMilliseconds.format(Instant.ofEpochMilli(batchTime))
-        } else {
-          // If batchInterval >= 1 second, don't show milliseconds
-          batchTimeFormat.format(Instant.ofEpochMilli(batchTime))
-        }
-      if (showYYYYMMSS) {
-        formattedBatchTime
-      } else {
-        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
-      }
-    } finally {
-      if (timezone != null) {
-        batchTimeFormat.withZone(oldTimezones._1)
-        batchTimeFormatWithMilliseconds.withZone(oldTimezones._2)
-      }
+    // If batchInterval >= 1 second, don't show milliseconds
+    val format = if (batchInterval < 1000) batchTimeFormatWithMilliseconds else batchTimeFormat
+    val formatWithZone = if (timezone == null) format else format.withZone(timezone.toZoneId)
+    val formattedBatchTime = formatWithZone.format(Instant.ofEpochMilli(batchTime))
+    if (showYYYYMMSS) {
+      formattedBatchTime
+    } else {
+      formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
     }
   }
 
