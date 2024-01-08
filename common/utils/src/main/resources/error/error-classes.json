@@ -1185,6 +1185,11 @@
         "message" : [
           "Check that the table <tableName> exists."
         ]
+      },
+      "UNCLASSIFIED" : {
+        "message" : [
+          "<message>"
+        ]
       }
     },
     "sqlState" : "HV000"
