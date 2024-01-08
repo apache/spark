@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
-import scala.collection.{immutable, mutable, IterableFactory, MapFactory}
+import scala.collection.{mutable, IterableFactory, MapFactory}
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.connect.client.arrow.ArrowDeserializers.resolveCompanion
@@ -33,9 +33,5 @@ private[arrow] object ScalaCollectionUtils {
   }
   def wrap[T](array: AnyRef): mutable.ArraySeq[T] = {
     mutable.ArraySeq.make(array.asInstanceOf[Array[T]])
-  }
-
-  def toImmutableArraySeq[T](array: AnyRef): immutable.ArraySeq[T] = {
-    immutable.ArraySeq.unsafeWrapArray(array.asInstanceOf[Array[T]])
   }
 }

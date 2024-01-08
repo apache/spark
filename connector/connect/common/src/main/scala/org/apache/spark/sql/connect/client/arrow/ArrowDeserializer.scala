@@ -47,6 +47,7 @@ import org.apache.spark.sql.types.Decimal
  */
 object ArrowDeserializers {
   import ArrowEncoderUtils._
+  import org.apache.spark.util.ArrayImplicits._
 
   /**
    * Create an Iterator of `T`. This iterator takes an Iterator of Arrow IPC Streams, and
@@ -227,7 +228,7 @@ object ArrowDeserializers {
           new VectorFieldDeserializer[immutable.ArraySeq[Any], ListVector](v) {
             def value(i: Int): immutable.ArraySeq[Any] = {
               val array = getArray(vector, i, deserializer)(element.clsTag)
-              ScalaCollectionUtils.toImmutableArraySeq(array)
+              array.asInstanceOf[Array[_]].toImmutableArraySeq
             }
           }
         } else if (isSubClass(Classes.ITERABLE, tag)) {
