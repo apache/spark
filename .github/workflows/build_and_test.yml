@@ -763,7 +763,9 @@ jobs:
       run: |
         # Build docs first with SKIP_API to ensure they are valid without requiring any
         # language docs to be built beforehand.
+        pushd docs
         SKIP_API=1 bundle exec jekyll build
+        popd
         if [ -f "./dev/is-changed.py" ]; then
           # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
