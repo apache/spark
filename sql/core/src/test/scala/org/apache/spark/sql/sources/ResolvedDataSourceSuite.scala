@@ -19,7 +19,6 @@ package org.apache.spark.sql.sources
 
 import java.time.ZoneId
 
-import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
