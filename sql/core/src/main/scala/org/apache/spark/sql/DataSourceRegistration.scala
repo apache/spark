@@ -61,6 +61,7 @@ private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataS
    */
   private def checkDataSourceExists(name: String): Unit = {
     // Allow re-registration of user-defined data sources.
+    // TODO(SPARK-46616): disallow re-registration of statically registered data sources.
     if (dataSourceManager.dataSourceExists(name)) return
 
     try {
