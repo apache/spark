@@ -2233,7 +2233,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val table2 = catalog.getTableMetadata(TableIdentifier("t2"))
       assert(table2.provider == Some("hive"))
 
-      val e1 = intercept[SparkClassNotFoundException] {
+      val e1 = intercept[AnalysisException] {
         sql("CREATE TABLE t3 LIKE s USING unknown")
       }
       checkError(

@@ -101,7 +101,7 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
   }
 
   test("error message for unknown data sources") {
-    val error = intercept[SparkClassNotFoundException] {
+    val error = intercept[AnalysisException] {
       getProvidingClass("asfdwefasdfasdf")
     }
     checkError(

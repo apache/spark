@@ -702,14 +702,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("paths" -> allPaths.mkString(", ")))
   }
 
-  def dataSourceNotFoundError(
-      provider: String, error: Throwable): SparkClassNotFoundException = {
-    new SparkClassNotFoundException(
-      errorClass = "DATA_SOURCE_NOT_FOUND",
-      messageParameters = Map("provider" -> provider),
-      cause = error)
-  }
-
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
       errorClass = "_LEGACY_ERROR_TEMP_2052",

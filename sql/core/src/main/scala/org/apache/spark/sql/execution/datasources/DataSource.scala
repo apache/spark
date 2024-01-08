@@ -663,7 +663,7 @@ object DataSource extends Logging {
                 } else if (isUserDefinedDataSource) {
                   classOf[PythonTableProvider]
                 } else {
-                  throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
+                  throw QueryCompilationErrors.dataSourceNotFoundError(provider1, error)
                 }
             }
           } catch {
