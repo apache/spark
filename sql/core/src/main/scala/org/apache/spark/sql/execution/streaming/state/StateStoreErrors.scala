@@ -44,25 +44,25 @@ class StateStoreErrors {
 }
 class StateV2ImplicitKeyNotFound(stateName: String)
   extends SparkRuntimeException(
-    "STV2_IMPLICIT_KEY_NOT_FOUND",
-    Map("stateName" -> stateName),
+    errorClass = "STV2_IMPLICIT_KEY_NOT_FOUND",
+    messageParameters = Map("stateName" -> stateName),
     cause = null
   )
 class StateV2EncoderPrefixKey()
-  extends SparkUnsupportedOperationException(
-    "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY",
-    Map.empty
+  extends SparkRuntimeException(
+    errorClass = "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY",
+    messageParameters = Map.empty
   )
 
 class StateV2MultipleValuesPerKey()
-  extends SparkUnsupportedOperationException(
-    "STV2_STORE_MULTIPLE_VALUES_PER_KEY",
-    Map.empty
+  extends SparkRuntimeException(
+    errorClass = "STV2_STORE_MULTIPLE_VALUES_PER_KEY",
+    messageParameters = Map.empty
   )
 
 class StateV2ValueShouldBeNonNull(typeOfState: String)
   extends SparkRuntimeException(
-    "STV2_VALUE_SHOULD_BE_NONNULL",
+    errorClass = "STV2_VALUE_SHOULD_BE_NONNULL",
     Map("typeOfState" -> typeOfState),
     cause = null
   )
