@@ -23,22 +23,22 @@ table_creation_sql = f"""CREATE TEMPORARY VIEW {inner_table} (a, b) AS VALUES
     (8, 80),
     (9, 90);
 CREATE TEMPORARY VIEW {outer_table} (a, b) AS VALUES
-    (1, 100),
-    (2, 200),
-    (2, 200),
-    (3, 300),
-    (4, 400),
-    (6, 600),
-    (7, 700),
-    (10, 1000);
+    (1, 1),
+    (2, 2),
+    (2, 100),
+    (3, 30),
+    (4, 4),
+    (6, 5),
+    (7, 200),
+    (10, 300);
 CREATE TEMPORARY VIEW {no_match_table} (a, b) AS VALUES
     (9999, 9999);
 CREATE TEMPORARY VIEW {join_table} (a, b) AS VALUES
-    (1, 10),
-    (3, 30),
-    (4, 400),
-    (6, 600),
-    (8, 80);
+    (1, 1),
+    (3, 3),
+    (4, 10),
+    (6, 40),
+    (8, 9);
 CREATE TEMPORARY VIEW null_table (a, b) AS SELECT CAST(null AS int), CAST(null as int);
 """
 
@@ -170,7 +170,7 @@ def generate_subquery(
     where_clause = f"WHERE {table_alias}.a = {outertable}.a" if is_correlated else ""
 
     # GROUP BY CLAUSE OF SUBQUERY -- apply GROUP BY if applicable
-    group_by_clause = "GROUP BY a" if group_by else ""
+    group_by_clause = "GROUP BY b" if group_by else ""
 
     # ORDER BY CLAUSE OF SUBQUERY -- ADD SORT IF THE OPERATOR IS AN ORDER-BY OR, THERE IS A LIMIT.
     requires_limit_one = subquery_type == SCALAR and (

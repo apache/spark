@@ -22,7 +22,8 @@ CREATE TEMPORARY VIEW join_table (a, b) AS VALUES
     (4, 400),
     (6, 600),
     (8, 80);
-CREATE TEMPORARY VIEW null_table (a, b) AS SELECT CAST(null AS int), CAST(null as int);
+CREATE TEMPORARY VIEW null_table (a, b) AS
+    SELECT CAST(null AS int), CAST(null as int);
 
 -- inner_table=inner_table,outer_table=outer_table,subquery_in=SELECT,subquery_type=NA,is_correlated=True,distinct=True,subquery_operator=AGGREGATE,subquery_operator_specification=('SUM', True)
 SELECT outer_table.a, outer_table.b, (SELECT DISTINCT SUM(inner_table.a) AS subquery_column_alias FROM inner_table WHERE inner_table.a = outer_table.a GROUP BY a ORDER BY subquery_column_alias DESC NULLS FIRST LIMIT 1) AS subquery_alias FROM outer_table  ORDER BY outer_table.a NULLS FIRST, outer_table.b NULLS FIRST, subquery_alias NULLS FIRST;
