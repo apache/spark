@@ -21,6 +21,8 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.immutable
+
 import io.grpc.inprocess.InProcessChannelBuilder
 import org.apache.arrow.memory.RootAllocator
 import org.apache.commons.lang3.SystemUtils
@@ -84,6 +86,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(booleans)
     testImplicit(booleans.toSeq)
     testImplicit(booleans.toSeq)(newBooleanSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(booleans))
 
     val bytes = Array(76.toByte, 59.toByte, 121.toByte)
     testImplicit(bytes.head)
@@ -91,6 +94,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(bytes)
     testImplicit(bytes.toSeq)
     testImplicit(bytes.toSeq)(newByteSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(bytes))
 
     val shorts = Array(21.toShort, (-213).toShort, 14876.toShort)
     testImplicit(shorts.head)
@@ -98,6 +102,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(shorts)
     testImplicit(shorts.toSeq)
     testImplicit(shorts.toSeq)(newShortSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(shorts))
 
     val ints = Array(4, 6, 5)
     testImplicit(ints.head)
@@ -105,6 +110,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(ints)
     testImplicit(ints.toSeq)
     testImplicit(ints.toSeq)(newIntSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(ints))
 
     val longs = Array(System.nanoTime(), System.currentTimeMillis())
     testImplicit(longs.head)
@@ -112,6 +118,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(longs)
     testImplicit(longs.toSeq)
     testImplicit(longs.toSeq)(newLongSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(longs))
 
     val floats = Array(3f, 10.9f)
     testImplicit(floats.head)
@@ -119,6 +126,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(floats)
     testImplicit(floats.toSeq)
     testImplicit(floats.toSeq)(newFloatSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(floats))
 
     val doubles = Array(23.78d, -329.6d)
     testImplicit(doubles.head)
@@ -126,22 +134,26 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(doubles)
     testImplicit(doubles.toSeq)
     testImplicit(doubles.toSeq)(newDoubleSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(doubles))
 
     val strings = Array("foo", "baz", "bar")
     testImplicit(strings.head)
     testImplicit(strings)
     testImplicit(strings.toSeq)
     testImplicit(strings.toSeq)(newStringSeqEncoder)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(strings))
 
     val myTypes = Array(MyType(12L, Math.E, Math.PI), MyType(0, 0, 0))
     testImplicit(myTypes.head)
     testImplicit(myTypes)
     testImplicit(myTypes.toSeq)
     testImplicit(myTypes.toSeq)(newProductSeqEncoder[MyType])
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(myTypes))
 
     // Others.
     val decimal = java.math.BigDecimal.valueOf(3141527000000000000L, 18)
     testImplicit(decimal)
+    testImplicit(immutable.ArraySeq.unsafeWrapArray(Array(decimal)))
     testImplicit(BigDecimal(decimal))
     testImplicit(Date.valueOf(LocalDate.now()))
     testImplicit(LocalDate.now())
