@@ -51,13 +51,13 @@ class StateV2ImplicitKeyNotFound(stateName: String)
 class StateV2EncoderPrefixKey()
   extends SparkUnsupportedOperationException(
     "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY",
-    Map()
+    Map.empty
   )
 
 class StateV2MultipleValuesPerKey()
   extends SparkUnsupportedOperationException(
     "STV2_STORE_MULTIPLE_VALUES_PER_KEY",
-    Map()
+    Map.empty
   )
 
 class StateV2ValueShouldBeNonNull(typeOfState: String)
