@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.SparkRuntimeException
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
