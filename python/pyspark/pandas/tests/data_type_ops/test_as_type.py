@@ -22,6 +22,7 @@ import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -87,7 +88,11 @@ class AsTypeTestsMixin:
             psser.astype(int)
 
 
-class AsTypeTests(AsTypeTestsMixin, OpsTestBase):
+class AsTypeTests(
+    AsTypeTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

@@ -21,6 +21,7 @@ import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
@@ -167,7 +168,11 @@ class ArithmeticTestsMixin:
                     self.assertRaises(TypeError, lambda: psser ** psdf[n_col])
 
 
-class ArithmeticTests(ArithmeticTestsMixin, OpsTestBase):
+class ArithmeticTests(
+    ArithmeticTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 
