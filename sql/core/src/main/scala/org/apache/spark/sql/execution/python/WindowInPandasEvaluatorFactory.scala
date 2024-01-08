@@ -43,6 +43,11 @@ class WindowInPandasEvaluatorFactory(
     val orderSpec: Seq[SortOrder],
     val childOutput: Seq[Attribute],
     val spillSize: SQLMetric,
+    val numOfOutputRows: SQLMetric,
+    val numOfPartitions: SQLMetric,
+    val spilledRows: SQLMetric,
+    val numOfWindowPartitions: SQLMetric,
+    val spillSizeOnDisk: SQLMetric,
     pythonMetrics: Map[String, SQLMetric],
     profiler: Option[String])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
@@ -231,6 +236,9 @@ class WindowInPandasEvaluatorFactory(
     private val allInputTypes = allInputs.map(_.dataType)
     private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
+    // Increase processed numOfPartitions
+    numOfPartitions += 1
+
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
@@ -316,6 +324,10 @@ class WindowInPandasEvaluatorFactory(
 
           // Setup iteration
           rowIndex = 0
+
+          // Increase processed numOfWindowPartitions
+          numOfWindowPartitions += 1
+
           bufferIterator = buffer.generateIterator()
         }
 
@@ -328,6 +340,8 @@ class WindowInPandasEvaluatorFactory(
             // clear final partition
             buffer.clear()
             spillSize += buffer.spillSize
+            spillSizeOnDisk += buffer.spillSizeOnDisk
+            spilledRows += buffer.spilledRows
           }
           found
         }
@@ -354,6 +368,9 @@ class WindowInPandasEvaluatorFactory(
                 }
                 frameIndex += 1
               }
+
+              // Increase processed numOfOutputRows
+              numOfOutputRows += 1
 
               pythonInputProj(join(indexRow, current))
           }

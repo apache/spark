@@ -94,6 +94,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private long pageCursor = -1;
   private long peakMemoryUsedBytes = 0;
   private long totalSpillBytes = 0L;
+  private long totalSpillBytesOnDisk = 0L;
+  private long totalSpilledRows = 0L;
   private long totalSortTimeNanos = 0L;
   private volatile SpillableIterator readingIterator = null;
 
@@ -242,6 +244,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
     taskContext.taskMetrics().incDiskBytesSpilled(writeMetrics.bytesWritten());
     totalSpillBytes += spillSize;
+    totalSpillBytesOnDisk += writeMetrics.bytesWritten();
+    totalSpilledRows += writeMetrics.recordsWritten();
     return spillSize;
   }
 
@@ -284,10 +288,24 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
-   * Return the total number of bytes that has been spilled into disk so far.
+   * Return the total number of bytes in memory that has been spilled into disk so far.
    */
   public long getSpillSize() {
     return totalSpillBytes;
+  }
+
+  /**
+   * Return the total number of bytes that has been spilled into disk so far.
+   */
+  public long getSpillSizeOnDisk() {
+    return totalSpillBytesOnDisk;
+  }
+
+  /**
+   * Return the total number of rows that has been spilled into disk so far.
+   */
+  public long getSpilledRows() {
+    return totalSpilledRows;
   }
 
   @VisibleForTesting
@@ -477,7 +495,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
       logger.info("Spilling data because number of spilledRecords crossed the threshold " +
-        numElementsForSpillThreshold);
+        numElementsForSpillThreshold + " for " + this);
       spill();
     }
 
@@ -532,6 +550,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public void merge(UnsafeExternalSorter other) throws IOException {
     other.spill();
     totalSpillBytes += other.totalSpillBytes;
+    totalSpillBytesOnDisk += other.totalSpillBytesOnDisk;
+    totalSpilledRows += other.totalSpilledRows;
     spillWriters.addAll(other.spillWriters);
     // remove them from `spillWriters`, or the files will be deleted in `cleanupResources`.
     other.spillWriters.clear();
@@ -669,6 +689,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           taskContext.taskMetrics().incMemoryBytesSpilled(released);
           taskContext.taskMetrics().incDiskBytesSpilled(writeMetrics.bytesWritten());
           totalSpillBytes += released;
+          totalSpillBytesOnDisk += writeMetrics.bytesWritten();
+          totalSpilledRows += writeMetrics.recordsWritten();
           return released;
         }
       } finally {
