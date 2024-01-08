@@ -34,7 +34,6 @@ class MissingPandasLikeDataFrame:
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Functions
-    asfreq = _unsupported_function("asfreq")
     asof = _unsupported_function("asof")
     combine = _unsupported_function("combine")
     compare = _unsupported_function("compare")
