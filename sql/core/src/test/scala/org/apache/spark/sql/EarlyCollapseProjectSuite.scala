@@ -196,7 +196,7 @@ class EarlyCollapseProjectSuite extends QueryTest
   }
 
   test("early collapse of filter chain with project - 1") {
-    val baseDfCreator = () => spark.range(20).select($"id" as "a", $"id" as "b").
+    val baseDfCreator = () => spark.range(100).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b")
 
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.filter($"a" > 4).
@@ -205,7 +205,7 @@ class EarlyCollapseProjectSuite extends QueryTest
   }
 
   test("early collapse of filter chain with project - 2") {
-    val baseDfCreator = () => spark.range(20).select($"id" as "a", $"id" as "b").
+    val baseDfCreator = () => spark.range(100).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").filter($"a" > 4).filter($"c" * $"b" < 60)
 
     checkProjectCollapseAndCacheUse(baseDfCreator, df => df.filter($"b" < 100).
@@ -213,7 +213,7 @@ class EarlyCollapseProjectSuite extends QueryTest
   }
 
   test("resurrection of intermediate dropped cols when used in filter") {
-    val baseDfCreator = () => spark.range(10).select($"id" as "a", $"id" as "b").
+    val baseDfCreator = () => spark.range(100).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"b").select($"c", $"b", $"c" + 7 as "d")
     // A dropped column would result in a new project being added on top of filter
     // so we have to take into account of that extra project added while checking
@@ -223,7 +223,7 @@ class EarlyCollapseProjectSuite extends QueryTest
   }
 
   test("resurrection of right renamed intermediate dropped cols when used in filter") {
-    val baseDfCreator = () => spark.range(10).select($"id" + 7 as "a", $"id" as "b").
+    val baseDfCreator = () => spark.range(100).select($"id" + 7 as "a", $"id" as "b").
       select($"a" + 1 as "c", $"b", $"a" * $"b" as "a").select($"c", $"b", $"c" + 7 as "d")
     // A dropped column would result in a new project being added on top of filter
     // so we have to take into account of that extra project added while checking
@@ -232,7 +232,7 @@ class EarlyCollapseProjectSuite extends QueryTest
       Map("c" -> "c1", "b" -> "b1", "d" -> "d1")).select($"c1", $"d1").filter($"a" > 25))
   }
 
-  private def checkProjectCollapseAndCacheUse(
+  protected def checkProjectCollapseAndCacheUse(
       baseDfCreator: () => DataFrame,
       testExec: DataFrame => DataFrame): Unit = {
     val baseDf = baseDfCreator()
