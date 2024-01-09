@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -233,7 +235,12 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
-    rocksDB.doMaintenance()
+    try {
+      rocksDB.doMaintenance()
+    } catch {
+      case NonFatal(ex) =>
+        logWarning(s"Error performing maintenance operations with exception=$ex")
+    }
   }
 
   override def close(): Unit = {

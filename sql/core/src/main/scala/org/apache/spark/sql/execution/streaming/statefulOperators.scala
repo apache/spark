@@ -435,7 +435,7 @@ case class StateStoreRestoreExec(
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
       val hasInput = iter.hasNext
-      val result = if (!hasInput && keyExpressions.isEmpty) {
+      if (!hasInput && keyExpressions.isEmpty) {
         // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
         // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
         // restore the value, so that we don't overwrite our state with a 0 value, but rather
@@ -450,10 +450,6 @@ case class StateStoreRestoreExec(
           outputRows
         }
       }
-      // SPARK-46547 - Release any locks/resources if required, to prevent
-      // deadlocks with the maintenance thread.
-      store.abort()
-      result
     }
   }
 
