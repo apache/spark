@@ -31,8 +31,8 @@ import org.apache.spark.annotation.Evolving;
 public class ReadMaxBytes implements ReadLimit {
   private int bytes;
 
-  ReadMaxBytes(int maxBytes) {
-    this.bytes = maxBytes;
+  ReadMaxBytes(int bytes) {
+    this.bytes = bytes;
   }
 
   /** Maximum total size of files to scan. */
