@@ -16,22 +16,21 @@
 #
 import unittest
 
-from pyspark import pandas as ps
-from pyspark.pandas.tests.indexes.test_base_slow import IndexesSlowTestsMixin
+from pyspark.pandas.tests.indexes.test_diff import IndexesDiffMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class IndexesSlowParityTests(
-    IndexesSlowTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+class IndexesDiffParityTests(
+    IndexesDiffMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_base_slow import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_diff import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

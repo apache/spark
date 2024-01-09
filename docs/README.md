@@ -30,12 +30,13 @@ whichever version of Spark you currently have checked out of revision control.
 
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, R, and SQL.
 
-You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
-[Python](https://www.python.org/downloads/)
-installed. Make sure the `bundle` command is available, if not install the Gem containing it:
+You need to have [Ruby][ruby] and [Python][python] installed. Make sure the `bundle` command is available. If not, install it as follows:
+
+[ruby]: https://www.ruby-lang.org/en/documentation/installation/
+[python]: https://www.python.org/downloads/
 
 ```sh
-$ sudo gem install bundler
+$ gem install bundler
 ```
 
 After this all the required ruby dependencies can be installed from the `docs/` directory via the Bundler:

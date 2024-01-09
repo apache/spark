@@ -963,6 +963,24 @@ class DataFrameTestsMixin:
             ):
                 df.unpivot("id", ["int", "str"], "var", "val").collect()
 
+    def test_melt_groupby(self):
+        df = self.spark.createDataFrame(
+            [(1, 2, 3, 4, 5, 6)],
+            ["f1", "f2", "label", "pred", "model_version", "ts"],
+        )
+        self.assertEqual(
+            df.melt(
+                "model_version",
+                ["label", "f2"],
+                "f1",
+                "f2",
+            )
+            .groupby("f1")
+            .count()
+            .count(),
+            2,
+        )
+
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         from pyspark.sql import Observation

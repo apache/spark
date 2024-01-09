@@ -1,5 +1,6 @@
 -- A test suite for scalar subquery in predicate context
 
+--ONLY_IF spark
 CREATE OR REPLACE TEMPORARY VIEW p AS VALUES (1, 1) AS T(pk, pv);
 CREATE OR REPLACE TEMPORARY VIEW c AS VALUES (1, 1) AS T(ck, cv);
 
