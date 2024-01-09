@@ -94,7 +94,7 @@ Data source options of XML can be set via:
   <tr>
       <td><code>inferSchema</code></td>
       <td><code>true</code></td>
-      <td>If true, attempts to infer an appropriate type for each resulting DataFrame column. If false, all resulting columns are of string type. XML built-in functions ignore this option.</td>
+      <td>If true, attempts to infer an appropriate type for each resulting DataFrame column. If false, all resulting columns are of string type.</td>
       <td>read</td>
   </tr>
 

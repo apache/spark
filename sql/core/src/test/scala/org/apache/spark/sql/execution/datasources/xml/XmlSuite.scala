@@ -2863,10 +2863,6 @@ class XmlSuite
                 .option("rowTag", "ROW")
                 .mode(SaveMode.Overwrite)
                 .xml(path)
-              val df2 = spark.read
-                .option("rowTag", "ROW")
-                .xml(path)
-              checkAnswer(df, df2)
             }
 
             assert(e.getCause.getCause.isInstanceOf[XMLStreamException])
