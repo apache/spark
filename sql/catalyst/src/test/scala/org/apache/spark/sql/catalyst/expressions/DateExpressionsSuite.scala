@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
@@ -75,33 +75,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       case _: TimestampNTZType =>
         LocalDateTime.parse(s.replace(" ", "T"))
-    }
-  }
-
-  test("datetime function current_date") {
-    val d0 = DateTimeUtils.currentDate(UTC)
-    val cd = CurrentDate(UTC_OPT).eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.currentDate(UTC)
-    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
-
-    val cdjst = CurrentDate(JST_OPT).eval(EmptyRow).asInstanceOf[Int]
-    val cdpst = CurrentDate(PST_OPT).eval(EmptyRow).asInstanceOf[Int]
-    assert(cdpst <= cd && cd <= cdjst)
-  }
-
-  test("datetime function current_timestamp") {
-    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
-    val t1 = System.currentTimeMillis()
-    assert(math.abs(t1 - ct.getTime) < 5000)
-  }
-
-  test("datetime function localtimestamp") {
-    // Verify with multiple outstanding time zones which has no daylight saving time.
-    Seq("UTC", "Africa/Dakar", "Asia/Hong_Kong").foreach { zid =>
-      val zoneId = DateTimeUtils.getZoneId(zid)
-      val ct = LocalTimestamp(Some(zid)).eval(EmptyRow).asInstanceOf[Long]
-      val t1 = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
-      assert(math.abs(t1 - ct) < 1000000)
     }
   }
 
@@ -970,11 +943,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
-            val t1 = UnixTimestamp(
-              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-            val t2 = UnixTimestamp(
-              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-            assert(t2 - t1 <= 1)
             checkEvaluation(
               UnixTimestamp(
                 Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId),
@@ -1041,11 +1009,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), zid)))
-            val t1 = ToUnixTimestamp(
-              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
-            val t2 = ToUnixTimestamp(
-              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
-            assert(t2 - t1 <= 1)
             checkEvaluation(ToUnixTimestamp(
               Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId), null)
             checkEvaluation(
@@ -1516,7 +1479,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[T](ToUnixTimestamp(Literal("1"), Literal(c)), c)
       checkExceptionInExpression[T](UnixTimestamp(Literal("1"), Literal(c)), c)
       if (!Set("E", "F", "q", "Q").contains(c)) {
-        checkExceptionInExpression[T](DateFormatClass(CurrentTimestamp(), Literal(c)), c)
         checkExceptionInExpression[T](FromUnixTime(Literal(0L), Literal(c)), c)
       }
     }
@@ -2123,5 +2085,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           TimestampType, TimestampType)
       }
     }
+  }
+
+  test("datetime function CurrentDate and localtimestamp are Unevaluable") {
+    checkError(exception = intercept[SparkException] { CurrentDate(UTC_OPT).eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: current_date(Some(UTC))"))
+
+    checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
 }
