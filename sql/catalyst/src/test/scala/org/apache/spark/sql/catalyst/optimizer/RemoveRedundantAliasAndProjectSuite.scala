@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.internal.SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
 class RemoveRedundantAliasAndProjectSuite extends PlanTest {
 
@@ -129,5 +130,64 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
       relation.select($"a" as "a", $"b").where($"b" < 10).select($"a").analyze,
       correlated = false)
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-46640: do not remove outer references from a subquery expression") {
+    val a = AttributeReference("a", IntegerType)() // a#0
+    // Keep the same name, otherwise the alias is not removed fearing schema change.
+    val a_alias = Alias(a, "a")() // a#0 as a#1
+    val a_alias_expression = AttributeReference("a", IntegerType)(exprId = a_alias.exprId) // a#1
+    val b = AttributeReference("b", IntegerType)()
+
+    // The original input query
+    //  Filter exists [a#1 && (a#1 = b#2)]
+    //  :  +- LocalRelation <empty>, [b#2]
+    //    +- Project [a#0 AS a#1]
+    //    +- LocalRelation <empty>, [a#0]
+    val query = Filter(
+      Exists(
+        LocalRelation(b),
+        outerAttrs = Seq(a_alias_expression),
+        joinCond = Seq(EqualTo(a_alias_expression, b))
+      ),
+      Project(Seq(a_alias), LocalRelation(a))
+    )
+
+    // The alias would not be removed if excluding subquery references is enabled.
+    //  Filter exists [a#1 && (a#1 = b#2)]
+    //  :  +- LocalRelation <empty>, [b#2]
+    //    +- Project [a#0 AS a#1]
+    //    +- LocalRelation <empty>, [a#0]
+    val expectedWhenExcluded = Filter(
+      Exists(
+        LocalRelation(b),
+        outerAttrs = Seq(a_alias_expression),
+        joinCond = Seq(EqualTo(a_alias_expression, b))
+      ),
+      Project(Seq(a_alias), LocalRelation(a))
+    )
+
+    // The alias would have been removed if excluding subquery references is disabled.
+    //  Filter exists [a#0 && (a#0 = b#2)]
+    //  :  +- LocalRelation <empty>, [b#2]
+    //    +- LocalRelation <empty>, [a#0]
+    val expectedWhenNotExcluded = Filter(
+      Exists(
+        LocalRelation(b),
+        outerAttrs = Seq(a),
+        joinCond = Seq(EqualTo(a, b))
+      ),
+      LocalRelation(a)
+    )
+
+    withSQLConf(EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "true") {
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expectedWhenExcluded)
+    }
+
+    withSQLConf(EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "false") {
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expectedWhenNotExcluded)
+    }
   }
 }
