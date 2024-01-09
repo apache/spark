@@ -809,6 +809,10 @@ ul {
   font-size: 30px;
 }
 
+#content h1.title {
+  font-size: 40px;
+}
+
 .global h2 {
   font-size: 24px !important;
 }
