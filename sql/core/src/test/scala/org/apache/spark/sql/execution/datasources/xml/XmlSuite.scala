@@ -761,7 +761,7 @@ class XmlSuite
       .collect()
 
     assert(results(0) === Row("alice", "35"))
-    assert(results(1) === Row("bob", "    "))
+    assert(results(1) === Row("bob", ""))
     assert(results(2) === Row("coc", "24"))
   }
 
@@ -847,7 +847,7 @@ class XmlSuite
     assert(result(0) === Row(Row(null)))
     assert(result(1) === Row(Row(Row(null, null))))
     assert(result(2) === Row(Row(Row("E", null))))
-    assert(result(3) === Row(Row(Row("E", " "))))
+    assert(result(3) === Row(Row(Row("E", ""))))
     assert(result(4) === Row(Row(Row("E", ""))))
   }
 
@@ -1177,8 +1177,8 @@ class XmlSuite
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children.xml"))
     val mixedRow = mixedDF.head()
-    assert(mixedRow.getAs[Row](0) === Row(List(" issue ", " text ignored "), " lorem "))
-    assert(mixedRow.getString(1) === " ipsum ")
+    assert(mixedRow.getAs[Row](0) === Row(List("issue", "text ignored"), "lorem"))
+    assert(mixedRow.getString(1) === "ipsum")
   }
 
   test("test mixed text and complex element children") {
@@ -1186,9 +1186,9 @@ class XmlSuite
       .option("rowTag", "root")
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children_2.xml"))
-    assert(mixedDF.select("foo.bar").head().getString(0) === " lorem ")
+    assert(mixedDF.select("foo.bar").head().getString(0) === "lorem")
     assert(mixedDF.select("foo.baz.bing").head().getLong(0) === 2)
-    assert(mixedDF.select("missing").head().getString(0) === " ipsum ")
+    assert(mixedDF.select("missing").head().getString(0) === "ipsum")
   }
 
   test("test XSD validation") {
@@ -1752,7 +1752,7 @@ class XmlSuite
       assert(result(1).getAs[String]("_attr") == "attr1"
         && result(1).getAs[String]("_VALUE") == "value2")
       // comments aren't included in valueTag
-      assert(result(2).getAs[String]("_VALUE") == "\n        value3\n        ")
+      assert(result(2).getAs[String]("_VALUE") == "value3")
     }
   }
 
