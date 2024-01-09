@@ -149,6 +149,24 @@ case class StructField(
     .getOrElse("")
 
   /**
+   * Returns a string containing a DDL statement for data type. It handles a special
+   * case for StructType in order to capture `NOT NULL` field qualifier as well as field comment.
+   * This method is called recursively for nested struct(s).
+   */
+  private def getDataTypeDDL(dataType: DataType): String = {
+    dataType match {
+      case s: StructType =>
+        val fieldsDDL = s.fields.map { f =>
+          val nullString = if (f.nullable) "" else " NOT NULL"
+          s"${QuotingUtils.quoteIfNeeded(f.name)}: " +
+          s"${getDataTypeDDL(f.dataType)}$nullString${f.getDDLComment}"
+        }
+        s"STRUCT<${fieldsDDL.mkString(", ")}>"
+      case _ => dataType.sql
+    }
+  }
+
+  /**
    * Returns a string containing a schema in SQL format. For example the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
    */
@@ -162,6 +180,7 @@ case class StructField(
    */
   def toDDL: String = {
     val nullString = if (nullable) "" else " NOT NULL"
-    s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLDefault$getDDLComment"
+    s"${QuotingUtils.quoteIfNeeded(name)} ${getDataTypeDDL(dataType)}$nullString" +
+      s"$getDDLDefault$getDDLComment"
   }
 }
