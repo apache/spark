@@ -31,7 +31,7 @@ object ColumnarDataTypeUtils {
     case PhysicalCalendarIntervalType => CalendarIntervalType
     case PhysicalFloatType => FloatType
     case PhysicalDoubleType => DoubleType
-    case PhysicalStringType => StringType
+    case PhysicalStringType(_) => StringType
     case PhysicalDecimalType(precision, scale) => DecimalType(precision, scale)
     case PhysicalArrayType(elementType, containsNull) => ArrayType(elementType, containsNull)
     case PhysicalStructType(fields) => StructType(fields)

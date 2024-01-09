@@ -23,8 +23,7 @@ import java.util.zip.CRC32
 
 import scala.annotation.tailrec
 
-import org.apache.commons.codec.digest.DigestUtils
-import org.apache.commons.codec.digest.MessageDigestAlgorithms
+import org.apache.commons.codec.digest.{DigestUtils, MessageDigestAlgorithms}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -33,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollatorFactory, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -492,6 +491,13 @@ abstract class HashExpression[E] extends Expression {
     case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
+    case CollatedStringType(collation) =>
+      // TODO: Hashing for collations is tricky. We could normalize the input
+      // based on collation and then calc the hash? Naive hashing can't be used for
+      // equality check (e.g. for group by).
+      // CollatorKey seems to be doing the trick. This requires deeper understanding.
+      val hash = CollatorFactory.getCollationAwareHash(input, collation)
+      genHashLong(hash.toString, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>
       genHashForMap(ctx, input, result, kt, vt, valueContainsNull)

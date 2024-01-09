@@ -22,6 +22,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.{QueryContext, SparkArithmeticException}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -572,7 +573,7 @@ case class Cast(
 
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
-    case StringType => buildCast[UTF8String](_, _.getBytes)
+    case StringType | CollatedStringType(_) => buildCast[UTF8String](_, _.getBytes)
     case ByteType => buildCast[Byte](_, NumberConverter.toBinary)
     case ShortType => buildCast[Short](_, NumberConverter.toBinary)
     case IntegerType => buildCast[Int](_, NumberConverter.toBinary)
@@ -1107,6 +1108,8 @@ case class Cast(
     } else {
       to match {
         case dt if dt == from => identity[Any]
+        // TODO: for collated string we would do same as for string but also
+        // fetch database level collator (?)
         case StringType => castToString(from)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)

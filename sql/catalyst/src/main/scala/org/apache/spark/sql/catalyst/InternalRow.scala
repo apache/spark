@@ -140,7 +140,9 @@ object InternalRow {
         case PhysicalLongType => (input, ordinal) => input.getLong(ordinal)
         case PhysicalFloatType => (input, ordinal) => input.getFloat(ordinal)
         case PhysicalDoubleType => (input, ordinal) => input.getDouble(ordinal)
-        case PhysicalStringType => (input, ordinal) => input.getUTF8String(ordinal)
+        case PhysicalStringType(None) => (input, ordinal) => input.getUTF8String(ordinal)
+        case PhysicalStringType(Some(collation)) => (input, ordinal) =>
+          input.getUTF8String(ordinal).installCollationAwareComparator(collation)
         case PhysicalBinaryType => (input, ordinal) => input.getBinary(ordinal)
         case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
         case t: PhysicalDecimalType => (input, ordinal) =>
@@ -186,6 +188,8 @@ object InternalRow {
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
     case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case CollatedStringType(collation) =>
+      (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy()) // TODO: Set coll
     case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
     case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
     case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())

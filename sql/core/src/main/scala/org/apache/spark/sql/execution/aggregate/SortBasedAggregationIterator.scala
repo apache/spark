@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.types.CollatedStringType
 
 /**
  * An iterator used to evaluate
@@ -89,6 +90,11 @@ class SortBasedAggregationIterator(
   // The aggregation buffer used by the sort-based aggregation.
   private[this] val sortBasedAggregationBuffer: InternalRow = newBuffer
 
+  private[this] lazy val binaryComparisonAllowed: Boolean = {
+    val dataTypes = groupingExpressions.map(_.dataType)
+    !dataTypes.exists(dt => dt.isInstanceOf[CollatedStringType])
+  }
+
   protected def initialize(): Unit = {
     if (inputIterator.hasNext) {
       initializeBuffer(sortBasedAggregationBuffer)
@@ -120,8 +126,17 @@ class SortBasedAggregationIterator(
       val currentRow = inputIterator.next()
       val groupingKey = groupingProjection(currentRow)
 
+      val groupKeysEqual = if (binaryComparisonAllowed) {
+        currentGroupingKey == groupingKey
+      } else {
+        // fallback to interpreted ordering.
+        val types = groupingAttributes.map(_.dataType).toIndexedSeq
+        val ordering = InterpretedOrdering.forSchema(types)
+        ordering.compare(currentGroupingKey, groupingKey) == 0
+      }
+
       // Check if the current row belongs the current input row.
-      if (currentGroupingKey == groupingKey) {
+      if (groupKeysEqual) {
         processRow(sortBasedAggregationBuffer, currentRow)
       } else {
         // We find a new group.

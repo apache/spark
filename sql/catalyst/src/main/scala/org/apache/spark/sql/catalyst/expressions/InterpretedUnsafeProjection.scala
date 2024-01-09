@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.types._
@@ -161,7 +162,7 @@ object InterpretedUnsafeProjection {
 
         case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
-        case PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
+        case PhysicalStringType(_) => (v, i) => writer.write(i, v.getUTF8String(i))
 
         case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 

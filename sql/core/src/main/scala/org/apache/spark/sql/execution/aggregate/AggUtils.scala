@@ -76,7 +76,7 @@ object AggUtils {
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
     val useHash = Aggregate.supportsHashAggregate(
-      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
     val forceSortAggregate = forceApplySortAggregate(child.conf)
 
     if (useHash && !forceSortAggregate) {

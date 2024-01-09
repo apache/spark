@@ -40,3 +40,13 @@ class StringType private() extends AtomicType {
 @Stable
 case object StringType extends StringType
 
+case class CollatedStringType(collation: String) extends AtomicType {
+  /**
+   * The default size of a value of the StringType is 20 bytes.
+   */
+  override def defaultSize: Int = 20
+
+  private[spark] override def asNullable: CollatedStringType = this
+
+  override def toString: String = s"String($collation)"
+}
