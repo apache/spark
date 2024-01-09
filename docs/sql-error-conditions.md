@@ -2048,31 +2048,6 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 
 '`<optionName>`' must be specified.
 
-### STV2_ENCODER_UNSUPPORTED_PREFIX_KEY
-
-SQLSTATE: XXKST
-
-Encoder does not support prefix key for <stateStoreEncoder>. Please use another state store provider that supports prefix keys,
-or omit the prefix key.
-
-### STV2_IMPLICIT_KEY_NOT_FOUND
-
-SQLSTATE: 55019
-
-Implicit key not found for operation on stateName=`<stateName>`.
-
-### STV2_UNSUPPORTED_OPERATION
-
-SQLSTATE: XXKST
-
-`<operationType>` operation not supported with `<entity>`.
-
-### STV2_VALUE_SHOULD_BE_NONNULL
-
-[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-New value should be non-null for `<typeOfState>`.
-
 ### STREAM_FAILED
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -2144,6 +2119,31 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
+
+### TWS_ENCODER_UNSUPPORTED_PREFIX_KEY
+
+SQLSTATE: XXKST
+
+Encoder does not support prefix key for <stateStoreEncoder>. Please use another state store provider that supports prefix keys,
+or omit the prefix key.
+
+### TWS_IMPLICIT_KEY_NOT_FOUND
+
+SQLSTATE: 55019
+
+Implicit key not found for operation on stateName=`<stateName>`.
+
+### TWS_UNSUPPORTED_OPERATION
+
+SQLSTATE: XXKST
+
+`<operationType>` operation not supported with `<entity>`.
+
+### TWS_VALUE_SHOULD_BE_NONNULL
+
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+New value should be non-null for `<typeOfState>`.
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 

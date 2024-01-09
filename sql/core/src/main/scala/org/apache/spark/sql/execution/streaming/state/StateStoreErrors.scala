@@ -26,43 +26,43 @@ import org.apache.spark.SparkRuntimeException
  */
 class StateStoreErrors {
   def implicitKeyNotFound(
-      stateName: String): StateV2ImplicitKeyNotFound = {
-    new StateV2ImplicitKeyNotFound(stateName)
+      stateName: String): TransformWithStateImplicitKeyNotFound = {
+    new TransformWithStateImplicitKeyNotFound(stateName)
   }
 
-  def encoderPrefixKey(stateStoreEncoder: String): StateV2EncoderPrefixKey = {
-    new StateV2EncoderPrefixKey(stateStoreEncoder)
+  def encoderPrefixKey(stateStoreEncoder: String): TransformWithStateEncoderPrefixKey = {
+    new TransformWithStateEncoderPrefixKey(stateStoreEncoder)
   }
 
-  def multipleValuesPerKey(): StateV2MultipleValuesPerKey = {
-    new StateV2MultipleValuesPerKey()
+  def multipleValuesPerKey(): TransformWithStateMultipleValuesPerKey = {
+    new TransformWithStateMultipleValuesPerKey()
   }
 
-  def valueShouldBeNonNull(typeOfState: String): StateV2ValueShouldBeNonNull = {
-    new StateV2ValueShouldBeNonNull(typeOfState)
+  def valueShouldBeNonNull(typeOfState: String): TransformWithStateValueShouldBeNonNull = {
+    new TransformWithStateValueShouldBeNonNull(typeOfState)
   }
 }
-class StateV2ImplicitKeyNotFound(stateName: String)
+class TransformWithStateImplicitKeyNotFound(stateName: String)
   extends SparkRuntimeException(
-    errorClass = "STV2_IMPLICIT_KEY_NOT_FOUND",
+    errorClass = "TWS_IMPLICIT_KEY_NOT_FOUND",
     messageParameters = Map("stateName" -> stateName),
     cause = null
   )
-class StateV2EncoderPrefixKey(stateStoreEncoder: String)
+class TransformWithStateEncoderPrefixKey(stateStoreEncoder: String)
   extends SparkRuntimeException(
-    errorClass = "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY",
+    errorClass = "TWS_ENCODER_UNSUPPORTED_PREFIX_KEY",
     messageParameters = Map("stateStoreEncoder" -> stateStoreEncoder)
   )
 
-class StateV2MultipleValuesPerKey()
+class TransformWithStateMultipleValuesPerKey()
   extends SparkRuntimeException(
-    errorClass = "STV2_STORE_MULTIPLE_VALUES_PER_KEY",
+    errorClass = "TWS_STORE_MULTIPLE_VALUES_PER_KEY",
     messageParameters = Map.empty
   )
 
-class StateV2ValueShouldBeNonNull(typeOfState: String)
+class TransformWithStateValueShouldBeNonNull(typeOfState: String)
   extends SparkRuntimeException(
-    errorClass = "STV2_VALUE_SHOULD_BE_NONNULL",
+    errorClass = "TWS_VALUE_SHOULD_BE_NONNULL",
     Map("typeOfState" -> typeOfState),
     cause = null
   )

@@ -3270,36 +3270,6 @@
     ],
     "sqlState" : "XXKST"
   },
-  "STV2_ENCODER_UNSUPPORTED_PREFIX_KEY" : {
-    "message" : [
-      "Encoder doesn't support prefix key for state store provider: <stateStoreEncoder>. Please use another state store provider that supports prefix keys, or omit the prefix key."
-    ],
-    "sqlState" : "XXKST"
-  },
-  "STV2_IMPLICIT_KEY_NOT_FOUND" : {
-    "message" : [
-      "Implicit key not found for operation on stateName=<stateName>"
-    ],
-    "sqlState" : "55019"
-  },
-  "STV2_STORE_MULTIPLE_VALUES_PER_KEY" : {
-    "message" : [
-      "Store does not support multiple values per key"
-    ],
-    "sqlState" : "42802"
-  },
-  "STV2_UNSUPPORTED_OPERATION" : {
-    "message" : [
-      "<operationType> operation not supported with <entity>"
-    ],
-    "sqlState" : "XXKST"
-  },
-  "STV2_VALUE_SHOULD_BE_NONNULL" : {
-    "message" : [
-      "New value should be non-null for <typeOfState>"
-    ],
-    "sqlState" : "22004"
-  },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
@@ -3365,6 +3335,36 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TWS_ENCODER_UNSUPPORTED_PREFIX_KEY" : {
+    "message" : [
+      "Encoder doesn't support prefix key for state store provider: <stateStoreEncoder>. Please use another state store provider that supports prefix keys, or omit the prefix key."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "TWS_IMPLICIT_KEY_NOT_FOUND" : {
+    "message" : [
+      "Implicit key not found for operation on stateName=<stateName>"
+    ],
+    "sqlState" : "55019"
+  },
+  "TWS_STORE_MULTIPLE_VALUES_PER_KEY" : {
+    "message" : [
+      "Store does not support multiple values per key"
+    ],
+    "sqlState" : "42802"
+  },
+  "TWS_UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "TWS_VALUE_SHOULD_BE_NONNULL" : {
+    "message" : [
+      "New value should be non-null for <typeOfState>"
+    ],
+    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
