@@ -2050,7 +2050,7 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 
 ### STV2_ENCODER_UNSUPPORTED_PREFIX_KEY
 
-SQLSTATE: 00000
+SQLSTATE: XXKST
 
 Encoder does not support prefix key for <stateStoreEncoder>. Please use another state store provider that supports prefix keys,
 or omit the prefix key.
@@ -2063,7 +2063,7 @@ Implicit key not found for operation on stateName=`<stateName>`.
 
 ### STV2_UNSUPPORTED_OPERATION
 
-SQLSTATE: 000A0
+SQLSTATE: XXKST
 
 `<operationType>` operation not supported with `<entity>`.
 

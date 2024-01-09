@@ -3274,7 +3274,7 @@
     "message" : [
       "Encoder doesn't support prefix key for state store provider: <stateStoreEncoder>. Please use another state store provider that supports prefix keys, or omit the prefix key."
     ],
-    "sqlState" : "00000"
+    "sqlState" : "XXKST"
   },
   "STV2_IMPLICIT_KEY_NOT_FOUND" : {
     "message" : [
@@ -3292,7 +3292,7 @@
     "message" : [
       "<operationType> operation not supported with <entity>"
     ],
-    "sqlState" : "000A0"
+    "sqlState" : "XXKST"
   },
   "STV2_VALUE_SHOULD_BE_NONNULL" : {
     "message" : [
