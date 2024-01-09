@@ -40,7 +40,6 @@ import org.apache.spark.{JobArtifactSet, LocalSparkContext, SparkConf, SparkCont
   SparkFunSuite}
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.executor.MesosExecutorBackend
-import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
   TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -265,7 +264,7 @@ class MesosFineGrainedSchedulerBackendSuite
       artifacts = JobArtifactSet.emptyJobArtifactSet,
       properties = new Properties(),
       cpus = 1,
-      resources = immutable.Map.empty[String, ResourceInformation],
+      resources = immutable.Map.empty,
       ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(
       expectedWorkerOffers.toIndexedSeq)).thenReturn(Seq(Seq(taskDesc)))
@@ -378,7 +377,7 @@ class MesosFineGrainedSchedulerBackendSuite
       artifacts = JobArtifactSet.emptyJobArtifactSet,
       properties = new Properties(),
       cpus = 1,
-      resources = immutable.Map.empty[String, ResourceInformation],
+      resources = immutable.Map.empty,
       ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(
       expectedWorkerOffers.toIndexedSeq)).thenReturn(Seq(Seq(taskDesc)))
