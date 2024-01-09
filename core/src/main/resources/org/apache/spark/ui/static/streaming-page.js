@@ -223,7 +223,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     .attr("cx", function(d) { return x(d.x); })
     .attr("cy", function(d) { return y(d.y); })
     .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "3";})
-    .on('mouseover', function(d) {
+    .on('mouseover', function(event, d) {
       var tip = yValueFormat(d.y) + " " + unitY + " at " + timeTipStrings[d.x];
       showBootstrapTooltip(d3.select(this), tip);
       // show the point
