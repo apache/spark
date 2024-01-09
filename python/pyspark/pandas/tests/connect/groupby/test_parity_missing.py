@@ -19,10 +19,14 @@ import unittest
 
 from pyspark.pandas.tests.groupby.test_missing import MissingTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class MissingParityTests(MissingTestsMixin, PandasOnSparkTestCase, ReusedConnectTestCase):
+class MissingParityTests(
+    MissingTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

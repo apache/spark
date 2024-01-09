@@ -474,6 +474,12 @@ For more details see [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-
 
 DataType `<type>` requires a length parameter, for example `<type>`(10). Please specify the length.
 
+### DATA_SOURCE_ALREADY_EXISTS
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' already exists. Please choose a different name for the new data source.
+
 ### DATA_SOURCE_NOT_EXIST
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1270,6 +1276,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Parameterized query must either use positional, or named parameters, but not both.
+
+### INVALID_SAVE_MODE
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The specified save mode `<mode>` is invalid. Valid save modes include "append", "overwrite", "ignore", "error", "errorifexists", and "default".
 
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
@@ -2325,6 +2337,12 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
+
+### UNSUPPORTED_DATA_SOURCE_SAVE_MODE
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+The data source '`<source>`' cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

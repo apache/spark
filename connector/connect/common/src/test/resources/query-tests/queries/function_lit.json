@@ -85,6 +85,20 @@
       }
     }, {
       "literal": {
+        "array": {
+          "elementType": {
+            "integer": {
+            }
+          },
+          "elements": [{
+            "integer": 8
+          }, {
+            "integer": 6
+          }]
+        }
+      }
+    }, {
+      "literal": {
         "null": {
           "null": {
           }

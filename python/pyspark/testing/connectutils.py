@@ -192,3 +192,8 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
     def tearDownClass(cls):
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
+
+    def test_assert_remote_mode(self):
+        from pyspark.sql import is_remote
+
+        self.assertTrue(is_remote())

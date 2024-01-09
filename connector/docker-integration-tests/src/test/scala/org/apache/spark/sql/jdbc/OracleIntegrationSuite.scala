@@ -65,19 +65,7 @@ import org.apache.spark.tags.DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
   import testImplicits._
 
-  override val db = new DatabaseOnDocker {
-    lazy override val imageName =
-      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.3")
-    val oracle_password = "Th1s1sThe0racle#Pass"
-    override val env = Map(
-      "ORACLE_PWD" -> oracle_password,      // oracle images uses this
-      "ORACLE_PASSWORD" -> oracle_password  // gvenzl/oracle-free uses this
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 1521
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
-  }
+  override val db = new OracleDatabaseOnDocker
 
   override val connectionTimeout = timeout(7.minutes)
 

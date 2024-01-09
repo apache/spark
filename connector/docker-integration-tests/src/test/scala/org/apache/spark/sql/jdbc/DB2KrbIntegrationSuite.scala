@@ -21,7 +21,7 @@ import java.security.PrivilegedExceptionAction
 import java.sql.Connection
 import javax.security.auth.login.Configuration
 
-import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
+import com.github.dockerjava.api.model.{AccessMode, Bind, ContainerConfig, HostConfig, Volume}
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod.KERBEROS
 import org.scalatest.time.SpanSugar._
@@ -34,7 +34,8 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.6.0a):
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.6.0a
- *     ./build/sbt -Pdocker-integration-tests "testOnly *DB2KrbIntegrationSuite"
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *DB2KrbIntegrationSuite"
  * }}}
  */
 @DockerTest
@@ -66,14 +67,15 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     }
 
     override def beforeContainerStart(
-        hostConfigBuilder: HostConfig.Builder,
-        containerConfigBuilder: ContainerConfig.Builder): Unit = {
+        hostConfigBuilder: HostConfig,
+        containerConfigBuilder: ContainerConfig): Unit = {
       copyExecutableResource("db2_krb_setup.sh", initDbDir, replaceIp)
 
-      hostConfigBuilder.appendBinds(
-        HostConfig.Bind.from(initDbDir.getAbsolutePath)
-          .to("/var/custom").readOnly(true).build()
-      )
+      val newBind = new Bind(
+        initDbDir.getAbsolutePath,
+        new Volume("/var/custom"),
+        AccessMode.ro)
+      hostConfigBuilder.withBinds(hostConfigBuilder.getBinds :+ newBind: _*)
     }
   }
 

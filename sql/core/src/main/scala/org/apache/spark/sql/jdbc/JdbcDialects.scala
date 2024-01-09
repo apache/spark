@@ -159,7 +159,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       val connection =
         ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
       require(connection != null,
-        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+        s"The driver could not open a JDBC connection. Check the URL: ${options.getRedactUrl()}")
       connection
     }
   }
@@ -633,13 +633,31 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param e The dialect specific exception.
    * @param errorClass The error class assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
+   * @param description The error description
    * @return `AnalysisException` or its sub-class.
    */
   def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
-    new AnalysisException(errorClass, messageParameters, cause = Some(e))
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    classifyException(description, e)
+  }
+
+  /**
+   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param message The error message to be placed to the returned exception.
+   * @param e The dialect specific exception.
+   * @return `AnalysisException` or its sub-class.
+   */
+  @deprecated("Please override the classifyException method with an error class", "4.0.0")
+  def classifyException(message: String, e: Throwable): AnalysisException = {
+    new AnalysisException(
+      errorClass = "FAILED_JDBC.UNCLASSIFIED",
+      messageParameters = Map(
+        "url" -> "jdbc:",
+        "message" -> message),
+      cause = Some(e))
   }
 
   /**
