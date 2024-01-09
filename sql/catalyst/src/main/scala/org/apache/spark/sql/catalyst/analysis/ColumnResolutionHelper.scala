@@ -536,28 +536,49 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       isMetadataAccess: Boolean,
       p: LogicalPlan): (Option[NamedExpression], Boolean) = {
     val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      var resolved = Option.empty[NamedExpression]
-      try {
+      val resolved = try {
         if (!isMetadataAccess) {
-          resolved = p.resolve(u.nameParts, conf.resolver)
+          p.resolve(u.nameParts, conf.resolver)
         } else if (u.nameParts.size == 1) {
-          resolved = p.getMetadataAttributeByNameOpt(u.nameParts.head)
+          p.getMetadataAttributeByNameOpt(u.nameParts.head)
+        } else {
+          None
         }
       } catch {
         case e: AnalysisException =>
           logDebug(s"Fail to resolve $u with $p due to $e")
+          None
       }
       (resolved, true)
     } else {
       resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children)
     }
 
-    // Even with the target plan node, tryResolveDataFrameColumns still
-    // can not guarantee successfully resolving u:
-    // there are several rules supporting missing column resolution
-    // (e.g. ResolveReferencesInSort), but the resolved attribute maybe filtered
-    // out by the output attribute set.
-    // In this case, fall back to column resolution without plan id.
+    // In self join case like:
+    //   df1 = spark.range(10).withColumn("a", sf.lit(0))
+    //   df2 = df1.withColumnRenamed("a", "b")
+    //   df1.join(df2, df1["a"] == df2["b"])
+    //
+    // the logical plan would be like:
+    //
+    // 'Join Inner, '`==`('a, 'b)                             [plan_id=5]
+    //    :- Project [id#22L, 0 AS a#25]                      [plan_id=1]
+    //      :  +- Range (0, 10, step=1, splits=Some(12))
+    //    +- Project [id#28L, a#31 AS b#36]                   [plan_id=2]
+    //         +- Project [id#28L, 0 AS a#31]                 [plan_id=1]
+    //            +- Range (0, 10, step=1, splits=Some(12))
+    //
+    // When resolving the column reference df1.a, the target node with plan_id=1
+    // can be found in both sides of the Join node.
+    // To correctly resolve df1.a, the analyzer discards the resolved attribute
+    // in the right side, by filtering out the result by the output attributes of
+    // Project plan_id=2.
+    //
+    // However, there are analyzer rules (e.g. ResolveReferencesInSort)
+    // supporting missing column resolution. Then a valid resolved attribute
+    // maybe filtered out here. In this case, resolveDataFrameColumnByPlanId
+    // returns None, the dataframe column will remain unresolved, and the analyzer
+    // will try to resolve it without plan id later.
     val filtered = resolved.filter { r =>
       if (isMetadataAccess) {
         r.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
