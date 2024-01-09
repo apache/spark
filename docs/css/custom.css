@@ -96,17 +96,6 @@ section {
   border-color: transparent;
 }
 
-.hero-banner .bg {
-  background: url(/img/spark-hero-thin-light.jpg) no-repeat;
-  transform: translate(36%, 0%);
-  height: 475px;
-  top: 0;
-  position: absolute;
-  right: 0;
-  width: 100%;
-  opacity: 50%;
-}
-
 .hero-banner h1 {
   color: #0B9ACE;
   font-style: normal;
