@@ -102,10 +102,10 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def abort(releaseOnly: Boolean = false): Unit = {
+    override def abort(): Unit = {
       verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
       logInfo(s"Aborting ${version + 1} for $id")
-      rocksDB.rollback(releaseOnly)
+      rocksDB.rollback()
       state = ABORTED
     }
 

@@ -451,17 +451,15 @@ class RocksDB(
   /**
    * Drop uncommitted changes, and roll back to previous version.
    */
-  def rollback(releaseOnly: Boolean = false): Unit = {
+  def rollback(): Unit = {
     acquire()
-    if (!releaseOnly) {
-      numKeysOnWritingVersion = numKeysOnLoadedVersion
-      loadedVersion = -1L
-      changelogWriter.foreach(_.abort())
-      // Make sure changelogWriter gets recreated next time.
-      changelogWriter = None
-      logInfo(s"Rolled back to $loadedVersion")
-    }
+    numKeysOnWritingVersion = numKeysOnLoadedVersion
+    loadedVersion = -1L
+    changelogWriter.foreach(_.abort())
+    // Make sure changelogWriter gets recreated next time.
+    changelogWriter = None
     release()
+    logInfo(s"Rolled back to $loadedVersion")
   }
 
   def doMaintenance(): Unit = {

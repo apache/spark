@@ -450,12 +450,10 @@ case class StateStoreRestoreExec(
           outputRows
         }
       }
-
-      CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
-        // SPARK-46547 - Release the DB instance lock if required, to prevent
-        // deadlocks with the maintenance thread.
-        store.abort(releaseOnly = true)
-      })
+      // SPARK-46547 - Release any locks/resources if required, to prevent
+      // deadlocks with the maintenance thread.
+      store.abort()
+      result
     }
   }
 
