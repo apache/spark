@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -2084,7 +2083,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
-    val trimWarningEnabled = new AtomicBoolean(true)
+
+    @volatile
+    private var trimWarningEnabled = true
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
@@ -2421,11 +2422,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case other =>
           checkUnsupportedAggregateClause(other, u)
           if (other.isInstanceOf[String2TrimExpression] && numArgs == 2) {
-            if (trimWarningEnabled.get) {
+            if (trimWarningEnabled) {
               log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
                 " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
                 " instead.")
-              trimWarningEnabled.set(false)
+              trimWarningEnabled = false
             }
           }
           other

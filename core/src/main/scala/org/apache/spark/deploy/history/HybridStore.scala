@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import java.util.Collection
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
@@ -43,11 +42,13 @@ private[history] class HybridStore extends KVStore {
   private var diskStore: KVStore = null
 
   // Flag to indicate whether we should use inMemoryStore or RocksDB
-  private val shouldUseInMemoryStore = new AtomicBoolean(true)
+  @volatile
+  private var shouldUseInMemoryStore = true
 
   // Flag to indicate whether this hybrid store is closed, use this flag
   // to avoid starting background thread after the store is closed
-  private val closed = new AtomicBoolean(false)
+  @volatile
+  private var closed = false
 
   // A background thread that dumps data from inMemoryStore to RocksDB
   private var backgroundThread: Thread = null
@@ -100,7 +101,7 @@ private[history] class HybridStore extends KVStore {
 
   override def close(): Unit = {
     try {
-      closed.set(true)
+      closed = true
       if (backgroundThread != null && backgroundThread.isAlive()) {
         // The background thread is still running, wait for it to finish
         backgroundThread.join()
@@ -139,7 +140,7 @@ private[history] class HybridStore extends KVStore {
       listener: HybridStore.SwitchToDiskStoreListener,
       appId: String,
       attemptId: Option[String]): Unit = {
-    if (closed.get) {
+    if (closed) {
       return
     }
 
@@ -155,7 +156,7 @@ private[history] class HybridStore extends KVStore {
           }
         }
         listener.onSwitchToDiskStoreSuccess()
-        shouldUseInMemoryStore.set(false)
+        shouldUseInMemoryStore = false
         inMemoryStore.close()
       } catch {
         case e: Exception =>
@@ -172,7 +173,7 @@ private[history] class HybridStore extends KVStore {
    * Visible for testing.
    */
   private[history] def getStore(): KVStore = {
-    if (shouldUseInMemoryStore.get) {
+    if (shouldUseInMemoryStore) {
       inMemoryStore
     } else {
       diskStore

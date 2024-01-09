@@ -27,7 +27,6 @@ import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -80,7 +79,7 @@ public class ReadAheadInputStream extends InputStream {
   private boolean isReading;
 
   // whether there is a reader waiting for data.
-  private AtomicBoolean isWaiting = new AtomicBoolean(false);
+  private volatile boolean isWaiting = false;
 
   private final InputStream underlyingInputStream;
 
@@ -164,7 +163,7 @@ public class ReadAheadInputStream extends InputStream {
           if (read <= 0) break;
           off += read;
           len -= read;
-        } while (len > 0 && !isWaiting.get());
+        } while (len > 0 && !isWaiting);
       } catch (Throwable ex) {
         exception = ex;
         if (ex instanceof Error error) {
@@ -221,7 +220,7 @@ public class ReadAheadInputStream extends InputStream {
 
   private void waitForAsyncReadComplete() throws IOException {
     stateChangeLock.lock();
-    isWaiting.set(true);
+    isWaiting = true;
     try {
       // There is only one reader, and one writer, so the writer should signal only once,
       // but a while loop checking the wake up condition is still needed to avoid spurious wakeups.
@@ -233,7 +232,7 @@ public class ReadAheadInputStream extends InputStream {
       iio.initCause(e);
       throw iio;
     } finally {
-      isWaiting.set(false);
+      isWaiting = false;
       stateChangeLock.unlock();
     }
     checkReadException();

@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.servlet.DispatcherType
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -47,7 +46,8 @@ private[spark] abstract class YarnSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
-  private val stopped = new AtomicBoolean(false)
+  @volatile
+  private var stopped = false
 
   override val minRegisteredRatio =
     if (conf.get(config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
@@ -114,7 +114,7 @@ private[spark] abstract class YarnSchedulerBackend(
       requestTotalExecutors(Map.empty, Map.empty, Map.empty)
       super.stop()
     } finally {
-      stopped.set(true)
+      stopped = true
     }
   }
 
@@ -279,7 +279,7 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
-        if (!stopped.get) {
+        if (!stopped) {
           if (disableExecutor(executorId)) {
             yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
           }
@@ -342,7 +342,7 @@ private[spark] abstract class YarnSchedulerBackend(
         addWebUIFilter(filterName, filterParams, proxyBase)
 
       case r @ RemoveExecutor(executorId, reason) =>
-        if (!stopped.get) {
+        if (!stopped) {
           logWarning(s"Requesting driver to remove executor $executorId for reason $reason")
           driverEndpoint.send(r)
         }

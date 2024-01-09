@@ -58,7 +58,9 @@ private[spark] class StandaloneAppClient(
 
   private val endpoint = new AtomicReference[RpcEndpointRef]
   private val appId = new AtomicReference[String]
-  private val registered = new AtomicBoolean(false)
+
+  @volatile
+  private var registered = false
 
   private class ClientEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint
     with Logging {
@@ -101,7 +103,7 @@ private[spark] class StandaloneAppClient(
       for (masterAddress <- masterRpcAddresses) yield {
         registerMasterThreadPool.submit(new Runnable {
           override def run(): Unit = try {
-            if (registered.get) {
+            if (registered) {
               return
             }
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
@@ -126,7 +128,7 @@ private[spark] class StandaloneAppClient(
       registerMasterFutures.set(tryRegisterAllMasters())
       registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
-          if (registered.get) {
+          if (registered) {
             registerMasterFutures.get.foreach(_.cancel(true))
             registerMasterThreadPool.shutdownNow()
           } else if (nthRetry >= REGISTRATION_RETRIES) {
@@ -162,7 +164,7 @@ private[spark] class StandaloneAppClient(
         // 2. Receive multiple RegisteredApplication from different masters because the master is
         // changing.
         appId.set(appId_)
-        registered.set(true)
+        registered = true
         master = Some(masterRef)
         listener.connected(appId.get)
 
