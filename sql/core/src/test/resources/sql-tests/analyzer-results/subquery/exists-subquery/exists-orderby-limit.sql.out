@@ -620,17 +620,15 @@ SELECT *
 FROM   emp
 WHERE  EXISTS (SELECT max(dept.dept_id)
                FROM   dept
-               WHERE  dept.dept_id <> emp.dept_id
-                 AND emp.salary > 200
-               GROUP  BY state
+               WHERE  emp.salary > 200
                LIMIT  1)
 -- !query analysis
 Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-+- Filter exists#x [dept_id#x && salary#x]
++- Filter exists#x [salary#x]
    :  +- GlobalLimit 1
    :     +- LocalLimit 1
-   :        +- Aggregate [state#x], [max(dept_id#x) AS max(dept_id)#x]
-   :           +- Filter (NOT (dept_id#x = outer(dept_id#x)) AND (outer(salary#x) > cast(200 as double)))
+   :        +- Aggregate [max(dept_id#x) AS max(dept_id)#x]
+   :           +- Filter (outer(salary#x) > cast(200 as double))
    :              +- SubqueryAlias dept
    :                 +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
    :                    +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
