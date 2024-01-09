@@ -7274,6 +7274,36 @@ def weekday(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def monthname(col: "ColumnOrName") -> Column:
+    """
+    Returns the three-letter abbreviated month name from the given date.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the three-letter abbreviation of month name for date/timestamp (Jan, Feb, Mar...)
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(monthname('dt').alias('month')).show()
+    +-----+
+    |month|
+    +-----+
+    |  Apr|
+    +-----+
+    """
+    return _invoke_function_over_columns("monthname", col)
+
+
+@_try_remote_functions
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
@@ -11153,30 +11183,96 @@ def parse_url(
     url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
 ) -> Column:
     """
-    Extracts a part from a URL.
+    URL function: Extracts a specified part from a URL. If a key is provided,
+    it returns the associated query parameter value.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     url : :class:`~pyspark.sql.Column` or str
-        A column of string.
+        A column of strings, each representing a URL.
     partToExtract : :class:`~pyspark.sql.Column` or str
-        A column of string, the path.
+        A column of strings, each representing the part to extract from the URL.
     key : :class:`~pyspark.sql.Column` or str, optional
-        A column of string, the key.
+        A column of strings, each representing the key of a query parameter in the URL.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the value of the extracted part from the URL.
 
     Examples
     --------
-    >>> df = spark.createDataFrame(
-    ...     [("http://spark.apache.org/path?query=1", "QUERY", "query",)],
-    ...     ["a", "b", "c"]
-    ... )
-    >>> df.select(parse_url(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r='1')]
+    Example 1: Extracting the query part from a URL
 
-    >>> df.select(parse_url(df.a, df.b).alias('r')).collect()
-    [Row(r='query=1')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |             query=1|
+    +--------------------+
+
+    Example 2: Extracting the value of a specific query parameter from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+    ...   ["url", "part", "key"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part, df.key)).show()
+    +-------------------------+
+    |parse_url(url, part, key)|
+    +-------------------------+
+    |                        1|
+    +-------------------------+
+
+    Example 3: Extracting the protocol part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PROTOCOL")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |               https|
+    +--------------------+
+
+    Example 4: Extracting the host part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "HOST")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |    spark.apache.org|
+    +--------------------+
+
+    Example 5: Extracting the path part from a URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("https://spark.apache.org/path?query=1", "PATH")],
+    ...   ["url", "part"]
+    ... )
+    >>> df.select(sf.parse_url(df.url, df.part)).show()
+    +--------------------+
+    |parse_url(url, part)|
+    +--------------------+
+    |               /path|
+    +--------------------+
     """
     if key is not None:
         return _invoke_function_over_columns("parse_url", url, partToExtract, key)
@@ -11217,21 +11313,77 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 @_try_remote_functions
 def url_decode(str: "ColumnOrName") -> Column:
     """
-    Decodes a `str` in 'application/x-www-form-urlencoded' format
-    using a specific encoding scheme.
+    URL function: Decodes a URL-encoded string in 'application/x-www-form-urlencoded'
+    format to its original format.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of string to decode.
+        A column of strings, each representing a URL-encoded string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the decoded string.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["a"])
-    >>> df.select(url_decode(df.a).alias('r')).collect()
-    [Row(r='https://spark.apache.org')]
+    Example 1: Decoding a URL-encoded string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show(truncate=False)
+    +------------------------+
+    |url_decode(url)         |
+    +------------------------+
+    |https://spark.apache.org|
+    +------------------------+
+
+    Example 2: Decoding a URL-encoded string with spaces
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Hello%20World%21",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |   Hello World!|
+    +---------------+
+
+    Example 3: Decoding a URL-encoded string with special characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("A%2BB%3D%3D",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |          A+B==|
+    +---------------+
+
+    Example 4: Decoding a URL-encoded string with non-ASCII characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("%E4%BD%A0%E5%A5%BD",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |           你好|
+    +---------------+
+
+    Example 5: Decoding a URL-encoded string with hexadecimal values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("%7E%21%40%23%24%25%5E%26%2A%28%29%5F%2B",)], ["url"])
+    >>> df.select(sf.url_decode(df.url)).show()
+    +---------------+
+    |url_decode(url)|
+    +---------------+
+    |  ~!@#$%^&*()_+|
+    +---------------+
     """
     return _invoke_function_over_columns("url_decode", str)
 
@@ -11239,21 +11391,77 @@ def url_decode(str: "ColumnOrName") -> Column:
 @_try_remote_functions
 def url_encode(str: "ColumnOrName") -> Column:
     """
-    Translates a string into 'application/x-www-form-urlencoded' format
-    using a specific encoding scheme.
+    URL function: Encodes a string into a URL-encoded string in
+    'application/x-www-form-urlencoded' format.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
-        A column of string to encode.
+        A column of strings, each representing a string to be URL-encoded.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the URL-encoded string.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("https://spark.apache.org",)], ["a"])
-    >>> df.select(url_encode(df.a).alias('r')).collect()
-    [Row(r='https%3A%2F%2Fspark.apache.org')]
+    Example 1: Encoding a simple URL
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https://spark.apache.org",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show(truncate=False)
+    +------------------------------+
+    |url_encode(url)               |
+    +------------------------------+
+    |https%3A%2F%2Fspark.apache.org|
+    +------------------------------+
+
+    Example 2: Encoding a URL with spaces
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Hello World!",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show()
+    +---------------+
+    |url_encode(url)|
+    +---------------+
+    | Hello+World%21|
+    +---------------+
+
+    Example 3: Encoding a URL with special characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("A+B==",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show()
+    +---------------+
+    |url_encode(url)|
+    +---------------+
+    |    A%2BB%3D%3D|
+    +---------------+
+
+    Example 4: Encoding a URL with non-ASCII characters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("你好",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show()
+    +------------------+
+    |   url_encode(url)|
+    +------------------+
+    |%E4%BD%A0%E5%A5%BD|
+    +------------------+
+
+    Example 5: Encoding a URL with hexadecimal values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("~!@#$%^&*()_+",)], ["url"])
+    >>> df.select(sf.url_encode(df.url)).show(truncate=False)
+    +-----------------------------------+
+    |url_encode(url)                    |
+    +-----------------------------------+
+    |%7E%21%40%23%24%25%5E%26*%28%29_%2B|
+    +-----------------------------------+
     """
     return _invoke_function_over_columns("url_encode", str)
 
@@ -17014,37 +17222,47 @@ def convert_timezone(
     Parameters
     ----------
     sourceTz : :class:`~pyspark.sql.Column`, optional
-        the time zone for the input timestamp. If it is missed,
+        The time zone for the input timestamp. If it is missed,
         the current session time zone is used as the source time zone.
     targetTz : :class:`~pyspark.sql.Column`
-        the time zone to which the input timestamp should be converted.
+        The time zone to which the input timestamp should be converted.
     sourceTs : :class:`~pyspark.sql.Column`
-        a timestamp without time zone.
+        A timestamp without time zone.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        timestamp for converted time zone.
+        A new column that contains a timestamp for converted time zone.
 
     Examples
     --------
+
+    Example 1: Converts the timestamp without time zone `sourceTs`,
+        the source time zone `sourceTz` is None.
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(convert_timezone(   # doctest: +SKIP
-    ...     None, lit('Asia/Hong_Kong'), 'dt').alias('ts')
+    >>> df.select(sf.convert_timezone(   # doctest: +SKIP
+    ...     None, sf.lit('Asia/Hong_Kong'), 'dt')
     ... ).show()
-    +-------------------+
-    |                 ts|
-    +-------------------+
-    |2015-04-08 00:00:00|
-    +-------------------+
-    >>> df.select(convert_timezone(
-    ...     lit('America/Los_Angeles'), lit('Asia/Hong_Kong'), 'dt').alias('ts')
+    +--------------------------------------------------------+
+    |convert_timezone(current_timezone(), Asia/Hong_Kong, dt)|
+    +--------------------------------------------------------+
+    |                                     2015-04-08 00:00:00|
+    +--------------------------------------------------------+
+
+    Example 2: Converts the timestamp without time zone `sourceTs`.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(sf.convert_timezone(
+    ...     sf.lit('America/Los_Angeles'), sf.lit('Asia/Hong_Kong'), 'dt')
     ... ).show()
-    +-------------------+
-    |                 ts|
-    +-------------------+
-    |2015-04-08 15:00:00|
-    +-------------------+
+    +---------------------------------------------------------+
+    |convert_timezone(America/Los_Angeles, Asia/Hong_Kong, dt)|
+    +---------------------------------------------------------+
+    |                                      2015-04-08 15:00:00|
+    +---------------------------------------------------------+
     """
     if sourceTz is None:
         return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
@@ -17067,55 +17285,78 @@ def make_dt_interval(
     Parameters
     ----------
     days : :class:`~pyspark.sql.Column` or str, optional
-        the number of days, positive or negative
+        The number of days, positive or negative.
     hours : :class:`~pyspark.sql.Column` or str, optional
-        the number of hours, positive or negative
+        The number of hours, positive or negative.
     mins : :class:`~pyspark.sql.Column` or str, optional
-        the number of minutes, positive or negative
+        The number of minutes, positive or negative.
     secs : :class:`~pyspark.sql.Column` or str, optional
-        the number of seconds with the fractional part in microsecond precision.
+        The number of seconds with the fractional part in microsecond precision.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a DayTimeIntervalType duration.
 
     Examples
     --------
+
+    Example 1: Make DayTimeIntervalType duration from days, hours, mins and secs.
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
     ...     ["day", "hour", "min", "sec"])
-    >>> df.select(make_dt_interval(
-    ...     df.day, df.hour, df.min, df.sec).alias('r')
-    ... ).show(truncate=False)
+    >>> df.select(sf.make_dt_interval(df.day, df.hour, df.min, df.sec)).show(truncate=False)
     +------------------------------------------+
-    |r                                         |
+    |make_dt_interval(day, hour, min, sec)     |
     +------------------------------------------+
     |INTERVAL '1 12:30:01.001001' DAY TO SECOND|
     +------------------------------------------+
 
-    >>> df.select(make_dt_interval(
-    ...     df.day, df.hour, df.min).alias('r')
-    ... ).show(truncate=False)
+    Example 2: Make DayTimeIntervalType duration from days, hours and mins.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
+    ...     ["day", "hour", "min", "sec"])
+    >>> df.select(sf.make_dt_interval(df.day, df.hour, df.min)).show(truncate=False)
     +-----------------------------------+
-    |r                                  |
+    |make_dt_interval(day, hour, min, 0)|
     +-----------------------------------+
     |INTERVAL '1 12:30:00' DAY TO SECOND|
     +-----------------------------------+
 
-    >>> df.select(make_dt_interval(
-    ...     df.day, df.hour).alias('r')
-    ... ).show(truncate=False)
+    Example 3: Make DayTimeIntervalType duration from days and hours.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
+    ...     ["day", "hour", "min", "sec"])
+    >>> df.select(sf.make_dt_interval(df.day, df.hour)).show(truncate=False)
     +-----------------------------------+
-    |r                                  |
+    |make_dt_interval(day, hour, 0, 0)  |
     +-----------------------------------+
     |INTERVAL '1 12:00:00' DAY TO SECOND|
     +-----------------------------------+
 
-    >>> df.select(make_dt_interval(df.day).alias('r')).show(truncate=False)
+    Example 4: Make DayTimeIntervalType duration from days.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
+    ...     ["day", "hour", "min", "sec"])
+    >>> df.select(sf.make_dt_interval(df.day)).show(truncate=False)
     +-----------------------------------+
-    |r                                  |
+    |make_dt_interval(day, 0, 0, 0)     |
     +-----------------------------------+
     |INTERVAL '1 00:00:00' DAY TO SECOND|
     +-----------------------------------+
 
-    >>> df.select(make_dt_interval().alias('r')).show(truncate=False)
+    Example 5: Make DayTimeIntervalType duration.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
+    ...     ["day", "hour", "min", "sec"])
+    >>> df.select(sf.make_dt_interval()).show(truncate=False)
     +-----------------------------------+
-    |r                                  |
+    |make_dt_interval(0, 0, 0, 0)       |
     +-----------------------------------+
     |INTERVAL '0 00:00:00' DAY TO SECOND|
     +-----------------------------------+
@@ -17145,82 +17386,129 @@ def make_interval(
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or str, optional
-        the number of years, positive or negative
+        The number of years, positive or negative.
     months : :class:`~pyspark.sql.Column` or str, optional
-        the number of months, positive or negative
+        The number of months, positive or negative.
     weeks : :class:`~pyspark.sql.Column` or str, optional
-        the number of weeks, positive or negative
+        The number of weeks, positive or negative.
     days : :class:`~pyspark.sql.Column` or str, optional
-        the number of days, positive or negative
+        The number of days, positive or negative.
     hours : :class:`~pyspark.sql.Column` or str, optional
-        the number of hours, positive or negative
+        The number of hours, positive or negative.
     mins : :class:`~pyspark.sql.Column` or str, optional
-        the number of minutes, positive or negative
+        The number of minutes, positive or negative.
     secs : :class:`~pyspark.sql.Column` or str, optional
-        the number of seconds with the fractional part in microsecond precision.
+        The number of seconds with the fractional part in microsecond precision.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains an interval.
 
     Examples
     --------
+
+    Example 1: Make interval from years, months, weeks, days, hours, mins and secs.
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
     ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour, df.min, df.sec).alias('r')
+    >>> df.select(sf.make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +---------------------------------------------------------------+
-    |r                                                              |
+    |make_interval(year, month, week, day, hour, min, sec)          |
     +---------------------------------------------------------------+
     |100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds|
     +---------------------------------------------------------------+
 
-    >>> df.select(make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour, df.min).alias('r')
+    Example 2: Make interval from years, months, weeks, days, hours and mins.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour, df.min)
     ... ).show(truncate=False)
+    +---------------------------------------------------+
+    |make_interval(year, month, week, day, hour, min, 0)|
+    +---------------------------------------------------+
+    |100 years 11 months 8 days 12 hours 30 minutes     |
+    +---------------------------------------------------+
+
+    Example 3: Make interval from years, months, weeks, days and hours.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour)
+    ... ).show(truncate=False)
+    +-------------------------------------------------+
+    |make_interval(year, month, week, day, hour, 0, 0)|
+    +-------------------------------------------------+
+    |100 years 11 months 8 days 12 hours              |
+    +-------------------------------------------------+
+
+    Example 4: Make interval from years, months, weeks and days.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.make_interval(df.year, df.month, df.week, df.day)).show(truncate=False)
     +----------------------------------------------+
-    |r                                             |
+    |make_interval(year, month, week, day, 0, 0, 0)|
     +----------------------------------------------+
-    |100 years 11 months 8 days 12 hours 30 minutes|
+    |100 years 11 months 8 days                    |
     +----------------------------------------------+
 
-    >>> df.select(make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour).alias('r')
-    ... ).show(truncate=False)
-    +-----------------------------------+
-    |r                                  |
-    +-----------------------------------+
-    |100 years 11 months 8 days 12 hours|
-    +-----------------------------------+
+    Example 5: Make interval from years, months and weeks.
 
-    >>> df.select(make_interval(
-    ...     df.year, df.month, df.week, df.day).alias('r')
-    ... ).show(truncate=False)
-    +--------------------------+
-    |r                         |
-    +--------------------------+
-    |100 years 11 months 8 days|
-    +--------------------------+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.make_interval(df.year, df.month, df.week)).show(truncate=False)
+    +--------------------------------------------+
+    |make_interval(year, month, week, 0, 0, 0, 0)|
+    +--------------------------------------------+
+    |100 years 11 months 7 days                  |
+    +--------------------------------------------+
 
-    >>> df.select(make_interval(
-    ...     df.year, df.month, df.week).alias('r')
-    ... ).show(truncate=False)
-    +--------------------------+
-    |r                         |
-    +--------------------------+
-    |100 years 11 months 7 days|
-    +--------------------------+
+    Example 6: Make interval from years and months.
 
-    >>> df.select(make_interval(df.year, df.month).alias('r')).show(truncate=False)
-    +-------------------+
-    |r                  |
-    +-------------------+
-    |100 years 11 months|
-    +-------------------+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.make_interval(df.year, df.month)).show(truncate=False)
+    +-----------------------------------------+
+    |make_interval(year, month, 0, 0, 0, 0, 0)|
+    +-----------------------------------------+
+    |100 years 11 months                      |
+    +-----------------------------------------+
 
-    >>> df.select(make_interval(df.year).alias('r')).show(truncate=False)
-    +---------+
-    |r        |
-    +---------+
-    |100 years|
-    +---------+
+    Example 7: Make interval from years.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.make_interval(df.year)).show(truncate=False)
+    +-------------------------------------+
+    |make_interval(year, 0, 0, 0, 0, 0, 0)|
+    +-------------------------------------+
+    |100 years                            |
+    +-------------------------------------+
+
+    Example 8: Make interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(sf.make_interval()).show(truncate=False)
+    +----------------------------------+
+    |make_interval(0, 0, 0, 0, 0, 0, 0)|
+    +----------------------------------+
+    |0 seconds                         |
+    +----------------------------------+
     """
     _years = lit(0) if years is None else years
     _months = lit(0) if months is None else months

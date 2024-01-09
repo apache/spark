@@ -18,9 +18,11 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnaryMinus, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.CalendarIntervalType
 
@@ -547,5 +549,25 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df,
       Row(1) :: Row(1) :: Nil)
+  }
+
+  test("SPARK-45352: Eliminate foldable window partitions") {
+    val df = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("a", "b")
+
+    Seq(true, false).foreach { eliminateWindowPartitionsEnabled =>
+      val excludedRules =
+        if (eliminateWindowPartitionsEnabled) "" else EliminateWindowPartitions.ruleName
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules) {
+        val window1 = Window.partitionBy(lit(1)).orderBy($"b")
+        checkAnswer(
+          df.select($"a", $"b", row_number().over(window1)),
+          Seq(Row(1, 1, 1), Row(1, 2, 3), Row(1, 3, 5), Row(2, 1, 2), Row(2, 2, 4)))
+
+        val window2 = Window.partitionBy($"a", lit(1)).orderBy($"b")
+        checkAnswer(
+          df.select($"a", $"b", row_number().over(window2)),
+          Seq(Row(1, 1, 1), Row(1, 2, 2), Row(1, 3, 3), Row(2, 1, 1), Row(2, 2, 2)))
+      }
+    }
   }
 }
