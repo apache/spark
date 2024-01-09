@@ -426,7 +426,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       throws: Boolean = false,
       includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      tryResolveColumnByPlanId(expr, Seq(plan)),
+      tryResolveDataFrameColumns(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, conf.resolver)
       },
@@ -448,7 +448,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       q: LogicalPlan,
       includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      tryResolveColumnByPlanId(e, q.children),
+      tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, conf.resolver)
       },
@@ -485,17 +485,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //    4. if more than one matching nodes are found, fail due to ambiguous column reference;
   //    5. resolve the expression with the matching node, if any error occurs here, return the
   //       original expression as it is.
-  private def tryResolveColumnByPlanId(
+  private def tryResolveDataFrameColumns(
       e: Expression,
       q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
-      resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
+      resolveDataFrameColumn(u, q).getOrElse(u)
     case _ if e.containsPattern(UNRESOLVED_ATTRIBUTE) =>
-      e.mapChildren(c => tryResolveColumnByPlanId(c, q))
+      e.mapChildren(c => tryResolveDataFrameColumns(c, q))
     case _ => e
   }
 
-  private def resolveUnresolvedAttributeByPlanId(
+  private def resolveDataFrameColumn(
       u: UnresolvedAttribute,
       q: Seq[LogicalPlan]): Option[NamedExpression] = {
     val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
@@ -504,8 +504,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     logDebug(s"Extract plan_id $planId from $u")
 
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
-    val (resolved, matched) = resolveByPlanId(u, planId, isMetadataAccess, q)
-
+    val (resolved, matched) = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q)
     if (!matched) {
       // Can not find the target plan node with plan id, e.g.
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
@@ -516,12 +515,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolved
   }
 
-  private def resolveByPlanId(
+  private def resolveDataFrameColumnByPlanId(
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
       q: Seq[LogicalPlan]): (Option[NamedExpression], Boolean) = {
-    q.iterator.map(resolveByPlanId(u, id, isMetadataAccess, _))
+    q.iterator.map(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _))
       .foldLeft((Option.empty[NamedExpression], false)) {
         case ((r1, m1), (r2, m2)) =>
           if (r1.nonEmpty && r2.nonEmpty) {
@@ -531,18 +530,29 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
   }
 
-  private def resolveByPlanId(
+  private def resolveDataFrameColumnRecursively(
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan): (Option[NamedExpression], Boolean) = {
     val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      (resolveByPlan(u, p, isMetadataAccess), true)
+      var resolved = Option.empty[NamedExpression]
+      try {
+        if (!isMetadataAccess) {
+          resolved = p.resolve(u.nameParts, conf.resolver)
+        } else if (u.nameParts.size == 1) {
+          resolved = p.getMetadataAttributeByNameOpt(u.nameParts.head)
+        }
+      } catch {
+        case e: AnalysisException =>
+          logDebug(s"Fail to resolve $u with $p due to $e")
+      }
+      (resolved, true)
     } else {
-      resolveByPlanId(u, id, isMetadataAccess, p.children)
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children)
     }
 
-    // Even with the target plan node, resolveUnresolvedAttributeByPlanId still
+    // Even with the target plan node, tryResolveDataFrameColumns still
     // can not guarantee successfully resolving u:
     // there are several rules supporting missing column resolution
     // (e.g. ResolveReferencesInSort), but the resolved attribute maybe filtered
@@ -556,24 +566,5 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
     (filtered, matched)
-  }
-
-  private def resolveByPlan(
-      u: UnresolvedAttribute,
-      plan: LogicalPlan,
-      isMetadataAccess: Boolean): Option[NamedExpression] = {
-    try {
-      if (!isMetadataAccess) {
-        plan.resolve(u.nameParts, conf.resolver)
-      } else if (u.nameParts.size == 1) {
-        plan.getMetadataAttributeByNameOpt(u.nameParts.head)
-      } else {
-        None
-      }
-    } catch {
-      case e: AnalysisException =>
-        logDebug(s"Fail to resolve $u with $plan due to $e")
-        None
-    }
   }
 }
