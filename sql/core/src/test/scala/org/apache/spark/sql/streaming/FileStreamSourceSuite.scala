@@ -1153,174 +1153,213 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("max files per trigger") {
-    withTempDir { case src =>
-      var lastFileModTime: Option[Long] = None
-
-      /** Create a text file with a single data item */
-      def createFile(data: Int): File = {
-        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
-        if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
-        lastFileModTime = Some(file.lastModified)
-        file
-      }
-
-      createFile(1)
-      createFile(2)
-      createFile(3)
-
-      // Set up a query to read text files 2 at a time
-      val df = spark
-        .readStream
-        .option("maxFilesPerTrigger", 2)
-        .text(src.getCanonicalPath)
-      val q = df
-        .writeStream
-        .format("memory")
-        .queryName("file_data")
-        .start()
-        .asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery
-      q.processAllAvailable()
-      val memorySink = q.sink.asInstanceOf[MemorySink]
-      val fileSource = getSourcesFromStreamingQuery(q).head
-
-      /** Check the data read in the last batch */
-      def checkLastBatchData(data: Int*): Unit = {
-        val schema = StructType(Seq(StructField("value", StringType)))
-        val df = spark.createDataFrame(
-          spark.sparkContext.makeRDD(memorySink.latestBatchData), schema)
-        checkAnswer(df, data.map(_.toString).toDF("value"))
-      }
-
-      def checkAllData(data: Seq[Int]): Unit = {
-        val schema = StructType(Seq(StructField("value", StringType)))
-        val df = spark.createDataFrame(
-          spark.sparkContext.makeRDD(memorySink.allData), schema)
-        checkAnswer(df, data.map(_.toString).toDF("value"))
-      }
-
-      /** Check how many batches have executed since the last time this check was made */
-      var lastBatchId = -1L
-      def checkNumBatchesSinceLastCheck(numBatches: Int): Unit = {
-        require(lastBatchId >= 0)
-        assert(memorySink.latestBatchId.get === lastBatchId + numBatches)
-        lastBatchId = memorySink.latestBatchId.get
-      }
-
-      checkLastBatchData(3)  // (1 and 2) should be in batch 1, (3) should be in batch 2 (last)
-      checkAllData(1 to 3)
-      lastBatchId = memorySink.latestBatchId.get
-
-      fileSource.withBatchingLocked {
-        createFile(4)
-        createFile(5)   // 4 and 5 should be in a batch
-        createFile(6)
-        createFile(7)   // 6 and 7 should be in the last batch
-      }
-      q.processAllAvailable()
-      checkNumBatchesSinceLastCheck(2)
-      checkLastBatchData(6, 7)
-      checkAllData(1 to 7)
-
-      fileSource.withBatchingLocked {
-        createFile(8)
-        createFile(9)    // 8 and 9 should be in a batch
-        createFile(10)
-        createFile(11)   // 10 and 11 should be in a batch
-        createFile(12)   // 12 should be in the last batch
-      }
-      q.processAllAvailable()
-      checkNumBatchesSinceLastCheck(3)
-      checkLastBatchData(12)
-      checkAllData(1 to 12)
-
-      q.stop()
-    }
-  }
-
-  testQuietly("max files per trigger - incorrect values") {
-    val testTable = "maxFilesPerTrigger_test"
-    withTable(testTable) {
+  test("maxFilesPerTrigger & maxBytesPerTrigger threshold logic must be obeyed") {
+    Seq(
+      "maxFilesPerTrigger",
+      "maxBytesPerTrigger"
+    ).foreach{ thresholdOption =>
       withTempDir { case src =>
-        def testMaxFilePerTriggerValue(value: String): Unit = {
-          val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
-          val e = intercept[StreamingQueryException] {
-            // Note: `maxFilesPerTrigger` is checked in the stream thread when creating the source
-            val q = df.writeStream.format("memory").queryName(testTable).start()
-            try {
-              q.processAllAvailable()
-            } finally {
-              q.stop()
-            }
-          }
-          assert(e.getCause.isInstanceOf[IllegalArgumentException])
-          Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
-            assert(e.getMessage.contains(s))
-          }
+        var lastFileModTime: Option[Long] = None
+
+        /** Create a text file with a single data item */
+        def createFile(data: String): File = {
+          val file = stringToFile(new File(src, s"$data.txt"), data)
+          if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
+          lastFileModTime = Some(file.lastModified)
+          file
         }
 
-        testMaxFilePerTriggerValue("not-a-integer")
-        testMaxFilePerTriggerValue("-1")
-        testMaxFilePerTriggerValue("0")
-        testMaxFilePerTriggerValue("10.1")
+        createFile("a")
+        createFile("b")
+        createFile("c")
+
+        // Set up a query to read text files 2 at a time
+        val df = spark
+          .readStream
+          .option(thresholdOption, 2)
+          .text(src.getCanonicalPath)
+        val q = df
+          .writeStream
+          .format("memory")
+          .queryName("file_data")
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+        q.processAllAvailable()
+        val memorySink = q.sink.asInstanceOf[MemorySink]
+        val fileSource = getSourcesFromStreamingQuery(q).head
+
+        /** Check the data read in the last batch */
+        def checkLastBatchData(data: Char*): Unit = {
+          val schema = StructType(Seq(StructField("value", StringType)))
+          val df = spark.createDataFrame(
+            spark.sparkContext.makeRDD(memorySink.latestBatchData), schema)
+          checkAnswer(df, data.map(_.toString).toDF("value"))
+        }
+
+        def checkAllData(data: Seq[Char]): Unit = {
+          val schema = StructType(Seq(StructField("value", StringType)))
+          val df = spark.createDataFrame(
+            spark.sparkContext.makeRDD(memorySink.allData), schema)
+          checkAnswer(df, data.map(_.toString).toDF("value"))
+        }
+
+        /** Check how many batches have executed since the last time this check was made */
+        var lastBatchId = -1L
+        def checkNumBatchesSinceLastCheck(numBatches: Int): Unit = {
+          require(lastBatchId >= 0)
+          assert(memorySink.latestBatchId.get === lastBatchId + numBatches)
+          lastBatchId = memorySink.latestBatchId.get
+        }
+
+        checkLastBatchData('c')  // (a and b) should be in batch 1, (c) should be in batch 2 (last)
+        checkAllData('a' to 'c')
+        lastBatchId = memorySink.latestBatchId.get
+
+        fileSource.withBatchingLocked {
+          createFile("d")
+          createFile("e")   // d and e should be in a batch
+          createFile("f")
+          createFile("g")   // f and g should be in the last batch
+        }
+        q.processAllAvailable()
+        checkNumBatchesSinceLastCheck(2)
+        checkLastBatchData('f', 'g')
+        checkAllData('a' to 'g')
+
+        fileSource.withBatchingLocked {
+          createFile("h")
+          createFile("i")    // h and i should be in a batch
+          createFile("j")
+          createFile("k")   // j and k should be in a batch
+          createFile("l")   // l should be in the last batch
+        }
+        q.processAllAvailable()
+        checkNumBatchesSinceLastCheck(3)
+        checkLastBatchData('l')
+        checkAllData('a' to 'l')
+
+        q.stop()
       }
     }
   }
 
-  test("SPARK-30669: maxFilesPerTrigger - ignored when using Trigger.Once") {
-    withTempDirs { (src, target) =>
-      val checkpoint = new File(target, "chk").getCanonicalPath
-      val targetDir = new File(target, "data").getCanonicalPath
-      var lastFileModTime: Option[Long] = None
+  testQuietly("max bytes per trigger & max files per trigger - incorrect values") {
+    Seq(
+      ("maxBytesPerTrigger_test", "maxBytesPerTrigger"),
+      ("maxFilesPerTrigger_test", "maxFilesPerTrigger")
+    ).foreach { case (testTable, optionName) =>
+      withTable(testTable) {
+        withTempDir { case src =>
+          def testMaxFilePerTriggerValue(value: String): Unit = {
+            val df = spark.readStream.option(optionName, value).text(src.getCanonicalPath)
+            val e = intercept[StreamingQueryException] {
+              // Note: a tested option is checked in the stream thread when creating the source
+              val q = df.writeStream.format("memory").queryName(testTable).start()
+              try {
+                q.processAllAvailable()
+              } finally {
+                q.stop()
+              }
+            }
+            assert(e.getCause.isInstanceOf[IllegalArgumentException])
+            Seq(optionName, value, "positive integer").foreach { s =>
+              assert(e.getMessage.contains(s))
+            }
+          }
 
-      /** Create a text file with a single data item */
-      def createFile(data: Int): File = {
-        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
-        if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
-        lastFileModTime = Some(file.lastModified)
-        file
+          testMaxFilePerTriggerValue("not-a-integer")
+          testMaxFilePerTriggerValue("-1")
+          testMaxFilePerTriggerValue("0")
+          testMaxFilePerTriggerValue("10.1")
+        }
       }
+    }
+  }
 
-      createFile(1)
-      createFile(2)
-      createFile(3)
-
-      // Set up a query to read text files one at a time
-      val df = spark
-        .readStream
-        .option("maxFilesPerTrigger", 1)
-        .text(src.getCanonicalPath)
-
-      def startQuery(): StreamingQuery = {
-        // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
-        df.writeStream
-          .format("parquet")
-          .trigger(Trigger.Once)
-          .option("checkpointLocation", checkpoint)
-          .start(targetDir)
+  testQuietly("max bytes per trigger & max files per trigger - both set") {
+    val testTable = "maxBytesPerTrigger_maxFilesPerTrigger_test"
+    withTable(testTable) {
+      withTempDir { case src =>
+        val df = spark.readStream
+          .option("maxBytesPerTrigger", "1")
+          .option("maxFilesPerTrigger", "1")
+          .text(src.getCanonicalPath)
+        val e = intercept[StreamingQueryException] {
+          // Note: a tested option is checked in the stream thread when creating the source
+          val q = df.writeStream.format("memory").queryName(testTable).start()
+          try {
+            q.processAllAvailable()
+          } finally {
+            q.stop()
+          }
+        }
+        assert(e.getCause.isInstanceOf[IllegalArgumentException])
+        Seq("maxBytesPerTrigger", "maxFilesPerTrigger", "can't be both set").foreach { s =>
+          assert(e.getMessage.contains(s))
+        }
       }
-      val q = startQuery()
+    }
+  }
 
-      try {
-        assert(q.awaitTermination(streamingTimeout.toMillis))
-        assert(q.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF())
-      } finally {
-        q.stop()
-      }
+  test("SPARK-30669: maxFilesPerTrigger & maxBytesPerTrigger - ignored when using Trigger.Once") {
+    Seq(
+      ("maxFilesPerTrigger", 1),
+      ("maxBytesPerTrigger", 1)
+    ).foreach{ case(optionName, optionValue) =>
+      withTempDirs { (src, target) =>
+        val checkpoint = new File(target, "chk").getCanonicalPath
+        val targetDir = new File(target, "data").getCanonicalPath
+        var lastFileModTime: Option[Long] = None
 
-      createFile(4)
-      createFile(5)
+        /** Create a text file with a single data item */
+        def createFile(data: Int): File = {
+          val file = stringToFile(new File(src, s"$data.txt"), data.toString)
+          if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
+          lastFileModTime = Some(file.lastModified)
+          file
+        }
 
-      // run a second batch
-      val q2 = startQuery()
-      try {
-        assert(q2.awaitTermination(streamingTimeout.toMillis))
-        assert(q2.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF())
-      } finally {
-        q2.stop()
+        createFile(1)
+        createFile(2)
+        createFile(3)
+
+        // Set up a query to read text files one at a time
+        val df = spark
+          .readStream
+          .option(optionName, optionValue)
+          .text(src.getCanonicalPath)
+
+        def startQuery(): StreamingQuery = {
+          // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
+          df.writeStream
+            .format("parquet")
+            .trigger(Trigger.Once)
+            .option("checkpointLocation", checkpoint)
+            .start(targetDir)
+        }
+        val q = startQuery()
+
+        try {
+          assert(q.awaitTermination(streamingTimeout.toMillis))
+          assert(q.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
+          checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF())
+        } finally {
+          q.stop()
+        }
+
+        createFile(4)
+        createFile(5)
+
+        // run a second batch
+        val q2 = startQuery()
+        try {
+          assert(q2.awaitTermination(streamingTimeout.toMillis))
+          assert(q2.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
+          checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF())
+        } finally {
+          q2.stop()
+        }
       }
     }
   }
@@ -1718,8 +1757,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       secondBatch: String,
       maxFileAge: Option[String] = None,
       cleanSource: CleanSourceMode.Value = CleanSourceMode.OFF,
-      archiveDir: Option[String] = None): Unit = {
-    val srcOptions = Map("latestFirst" -> latestFirst.toString, "maxFilesPerTrigger" -> "1") ++
+      archiveDir: Option[String] = None,
+      thresholdOption: String = "maxFilesPerTrigger"): Unit = {
+    val srcOptions = Map("latestFirst" -> latestFirst.toString, thresholdOption -> "1") ++
       maxFileAge.map("maxFileAge" -> _) ++
       Seq("cleanSource" -> cleanSource.toString) ++
       archiveDir.map("sourceArchiveDir" -> _)
@@ -1774,6 +1814,19 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       runTwoBatchesAndVerifyResults(src, latestFirst = true, firstBatch = "2", secondBatch = "1",
         maxFileAge = Some("1m") /* 1 minute */)
+    }
+  }
+
+
+  test("SPARK-19813: Ignore maxFileAge when maxBytesPerTrigger and latestFirst is used") {
+    withTempDir { src =>
+      // Prepare two files: 1.txt, 2.txt, and make sure they have different modified time.
+      val f1 = stringToFile(new File(src, "1.txt"), "1")
+      val f2 = stringToFile(new File(src, "2.txt"), "2")
+      f2.setLastModified(f1.lastModified + 3600 * 1000 /* 1 hour later */)
+
+      runTwoBatchesAndVerifyResults(src, latestFirst = true, firstBatch = "2", secondBatch = "1",
+        maxFileAge = Some("1m"), thresholdOption = "maxBytesPerTrigger")
     }
   }
 
