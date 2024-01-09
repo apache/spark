@@ -1124,6 +1124,52 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("retain empty proto fields") {
+    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message" -> "true")
+
+    // EmptyRecursiveProto at the top level. It will be an empty struct.
+    checkWithFileAndClassName("EmptyProto") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+        )
+        // Top level empty message is retained without adding dummy column to the schema.
+        assert(df.schema == structFromDDL("empty_proto struct<>"))
+    }
+
+    // EmptyRecursiveProto at inner level, because empty struct type is not allowed in Spark.,
+    // a dummy column is inserted to retain the empty message.
+    checkWithFileAndClassName("EmptyProtoWrapper") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+        )
+        // Nested empty message is retained by adding dummy column to the schema.
+        assert(df.schema ==
+          structFromDDL("wrapper struct<name: string, empty_proto struct<_dummy_field: string>>"))
+    }
+  }
+
+  test("Write empty proto to parquet") {
+    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message" -> "true")
+    withTempDir { file =>
+      val binaryDF = Seq(
+        EmptyRecursiveProtoWrapper.newBuilder.setName("my_name").build().toByteArray).toDF("binary")
+      checkWithFileAndClassName("EmptyProtoWrapper") {
+        case (name, descFilePathOpt) =>
+          val df = binaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+          )
+          df.write.format("parquet").mode("overwrite").save(file.getAbsolutePath)
+      }
+      val resultDF = spark.read.format("parquet").load(file.getAbsolutePath)
+      assert(resultDF.schema ==
+        structFromDDL("wrapper struct<name: string, empty_proto struct<_dummy_field: string>>"))
+      // The dummy column of empty proto should have null value.
+      checkAnswer(resultDF, Seq(Row(Row("my_name", null))))
+    }
+  }
+
   test("Corner case: empty recursive proto fields should be dropped") {
     // This verifies that a empty proto like 'message A { A a = 1}' are completely dropped
     // irrespective of max depth setting.

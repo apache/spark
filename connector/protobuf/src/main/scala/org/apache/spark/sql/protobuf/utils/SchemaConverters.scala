@@ -212,11 +212,17 @@ object SchemaConverters extends Logging {
           ).toSeq
           fields match {
             case Nil =>
-              log.info(
-                s"Dropping ${fd.getFullName} as it does not have any fields left " +
-                "likely due to recursive depth limit."
-              )
-              None
+              if (protobufOptions.retainEmptyMessage) {
+                // Insert a dummy column to retain the empty message because
+                // spark doesn't allow empty struct type.
+                Some(StructType(StructField("_dummy_field", StringType) :: Nil))
+              } else {
+                log.info(
+                  s"Dropping ${fd.getFullName} as it does not have any fields left " +
+                    "likely due to recursive depth limit."
+                )
+                None
+              }
             case fds => Some(StructType(fds))
           }
         }
