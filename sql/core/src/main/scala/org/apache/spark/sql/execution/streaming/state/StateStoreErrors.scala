@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
  *
  * ERROR_CLASS has a prefix of "STV2_" representing State API V2.
  */
-class StateStoreErrors {
+object StateStoreErrors {
   def implicitKeyNotFound(
       stateName: String): TransformWithStateImplicitKeyNotFound = {
     new TransformWithStateImplicitKeyNotFound(stateName)
@@ -38,6 +38,10 @@ class StateStoreErrors {
     new TransformWithStateMultipleValuesPerKey()
   }
 
+  def unsupportedOperationException(operationName: String, entity: String):
+    TransformWithStateUnsupportedOperation = {
+    new TransformWithStateUnsupportedOperation(operationName, entity)
+  }
   def valueShouldBeNonNull(typeOfState: String): TransformWithStateValueShouldBeNonNull = {
     new TransformWithStateValueShouldBeNonNull(typeOfState)
   }
@@ -48,18 +52,28 @@ class TransformWithStateImplicitKeyNotFound(stateName: String)
     messageParameters = Map("stateName" -> stateName),
     cause = null
   )
+
+// Used for ListState
 class TransformWithStateEncoderPrefixKey(stateStoreEncoder: String)
   extends SparkRuntimeException(
     errorClass = "TWS_ENCODER_UNSUPPORTED_PREFIX_KEY",
     messageParameters = Map("stateStoreEncoder" -> stateStoreEncoder)
   )
 
+// Used for ListState
 class TransformWithStateMultipleValuesPerKey()
   extends SparkRuntimeException(
     errorClass = "TWS_STORE_MULTIPLE_VALUES_PER_KEY",
     messageParameters = Map.empty
   )
 
+class TransformWithStateUnsupportedOperation(operationType: String, entity: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "TWS_STORE_UNSUPPORTED_OPERATION",
+    messageParameters = Map("operationType" -> operationType, "entity" -> entity)
+  )
+
+// Used for ListState
 class TransformWithStateValueShouldBeNonNull(typeOfState: String)
   extends SparkRuntimeException(
     errorClass = "TWS_VALUE_SHOULD_BE_NONNULL",
