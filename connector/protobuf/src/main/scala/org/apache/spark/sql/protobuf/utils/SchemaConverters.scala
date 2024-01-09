@@ -215,7 +215,9 @@ object SchemaConverters extends Logging {
               if (protobufOptions.retainEmptyMessage) {
                 // Insert a dummy column to retain the empty message because
                 // spark doesn't allow empty struct type.
-                Some(StructType(StructField("_dummy_field", StringType) :: Nil))
+                Some(
+                  StructType(StructField("_dummy_field_to_retain_empty_message", StringType) :: Nil)
+                )
               } else {
                 log.info(
                   s"Dropping ${fd.getFullName} as it does not have any fields left " +

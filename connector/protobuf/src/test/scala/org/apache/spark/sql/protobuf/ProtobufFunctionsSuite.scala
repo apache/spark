@@ -1145,8 +1145,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
         )
         // Nested empty message is retained by adding dummy column to the schema.
-        assert(df.schema ==
-          structFromDDL("wrapper struct<name: string, empty_proto struct<_dummy_field: string>>"))
+        assert(df.schema == structFromDDL("wrapper struct" +
+          "<name: string, empty_proto struct<_dummy_field_to_retain_empty_message: string>>"))
     }
   }
 
@@ -1154,7 +1154,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message" -> "true")
     withTempDir { file =>
       val binaryDF = Seq(
-        EmptyRecursiveProtoWrapper.newBuilder.setName("my_name").build().toByteArray).toDF("binary")
+        EmptyRecursiveProtoWrapper.newBuilder.setName("my_name").build().toByteArray)
+        .toDF("binary")
       checkWithFileAndClassName("EmptyProtoWrapper") {
         case (name, descFilePathOpt) =>
           val df = binaryDF.select(
@@ -1163,8 +1164,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           df.write.format("parquet").mode("overwrite").save(file.getAbsolutePath)
       }
       val resultDF = spark.read.format("parquet").load(file.getAbsolutePath)
-      assert(resultDF.schema ==
-        structFromDDL("wrapper struct<name: string, empty_proto struct<_dummy_field: string>>"))
+      assert(resultDF.schema == structFromDDL("wrapper struct" +
+          "<name: string, empty_proto struct<_dummy_field_to_retain_empty_message: string>>"
+      ))
       // The dummy column of empty proto should have null value.
       checkAnswer(resultDF, Seq(Row(Row("my_name", null))))
     }
