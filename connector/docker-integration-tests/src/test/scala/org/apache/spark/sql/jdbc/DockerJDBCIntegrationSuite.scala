@@ -156,7 +156,7 @@ abstract class DockerJDBCIntegrationSuite
         .newHostConfig()
         .withNetworkMode("bridge")
         .withPrivileged(db.privileged)
-        .withPortBindings(PortBinding.parse(s"$dockerIp:$externalPort:${db.jdbcPort}"))
+        .withPortBindings(PortBinding.parse(s"$externalPort:${db.jdbcPort}"))
 
       if (db.usesIpc) {
         hostConfig.withIpcMode("host")
@@ -197,6 +197,7 @@ abstract class DockerJDBCIntegrationSuite
       }
     } catch {
       case NonFatal(e) =>
+        logError(s"Failed to initialize Docker container for ${this.getClass.getName}", e)
         try {
           afterAll()
         } finally {
