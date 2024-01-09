@@ -329,7 +329,11 @@ abstract class StreamExecution(
           messageParameters = Map(
             "id" -> id.toString,
             "runId" -> runId.toString,
-            "message" -> message))
+            "message" -> message,
+            "queryDebugString" -> toDebugString(includeLogicalPlan = isInitialized),
+            "startOffset" -> committedOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString,
+            "endOffset" -> availableOffsets.toOffsetSeq(sources, offsetSeqMetadata).toString
+          ))
         logError(s"Query $prettyIdString terminated with error", e)
         updateStatusMessage(s"Terminated with exception: $message")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to

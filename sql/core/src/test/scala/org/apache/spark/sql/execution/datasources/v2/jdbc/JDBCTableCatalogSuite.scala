@@ -161,7 +161,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
     withTable("h2.test.new_table") {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
-      val e = intercept[AnalysisException] {
+      val e = intercept[TableAlreadyExistsException] {
         sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       }
       checkErrorTableAlreadyExists(e, "`test`.`new_table`")
@@ -559,10 +559,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           sql("CREATE TABLE h2.test.new_table(i INT, j STRING)" +
             " TBLPROPERTIES('ENGINE'='tableEngineName')")
         },
-        errorClass = "FAILED_JDBC.CREATE_TABLE",
+        errorClass = "FAILED_JDBC.UNCLASSIFIED",
         parameters = Map(
-          "url" -> url,
-          "tableName" -> "`test`.`new_table`"))
+          "url" -> "jdbc:",
+          "message" -> "Failed table creation: test.new_table"))
     }
   }
 
@@ -578,10 +578,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException]{
         sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
       },
-      errorClass = "FAILED_JDBC.CREATE_TABLE",
+      errorClass = "FAILED_JDBC.UNCLASSIFIED",
       parameters = Map(
-        "url" -> url,
-        "tableName" -> "`test`.`new_table`"))
+        "url" -> "jdbc:",
+        "message" -> "Failed table creation: test.new_table"))
   }
 
   test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {

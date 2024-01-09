@@ -27,7 +27,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.network.client.TransportClient
 import org.apache.spark.rpc._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SslTestUtils, ThreadUtils}
 
 class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 

@@ -1414,7 +1414,7 @@ test_that("test HiveContext", {
 
     # Invalid mode
     expect_error(saveAsTable(df, "parquetest", "parquet", mode = "abc", path = parquetDataPath),
-                 "illegal argument - Unknown save mode: abc")
+                 "Error in mode : analysis error - \\[INVALID_SAVE_MODE\\].*")
     unsetHiveContext()
   }
 })
@@ -2062,6 +2062,7 @@ test_that("date functions on a DataFrame", {
   expect_equal(collect(select(df, weekofyear(df$b)))[, 1], c(50, 50, 51))
   expect_equal(collect(select(df, year(df$b)))[, 1], c(2012, 2013, 2014))
   expect_equal(collect(select(df, month(df$b)))[, 1], c(12, 12, 12))
+  expect_equal(collect(select(df, monthname(df$b)))[, 1], c("Dec", "Dec", "Dec"))
   expect_equal(collect(select(df, last_day(df$b)))[, 1],
                c(as.Date("2012-12-31"), as.Date("2013-12-31"), as.Date("2014-12-31")))
   expect_equal(collect(select(df, next_day(df$b, "MONDAY")))[, 1],

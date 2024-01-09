@@ -3342,7 +3342,8 @@ class DataSourceV2SQLSuiteV1Filter
             Row("# Column Default Values", "", ""),
             Row("# Metadata Columns", "", ""),
             Row("id", "bigint", "42"),
-            Row("id", "bigint", null)
+            Row("id", "bigint", null),
+            Row("Statistics", "0 bytes, 0 rows", null)
           ))
       }
     }

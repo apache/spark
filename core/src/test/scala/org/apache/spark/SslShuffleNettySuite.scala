@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.util.SslTestUtils
+
 class SslShuffleNettySuite extends ShuffleNettySuite {
 
   override def beforeAll(): Unit = {

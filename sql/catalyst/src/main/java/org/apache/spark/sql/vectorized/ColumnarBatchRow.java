@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import java.util.Map;
+
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -87,7 +90,7 @@ public final class ColumnarBatchRow extends InternalRow {
 
   @Override
   public boolean anyNull() {
-    throw new UnsupportedOperationException();
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3151");
   }
 
   @Override
@@ -191,13 +194,18 @@ public final class ColumnarBatchRow extends InternalRow {
     } else if (dataType instanceof VariantType) {
       return getVariant(ordinal);
     } else {
-      throw new UnsupportedOperationException("Datatype not supported " + dataType);
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3152", Map.of("dataType", String.valueOf(dataType)));
     }
   }
 
   @Override
-  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+  public void update(int ordinal, Object value) {
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3153");
+  }
 
   @Override
-  public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
+  public void setNullAt(int ordinal) {
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3153");
+  }
 }

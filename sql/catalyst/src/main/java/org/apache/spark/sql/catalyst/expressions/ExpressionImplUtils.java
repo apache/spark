@@ -34,8 +34,7 @@ import java.security.spec.AlgorithmParameterSpec;
  * A utility class for constructing expressions.
  */
 public class ExpressionImplUtils {
-  private static final ThreadLocal<SecureRandom> threadLocalSecureRandom =
-          ThreadLocal.withInitial(SecureRandom::new);
+  private static final SecureRandom secureRandom = new SecureRandom();
 
   private static final int GCM_IV_LEN = 12;
   private static final int GCM_TAG_LEN = 128;
@@ -153,7 +152,7 @@ public class ExpressionImplUtils {
 
   private static byte[] generateIv(CipherMode mode) {
     byte[] iv = new byte[mode.ivLength];
-    threadLocalSecureRandom.get().nextBytes(iv);
+    secureRandom.nextBytes(iv);
     return iv;
   }
 

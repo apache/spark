@@ -415,6 +415,12 @@ class FunctionsTestsMixin:
         row = df.select(F.dayofweek(df.date)).first()
         self.assertEqual(row[0], 2)
 
+    def test_monthname(self):
+        dt = datetime.datetime(2017, 11, 6)
+        df = self.spark.createDataFrame([Row(date=dt)])
+        row = df.select(F.monthname(df.date)).first()
+        self.assertEqual(row[0], "Nov")
+
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
         dt = datetime.date(2021, 12, 27)
@@ -1451,6 +1457,20 @@ class FunctionsTestsMixin:
         df = self.spark.range(1).select(F.now())
         self.assertIsInstance(df.first()[0], datetime.datetime)
         self.assertEqual(df.schema.names[0], "now()")
+
+    def test_json_tuple_empty_fields(self):
+        df = self.spark.createDataFrame(
+            [
+                ("1", """{"f1": "value1", "f2": "value2"}"""),
+                ("2", """{"f1": "value12"}"""),
+            ],
+            ("key", "jstring"),
+        )
+        self.assertRaisesRegex(
+            PySparkValueError,
+            "At least one field must be specified",
+            lambda: df.select(F.json_tuple(df.jstring)),
+        )
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

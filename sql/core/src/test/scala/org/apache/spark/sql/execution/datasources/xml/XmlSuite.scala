@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
+import java.io.EOFException
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
@@ -31,12 +33,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.execution.datasources.xml.TestUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -44,12 +47,18 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class XmlSuite extends QueryTest with SharedSparkSession {
+class XmlSuite
+    extends QueryTest
+    with SharedSparkSession
+    with CommonFileDataSourceSuite
+    with TestXmlData {
   import testImplicits._
 
   private val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
+
+  override protected def dataSourceFormat: String = "xml"
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -60,6 +69,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   private def getEmptyTempDir(): Path = {
     Files.createTempDirectory(tempDir, "test")
   }
+
+  override def excluded: Seq[String] = Seq(
+    s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system")
 
   // Tests
 
@@ -218,8 +230,17 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DSL test for failing fast") {
-    val exceptionInParse = intercept[SparkException] {
+    val exceptionInSchemaInference = intercept[SparkException] {
       spark.read
+        .option("rowTag", "ROW")
+        .option("mode", FailFastMode.name)
+        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
+    }.getMessage
+    assert(exceptionInSchemaInference.contains(
+      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val exceptionInParsing = intercept[SparkException] {
+      spark.read
+        .schema("year string")
         .option("rowTag", "ROW")
         .option("mode", FailFastMode.name)
         .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
@@ -227,28 +248,37 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParse.getCause.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "badRecord" -> "[null,null,null]",
+        "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
     )
   }
 
   test("test FAILFAST with unclosed tag") {
-    val exceptionInParse = intercept[SparkException] {
+    val exceptionInSchemaInference = intercept[SparkException] {
       spark.read
         .option("rowTag", "book")
         .option("mode", FailFastMode.name)
         .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
+    }.getMessage
+    assert(exceptionInSchemaInference.contains(
+      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val exceptionInParsing = intercept[SparkException] {
+      spark.read
+        .schema("_id string")
+        .option("rowTag", "book")
+        .option("mode", FailFastMode.name)
+        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
         .show()
-    }
+    }.getCause.getCause
     checkError(
       // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParse.getCause.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "badRecord" -> "[empty row]",
+        "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
     )
   }
@@ -1097,9 +1127,11 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(valid.toSeq.toArray.take(schema.length - 1) ===
       Array(Row(10, 10), Row(10, "Ten"), 10.0, 10.0, true,
         "Ten", Array(1, 2), Map("a" -> 123, "b" -> 345)))
-    assert(invalid.toSeq.toArray.take(schema.length - 1) ===
-      Array(null, null, null, null, null,
-        "Ten", Array(2), null))
+    // TODO: we don't support partial results
+    assert(
+      invalid.toSeq.toArray.take(schema.length - 1) ===
+        Array(null, null, null, null, null,
+          null, null, null))
 
     assert(valid.toSeq.toArray.last === null)
     assert(invalid.toSeq.toArray.last.toString.contains(
@@ -1145,7 +1177,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children.xml"))
     val mixedRow = mixedDF.head()
-    assert(mixedRow.getAs[Row](0).toSeq === Seq(" lorem "))
+    assert(mixedRow.getAs[Row](0) === Row(List(" issue ", " text ignored "), " lorem "))
     assert(mixedRow.getString(1) === " ipsum ")
   }
 
@@ -1336,7 +1368,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(getTestResourcePath(resDir + "whitespace_error.xml"))
 
     assert(whitespaceDF.count() === 1)
-    assert(whitespaceDF.take(1).head.getAs[String]("_corrupt_record") !== null)
+    assert(whitespaceDF.take(1).head.getAs[String]("_corrupt_record") === null)
   }
 
   test("struct with only attributes and no value tag does not crash") {
@@ -1729,9 +1761,15 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val TAG_NAME = "tag"
     val VALUETAG_NAME = "_VALUE"
     val schema = buildSchema(
+      field(VALUETAG_NAME),
       field(ATTRIBUTE_NAME),
-      field(TAG_NAME, LongType),
-      field(VALUETAG_NAME))
+      field(TAG_NAME, LongType))
+    val expectedAns = Seq(
+      Row("value1", null, null),
+      Row("value2", "attr1", null),
+      Row("4", null, 5L),
+      Row("7", null, 6L),
+      Row(null, "8", null))
     val dfs = Seq(
       // user specified schema
       spark.read
@@ -1744,25 +1782,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         .xml(getTestResourcePath(resDir + "root-level-value-none.xml"))
     )
     dfs.foreach { df =>
-      val result = df.collect()
-      assert(result.length === 5)
-      assert(result(0).get(0) == null && result(0).get(1) == null)
-      assert(
-        result(1).getAs[String](ATTRIBUTE_NAME) == "attr1"
-          && result(1).getAs[Any](TAG_NAME) == null
-      )
-      assert(
-        result(2).getAs[Long](TAG_NAME) == 5L
-          && result(2).getAs[Any](ATTRIBUTE_NAME) == null
-      )
-      assert(
-        result(3).getAs[Long](TAG_NAME) == 6L
-          && result(3).getAs[Any](ATTRIBUTE_NAME) == null
-      )
-      assert(
-        result(4).getAs[String](ATTRIBUTE_NAME) == "8"
-          && result(4).getAs[Any](TAG_NAME) == null
-      )
+      checkAnswer(df, expectedAns)
     }
   }
 
@@ -2138,7 +2158,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         <string>this is a simple string.</string>
         <integer>10</integer>
         <long>21474836470</long>
-        <decimal>92233720368547758070</decimal>
+        <bigInteger>92233720368547758070</bigInteger>
         <double>1.7976931348623157</double>
         <boolean>true</boolean>
         <null>null</null>
@@ -2148,7 +2168,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val dfWithNodecimal = spark.read
       .option("nullValue", "null")
       .xml(primitiveFieldAndType)
-    assert(dfWithNodecimal.schema("decimal").dataType === DoubleType)
+    assert(dfWithNodecimal.schema("bigInteger").dataType === DoubleType)
+    assert(dfWithNodecimal.schema("double").dataType === DoubleType)
 
     val df = spark.read
       .option("nullValue", "null")
@@ -2156,9 +2177,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(primitiveFieldAndType)
 
     val expectedSchema = StructType(
+      StructField("bigInteger", DecimalType(20, 0), true) ::
       StructField("boolean", BooleanType, true) ::
-      StructField("decimal", DecimalType(20, 0), true) ::
-      StructField("double", DoubleType, true) ::
+      StructField("double", DecimalType(17, 16), true) ::
       StructField("integer", LongType, true) ::
       StructField("long", LongType, true) ::
       StructField("null", StringType, true) ::
@@ -2168,8 +2189,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df,
-      Row(true,
+      Row(
         new java.math.BigDecimal("92233720368547758070"),
+        true,
         1.7976931348623157,
         10,
         21474836470L,
@@ -2368,6 +2390,441 @@ class XmlSuite extends QueryTest with SharedSparkSession {
           err.getMessage.contains("Unsupported field: OffsetSeconds") ||
             err.getMessage.contains("Unable to extract value") ||
             err.getMessage.contains("Unable to extract ZoneId"))
+      }
+    }
+  }
+
+  test("capture values interspersed between elements - simple") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <a>
+         |        value2
+         |        <b>1</b>
+         |        value3
+         |    </a>
+         |    value4
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Array("value1", "value4"), Row(Array("value2", "value3"), 1))))
+  }
+
+  test("capture values interspersed between elements - array") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <array>
+         |        value2
+         |        <b>1</b>
+         |        value3
+         |    </array>
+         |    <array>
+         |        value4
+         |        <b>2</b>
+         |        value5
+         |        <c>3</c>
+         |        value6
+         |    </array>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val expectedAns = Seq(
+      Row(
+        "value1",
+        Array(
+          Row(List("value2", "value3"), 1, null),
+          Row(List("value4", "value5", "value6"), 2, 3))))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, expectedAns)
+
+  }
+
+  test("capture values interspersed between elements - long and double") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |  <a>
+         |    1
+         |    <b>2</b>
+         |    3
+         |    <b>4</b>
+         |    5.0
+         |  </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1.0, 3.0, 5.0), Array(2, 4)))))
+  }
+
+  test("capture values interspersed between elements - comments") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |  <a> 1 <!--this is a comment--> 2 </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1, 2)))))
+  }
+
+  test("capture values interspersed between elements - whitespaces with quotes") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |  <a>" "</a>
+         |  <b>" "<c>1</c></b>
+         |  <d><e attr=" "></e></d>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", false)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(
+      Row("\" \"", Row("\" \"", 1), Row(Row(" ")))))
+  }
+
+  test("capture values interspersed between elements - nested comments") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <a> 1
+         |        <!--this is a comment--> 2
+         |        <b>1</b>
+         |        <!--this is a comment--> 3
+         |        <b>2</b>
+         |    </a>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(df, Seq(Row(Row(Array(1, 2, 3), Array(1, 2)))))
+  }
+
+  test("capture values interspersed between elements - nested struct") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct1>
+         |        <struct2>
+         |            <array>1</array>
+         |            value1
+         |            <array>2</array>
+         |            value2
+         |            <struct3>3</struct3>
+         |        </struct2>
+         |        value4
+         |    </struct1>
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("ignoreSurroundingSpaces", true)
+      .option("multiLine", "true")
+      .xml(input)
+
+    checkAnswer(
+      df,
+      Seq(
+        Row(
+          Row(
+            "value4",
+            Row(
+              Array("value1", "value2"),
+              Array(1, 2),
+              3)))))
+  }
+
+  test("capture values interspersed between elements - deeply nested") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    value1
+         |    <struct1>
+         |        value2
+         |        <struct2>
+         |            value3
+         |            <array1>
+         |                value4
+         |                <struct3>
+         |                    value5
+         |                    <array2>1<!--First comment--> <!--Second comment--></array2>
+         |                    <![CDATA[This is a CDATA section containing <sample1> text.]]>
+         |                    <![CDATA[This is a CDATA section containing <sample2> text.]]>
+         |                    value6
+         |                    <array2>2</array2>
+         |                    value7
+         |                </struct3>
+         |                value8
+         |                <string>string</string>
+         |                value9
+         |            </array1>
+         |            value10
+         |            <array1>
+         |                <struct3><!--First comment--> <!--Second comment-->
+         |                    <array2>3</array2>
+         |                    value11
+         |                    <array2>4</array2><!--First comment--> <!--Second comment-->
+         |                </struct3>
+         |                <string>string</string>
+         |                value12
+         |            </array1>
+         |            value13
+         |            <int>3</int>
+         |            value14
+         |        </struct2>
+         |        value15
+         |    </struct1>
+         |     <!--First comment-->
+         |    value16
+         |     <!--Second comment-->
+         |</ROW>
+         |""".stripMargin
+    val input = spark.createDataset(Seq(xmlString))
+    val df = spark.read
+      .option("ignoreSurroundingSpaces", true)
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .xml(input)
+
+    val expectedAns = Seq(Row(
+      ArraySeq("value1", "value16"),
+      Row(
+        ArraySeq("value2", "value15"),
+        Row(
+          ArraySeq("value3", "value10", "value13", "value14"),
+          Array(
+              Row(
+                ArraySeq("value4", "value8", "value9"),
+                "string",
+                Row(
+                  ArraySeq(
+                    "value5",
+                    "This is a CDATA section containing <sample1> text." +
+                      "\n                    This is a CDATA section containing <sample2> text.\n" +
+                      "                    value6",
+                    "value7"
+                  ),
+                  ArraySeq(1, 2)
+                )
+              ),
+              Row(ArraySeq("value12"), "string", Row(ArraySeq("value11"), ArraySeq(3, 4)))
+            ),
+          3))))
+
+    checkAnswer(df, expectedAns)
+  }
+
+  test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
+    val mixedIntegerAndDoubleRecords = Seq(
+      """<ROW><a>3</a><b>1.1</b></ROW>""",
+      s"""<ROW><a>3.1</a><b>0.${"0" * 38}1</b></ROW>""").toDS()
+    val xmlDF = spark.read
+      .option("prefersDecimal", "true")
+      .option("rowTag", "ROW")
+      .xml(mixedIntegerAndDoubleRecords)
+
+    // The values in `a` field will be decimals as they fit in decimal. For `b` field,
+    // they will be doubles as `1.0E-39D` does not fit.
+    val expectedSchema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+        StructField("b", DoubleType, true) :: Nil)
+
+    assert(xmlDF.schema === expectedSchema)
+    checkAnswer(
+      xmlDF,
+      Row(BigDecimal("3"), 1.1D) ::
+        Row(BigDecimal("3.1"), 1.0E-39D) :: Nil
+    )
+  }
+
+  def bigIntegerRecords: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize(
+      s"""<ROW><a>1${"0" * 38}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
+
+  test("Infer big integers correctly even when it does not fit in decimal") {
+    val df = spark.read
+      .option("rowTag", "ROW")
+      .option("prefersDecimal", "true")
+      .xml(bigIntegerRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `92233720368547758070`.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DecimalType(20, 0), true) :: Nil)
+
+    assert(df.schema === expectedSchema)
+    checkAnswer(df, Row(1.0E38D, BigDecimal("92233720368547758070")))
+  }
+
+  def floatingValueRecords: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize(
+      s"""<ROW><a>0.${"0" * 38}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
+
+  test("Infer floating-point values correctly even when it does not fit in decimal") {
+    val df = spark.read
+      .option("prefersDecimal", "true")
+      .option("rowTag", "ROW")
+      .xml(floatingValueRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `0.01` by having a precision equal to the scale.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DecimalType(2, 2), true) :: Nil)
+
+    assert(df.schema === expectedSchema)
+    checkAnswer(df, Row(1.0E-39D, BigDecimal("0.01")))
+
+    val mergedDF = spark.read
+      .option("prefersDecimal", "true")
+      .option("rowTag", "ROW")
+      .xml(floatingValueRecords.union(bigIntegerRecords))
+
+    val expectedMergedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+        StructField("b", DecimalType(22, 2), true) :: Nil)
+
+    assert(expectedMergedSchema === mergedDF.schema)
+    checkAnswer(
+      mergedDF,
+      Row(1.0E-39D, BigDecimal("0.01")) ::
+        Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
+    )
+  }
+
+  test("SPARK-46248: Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read
+            .option("rowTag", "ROW")
+            .option("multiLine", false)
+            .xml(inputFile.toURI.toString)
+            .collect()
+        }
+        assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
+        assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+        val e2 = intercept[SparkException] {
+          spark.read
+            .option("rowTag", "ROW")
+            .option("multiLine", true)
+            .xml(inputFile.toURI.toString)
+            .collect()
+        }
+        assert(ExceptionUtils.getRootCause(e2).isInstanceOf[EOFException])
+        assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        val result = spark.read
+           .option("rowTag", "ROW")
+           .option("multiLine", false)
+           .xml(inputFile.toURI.toString)
+           .collect()
+        assert(result.isEmpty)
+      }
+    })
+    withTempPath { dir =>
+      import org.apache.hadoop.fs.Path
+      val xmlPath = new Path(dir.getCanonicalPath, "xml")
+      val fs = xmlPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+      sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)
+      val df = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
+      fs.delete(xmlPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          df.collect()
+        }
+        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
+        assert(e.getCause.getMessage.contains(".xml does not exist"))
+      }
+
+      sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)
+      val df2 = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
+      fs.delete(xmlPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+        assert(df2.collect().isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-46248: Read from a corrupted compressed file") {
+    withTempDir { dir =>
+      val format = "xml"
+      val numRecords = 10000
+      // create data
+      val data =
+        spark.sparkContext.parallelize(
+          (0 until numRecords).map(i => Row(i.toLong, (i * 2).toLong)))
+      val schema = buildSchema(field("a1", LongType), field("a2", LongType))
+      val df = spark.createDataFrame(data, schema)
+
+      df.coalesce(4)
+        .write
+        .mode(SaveMode.Overwrite)
+        .format(format)
+        .option("compression", "gZiP")
+        .option("rowTag", "row")
+        .save(dir.getCanonicalPath)
+
+      withCorruptedFile(dir) { corruptedDir =>
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val dfCorrupted = spark.read
+            .format(format)
+            .option("multiline", "true")
+            .option("compression", "gzip")
+            .option("rowTag", "row")
+            .load(corruptedDir.getCanonicalPath)
+          val results = dfCorrupted.collect()
+          assert(results(1) === Row(1, 2))
+          assert(results.length > 100)
+          val dfCorruptedWSchema = spark.read
+            .format(format)
+            .schema(schema)
+            .option("multiline", "true")
+            .option("compression", "gzip")
+            .option("rowTag", "row")
+            .load(corruptedDir.getCanonicalPath)
+          assert(dfCorrupted.dtypes === dfCorruptedWSchema.dtypes)
+          checkAnswer(dfCorrupted, dfCorruptedWSchema)
+        }
       }
     }
   }
