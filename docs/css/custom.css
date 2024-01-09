@@ -96,20 +96,13 @@ section {
   border-color: transparent;
 }
 
-.hero-banner h1 {
+.hero-banner .container .row h1 {
   color: #0B9ACE;
   font-style: normal;
   font-weight: normal;
   font-size: 48px;
   line-height: 63px;
   letter-spacing: -0.045em;
-}
-
-.hero-banner h2 {
-  font-style: normal;
-  font-weight: bold;
-  font-size: 32px;
-  line-height: 42px;
 }
 
 .what-is-spark {
@@ -812,18 +805,25 @@ ul {
   margin-bottom: 10px;
 }
 
-.global h2, .global .h2 {
+.global h1, .global .h1 {
   font-size: 30px;
 }
 
-.global h3 {
+.global h2 {
   font-size: 24px !important;
+}
+
+.global h3 {
+  font-size: 20px !important;
 }
 
 .global h4 {
   font-size: 18px !important;
 }
 
+.global h5 {
+  font-size: 16px !important;
+}
 
 .global h1:first-letter, .global h2:first-letter, .global h3:first-letter, .global h4:first-letter, .global h5:first-letter, .global h6:first-letter, .global .h1:first-letter, .global .h2:first-letter, .global .h3:first-letter, .global .h4:first-letter, .global .h5:first-letter, .global .h6:first-letter {
   text-transform: uppercase;
