@@ -16,23 +16,21 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.EOFException
+import java.io.{EOFException, File}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
-
+import javax.xml.stream.XMLStreamException
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
-
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.{SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
@@ -2827,5 +2825,60 @@ class XmlSuite
         }
       }
     }
+  }
+
+  test("XML Validate Name") {
+    val data = Seq(Row("Random String"))
+
+    def checkValidation(fieldName: String,
+                        errorMsg: String,
+                        validateName: Boolean = true): Unit = {
+      val schema = StructType(Seq(StructField(fieldName, StringType)))
+      val df = spark.createDataFrame(data.asJava, schema)
+
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        validateName match {
+          case false =>
+            df.write
+              .option("rowTag", "ROW")
+              .option("validateName", false)
+              .option("declaration", "")
+              .option("indent", "")
+              .mode(SaveMode.Overwrite)
+              .xml(path)
+            // read file back and check its content
+            val xmlFile = new File(path).listFiles()
+              .filter(_.isFile)
+              .filter(_.getName.endsWith("xml")).head
+            val actualContent = Files.readString(xmlFile.toPath).replaceAll("\\n", "")
+            assert(actualContent ===
+              s"<${XmlOptions.DEFAULT_ROOT_TAG}><ROW>" +
+                s"<$fieldName>${data.head.getString(0)}</$fieldName>" +
+                s"</ROW></${XmlOptions.DEFAULT_ROOT_TAG}>")
+
+          case true =>
+            val e = intercept[SparkException] {
+              df.write
+                .option("rowTag", "ROW")
+                .mode(SaveMode.Overwrite)
+                .xml(path)
+              val df2 = spark.read
+                .option("rowTag", "ROW")
+                .xml(path)
+              checkAnswer(df, df2)
+            }
+
+            assert(e.getCause.getCause.isInstanceOf[XMLStreamException])
+            assert(e.getMessage.contains(errorMsg))
+        }
+      }
+    }
+
+    checkValidation("", "Illegal to pass empty name")
+    checkValidation(" ", "Illegal first name character ' '")
+    checkValidation("1field", "Illegal first name character '1'")
+    checkValidation("field name with space", "Illegal name character ' '")
+    checkValidation("field", "", false)
   }
 }

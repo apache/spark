@@ -792,6 +792,7 @@ class DataFrameWriter(OptionUtils):
         timestampFormat: Optional[str] = None,
         compression: Optional[str] = None,
         encoding: Optional[str] = None,
+        validateName: Optional[bool] = None,
     ) -> None:
         self.mode(mode)
         self._set_opts(
@@ -806,6 +807,7 @@ class DataFrameWriter(OptionUtils):
             timestampFormat=timestampFormat,
             compression=compression,
             encoding=encoding,
+            validateName=validateName,
         )
         self.format("xml").save(path)
 
