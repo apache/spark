@@ -180,6 +180,33 @@ private[sql] class ProtobufOptions(
   // can contain large unsigned values without overflow.
   val upcastUnsignedInts: Boolean =
     parameters.getOrElse("upcast.unsigned.ints", false.toString).toBoolean
+
+  // Whether to unwrap the struct representation for well known primitve wrapper types when
+  // deserializing. By default, the wrapper types for primitives (i.e. google.protobuf.Int32Value,
+  // google.protobuf.Int64Value, etc.) will get deserialized as structs. We allow the option to
+  // deserialize them as their respective primitives.
+  // https://protobuf.dev/reference/protobuf/google.protobuf/
+  //
+  // For example, given a message like:
+  // ```
+  // syntax = "proto3";
+  // message Example {
+  //   google.protobuf.Int32Value int_val = 1;
+  // }
+  // ```
+  //
+  // The message Example(Int32Value(1)) would be deserialized by default as
+  // {int_val: {value: 5}}
+  //
+  // However, with this option set, it would be deserialized as
+  // {int_val: 5}
+  //
+  // NOTE: With `emit.default.values`, we won't fill in the default primitive value during
+  // this unwrapping; this behavior preserves as much information as possible.
+  // Concretely, the behavior with emit defaults and this option set is:
+  //    nil => nil, Int32Value(0) => 0, Int32Value(100) => 100.
+  val unwrapWellKnownTypes: Boolean =
+    parameters.getOrElse("unwrap.primitive.wrapper.types", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {

@@ -1,4 +1,5 @@
 -- Tests NOT-IN subqueries nested inside OR expression(s).
+--ONLY_IF spark
 
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false

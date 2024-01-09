@@ -179,6 +179,11 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
 
+    def test_assert_vanilla_mode(self):
+        from pyspark.sql import is_remote
+
+        self.assertFalse(is_remote())
+
 
 class ByteArrayOutput:
     def __init__(self):

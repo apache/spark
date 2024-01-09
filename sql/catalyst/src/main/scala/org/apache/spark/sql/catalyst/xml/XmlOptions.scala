@@ -95,7 +95,7 @@ class XmlOptions(
   val nullValue = parameters.getOrElse(NULL_VALUE, XmlOptions.DEFAULT_NULL_VALUE)
   val columnNameOfCorruptRecord =
     parameters.getOrElse(COLUMN_NAME_OF_CORRUPT_RECORD, defaultColumnNameOfCorruptRecord)
-  val ignoreSurroundingSpaces = getBool(IGNORE_SURROUNDING_SPACES, false)
+  val ignoreSurroundingSpaces = getBool(IGNORE_SURROUNDING_SPACES, true)
   val parseMode = ParseMode.fromString(parameters.getOrElse(MODE, PermissiveMode.name))
   val inferSchema = getBool(INFER_SCHEMA, true)
   val rowValidationXSDPath = parameters.get(ROW_VALIDATION_XSD_PATH).orNull

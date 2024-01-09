@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -451,7 +451,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
     override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
     override def name(): String = CatalogManager.SESSION_CATALOG_NAME
     override def listFunctions(namespace: Array[String]): Array[Identifier] = {
-      throw new UnsupportedOperationException()
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3111")
     }
     override def loadFunction(ident: Identifier): UnboundFunction = {
       V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))

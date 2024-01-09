@@ -3452,7 +3452,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.spark.stop()
         spark = (
             PySparkSession.builder.config(conf=self.conf())
-            .config("spark.connect.jvmStacktrace.maxSize", 128)
+            .config("spark.connect.grpc.maxMetadataSize", 128)
             .remote("local[4]")
             .getOrCreate()
         )
@@ -3485,6 +3485,17 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         with self.assertRaises(RuntimeError) as e:
             PySparkSession.builder.create()
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
+
+    def test_get_message_parameters_without_enriched_error(self):
+        with self.sql_conf({"spark.sql.connect.enrichError.enabled": False}):
+            exception = None
+            try:
+                self.spark.sql("""SELECT a""")
+            except AnalysisException as e:
+                exception = e
+
+            self.assertIsNotNone(exception)
+            self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
 
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):

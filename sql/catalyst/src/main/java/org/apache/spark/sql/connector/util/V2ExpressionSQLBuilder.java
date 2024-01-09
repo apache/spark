@@ -19,8 +19,10 @@ package org.apache.spark.sql.connector.util;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.StringJoiner;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
@@ -273,14 +275,16 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitUserDefinedScalarFunction(
       String funcName, String canonicalName, String[] inputs) {
-    throw new UnsupportedOperationException(
-      this.getClass().getSimpleName() + " does not support user defined function: " + funcName);
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3141",
+      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
   protected String visitUserDefinedAggregateFunction(
       String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
-    throw new UnsupportedOperationException(this.getClass().getSimpleName() +
-      " does not support user defined aggregate function: " + funcName);
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3142",
+      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
