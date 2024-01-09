@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.SubquerySQLGenerator.SUBQUERY_ALIAS
 
 class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
 
@@ -25,11 +26,12 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
 
   trait NamedExpression extends Expression
 
-  case class Attribute(name: String) extends NamedExpression {
-    override def toString: String = name
+  case class Attribute(name: String, qualifier: String) extends NamedExpression {
+    override def toString: String = f"$qualifier.$name"
   }
-  case class Alias(expr: Expression, alias: String) extends NamedExpression {
-    override def toString: String = f"$expr AS $alias"
+  case class Alias(child: Expression, alias: String, qualifier: Option[String])
+    extends NamedExpression {
+    override def toString: String = f"$child AS $alias"
   }
 
   trait Predicate extends Expression
@@ -55,17 +57,17 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
       }
     }
   }
-  case class Exists() extends SubqueryExpression {
+  case class Exists() extends SubqueryExpression with Predicate {
     def generateSql(expr: Expression): String = f"EXISTS ($expr)"
   }
-  case class NotExists() extends SubqueryExpression {
+  case class NotExists() extends SubqueryExpression with Predicate {
     def generateSql(expr: Expression): String = f"NOT EXISTS ($expr)"
   }
-  case class In() extends SubqueryExpression {
+  case class In() extends SubqueryExpression with Predicate {
     def generateSql(expr: Expression, rightSideExpr: Expression): String =
       f"$expr IN ($rightSideExpr)"
   }
-  case class NotIn() extends SubqueryExpression {
+  case class NotIn() extends SubqueryExpression with Predicate {
     def generateSql(expr: Expression, rightSideExpr: Expression): String =
       f"$expr NOT IN ($rightSideExpr)"
   }
@@ -116,13 +118,14 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
       f"($leftRelation $setOperationType $rightRelation)"
   }
 
-  case class Limit(limitValue: Int) extends Operator {
+  case class Limit(limitValue: Int) extends Operator with Clause {
     override def toString: String = f"LIMIT $limitValue"
   }
 
   trait Clause
 
-  case class SelectClause(projection: Seq[Expression], isDistinct: Boolean) extends Clause {
+  case class SelectClause(projection: Seq[NamedExpression], isDistinct: Boolean = false)
+    extends Clause {
     override def toString: String = f"SELECT ${if (isDistinct) "DISTINCT" else {""}} $projection"
   }
   case class FromClause(relations: Seq[Operator]) extends Clause {
@@ -138,17 +141,14 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     override def toString: String = f"ORDER BY " +
       attributes.map(a => a + "DESC NULLS FIRST").mkString(", ")
   }
-  case class LimitClause(limitValue: Int) extends Clause {
-    override def toString: String = f"LIMIT $limitValue"
-  }
 
   case class QueryOrganization(
       selectClause: SelectClause,
       fromClause: FromClause,
-      whereClause: Option[WhereClause],
-      groupByClause: Option[GroupByClause],
-      orderByClause: Option[OrderByClause],
-      limitClause: Option[LimitClause]) {
+      whereClause: Option[WhereClause] = None,
+      groupByClause: Option[GroupByClause] = None,
+      orderByClause: Option[OrderByClause] = None,
+      limitClause: Option[Limit] = None) {
 
     override def toString: String =
       f"$selectClause $fromClause $whereClause $groupByClause $orderByClause $limitClause"
@@ -195,10 +195,10 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     }
 
     val limitClause = if (requiresLimitOne) {
-      Some(LimitClause(1))
+      Some(Limit(1))
     } else operatorInSubquery match {
       case limit: Limit =>
-        Some(LimitClause(limit.limitValue))
+        Some(limit)
       case _ =>
         None
     }
@@ -210,15 +210,47 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
   def generateQuery(
       innerTable: Relation,
       outerTable: Relation,
+      subqueryClause: Clause,
       subqueryExpression: SubqueryExpression,
-      correlationConditions: Seq[Predicate],
       isDistinct: Boolean,
       operatorInSubquery: Operator): String = {
 
+    val correlationConditions = Seq()
+    val subqueryOrganization = generateSubquery(
+      innerTable, subqueryExpression, correlationConditions, isDistinct, operatorInSubquery)
+
+    val (queryProjection, selectClause, fromClause, whereClause) = subqueryClause match {
+      case _: SelectClause =>
+        // TODO projection
+        val queryProjection = outerTable.output ++ Seq(Attribute(SUBQUERY_ALIAS))
+        val fromClause = FromClause(Seq(outerTable))
+        val selectClause = SelectClause(queryProjection)
+        (queryProjection, selectClause, fromClause, None)
+      case _: FromClause =>
+        val queryProjection = subqueryOrganization.selectClause.projection
+        (queryProjection, selectClause, fromClause, None)
+      case _: WhereClause =>
+        val queryProjection = outerTable.output
+        val selectClause = SelectClause(queryProjection)
+        val fromClause = FromClause(Seq(outerTable))
+        // TODO whereClause, subquery predicates
+        val whereClause = None
+        (queryProjection, selectClause, fromClause, whereClause)
+    }
+    val orderByClause = OrderByClause(queryProjection)
+
+    // TODO: Query comment
+    QueryOrganization(selectClause, fromClause, whereClause, groupByClause = None,
+      orderByClause, limitClause = None)
   }
 }
 
 
 object SubquerySQLGenerator {
 
+  val SUBQUERY_ALIAS = "subqueryAlias"
+
+  def main(args: Array[String]): Unit = {
+    // TODO main function
+  }
 }
