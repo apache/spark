@@ -2980,6 +2980,13 @@ def weekday(col: "ColumnOrName") -> Column:
 weekday.__doc__ = pysparkfuncs.weekday.__doc__
 
 
+def monthname(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("monthname", col)
+
+
+monthname.__doc__ = pysparkfuncs.monthname.__doc__
+
+
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("extract", field, source)
 

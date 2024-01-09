@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
 
@@ -91,8 +90,7 @@ object DataSourceManager extends Logging {
   private lazy val shouldLoadPythonDataSources: Boolean = {
     Utils.checkCommandAvailable(PythonUtils.defaultPythonExec) &&
       // Make sure PySpark zipped files also exist.
-      PythonUtils.sparkPythonPath
-        .split(Pattern.quote(File.separator)).forall(new File(_).exists())
+      PythonUtils.sparkPythonPaths.forall(new File(_).exists())
   }
 
   private def initialDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
@@ -105,7 +103,7 @@ object DataSourceManager extends Logging {
             // Even if it fails for whatever reason, we shouldn't make the whole
             // application fail.
             logWarning(
-              s"Skipping the lookup of Python Data Sources due to the failure: $e")
+              "Skipping the lookup of Python Data Sources due to the failure.", e)
             None
         }
 

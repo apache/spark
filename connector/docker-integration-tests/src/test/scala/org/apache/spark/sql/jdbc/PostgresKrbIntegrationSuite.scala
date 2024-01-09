@@ -28,7 +28,8 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., postgres:15.1):
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
- *     ./build/sbt -Pdocker-integration-tests "testOnly *PostgresKrbIntegrationSuite"
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *PostgresKrbIntegrationSuite"
  * }}}
  */
 @DockerTest

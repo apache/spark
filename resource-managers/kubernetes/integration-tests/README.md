@@ -13,9 +13,10 @@ directory:
 
     ./dev/dev-run-integration-tests.sh
 
-To run tests with Java 11 instead of Java 8, use `--java-image-tag` to specify the base image.
+To run tests with a specific Java version instead of Java 21, use `--java-image-tag` to specify the 
+[base image](https://hub.docker.com/r/azul/zulu-openjdk/tags) accordingly.
 
-    ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
+    ./dev/dev-run-integration-tests.sh --java-image-tag 17-jre
 
 To run tests with a custom docker image, use `--docker-file` to specify the Dockerfile.
 Note that if both `--docker-file` and `--java-image-tag` are used, `--docker-file` is preferred,
@@ -130,7 +131,7 @@ properties to Maven.  For example:
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.13 \
                             -Pkubernetes -Pkubernetes-integration-tests \
                             -Phadoop-3 -Dhadoop.version=3.3.6 \
-                            -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
+                            -Dspark.kubernetes.test.sparkTgz=spark-4.0.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
                             -Dspark.kubernetes.test.namespace=spark-int-tests \
@@ -198,9 +199,9 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.javaImageTag</code></td>
     <td>
-      A specific OpenJDK base image tag to use, when set uses it instead of 8-jre-slim.
+      A specific OpenJDK base image tag to use, when set uses it instead of azul/zulu-openjdk.
     </td>
-    <td><code>8-jre-slim</code></td>
+    <td><code>azul/zulu-openjdk</code></td>
   </tr>
   <tr>
     <td><code>spark.kubernetes.test.imageTagFile</code></td>

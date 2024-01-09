@@ -270,6 +270,7 @@ Date and Timestamp Functions
     make_ym_interval
     minute
     month
+    monthname
     months_between
     next_day
     now

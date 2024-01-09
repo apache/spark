@@ -3193,10 +3193,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1308",
+      errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
       messageParameters = Map(
         "source" -> source,
-        "createMode" -> createMode))
+        "createMode" -> toDSOption(createMode)))
   }
 
   def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
@@ -3861,6 +3861,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "functionName" -> functionName,
         "reason" -> reason))
+  }
+
+  def dataSourceAlreadyExists(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+      messageParameters = Map("provider" -> name))
   }
 
   def dataSourceDoesNotExist(name: String): Throwable = {
