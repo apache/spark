@@ -246,7 +246,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       errorClass = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
       context = ExpectedContext(
-        fragment = "anonfun$select$4",
+        fragment = "select",
         callSitePattern = getCurrentClassCallSitePattern))
   }
 
@@ -527,7 +527,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             errorClass = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
             context = ExpectedContext(
-              fragment = "anonfun$select$4",
+              fragment = "select",
               callSitePattern = getCurrentClassCallSitePattern))
 
           checkError(
@@ -537,7 +537,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             errorClass = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"),
             context = ExpectedContext(
-              fragment = "anonfun$select$4",
+              fragment = "select",
               callSitePattern = getCurrentClassCallSitePattern))
         }
       }
