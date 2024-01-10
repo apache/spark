@@ -284,6 +284,33 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-46522: data source name conflicts") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |
+         |class $dataSourceName(DataSource):
+         |    ...
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    Seq(
+      "text", "json", "csv", "avro", "orc", "parquet", "jdbc",
+      "binaryFile", "xml", "kafka", "noop",
+      "org.apache.spark.sql.test",
+      "org.apache.spark.sql.hive.orc"
+    ).foreach { provider =>
+      withClue(s"Data source: $provider") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.dataSource.registerPython(provider, dataSource)
+          },
+          errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+          parameters = Map("provider" -> provider))
+      }
+    }
+  }
+
   test("reader not implemented") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
@@ -622,12 +649,21 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     }
 
     withClue("without mode") {
-      val error = intercept[AnalysisException] {
-        spark.range(1).write.format(dataSourceName).save()
-      }
-      // TODO: improve this error message.
-      assert(error.getMessage.contains("TableProvider implementation SimpleDataSource " +
-        "cannot be written with ErrorIfExists mode, please use Append or Overwrite modes instead."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).save()
+        },
+        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"ErrorIfExists\""))
+    }
+
+    withClue("with unsupported mode") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).write.format(dataSourceName).mode("ignore").save()
+        },
+        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"Ignore\""))
     }
 
     withClue("invalid mode") {
@@ -780,5 +816,48 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
           Seq(Row("failed")))
       }
     }
+  }
+
+  test("SPARK-46568: case insensitive options") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import (
+         |    DataSource, DataSourceReader, DataSourceWriter, WriterCommitMessage)
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def read(self, partition):
+         |        foo = self.options.get("Foo")
+         |        bar = self.options.get("BAR")
+         |        baz = "BaZ" in self.options
+         |        yield (foo, bar, baz)
+         |
+         |class SimpleDataSourceWriter(DataSourceWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |
+         |    def write(self, row):
+         |        if "FOO" not in self.options or "BAR" not in self.options:
+         |            raise Exception("FOO or BAR not found")
+         |        return WriterCommitMessage()
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "a string, b string, c string"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader(self.options)
+         |
+         |    def writer(self, schema, overwrite):
+         |        return SimpleDataSourceWriter(self.options)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val df = spark.read.option("foo", 1).option("bar", 2).option("BAZ", 3)
+      .format(dataSourceName).load()
+    checkAnswer(df, Row("1", "2", "true"))
+    df.write.option("foo", 1).option("bar", 2).format(dataSourceName).mode("append").save()
   }
 }

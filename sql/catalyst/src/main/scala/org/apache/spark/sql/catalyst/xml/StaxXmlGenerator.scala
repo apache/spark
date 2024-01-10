@@ -65,6 +65,7 @@ class StaxXmlGenerator(
     val factory = XMLOutputFactory.newInstance()
     // to_xml disables structure validation to allow multiple root tags
     factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_STRUCTURE, validateStructure)
+    factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_NAMES, options.validateName)
     val xmlWriter = factory.createXMLStreamWriter(writer)
     if (!indentDisabled) {
       val indentingXmlWriter = new IndentingXMLStreamWriter(xmlWriter)

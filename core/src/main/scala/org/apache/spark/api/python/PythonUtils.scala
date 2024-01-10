@@ -36,7 +36,7 @@ private[spark] object PythonUtils extends Logging {
   val PY4J_ZIP_NAME = "py4j-0.10.9.7-src.zip"
 
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
-  def sparkPythonPath: String = {
+  def sparkPythonPaths: Seq[String] = {
     val pythonPath = new ArrayBuffer[String]
     for (sparkHome <- sys.env.get("SPARK_HOME")) {
       pythonPath += Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator)
@@ -44,8 +44,10 @@ private[spark] object PythonUtils extends Logging {
         Seq(sparkHome, "python", "lib", PY4J_ZIP_NAME).mkString(File.separator)
     }
     pythonPath ++= SparkContext.jarOfObject(this)
-    pythonPath.mkString(File.pathSeparator)
+    pythonPath.toSeq
   }
+
+  def sparkPythonPath: String = sparkPythonPaths.mkString(File.pathSeparator)
 
   /** Merge PYTHONPATHS with the appropriate separator. Ignores blank strings. */
   def mergePythonPaths(paths: String*): String = {

@@ -30,7 +30,7 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql import Row
-from pyspark.sql.datasource import DataSource, WriterCommitMessage
+from pyspark.sql.datasource import DataSource, WriterCommitMessage, CaseInsensitiveDict
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
@@ -142,7 +142,7 @@ def main(infile: IO, outfile: IO) -> None:
         return_col_name = return_type[0].name
 
         # Receive the options.
-        options = dict()
+        options = CaseInsensitiveDict()
         num_options = read_int(infile)
         for _ in range(num_options):
             key = utf8_deserializer.loads(infile)
@@ -153,7 +153,7 @@ def main(infile: IO, outfile: IO) -> None:
         overwrite = read_bool(infile)
 
         # Instantiate a data source.
-        data_source = data_source_cls(options=options)
+        data_source = data_source_cls(options=options)  # type: ignore
 
         # Instantiate the data source writer.
         writer = data_source.writer(schema, overwrite)

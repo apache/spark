@@ -1,3 +1,4 @@
+--ONLY_IF spark
 CREATE OR REPLACE VIEW t1(a1, a2) as values (0, 1), (1, 2);
 CREATE OR REPLACE VIEW t2(b1, b2) as values (0, 2), (0, 3);
 CREATE OR REPLACE VIEW t3(c1, c2) as values (0, 2), (0, 3);
