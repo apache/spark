@@ -16,6 +16,11 @@
 #
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
 
-from pyspark.testing.pandasutils import assertPandasOnSparkEqual
+__all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
-__all__ = ["assertDataFrameEqual", "assertSchemaEqual", "assertPandasOnSparkEqual"]
+try:
+    from pyspark.testing.pandasutils import assertPandasOnSparkEqual
+
+    __all__.append("assertPandasOnSparkEqual")
+except AttributeError:
+    pass
