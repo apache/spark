@@ -29,9 +29,10 @@ class SparkConnectReattachExecuteHandler(
     extends Logging {
 
   def handle(v: proto.ReattachExecuteRequest): Unit = {
-    val executeHolder = SparkConnectService.executionManager
-      .getExecuteHolder(ExecuteKey(v.getUserContext.getUserId, v.getSessionId, v.getOperationId))
-      .getOrElse {
+    val sessionHolder = SparkConnectService.sessionManager
+      .getIsolatedSession(SessionKey(v.getUserContext.getUserId, v.getSessionId))
+
+    val executeHolder = sessionHolder.executeHolder(v.getOperationId).getOrElse {
         if (SparkConnectService.executionManager
             .getAbandonedTombstone(
               ExecuteKey(v.getUserContext.getUserId, v.getSessionId, v.getOperationId))
