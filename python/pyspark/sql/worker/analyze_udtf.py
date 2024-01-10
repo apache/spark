@@ -28,6 +28,7 @@ from pyspark.serializers import (
     read_bool,
     read_int,
     write_int,
+    write_long,
     write_with_length,
     SpecialLengths,
 )
@@ -225,6 +226,15 @@ def main(infile: IO, outfile: IO) -> None:
                 write_int(1, outfile)
             else:
                 write_int(2, outfile)
+        # Return the requested amount of execution memory to acquire, if any.
+        write_long(
+            0 if result.acquireExecutionMemoryMbRequested is None
+            else result.acquireExecutionMemoryMbRequested,
+            outfile)
+        write_long(
+            0 if result.acquireExecutionMemoryMbActual is None
+            else result.acquireExecutionMemoryMbActual,
+            outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

@@ -276,11 +276,22 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
         case 2 => orderBy.append(SortOrder(parsed, direction, NullsLast, Seq.empty))
       }
     }
+    // Receive the requested amount of execution memory to acquire, if any.
+    val acquireExecutionMemoryMbRequested = {
+      val value = dataIn.readLong()
+      if (value > 0) Some(value) else None
+    }
+    val acquireExecutionMemoryMbActual = {
+      val value = dataIn.readLong()
+      if (value > 0) Some(value) else None
+    }
     PythonUDTFAnalyzeResult(
       schema = schema,
       withSinglePartition = withSinglePartition,
       partitionByExpressions = partitionByExpressions.toSeq,
       orderByExpressions = orderBy.toSeq,
+      acquireMemoryMbRequested = acquireExecutionMemoryMbRequested,
+      acquireMemoryMbActual = acquireExecutionMemoryMbActual,
       pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }

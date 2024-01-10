@@ -106,6 +106,9 @@ SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
     UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col);
+-- The following UDTF calls exercise acquiring execution memory.
+SELECT * FROM UDTFAcquireExecutionMemory(argument => 4, min_memory_mb => 0);
+SELECT * FROM UDTFAcquireExecutionMemory(argument => 4, min_memory_mb => 10);
 -- The following UDTF calls should fail because the UDTF's 'eval' or 'terminate' method returns None
 -- to a non-nullable column, either directly or within an array/struct/map subfield.
 SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2));

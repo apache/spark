@@ -763,6 +763,56 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |""".stripMargin
   }
 
+  object UDTFAcquireExecutionMemory extends TestUDTF {
+    val pythonScript: String =
+      s"""
+         |from dataclasses import dataclass
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import IntegerType, LongType, StringType, StructType
+         |
+         |@dataclass
+         |class CustomAnalyzeResult(AnalyzeResult):
+         |    minMemoryMb: int = 0
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(**kwargs):
+         |        argument = kwargs.get("argument")
+         |        min_memory_mb = kwargs.get("min_memory_mb").value
+         |        if argument is not None:
+         |            assert(argument.dataType == IntegerType() or argument.dataType == LongType())
+         |            argument_value = argument.value
+         |        else:
+         |            argument_value = None
+         |        return CustomAnalyzeResult(
+         |            schema=StructType()
+         |                .add("initial_request", LongType())
+         |                .add("acquired_memory", LongType())
+         |                .add("min_memory", LongType())
+         |                .add("status", StringType()),
+         |            acquireExecutionMemoryMbRequested=argument_value,
+         |            # Set this field to some junk value to show that it has no effect and gets
+         |            # overwritten with the actual number of execution MB acquired from the
+         |            # 'TaskMemoryManager.acquireExecutionMemory' method.
+         |            acquireExecutionMemoryMbActual=99999,
+         |            minMemoryMb=min_memory_mb)
+         |
+         |    def eval(self, **kwargs):
+         |        pass
+         |
+         |    def terminate(self):
+         |          yield (
+         |              self._analyze_result.acquireExecutionMemoryMbRequested,
+         |              self._analyze_result.acquireExecutionMemoryMbActual,
+         |              self._analyze_result.minMemoryMb,
+         |              "OK" if self._analyze_result.acquireExecutionMemoryMbActual >=
+         |                  self._analyze_result.minMemoryMb else "Insufficient memory")
+         |""".stripMargin
+  }
+
   object InvalidAnalyzeMethodReturnsNonStructTypeSchema extends TestUDTF {
     val pythonScript: String =
       s"""
@@ -1156,6 +1206,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFForwardStateFromAnalyze,
     UDTFForwardStateFromAnalyzeWithKwargs,
     UDTFPartitionByOrderByComplexExpr,
+    UDTFAcquireExecutionMemory,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,

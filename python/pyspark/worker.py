@@ -840,6 +840,9 @@ def read_udtf(pickleSer, infile, eval_type):
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
     udtf_name = utf8_deserializer.loads(infile)
+    udtf_acquired_execution_memory_mb = read_long(infile)
+    if udtf_acquired_execution_memory_mb > 0:
+        pickled_analyze_result.acquireExecutionMemoryMbActual = udtf_acquired_execution_memory_mb
 
     # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
     # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor

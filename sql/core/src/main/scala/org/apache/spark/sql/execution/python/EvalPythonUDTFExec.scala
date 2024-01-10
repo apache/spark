@@ -22,6 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.memory.{MemoryConsumer, MemoryMode}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -99,7 +100,19 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         projection(inputRow)
       }
 
-      val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
+      memoryConsumer.foreach { consumer =>
+        val acquireMemoryMbActual: Long = consumer.acquireMemory()
+        udtf.acquireMemoryMbActual = Some(acquireMemoryMbActual)
+      }
+      val outputRowIterator = try {
+        evaluate(argMetas, projectedRowIter, schema, context)
+      } finally {
+        if (TaskContext.get() != null) {
+          memoryConsumer.foreach { consumer =>
+            consumer.freeMemory()
+          }
+        }
+      }
 
       val pruneChildForResult: InternalRow => InternalRow =
         if (child.outputSet == AttributeSet(requiredChildOutput)) {
@@ -137,4 +150,46 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       }
     }
   }
+
+  lazy val memoryConsumer: Option[PythonUDTFMemoryConsumer] = {
+    if (TaskContext.get() != null) {
+      Some(PythonUDTFMemoryConsumer(udtf))
+    } else {
+      None
+    }
+  }
+}
+
+/**
+ * This class takes responsibility to allocate execution memory for UDTF evaluation before it begins
+ * and free the memory after the evaluation is over.
+ *
+ * Background: If the UDTF's 'analyze' method returns an 'AnalyzeResult' with a non-empty
+ * 'acquireExecutionMemoryMb' value, this value represents the amount of memory in megabytes that
+ * the UDTF should request from each Spark executor that it runs on. Then the UDTF takes
+ * responsibility to use at most this much memory, including all allocated objects. The purpose of
+ * this functionality is to prevent executors from crashing by running out of memory due to the
+ * extra memory consumption invoked by the UDTF's 'eval' and 'terminate' and 'cleanup' methods.
+ *
+ * In this class, Spark calls 'TaskMemoryManager.acquireExecutionMemory' with the requested number
+ * of megabytes, and when Spark calls __init__  of the UDTF later, it updates the
+ * acquiredExecutionMemory integer passed into the UDTF constructor to the actual number returned
+ * from 'TaskMemoryManager.acquireExecutionMemory', so the 'eval' and 'terminate' and 'cleanup'
+ * methods know it and can ensure to bound memory usage to at most this number.
+ */
+case class PythonUDTFMemoryConsumer(udtf: PythonUDTF)
+  extends MemoryConsumer(TaskContext.get().taskMemoryManager(), MemoryMode.ON_HEAP) {
+  private val BYTES_PER_MEGABYTE = 1024 * 1024
+  def acquireMemory(): Long = {
+    udtf.acquireMemoryMbRequested.map { megabytes: Long =>
+      acquireMemory(megabytes * BYTES_PER_MEGABYTE) / BYTES_PER_MEGABYTE
+    }.getOrElse(0)
+  }
+  def freeMemory(): Unit = {
+    udtf.acquireMemoryMbRequested.foreach { megabytes: Long =>
+      freeMemory(megabytes * BYTES_PER_MEGABYTE)
+    }
+  }
+  /** Return zero to indicate that we are not capable of spilling acquired memory to disk. */
+  override def spill(size: Long, trigger: MemoryConsumer): Long = 0
 }

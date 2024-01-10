@@ -2260,9 +2260,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 analyzeResult.applyToTableArgument(u.name, t)
               case c => c
             }
+            // Assign no partition column indexes for now upon initial construction of the
+            // 'PythonUDTF' class here; we may assign them later if necessary during query
+            // compilation.
+            val pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None
             PythonUDTF(
               u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
-              newChildren, u.evalType, u.udfDeterministic, u.resultId)
+              newChildren, u.evalType, u.udfDeterministic, u.resultId,
+              pythonUDTFPartitionColumnIndexes, analyzeResult.acquireMemoryMbRequested)
           }
         }
     }

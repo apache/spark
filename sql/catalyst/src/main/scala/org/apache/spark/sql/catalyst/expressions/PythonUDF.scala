@@ -174,6 +174,16 @@ abstract class UnevaluableGenerator extends Generator {
  * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
  *                                         all PARTITION BY expressions within the TABLE argument of
  *                                         the Python UDTF call, if applicable
+ * @param acquireMemoryMbRequested If this is not None, this represents the amount of memory in
+ *                                 megabytes that the UDTF should request from each Spark executor
+ *                                 that it runs on. Then the UDTF takes responsibility to use at
+ *                                 most this much memory, including all allocated objects. The
+ *                                 purpose of this functionality is to prevent executors from
+ *                                 crashing by running out of memory due to the extra memory
+ *                                 consumption invoked by the UDTF's 'eval' and 'terminate' and
+ *                                 'cleanup' methods. Spark will then call
+ *                                 'TaskMemoryManager.acquireExecutionMemory' with the requested
+ *                                 number of megabytes
  */
 case class PythonUDTF(
     name: String,
@@ -184,7 +194,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
+    acquireMemoryMbRequested: Option[Long] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -195,6 +206,16 @@ case class PythonUDTF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
     copy(children = newChildren)
+
+  /**
+   * This eventually holds the result of 'TaskMemoryManager.acquireExecutionMemory' if and when we
+   * call it with the argument of [[acquireMemoryMbRequested]]. That method returns an integer
+   * indicating the number of bytes of memory actually acquired, which may range from zero to the
+   * number of bytes requested. We store this result here in order to propagate it back to the UDTF
+   * execution and assign it to the 'acquireExecutionMemoryMb' field of the 'AnalyzeResult', so that
+   * subsequent invocations of the 'eval' and 'terminate' and 'cleanup' methods can see it.
+   */
+  var acquireMemoryMbActual: Option[Long] = None
 }
 
 /**
@@ -246,6 +267,15 @@ case class UnresolvedPolymorphicPythonUDTF(
  * @param orderByExpressions if non-empty, this contains the list of ordering items that the
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
+ * @param acquireMemoryMbRequested If this is not None, this represents the amount of memory in
+ *                                 megabytes that the UDTF should request from each Spark executor
+ *                                 that it runs on (see this field in the 'PythonUDTF' class for
+ *                                 more background)
+ * @param acquireMemoryMbActual If this is not None, the UDTF's 'analyze' method assigned a positive
+ *                              integer to this field as a minmium memory requirement signal wherein
+ *                              Spark will return an error if the
+ *                              'TaskMemoryManager.acquireExecutionMemory' method returns a smaller
+ *                              value
  * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
  *                             contains all metadata returned by the Python UDTF 'analyze' method
  *                             including the result schema of the function call as well as optional
@@ -256,6 +286,8 @@ case class PythonUDTFAnalyzeResult(
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
+    acquireMemoryMbRequested: Option[Long],
+    acquireMemoryMbActual: Option[Long],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument

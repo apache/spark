@@ -479,6 +479,18 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM UDTFAcquireExecutionMemory(argument => 4, min_memory_mb => 0)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFAcquireExecutionMemory(argument => 4, min_memory_mb => 10)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]

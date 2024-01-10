@@ -93,11 +93,11 @@ class OrderingColumn:
 
     Parameters
     ----------
-    name : str
+    name: str
         The contents of the ordering column name or expression represented as a SQL string.
-    ascending : bool, default True
+    ascending: bool, default True
         This is if this expression specifies an ascending sorting order.
-    overrideNullsFirst : str, optional
+    overrideNullsFirst: str, optional
         If this is None, use the default behavior to sort NULL values first when sorting in
         ascending order, or last when sorting in descending order. Otherwise, if this is
         True or False, we override the default behavior accordingly.
@@ -118,13 +118,13 @@ class AnalyzeResult:
 
     Parameters
     ----------
-    schema : :class:`StructType`
+    schema: :class:`StructType`
         The schema that the Python UDTF will return.
-    withSinglePartition : bool
+    withSinglePartition: bool
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partitionBy : sequence of :class:`PartitioningColumn`
+    partitionBy: sequence of :class:`PartitioningColumn`
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
@@ -133,12 +133,28 @@ class AnalyzeResult:
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
+    acquireExecutionMemoryMbRequested: long
+        If this is not None, this represents the amount of memory in megabytes that the UDTF should
+        request from each Spark executor that it runs on. Then the UDTF takes responsibility to use
+        at most this much memory, including all allocated objects. The purpose of this functionality
+        is to prevent executors from crashing by running out of memory due to the extra memory
+        consumption invoked by the UDTF's 'eval' and 'terminate' and 'cleanup' methods. Spark will
+        then call 'TaskMemoryManager.acquireExecutionMemory' with the requested number of megabytes.
+    acquireExecutionMemoryMbActual: long
+        If there is a task context available, Spark will assign this field to the number of
+        megabytes returned from the call to the TaskMemoryManager.acquireExecutionMemory' method, as
+        consumed by the UDTF's'__init__' method. Therefore, its 'eval' and 'terminate' and 'cleanup'
+        methods will know it thereafter and can ensure to bound memory usage to at most this number.
+        Note that there is no effect if the UDTF's 'analyze' method assigns a value to this; it will
+        be overwritten.
     """
 
     schema: StructType
     withSinglePartition: bool = False
     partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
     orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+    acquireExecutionMemoryMbRequested: Optional[int] = None
+    acquireExecutionMemoryMbActual: Optional[int] = None
 
 
 class SkipRestOfInputTableException(Exception):
@@ -393,9 +409,9 @@ class UDTFRegistration:
 
         Parameters
         ----------
-        name : str
+        name: str
             The name of the user-defined table function in SQL statements.
-        f : function or :meth:`pyspark.sql.functions.udtf`
+        f: function or :meth:`pyspark.sql.functions.udtf`
             The user-defined table function.
 
         Returns
