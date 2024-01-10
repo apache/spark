@@ -3309,7 +3309,7 @@ and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` th
 Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
 or by `SparkSession.conf`'s setter and getter methods in runtime.
 
-{% include_relative _generated_config_tables/__sql_runtime.html %}
+{% include_api_gen _generated_config_tables/__sql_runtime.html %}
 
 #### Static SQL Configuration
 
@@ -3317,7 +3317,7 @@ Static SQL configurations are cross-session, immutable Spark SQL configurations.
 and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
 External users can query the static sql config values via `SparkSession.conf` or via set command, e.g. `SET spark.sql.extensions;`, but cannot set/unset them.
 
-{% include_relative _generated_config_tables/__sql_static.html %}
+{% include_api_gen _generated_config_tables/__sql_static.html %}
 
 ### Spark Streaming
 

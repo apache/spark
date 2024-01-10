@@ -194,7 +194,7 @@ object ExprUtils extends QueryErrorsBase {
       }
 
       // Check if the data type of expr is orderable.
-      if (!RowOrdering.isOrderable(expr.dataType)) {
+      if (expr.dataType.existsRecursively(_.isInstanceOf[MapType])) {
         expr.failAnalysis(
           errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
           messageParameters = Map(
