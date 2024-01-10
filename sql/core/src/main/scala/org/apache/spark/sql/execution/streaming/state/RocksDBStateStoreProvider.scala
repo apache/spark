@@ -238,8 +238,11 @@ private[sql] class RocksDBStateStoreProvider
     try {
       rocksDB.doMaintenance()
     } catch {
+      // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
+      // maintenance thread and streaming aggregation operator
       case NonFatal(ex) =>
-        logWarning(s"Error performing maintenance operations with exception=$ex")
+        logWarning(s"Ignoring error while performing maintenance operations with exception=",
+          ex)
     }
   }
 
