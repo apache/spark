@@ -3147,6 +3147,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     var defaultExpression: Option[DefaultExpressionContext] = None
     var generationExpression: Option[GenerationExpressionContext] = None
     var commentSpec: Option[CommentSpecContext] = None
+    var collationSpec: Option[CollationSpecContext] = None
+
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
         if (!nullable) {
@@ -3176,6 +3178,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         }
         commentSpec = Some(spec)
       }
+      Option(option.collationSpec()).foreach { spec =>
+        if (collationSpec.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, colName.getText, "COLLATE")
+        }
+        collationSpec = Some(spec)
+      }
     }
 
     val builder = new MetadataBuilder
@@ -3183,6 +3192,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     commentSpec.map(visitCommentSpec).foreach {
       builder.putString("comment", _)
     }
+
     // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
     defaultExpression.map(visitDefaultExpression).foreach { field =>
       if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
@@ -3199,11 +3209,19 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
     }
 
+    val collation = collationSpec.map(visitCollationSpec)
     val name: String = colName.getText
+
+    val dataType = (collation, typedVisit[DataType](ctx.dataType)) match {
+      case (None, _) => typedVisit[DataType](ctx.dataType)
+      case (Some(collation), StringType) => CollatedStringType(collation)
+      case (Some(collation), dataType) =>
+        throw QueryParsingErrors.invalidCollationSpecified(ctx, dataType.catalogString, collation)
+    }
 
     StructField(
       name = name,
-      dataType = typedVisit[DataType](ctx.dataType),
+      dataType = dataType,
       nullable = nullable,
       metadata = builder.build())
   }

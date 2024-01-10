@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollatorFactory, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -170,31 +170,34 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   // is not null.
   @scala.annotation.tailrec
   protected final def castToStringCode(
-      from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
+      from: DataType, ctx: CodegenContext, collation: Option[String]): (ExprValue, ExprValue)
+    => Block = {
+    val collatorId = CollatorFactory.installComparator(collation.getOrElse("default"))
+
     from match {
       case BinaryType if useHexFormatForBinary =>
         (c, evPrim) =>
           val utilCls = SparkStringUtils.getClass.getName.stripSuffix("$")
           code"$evPrim = UTF8String.fromString($utilCls.getHexString($c));"
       case BinaryType =>
-        (c, evPrim) => code"$evPrim = UTF8String.fromBytes($c);"
+        (c, evPrim) => code"$evPrim = UTF8String.fromBytes($c, $collatorId);"
       case DateType =>
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),
           dateFormatter.getClass)
-        (c, evPrim) => code"$evPrim = UTF8String.fromString($df.format($c));"
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($df.format($c, $collatorId));"
       case TimestampType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),
           timestampFormatter.getClass)
-        (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c), $collatorId);"
       case TimestampNTZType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
-        (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c), $collatorId);"
       case CalendarIntervalType =>
-        (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toString());"
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toString(), $collatorId);"
       case ArrayType(et, _) =>
         (c, evPrim) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
@@ -231,11 +234,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
              |$evPrim = $buffer.build();
            """.stripMargin
         }
-      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx)
+      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx, None)
       case udt: UserDefinedType[_] =>
         val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
         (c, evPrim) =>
-          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
+          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString(), $collatorId);"
       case i: YearMonthIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
@@ -256,11 +259,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
       // notation if an exponent is needed.
       case _: DecimalType if useDecimalPlainString =>
-        (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString(), $collatorId);"
       case StringType =>
         (c, evPrim) => code"$evPrim = $c;"
       case _ =>
-        (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
+        (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c), $collatorId);"
     }
   }
 
@@ -279,7 +282,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       array: ExprValue,
       buffer: ExprValue,
       ctx: CodegenContext): Block = {
-    val elementToStringCode = castToStringCode(et, ctx)
+    val elementToStringCode = castToStringCode(et, ctx, None)
     val funcName = ctx.freshName("elementToString")
     val element = JavaCode.variable("element", et)
     val elementStr = JavaCode.variable("elementStr", StringType)
@@ -324,7 +327,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
     def dataToStringFunc(func: String, dataType: DataType) = {
       val funcName = ctx.freshName(func)
-      val dataToStringCode = castToStringCode(dataType, ctx)
+      val dataToStringCode = castToStringCode(dataType, ctx, None)
       val data = JavaCode.variable("data", dataType)
       val dataStr = JavaCode.variable("dataStr", StringType)
       val functionCall = ctx.addNewFunction(funcName,
@@ -381,7 +384,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       buffer: ExprValue,
       ctx: CodegenContext): Block = {
     val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
-      val fieldToStringCode = castToStringCode(ft, ctx)
+      val fieldToStringCode = castToStringCode(ft, ctx, None)
       val field = ctx.freshVariable("field", ft)
       val fieldStr = ctx.freshVariable("fieldStr", StringType)
       val javaType = JavaCode.javaType(ft)

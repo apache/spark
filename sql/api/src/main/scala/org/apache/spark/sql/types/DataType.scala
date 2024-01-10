@@ -117,6 +117,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
+  private val COLLATED_STRING_TYPE = """collatedstring\(\s*(\w+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -181,6 +182,10 @@ object DataType {
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
+      // TODO: Managed to lose collation_name somewhere.
+      // This is fine since we still don't care about collation
+      // at parquet level, but this should be fixed.
+      case "collatedstring" => CollatedStringType("default")
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
@@ -376,7 +381,8 @@ object DataType {
               equalsStructurally(l.dataType, r.dataType, ignoreNullability) &&
                 (ignoreNullability || l.nullable == r.nullable)
             }
-
+      // case (CollatedStringType(_), StringType) => true
+      // case (StringType, CollatedStringType(_)) => true
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }

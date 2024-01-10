@@ -174,7 +174,7 @@ public class ParquetVectorUpdaterFactory {
       }
       case BINARY -> {
         if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
-          canReadAsBinaryDecimal(descriptor, sparkType)) {
+          sparkType instanceof CollatedStringType || canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new BinaryUpdater();
         }
       }

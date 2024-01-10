@@ -668,6 +668,34 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     )
   }
 
+  def invalidCollationSpecified(
+                                      ctx: ParserRuleContext,
+                                      columnName: String,
+                                      collationName: String,
+                                      isCreate: Boolean = true,
+                                      alterType: String = "ADD"): Throwable = {
+    val errorClass =
+      if (isCreate) {
+        "CREATE_TABLE_COLUMN_INVALID_COLLATION"
+      } else {
+        "ALTER_TABLE_COLUMN_INVALID_COLLATION"
+      }
+    val alterTypeMap: Map[String, String] =
+      if (isCreate) {
+        Map.empty
+      } else {
+        Map("type" -> alterType)
+      }
+    new ParseException(
+      errorClass = errorClass,
+      messageParameters = alterTypeMap ++ Map(
+        "columnName" -> columnName,
+        "collationName" -> collationName
+      ),
+      ctx
+    )
+  }
+
   def invalidDatetimeUnitError(
       ctx: ParserRuleContext,
       functionName: String,

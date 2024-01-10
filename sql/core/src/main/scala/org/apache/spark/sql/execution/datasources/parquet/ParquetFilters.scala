@@ -211,6 +211,7 @@ class ParquetFilters(
   }
 
   private val makeEq:
+    // TODO: Pushdown is here!
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: Array[String], v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[JBoolean])

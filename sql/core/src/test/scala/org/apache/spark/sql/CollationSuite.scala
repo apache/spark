@@ -276,4 +276,21 @@ class CollationSuite extends QueryTest
       Seq(
         Row("ććć", "ććć")))
   }
+
+  test("create table support") {
+    // TODO: Filter pushdown and partitioning are todos.
+    val tableName = "parquet_dummy_t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName" +
+        "(c1 STRING COLLATE 'sr-primary')" +
+        "USING PARQUET ")
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+      checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"),
+        Seq(Row("sr-primary")))
+      checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"),
+        Seq(Row(1)))
+    }
+  }
 }

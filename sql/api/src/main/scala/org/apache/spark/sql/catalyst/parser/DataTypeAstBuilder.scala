@@ -205,4 +205,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
     string(visitStringLit(ctx.stringLit))
   }
+
+  /**
+   * Create a collation string.
+   */
+  override def visitCollationSpec(ctx: CollationSpecContext): String = withOrigin(ctx) {
+    string(visitStringLit(ctx.stringLit))
+  }
 }

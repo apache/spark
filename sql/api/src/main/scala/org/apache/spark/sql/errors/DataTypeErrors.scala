@@ -283,6 +283,13 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map.empty)
   }
 
+
+  def collatedStringTypeAsStringUnsupportedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_COLLATED_STRING_AS_STRING",
+      messageParameters = Map.empty)
+  }
+
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1189",

@@ -345,6 +345,10 @@ commentSpec
     : COMMENT stringLit
     ;
 
+collationSpec
+    : COLLATE stringLit
+    ;
+
 query
     : ctes? queryTerm queryOrganization
     ;
@@ -1171,6 +1175,7 @@ colDefinitionOption
     | defaultExpression
     | generationExpression
     | commentSpec
+    | collationSpec
     ;
 
 generationExpression
