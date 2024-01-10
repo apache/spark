@@ -407,12 +407,12 @@ class UserDefinedFunction:
         memory_profiler_enabled = sc._conf.get("spark.python.profile.memory", "false") == "true"
 
         if profiler_enabled or memory_profiler_enabled:
+            # Disable profiling Pandas UDFs with iterators as input/output.
             if self.evalType in [
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             ]:
-                # Disable profiling Pandas UDFs with iterators as input/output.
                 profiler_enabled = memory_profiler_enabled = False
                 warnings.warn(
                     "Profiling UDFs with iterators input/output is not supported.",
