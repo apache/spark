@@ -132,10 +132,10 @@ class SubquerySQLGeneratorSuite
     val (queryProjection, selectClause, fromClause, whereClause) = subqueryClause match {
       case SubqueryClause.SELECT =>
         // If the subquery is in the FROM clause, then it is a scalar subquery.
-        val queryProjection = outerTable.output ++ Seq(Attribute(subqueryAlias))
+        val queryProjection = outerTable.output ++
+          Seq(Alias(Subquery(subqueryOrganization), subqueryAlias, None))
         val fromClause = FromClause(Seq(outerTable))
-        val selectClause = SelectClause(outerTable.output ++
-          Seq(Alias(Subquery(subqueryOrganization), subqueryAlias, None)))
+        val selectClause = SelectClause(queryProjection)
         (queryProjection, selectClause, fromClause, None)
       case SubqueryClause.FROM =>
         // If the subquery is in the FROM clause, then it is treated as a Relation.
