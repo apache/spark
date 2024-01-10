@@ -49,4 +49,7 @@ case class CollatedStringType(collation: String) extends AtomicType {
   private[spark] override def asNullable: CollatedStringType = this
 
   override def toString: String = s"String($collation)"
+
+  // TODO: Can this just be string with collation?
+  override def typeName: String = s"collatedstring($collation)"
 }
