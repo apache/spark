@@ -115,8 +115,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
     override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-      throw new UnsupportedOperationException("Creating multiple column families with " +
-        "HDFSBackedStateStoreProvider is not supported")
+      throw StateStoreErrors.multipleColumnFamilies("HDFSStateStoreProvider")
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {

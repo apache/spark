@@ -2132,6 +2132,12 @@ SQLSTATE: 55019
 
 Implicit key not found for operation on stateName=`<stateName>`
 
+### TWS_STORE_MULTIPLE_COLUMN_FAMILIES
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Creating multiple column families with `<stateStoreProvider>` is not supported
+
 ### TWS_STORE_MULTIPLE_VALUES_PER_KEY
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

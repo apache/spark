@@ -34,6 +34,11 @@ object StateStoreErrors {
     new TransformWithStateEncoderPrefixKey(stateStoreEncoder)
   }
 
+  def multipleColumnFamilies(stateStoreProvider: String):
+    TransformWithStateMultipleColumnFamilies = {
+    new TransformWithStateMultipleColumnFamilies(stateStoreProvider)
+  }
+
   def multipleValuesPerKey(): TransformWithStateMultipleValuesPerKey = {
     new TransformWithStateMultipleValuesPerKey()
   }
@@ -57,6 +62,12 @@ class TransformWithStateEncoderPrefixKey(stateStoreEncoder: String)
   extends SparkRuntimeException(
     errorClass = "TWS_ENCODER_UNSUPPORTED_PREFIX_KEY",
     messageParameters = Map("stateStoreEncoder" -> stateStoreEncoder)
+  )
+
+class TransformWithStateMultipleColumnFamilies(stateStoreProvider: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "TWS_STORE_MULTIPLE_COLUMN_FAMILIES",
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
   )
 
 // Used for ListState

@@ -3348,6 +3348,12 @@
     ],
     "sqlState" : "55019"
   },
+  "TWS_STORE_MULTIPLE_COLUMN_FAMILIES" : {
+    "message" : [
+      "Creating multiple column families with <stateStoreProvider> is not supported"
+    ],
+    "sqlState" : "42802"
+  },
   "TWS_STORE_MULTIPLE_VALUES_PER_KEY" : {
     "message" : [
       "Store does not support multiple values per key"
