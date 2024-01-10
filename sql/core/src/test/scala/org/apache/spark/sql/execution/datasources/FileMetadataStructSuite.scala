@@ -245,9 +245,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
-      context = ExpectedContext(
-        fragment = "select",
-        callSitePattern = getCurrentClassCallSitePattern))
+      context =
+        ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   metadataColumnsTest("SPARK-42683: df metadataColumn - schema conflict",
