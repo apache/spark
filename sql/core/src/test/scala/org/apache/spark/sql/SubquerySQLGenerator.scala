@@ -58,9 +58,9 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     val IN, NOT_IN, EXISTS, NOT_EXISTS = Value
   }
 
-  trait SubqueryExpression extends Expression with Operator {
+  trait SubqueryExpression extends Expression {
     val inner: Operator
-    override def toString: String = f"(${inner.toString})"
+    override def toString: String = f"($inner)"
   }
   case class Subquery(inner: Operator) extends SubqueryExpression
   case class ScalarSubquery(inner: Operator) extends SubqueryExpression
@@ -94,7 +94,7 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
   }
   case class SubqueryRelation(name: String, output: Seq[Attribute], inner: Operator)
     extends Relation with SubqueryExpression {
-    override def toString: String = f"$inner AS $name"
+    override def toString: String = f"($inner) AS $name"
   }
 
   case class Aggregate(
@@ -106,14 +106,17 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     val LEFT_OUTER = Value("LEFT OUTER")
     val RIGHT_OUTER = Value("RIGHT OUTER")
   }
-  case class Join(
-      leftRelation: Operator,
-      rightRelation: Operator,
+  case class JoinedRelation(
+      leftRelation: Relation,
+      rightRelation: Relation,
       condition: Expression,
-      joinType: JoinType.Value) extends Operator {
+      joinType: JoinType.Value) extends Relation {
+
+    val output: Seq[Attribute] = leftRelation.output ++ rightRelation.output
 
     override def toString: String =
       f"$leftRelation $joinType JOIN $rightRelation ON $condition"
+    override val name: String = toString
   }
 
   object SetOperationType extends Enumeration {
@@ -124,7 +127,7 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
   case class SetOperation(leftRelation: Operator,
       rightRelation: Operator, setOperationType: SetOperationType.Value) extends Operator {
     override def toString: String =
-      f"($leftRelation $setOperationType $rightRelation)"
+      f"SELECT * FROM $leftRelation $setOperationType SELECT * FROM $rightRelation"
   }
 
   case class Limit(limitValue: Int) extends Operator with Clause {
@@ -262,7 +265,7 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
         }
         val selectClause = SelectClause(subqueryOutput)
         val subqueryRelation = SubqueryRelation(SUBQUERY_ALIAS, subqueryOutput,
-          Subquery(subqueryOrganization))
+          subqueryOrganization)
         val fromClause = FromClause(Seq(subqueryRelation))
         (subqueryOutput, selectClause, fromClause, None)
       case SubqueryClause.WHERE =>
@@ -347,7 +350,6 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     Attribute(SECOND_COLUMN, Some(NULL_TABLE_NAME)))
   val NULL_TABLE = TableRelation(NULL_TABLE_NAME, NULL_TABLE_SCHEMA)
 
-  // TODO: inner table combinations to include join, set ops with JOIN_TABLE
   val TABLE_COMBINATIONS = Seq(
     (INNER_TABLE, OUTER_TABLE),
     (INNER_TABLE, NULL_TABLE),
@@ -355,6 +357,24 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     (NO_MATCH_TABLE, OUTER_TABLE),
     (INNER_TABLE, NO_MATCH_TABLE)
   )
+
+  val INNER_SUBQUERY_ALIAS = "innerSubqueryAlias"
+  val ALL_COMBINATIONS = TABLE_COMBINATIONS.flatMap {
+    case (innerTable, outerTable) =>
+      val joins = Seq(JoinType.INNER, JoinType.LEFT_OUTER, JoinType.RIGHT_OUTER)
+        .map(joinType => JoinedRelation(
+          leftRelation = innerTable,
+          rightRelation = JOIN_TABLE,
+          condition = Equals(innerTable.output.head, JOIN_TABLE.output.head), // hardcoded
+          joinType = joinType))
+      val setOps = Seq(SetOperationType.UNION, SetOperationType.EXCEPT, SetOperationType.INTERSECT)
+        .map(setOp => SetOperation(innerTable, JOIN_TABLE, setOp))
+        .map(plan => {
+          val output = innerTable.output.map(a => a.copy(qualifier = Some(INNER_SUBQUERY_ALIAS)))
+          SubqueryRelation(name = INNER_SUBQUERY_ALIAS, output = output, inner = plan)
+        })
+      (joins ++ setOps ++ Seq(innerTable)).map(inner => (inner, outerTable))
+  }
 
   val SUBQUERY_ALIAS = "subqueryAlias"
   // TODO: Add aggregates
@@ -365,7 +385,7 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
 
   val queries = scala.collection.mutable.ListBuffer[String]()
 
-  for ((innerTable, outerTable) <- TABLE_COMBINATIONS) {
+  for ((innerTable, outerTable) <- ALL_COMBINATIONS) {
     for (subqueryClause <-
            Seq(SubqueryClause.WHERE, SubqueryClause.SELECT, SubqueryClause.FROM)) {
       for (subqueryType <- subqueryTypeChoices(subqueryClause)) {
