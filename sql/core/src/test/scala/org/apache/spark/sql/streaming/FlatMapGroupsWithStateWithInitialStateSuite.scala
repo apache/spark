@@ -218,6 +218,8 @@ class FlatMapGroupsWithStateWithInitialStateSuite extends StateStoreMetricsTest 
       ("a", new RunningCount(2))
     ).toDS().groupByKey(x => x._1).mapValues(_._2)
 
+    val t = Seq("a", "b").toDS().groupByKey(x => x)
+
     val e = intercept[SparkException] {
       Seq("a", "b").toDS().groupByKey(x => x)
         .flatMapGroupsWithState(Update, NoTimeout(), initialState)(flatMapGroupsWithStateFunc)

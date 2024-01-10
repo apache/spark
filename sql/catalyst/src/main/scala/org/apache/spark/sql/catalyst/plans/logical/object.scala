@@ -570,7 +570,7 @@ case class FlatMapGroupsWithState(
 }
 
 object TransformWithState {
-  def apply[K: Encoder, V: Encoder, U: Encoder](
+  def apply[K: Encoder, V: Encoder, U: Encoder, S: Encoder](
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       statefulProcessor: StatefulProcessor[K, V, U],
@@ -586,9 +586,47 @@ object TransformWithState {
       timeoutMode,
       outputMode,
       CatalystSerde.generateObjAttr[U],
-      child
+      child,
+      false,
+      groupingAttributes,
+      dataAttributes,
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      LocalRelation(encoderFor[K].schema) // empty data set
     )
     CatalystSerde.serialize[U](mapped)
+  }
+
+  def apply[K: Encoder, V: Encoder, U: Encoder, S: Encoder](
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode,
+      child: LogicalPlan,
+      initialStateGroupAttrs: Seq[Attribute],
+      initialStateDataAttrs: Seq[Attribute],
+      initialState: LogicalPlan): LogicalPlan = {
+    println("I am here inside TransformWithState apply()")
+    val mapped = new TransformWithState(
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
+      timeoutMode,
+      outputMode,
+      CatalystSerde.generateObjAttr[U],
+      child,
+      hasInitialState = true,
+      initialStateGroupAttrs,
+      initialStateDataAttrs,
+      UnresolvedDeserializer(encoderFor[S].deserializer, initialStateDataAttrs),
+      initialState
+    )
+    println("I am after mapped")
+    val res = CatalystSerde.serialize[U](mapped)
+    println("I am after serialize")
+    res
   }
 }
 
@@ -601,10 +639,18 @@ case class TransformWithState(
     timeoutMode: TimeoutMode,
     outputMode: OutputMode,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+    child: LogicalPlan,
+    hasInitialState: Boolean = false,
+    initialStateGroupAttr: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
+    initialStateDeserializer: Expression,
+    initialState: LogicalPlan) extends BinaryNode with ObjectProducer {
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): TransformWithState =
-    copy(child = newChild)
+  override def left: LogicalPlan = child
+  override def right: LogicalPlan = initialState
+  override protected def withNewChildrenInternal(
+     newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithState =
+    copy(child = newLeft, initialState = newRight)
 }
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */

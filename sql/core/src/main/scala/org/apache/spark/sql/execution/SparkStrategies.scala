@@ -728,12 +728,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
         dataAttributes, statefulProcessor, timeoutMode, outputMode,
-        outputAttr, child) =>
+        outputAttr, child, hasInitialState, sgroupAttr, sdataAttr, sDeser, initialState) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
           valueDeserializer,
+          sDeser,
           groupingAttributes,
           dataAttributes,
+          sgroupAttr,
+          sdataAttr,
           statefulProcessor,
           timeoutMode,
           outputMode,
@@ -742,7 +745,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          planLater(child))
+          planLater(child),
+          hasInitialState,
+          planLater(initialState)
+        )
         execPlan :: Nil
       case _ =>
         Nil
