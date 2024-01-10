@@ -619,6 +619,9 @@ private[deploy] class Master(
         case e: Exception => logInfo("Worker " + worker.id + " had exception on reconnect")
       }
     }
+
+    // In case of zero workers and apps, we can complete recovery.
+    if (canCompleteRecovery) { completeRecovery() }
   }
 
   private def completeRecovery(): Unit = {
