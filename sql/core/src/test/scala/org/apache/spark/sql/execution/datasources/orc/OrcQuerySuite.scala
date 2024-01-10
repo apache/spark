@@ -508,7 +508,7 @@ abstract class OrcQueryTest extends OrcTest {
       conf.setBoolean("hive.io.file.read.all.columns", false)
 
       val orcRecordReader = {
-        val file = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc")).head
+        val file = new File(path).listFiles().find(_.getName.endsWith(".orc")).head
         val split = new FileSplit(new Path(file.toURI), 0, file.length, Array.empty[String])
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
