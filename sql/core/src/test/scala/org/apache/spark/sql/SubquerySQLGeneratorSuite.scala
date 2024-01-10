@@ -23,8 +23,16 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.stringToFile
 
 class SubquerySQLGeneratorSuite
-  extends SparkFunSuite with SQLQueryTestHelper with QueryGeneratorHelper {
+  extends SparkFunSuite with QueryGeneratorHelper {
 
+  /**
+   * Function to generate a subquery given the following parameters:
+   * @param innerTable The relation within the subquery.
+   * @param correlationConditions Conditions referencing both inner and outer tables.
+   * @param isDistinct Whether the result of the subquery is to be de-duplicated.
+   * @param operatorInSubquery The operator to be included in this subquery.
+   * @param isScalarSubquery Whether the subquery is a scalar subquery or not.
+   */
   private def generateSubquery(
       innerTable: Relation,
       correlationConditions: Seq[Predicate],
@@ -32,25 +40,35 @@ class SubquerySQLGeneratorSuite
       operatorInSubquery: Operator,
       isScalarSubquery: Boolean): QueryOrganization = {
 
+    // Generating the From clause of the subquery:
     val fromClause = FromClause(Seq(innerTable))
+
+    // Generating the Select clause of the subquery: consider Aggregation result expressions, if the
+    // operator to be included is an Aggregate.
     val projections = operatorInSubquery match {
       case Aggregate(resultExpressions, _) => resultExpressions
       case _ => Seq(innerTable.output.head)
     }
     val selectClause = SelectClause(projections, isDistinct = isDistinct)
 
+    // Generating the Where clause of the subquery: add correlation conditions, if any.
     val whereClause = if (correlationConditions.nonEmpty) {
       Some(WhereClause(correlationConditions))
     } else {
       None
     }
 
+    // Generating the GroupBy clause of the subquery: add GroupBy if the operator to be included is
+    // an Aggregate.
     val groupByClause = operatorInSubquery match {
       case a: Aggregate if a.groupingExpressions.nonEmpty =>
         Some(GroupByClause(a.groupingExpressions))
       case _ => None
     }
 
+    // For the OrderBy, consider whether or not the result of the subquery is required to be sorted.
+    // This is to maintain test determinism. This is affected by whether the subquery has a limit
+    // clause.
     val requiresLimitOne = isScalarSubquery && (operatorInSubquery match {
       case a: Aggregate => a.groupingExpressions.nonEmpty
       case l: Limit => l.limitValue > 1
@@ -63,6 +81,8 @@ class SubquerySQLGeneratorSuite
       None
     }
 
+    // For the Limit clause, consider whether the subquery needs to return 1 row, or whether the
+    // operator to be included is a Limit.
     val limitClause = if (requiresLimitOne) {
       Some(Limit(1))
     } else operatorInSubquery match {
@@ -76,6 +96,17 @@ class SubquerySQLGeneratorSuite
       orderByClause, limitClause)()
   }
 
+  /**
+   * Generate a query (that has a subquery) with the given parameters.
+   * @param innerTable Table within the subquery.
+   * @param outerTable Table outside of the subquery, in the main query.
+   * @param subqueryAlias
+   * @param subqueryClause The clause of the main query where the subquery is located.
+   * @param subqueryType The type of subquery, such as SCALAR, PREDICATE (EQUALS, EXISTS, etc.)
+   * @param isCorrelated Whether the subquery is to be correlated.
+   * @param isDistinct Whether subquery results is to be de-duplicated, i.e. have a DISTINCT clause.
+   * @param operatorInSubquery The operator to be included in the subquery.
+   */
   private def generateQuery(
       innerTable: Relation,
       outerTable: Relation,
@@ -86,7 +117,7 @@ class SubquerySQLGeneratorSuite
       isDistinct: Boolean,
       operatorInSubquery: Operator): QueryOrganization = {
 
-    // Correlation conditions, hardcoded
+    // Correlation conditions, this is hardcoded for now.
     val correlationConditions = if (isCorrelated) {
       Seq(Equals(innerTable.output.head, outerTable.output.head))
     } else {
@@ -100,12 +131,14 @@ class SubquerySQLGeneratorSuite
     // TODO: Clean up
     val (queryProjection, selectClause, fromClause, whereClause) = subqueryClause match {
       case SubqueryClause.SELECT =>
+        // If the subquery is in the FROM clause, then it is a scalar subquery.
         val queryProjection = outerTable.output ++ Seq(Attribute(subqueryAlias))
         val fromClause = FromClause(Seq(outerTable))
         val selectClause = SelectClause(outerTable.output ++
           Seq(Alias(Subquery(subqueryOrganization), subqueryAlias, None)))
         (queryProjection, selectClause, fromClause, None)
       case SubqueryClause.FROM =>
+        // If the subquery is in the FROM clause, then it is treated as a Relation.
         val subqueryProjection = subqueryOrganization.selectClause.projection
         val subqueryOutput = subqueryProjection.map {
           case a: Attribute => Attribute(name = a.name, qualifier = Some(subqueryAlias))
@@ -117,6 +150,7 @@ class SubquerySQLGeneratorSuite
         val fromClause = FromClause(Seq(subqueryRelation))
         (subqueryOutput, selectClause, fromClause, None)
       case SubqueryClause.WHERE =>
+        // If the subquery is in the FROM clause, then it is treated as a predicate.
         val queryProjection = outerTable.output
         val selectClause = SelectClause(queryProjection)
         val fromClause = FromClause(Seq(outerTable))
@@ -147,6 +181,7 @@ class SubquerySQLGeneratorSuite
     val FIRST_COLUMN = "a"
     val SECOND_COLUMN = "b"
 
+    // Table definitions
     val INNER_TABLE_NAME = "inner_table"
     val INNER_TABLE_SCHEMA = Seq(
       Attribute(FIRST_COLUMN, Some(INNER_TABLE_NAME)),
@@ -192,6 +227,8 @@ class SubquerySQLGeneratorSuite
     val SET_OPERATIONS = Seq(
       SetOperationType.UNION, SetOperationType.EXCEPT, SetOperationType.INTERSECT)
 
+    // Generate combinations of the inner table to have joins and set operations (with the
+    // JOIN_TABLE).
     val ALL_COMBINATIONS = TABLE_COMBINATIONS.flatMap {
       case (innerTable, outerTable) =>
         val joins = JOIN_TYPES.map(joinType => JoinedRelation(
@@ -207,6 +244,7 @@ class SubquerySQLGeneratorSuite
         (Seq(innerTable) ++ joins ++ setOps).map(inner => (inner, outerTable))
     }
 
+    // If the subquery is in the SELECT clause of the main query, it can only be a scalar subquery.
     def subqueryTypeChoices (subqueryClause: SubqueryClause.Value): Seq[SubqueryType.Value] = {
       if (subqueryClause == SubqueryClause.SELECT) {
         Seq(SubqueryType.SCALAR)
@@ -220,6 +258,7 @@ class SubquerySQLGeneratorSuite
           SubqueryType.NOT_EXISTS)
       }
     }
+    // If the subquery is in the FROM clause of the main query, it cannot be correlated.
     def correlationChoices(subqueryClause: SubqueryClause.Value): Seq[Boolean] = {
       if (subqueryClause== SubqueryClause.FROM) {
         Seq(false)
@@ -241,6 +280,7 @@ class SubquerySQLGeneratorSuite
       val aggFunctions = Seq(Sum(aggColumn), Count(aggColumn))
         .map(af => Alias(af, AGGREGATE_FUNCTION_ALIAS, None))
       val groupByOptions = Seq(true, false)
+      // Generate all combinations of (aggFunction = sum/count, groupBy = true/false).
       val combinations = aggFunctions.flatMap(agg => groupByOptions.map(groupBy => (agg, groupBy)))
       val aggregates = combinations.map {
         case (af, groupBy) => Aggregate(Seq(af), if (groupBy) Seq(groupByColumn) else Seq())
@@ -249,6 +289,7 @@ class SubquerySQLGeneratorSuite
 
       for {
         subqueryOperator <- SUBQUERY_OPERATORS
+        // Generate queries.
         generatedQuery = generateQuery(innerTable, outerTable, SUBQUERY_ALIAS, subqueryClause,
           subqueryType, isCorrelated, isDistinct, subqueryOperator)
         if !generatedQueries.contains(generatedQuery)
@@ -257,6 +298,8 @@ class SubquerySQLGeneratorSuite
       }
     }
 
+    // Number of queries we want per file. This is to reduce test duration / improve test
+    // efficiency with sharding.
     val sizeOfSubarrays: Int = 50
     val arrayOfGeneratedQueries = generatedQueries.grouped(sizeOfSubarrays)
       .map(queries => queries.mkString(";\n"))
