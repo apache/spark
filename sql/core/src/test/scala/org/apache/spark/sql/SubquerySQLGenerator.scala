@@ -18,20 +18,21 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SubquerySQLGenerator.{SUBQUERY_ALIAS, TABLE_COMBINATIONS}
 
 class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
 
   trait Expression
 
-  trait NamedExpression extends Expression
+  trait NamedExpression extends Expression {
+    val name: String
+  }
 
   case class Attribute(name: String, qualifier: Option[String] = None) extends NamedExpression {
-    override def toString: String = f"${if (qualifier.isDefined) qualifier + "." else ""}.$name"
+    override def toString: String = f"${if (qualifier.isDefined) qualifier.get + "." else ""}$name"
   }
-  case class Alias(child: Expression, alias: String, qualifier: Option[String])
+  case class Alias(child: Expression, name: String, qualifier: Option[String])
     extends NamedExpression {
-    override def toString: String = f"$child AS $alias"
+    override def toString: String = f"$child AS $name"
   }
 
   trait Predicate extends Expression
@@ -61,6 +62,7 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     val inner: Operator
     override def toString: String = f"(${inner.toString})"
   }
+  case class Subquery(inner: Operator) extends SubqueryExpression
   case class ScalarSubquery(inner: Operator) extends SubqueryExpression
   case class Exists(inner: Operator) extends SubqueryExpression with Predicate {
     override def toString: String = f"EXISTS ($inner)"
@@ -92,12 +94,12 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
   }
   case class SubqueryRelation(name: String, output: Seq[Attribute], inner: Operator)
     extends Relation with SubqueryExpression {
-    override def toString: String = name
+    override def toString: String = f"$inner AS $name"
   }
 
   case class Aggregate(
-      resultExpressions: Seq[NamedExpression],
-      groupingExpressions: Seq[Expression]) extends Operator
+                        resultExpressions: Seq[NamedExpression],
+                        groupingExpressions: Seq[Expression]) extends Operator
 
   object JoinType extends Enumeration {
     val INNER = Value("INNER")
@@ -105,9 +107,9 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     val RIGHT_OUTER = Value("RIGHT OUTER")
   }
   case class Join(leftRelation: Operator,
-      rightRelation: Operator,
-      condition: Expression,
-      joinType: JoinType.Value) extends Operator {
+                  rightRelation: Operator,
+                  condition: Expression,
+                  joinType: JoinType.Value) extends Operator {
 
     override def toString: String =
       f"$leftRelation $joinType JOIN $rightRelation ON $condition"
@@ -119,7 +121,7 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     val EXCEPT = Value("EXCEPT")
   }
   case class SetOperation(leftRelation: Operator,
-      rightRelation: Operator, setOperationType: SetOperationType.Value) extends Operator {
+                          rightRelation: Operator, setOperationType: SetOperationType.Value) extends Operator {
     override def toString: String =
       f"($leftRelation $setOperationType $rightRelation)"
   }
@@ -136,10 +138,10 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
 
   case class SelectClause(projection: Seq[NamedExpression], isDistinct: Boolean = false)
     extends Clause {
-    override def toString: String = f"SELECT ${if (isDistinct) "DISTINCT" else {""}} $projection"
+    override def toString: String = f"SELECT${if (isDistinct) " DISTINCT " else {" "}}${projection.mkString(", ")}"
   }
   case class FromClause(relations: Seq[Operator]) extends Clause {
-    override def toString: String = f"FROM $relations"
+    override def toString: String = f"FROM ${relations.mkString(", ")}"
   }
   case class WhereClause(predicates: Seq[Predicate]) extends Clause {
     override def toString: String = f"WHERE " + predicates.mkString(" AND ")
@@ -149,38 +151,39 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
   }
   case class OrderByClause(attributes: Seq[NamedExpression]) extends Clause {
     override def toString: String = f"ORDER BY " +
-      attributes.map(a => a + "DESC NULLS FIRST").mkString(", ")
+      attributes.map(a => a + " DESC NULLS FIRST").mkString(", ")
   }
 
   case class QueryOrganization(
-      selectClause: SelectClause,
-      fromClause: FromClause,
-      whereClause: Option[WhereClause] = None,
-      groupByClause: Option[GroupByClause] = None,
-      orderByClause: Option[OrderByClause] = None,
-      limitClause: Option[Limit] = None) extends Operator {
+                                selectClause: SelectClause,
+                                fromClause: FromClause,
+                                whereClause: Option[WhereClause] = None,
+                                groupByClause: Option[GroupByClause] = None,
+                                orderByClause: Option[OrderByClause] = None,
+                                limitClause: Option[Limit] = None,
+                                comment: String = "") extends Operator {
 
     override def toString: String = {
       def getOptionClauseString(optionalClause: Option[Clause]): String =
-        if (optionalClause.isDefined) { optionalClause.toString + " " } else { "" }
+        if (optionalClause.isDefined) { " " + optionalClause.get.toString } else { "" }
 
-      f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
+      comment + f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
         f"${getOptionClauseString(groupByClause)}${getOptionClauseString(orderByClause)}" +
         f"${getOptionClauseString(limitClause)}"
     }
   }
 
   def generateSubquery(
-      innerTable: Relation,
-      correlationConditions: Seq[Predicate],
-      isDistinct: Boolean,
-      operatorInSubquery: Operator,
-      requiresLimitOne: Boolean): QueryOrganization = {
+                        innerTable: Relation,
+                        correlationConditions: Seq[Predicate],
+                        isDistinct: Boolean,
+                        operatorInSubquery: Operator,
+                        isScalarSubquery: Boolean): QueryOrganization = {
 
     val fromClause = FromClause(Seq(innerTable))
     val projections = operatorInSubquery match {
       case Aggregate(resultExpressions, _) => resultExpressions
-      case _ => innerTable.output
+      case _ => Seq(innerTable.output.head)
     }
     val selectClause = SelectClause(projections, isDistinct = isDistinct)
 
@@ -195,6 +198,13 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
         Some(GroupByClause(a.groupingExpressions))
       case _ => None
     }
+
+    val requiresLimitOne = (operatorInSubquery match {
+      case a: Aggregate => a.groupingExpressions.nonEmpty
+      case l: Limit => l.limitValue > 1
+      case _ => true
+    }
+      )
 
     val orderByClause = if (requiresLimitOne || operatorInSubquery.isInstanceOf[Limit]) {
       Some(OrderByClause(projections))
@@ -216,37 +226,43 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
   }
 
   def generateQuery(
-      innerTable: Relation,
-      outerTable: Relation,
-      subqueryClause: SubqueryClause.Value,
-      subqueryType: SubqueryType.Value,
-      isDistinct: Boolean,
-      operatorInSubquery: Operator): String = {
+                     innerTable: Relation,
+                     outerTable: Relation,
+                     subqueryClause: SubqueryClause.Value,
+                     subqueryType: SubqueryType.Value,
+                     isCorrelated: Boolean,
+                     isDistinct: Boolean,
+                     operatorInSubquery: Operator): String = {
 
     // Correlation conditions, hardcoded
-    val correlationConditions = Seq(Equals(innerTable.output.head, outerTable.output.head))
-    val requiresLimitOne = Seq(SubqueryType.SCALAR, SubqueryType.SCALAR_PREDICATE_EQUALS,
-      SubqueryType.SCALAR_PREDICATE_LESS_THAN).contains(subqueryType) && (operatorInSubquery match {
-        case a: Aggregate => a.groupingExpressions.nonEmpty
-        case l: Limit => l.limitValue > 1
-        case _ => true
-      }
-    )
+    val correlationConditions = if (isCorrelated) {
+      Seq(Equals(innerTable.output.head, outerTable.output.head))
+    } else {
+      Seq()
+    }
+    val isScalarSubquery = Seq(SubqueryType.SCALAR, SubqueryType.SCALAR_PREDICATE_EQUALS,
+      SubqueryType.SCALAR_PREDICATE_LESS_THAN).contains(subqueryType)
     val subqueryOrganization = generateSubquery(
-      innerTable, correlationConditions, isDistinct, operatorInSubquery, requiresLimitOne)
+      innerTable, correlationConditions, isDistinct, operatorInSubquery, isScalarSubquery)
 
     val (queryProjection, selectClause, fromClause, whereClause) = subqueryClause match {
       case SubqueryClause.SELECT =>
         val queryProjection = outerTable.output ++ Seq(Attribute(SUBQUERY_ALIAS))
         val fromClause = FromClause(Seq(outerTable))
-        val selectClause = SelectClause(queryProjection)
+        val selectClause = SelectClause(outerTable.output ++
+          Seq(Alias(Subquery(subqueryOrganization), SUBQUERY_ALIAS, None)))
         (queryProjection, selectClause, fromClause, None)
       case SubqueryClause.FROM =>
-        val queryProjection = subqueryOrganization.selectClause.projection
-        val selectClause = SelectClause(queryProjection)
-        // TODO: alias
-        val fromClause = FromClause(Seq(ScalarSubquery(subqueryOrganization)))
-        (queryProjection, selectClause, fromClause, None)
+        val subqueryProjection = subqueryOrganization.selectClause.projection
+        val subqueryOutput = subqueryProjection.map {
+          case a: Attribute => Attribute(name = a.name, qualifier = Some(SUBQUERY_ALIAS))
+          case a: Alias => Attribute(name = a.name, qualifier = Some(SUBQUERY_ALIAS))
+        }
+        val selectClause = SelectClause(subqueryOutput)
+        val subqueryRelation = SubqueryRelation(SUBQUERY_ALIAS, subqueryOutput,
+          Subquery(subqueryOrganization))
+        val fromClause = FromClause(Seq(subqueryRelation))
+        (subqueryOutput, selectClause, fromClause, None)
       case SubqueryClause.WHERE =>
         val queryProjection = outerTable.output
         val selectClause = SelectClause(queryProjection)
@@ -267,88 +283,67 @@ class SubquerySQLGenerator extends SparkFunSuite with SQLQueryTestHelper {
     }
     val orderByClause = Some(OrderByClause(queryProjection))
 
-    // TODO: Query comment
+    val comment = f"""
+                     |/*
+                     |  inner_table=$innerTable,
+                     |  outer_table=$outerTable,
+                     |  subqueryClause=$subqueryClause,
+                     |  subquery_type=$subqueryType,
+                     |  is_correlated=$isCorrelated,
+                     |  distinct=$isDistinct",
+                     |  subquery_operator=$operatorInSubquery
+                     |*/
+                     |""".stripMargin
     QueryOrganization(selectClause, fromClause, whereClause, groupByClause = None,
-      orderByClause, limitClause = None).toString
+      orderByClause, limitClause = None,
+      comment = comment).toString
   }
 
   private val subqueryTypeChoices = (subqueryClause: SubqueryClause.Value) =>
     if (subqueryClause == SubqueryClause.SELECT) {
-    Seq(SubqueryType.SCALAR)
-  } else {
-    Seq(
-      SubqueryType.SCALAR_PREDICATE_LESS_THAN,
-      SubqueryType.SCALAR_PREDICATE_EQUALS,
-      SubqueryType.IN,
-      SubqueryType.NOT_IN,
-      SubqueryType.EXISTS,
-      SubqueryType.NOT_EXISTS)
-  }
-
-  def main(args: Array[String]): Unit = {
-    val queries = scala.collection.mutable.ListBuffer[String]()
-
-    for ((innerTable, outerTable) <- TABLE_COMBINATIONS) {
-      for (subqueryClause <-
-             Seq(SubqueryClause.WHERE, SubqueryClause.SELECT, SubqueryClause.FROM)) {
-        for (subqueryType <- subqueryTypeChoices(subqueryClause)) {
-          for (isDistinct <- Seq(true, false)) {
-            // TODO
-            for (subqueryOperator <- Seq()) {
-              val generatedQuery = generateQuery(
-                innerTable,
-                outerTable,
-                subqueryClause,
-                subqueryType,
-                isDistinct,
-                subqueryOperator
-              )
-              if (!queries.contains(generatedQuery)) {
-                queries += generatedQuery
-              }
-            }
-          }
-        }
-      }
+      Seq(SubqueryType.SCALAR)
+    } else {
+      Seq(
+        SubqueryType.SCALAR_PREDICATE_LESS_THAN,
+        SubqueryType.SCALAR_PREDICATE_EQUALS,
+        SubqueryType.IN,
+        SubqueryType.NOT_IN,
+        SubqueryType.EXISTS,
+        SubqueryType.NOT_EXISTS)
     }
-  }
-}
-
-
-object SubquerySQLGenerator {
 
   val FIRST_COLUMN = "a"
   val SECOND_COLUMN = "b"
 
   val INNER_TABLE_NAME = "inner_table"
   val INNER_TABLE_SCHEMA = Seq(
-    Attribute(FIRST_COLUMN, INNER_TABLE_NAME),
-    Attribute(SECOND_COLUMN, INNER_TABLE_NAME))
-  val INNER_TABLE = Relation(INNER_TABLE_NAME, INNER_TABLE_SCHEMA)
+    Attribute(FIRST_COLUMN, Some(INNER_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(INNER_TABLE_NAME)))
+  val INNER_TABLE = TableRelation(INNER_TABLE_NAME, INNER_TABLE_SCHEMA)
 
   val OUTER_TABLE_NAME = "outer_table"
   val OUTER_TABLE_SCHEMA = Seq(
-    Attribute(FIRST_COLUMN, OUTER_TABLE_NAME),
-    Attribute(SECOND_COLUMN, OUTER_TABLE_NAME))
-  val OUTER_TABLE = Relation(OUTER_TABLE_NAME, OUTER_TABLE_SCHEMA)
+    Attribute(FIRST_COLUMN, Some(OUTER_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(OUTER_TABLE_NAME)))
+  val OUTER_TABLE = TableRelation(OUTER_TABLE_NAME, OUTER_TABLE_SCHEMA)
 
   val NO_MATCH_TABLE_NAME = "no_match_table"
   val NO_MATCH_TABLE_SCHEMA = Seq(
-    Attribute(FIRST_COLUMN, NO_MATCH_TABLE_NAME),
-    Attribute(SECOND_COLUMN, NO_MATCH_TABLE_NAME))
-  val NO_MATCH_TABLE = Relation(NO_MATCH_TABLE_NAME, NO_MATCH_TABLE_SCHEMA)
+    Attribute(FIRST_COLUMN, Some(NO_MATCH_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(NO_MATCH_TABLE_NAME)))
+  val NO_MATCH_TABLE = TableRelation(NO_MATCH_TABLE_NAME, NO_MATCH_TABLE_SCHEMA)
 
   val JOIN_TABLE_NAME = "join_table"
   val JOIN_TABLE_SCHEMA = Seq(
-    Attribute(FIRST_COLUMN, JOIN_TABLE_NAME),
-    Attribute(SECOND_COLUMN, JOIN_TABLE_NAME))
-  val JOIN_TABLE = Relation(JOIN_TABLE_NAME, JOIN_TABLE_SCHEMA)
+    Attribute(FIRST_COLUMN, Some(JOIN_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(JOIN_TABLE_NAME)))
+  val JOIN_TABLE = TableRelation(JOIN_TABLE_NAME, JOIN_TABLE_SCHEMA)
 
   val NULL_TABLE_NAME = "null_table"
   val NULL_TABLE_SCHEMA = Seq(
-    Attribute(FIRST_COLUMN, NULL_TABLE_NAME),
-    Attribute(SECOND_COLUMN, NULL_TABLE_NAME))
-  val NULL_TABLE = Relation(NULL_TABLE_NAME, NULL_TABLE_SCHEMA)
+    Attribute(FIRST_COLUMN, Some(NULL_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(NULL_TABLE_NAME)))
+  val NULL_TABLE = TableRelation(NULL_TABLE_NAME, NULL_TABLE_SCHEMA)
 
   // TODO: inner table combinations to include join, set ops with JOIN_TABLE
   val TABLE_COMBINATIONS = Seq(
@@ -360,4 +355,42 @@ object SubquerySQLGenerator {
   )
 
   val SUBQUERY_ALIAS = "subqueryAlias"
+  // TODO: Add aggregates
+  val SUBQUERY_OPERATORS = Seq(
+    Limit(1),
+    Limit(10)
+  )
+
+  val queries = scala.collection.mutable.ListBuffer[String]()
+
+  for ((innerTable, outerTable) <- TABLE_COMBINATIONS) {
+    for (subqueryClause <-
+           Seq(SubqueryClause.WHERE, SubqueryClause.SELECT, SubqueryClause.FROM)) {
+      for (subqueryType <- subqueryTypeChoices(subqueryClause)) {
+        for (isDistinct <- Seq(true, false)) {
+          val correlationChoices = if (subqueryClause == SubqueryClause.FROM) {
+            Seq(false)
+          } else {
+            Seq(true, false)
+          }
+          for (isCorrelated <- correlationChoices) {
+            for (subqueryOperator <- SUBQUERY_OPERATORS) {
+              val generatedQuery = generateQuery(
+                innerTable,
+                outerTable,
+                subqueryClause,
+                subqueryType,
+                isCorrelated,
+                isDistinct,
+                subqueryOperator
+              )
+              if (!queries.contains(generatedQuery)) {
+                queries += generatedQuery + ";"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
