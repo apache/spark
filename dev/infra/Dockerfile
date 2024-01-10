@@ -132,7 +132,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 # TODO(SPARK-46647) Add unittest-xml-reporting into Python 3.12 image when it supports Python 3.12
-RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS
+RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml
 # TODO(SPARK-46078) Use official one instead of nightly build when it's ready
 RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 RUN python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
