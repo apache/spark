@@ -256,4 +256,13 @@ object Connect {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val CONNECT_GRPC_MAX_METADATA_SIZE =
+    buildStaticConf("spark.connect.grpc.maxMetadataSize")
+      .doc(
+        "Sets the maximum size of metadata fields. For instance, it restricts metadata fields " +
+          "in `ErrorInfo`.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(1024)
 }

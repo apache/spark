@@ -42,7 +42,7 @@ SELECT * FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -54,7 +54,7 @@ SELECT * EXCEPT (id) FROM tbl_view
 -- !query analysis
 Project [name#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -66,7 +66,7 @@ SELECT * EXCEPT (name) FROM tbl_view
 -- !query analysis
 Project [id#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -78,7 +78,7 @@ SELECT * EXCEPT (data) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -90,7 +90,7 @@ SELECT * EXCEPT (data.f1) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, named_struct(s2, data#x.s2) AS data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -102,7 +102,7 @@ SELECT * EXCEPT (data.s2) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, named_struct(f1, data#x.f1) AS data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -114,7 +114,19 @@ SELECT * EXCEPT (data.s2.f2) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, named_struct(f1, data#x.f1, s2, named_struct(f3, data#x.s2.f3)) AS data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+         +- Project [id#x, name#x, data#x]
+            +- SubqueryAlias tbl_view
+               +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view
+-- !query analysis
+Project [id#x, name#x, named_struct() AS data#x]
++- SubqueryAlias tbl_view
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -126,7 +138,7 @@ SELECT * EXCEPT (id, name, data) FROM tbl_view
 -- !query analysis
 Project
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -147,7 +159,7 @@ SELECT tbl_view.* EXCEPT (name) FROM tbl_view
 -- !query analysis
 Project [id#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -161,7 +173,7 @@ SELECT * EXCEPT (name, data) FROM tbl_view
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/ids, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/ids], Append, `spark_catalog`.`default`.`ids`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/ids), [id]
 +- Project [id#x]
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -189,7 +201,7 @@ SELECT data.* EXCEPT (s2) FROM tbl_view
 -- !query analysis
 Project [data#x.f1 AS f1#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -201,7 +213,7 @@ SELECT data.* EXCEPT (s2.f2) FROM tbl_view
 -- !query analysis
 Project [data#x.f1 AS f1#x, named_struct(f3, data#x.s2.f3) AS s2#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -213,7 +225,7 @@ SELECT data.s2.* EXCEPT (f2) FROM tbl_view
 -- !query analysis
 Project [data#x.s2.f3 AS f3#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view

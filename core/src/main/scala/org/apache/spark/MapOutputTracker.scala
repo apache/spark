@@ -744,7 +744,7 @@ private[spark] class MapOutputTrackerMaster(
         needMergeOutput: Boolean): Unit = {
       val hostPort = context.senderAddress.hostPort
       val shuffleStatus = shuffleStatuses.get(shuffleId).head
-      logDebug(s"Handling request to send ${if (needMergeOutput) "map" else "map/merge"}" +
+      logDebug(s"Handling request to send ${if (needMergeOutput) "map/merge" else "map"}" +
         s" output locations for shuffle $shuffleId to $hostPort")
       if (needMergeOutput) {
         context.reply(

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.TimestampNTZType
+import org.apache.spark.util.Utils
 
 /**
  * Options for the JDBC data source.
@@ -248,6 +249,8 @@ class JDBCOptions(
       otherOption.parameters.equals(this.parameters)
     case _ => false
   }
+
+  def getRedactUrl(): String = Utils.redact(SQLConf.get.stringRedactionPattern, url)
 }
 
 class JdbcOptionsInWrite(

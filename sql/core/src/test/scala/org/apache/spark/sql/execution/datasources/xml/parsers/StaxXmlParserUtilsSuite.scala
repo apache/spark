@@ -63,7 +63,7 @@ final class StaxXmlParserUtilsSuite extends SparkFunSuite with BeforeAndAfterAll
     val parser = factory.createXMLEventReader(new StringReader(input.toString))
     // Skip until </id>
     StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.END_ELEMENT)
-    val xmlString = StaxXmlParserUtils.currentStructureAsString(parser)
+    val xmlString = StaxXmlParserUtils.currentStructureAsString(parser, "ROW", new XmlOptions())
     val expected = <info>
       <name>Sam Mad Dog Smith</name><amount><small>1</small><large>9</large></amount></info>
     assert(xmlString === expected.toString())

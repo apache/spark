@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -2040,9 +2040,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def failToPlanDataSourceError(action: String, tpe: String, msg: String): Throwable = {
+  def pythonDataSourceError(action: String, tpe: String, msg: String): Throwable = {
     new AnalysisException(
-      errorClass = "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON",
+      errorClass = "PYTHON_DATA_SOURCE_ERROR",
       messageParameters = Map("action" -> action, "type" -> tpe, "msg" -> msg)
     )
   }
@@ -3184,12 +3184,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
+  def invalidSaveModeError(saveMode: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SAVE_MODE",
+      messageParameters = Map("mode" -> toDSOption(saveMode))
+    )
+  }
+
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1308",
+      errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
       messageParameters = Map(
         "source" -> source,
-        "createMode" -> createMode))
+        "createMode" -> toDSOption(createMode)))
   }
 
   def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
@@ -3932,5 +3939,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "dsSchema" -> toSQLType(dsSchema),
         "expectedSchema" -> toSQLType(expectedSchema)))
+  }
+
+  def cannotResolveColumn(u: UnresolvedAttribute): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+      messageParameters = Map("name" -> toSQLId(u.nameParts)),
+      origin = u.origin
+    )
+  }
+
+  def ambiguousColumnReferences(u: UnresolvedAttribute): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+      messageParameters = Map("name" -> toSQLId(u.nameParts)),
+      origin = u.origin
+    )
   }
 }
