@@ -334,7 +334,7 @@ jobs:
     needs: [precondition, infra-image]
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
-    name: "Build modules: ${{ matrix.modules }} ${{ env.PYTHON_TO_TEST }}"
+    name: "Build modules: ${{ matrix.modules }} ${{ matrix.pyversion }}"
     runs-on: ubuntu-22.04
     timeout-minutes: 300
     container:
