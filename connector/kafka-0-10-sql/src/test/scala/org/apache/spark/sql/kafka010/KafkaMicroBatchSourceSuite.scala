@@ -2681,7 +2681,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
 
   import testImplicits._
 
-  val topicId = new AtomicInteger(1)
+  private val topicId = new AtomicInteger(1)
 
   @volatile var topics: Seq[String] = (1 to 5).map(_ => newStressTopic)
 

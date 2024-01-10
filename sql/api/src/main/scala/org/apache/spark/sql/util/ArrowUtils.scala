@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.util
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.RootAllocator
@@ -188,8 +186,12 @@ private[sql] object ArrowUtils {
         }
         val genNawName = st.names.groupBy(identity).map {
           case (name, names) if names.length > 1 =>
-            val i = new AtomicInteger()
-            name -> { () => s"${name}_${i.getAndIncrement()}" }
+            var i = 0
+            name -> { () =>
+              val id = i
+              i += 1
+              s"${name}_$id"
+            }
           case (name, _) => name -> { () => name }
         }
         st.names.map(genNawName(_)())

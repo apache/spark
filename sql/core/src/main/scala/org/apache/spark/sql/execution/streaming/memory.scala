@@ -41,7 +41,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object MemoryStream {
-  protected val currentBlockId = new AtomicInteger(0)
   protected val memoryStreamId = new AtomicInteger(0)
 
   def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
