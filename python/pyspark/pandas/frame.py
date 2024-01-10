@@ -9466,33 +9466,34 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             "and loads all data into one executor's memory to compute. "
             "It should only be used if the pandas DataFrame is expected to be small."
         )
-        tmp_df = self.copy()
+        input_df = self.copy()
 
         uid = str(uuid.uuid4()).replace("-", "")
         tmp_agg_column_name = f"__tmp_aggregate_col_for_frame_asfreq_{uid}__"
         tmp_idx_column_name = f"__tmp_index_col_for_frame_asfreq_{uid}__"
 
-        tmp_df[tmp_agg_column_name] = 0
-        tmp_df[tmp_idx_column_name] = tmp_df.index
+        input_df[tmp_agg_column_name] = 0
+        input_df[tmp_idx_column_name] = input_df.index
 
-        def asfreq_compute(df):
-            return (
-                df.drop(columns=[tmp_agg_column_name])
-                .set_index(tmp_idx_column_name)
-                .asfreq(
-                    freq=freq,
-                    method=method,
-                    how=how,
-                    normalize=normalize,
-                    fill_value=fill_value,
-                )
+        def asfreq_compute(pdf: pd.DataFrame):  # type: ignore[no-untyped-def]
+            pdf = pdf.drop(columns=[tmp_agg_column_name])
+            pdf = pdf.set_index(tmp_idx_column_name, drop=True)
+            pdf = pdf.sort_index()
+            pdf = pdf.asfreq(
+                freq=freq,
+                method=method,
+                how=how,
+                normalize=normalize,
+                fill_value=fill_value,
             )
+            pdf[tmp_idx_column_name] = pdf.index
+            return pdf.reset_index(drop=True)
 
-        result_df = tmp_df.groupby(tmp_agg_column_name).apply(asfreq_compute)
-        result_df = result_df.droplevel(tmp_agg_column_name)
-        result_df.index.names = self.index.names
+        output_df = input_df.groupby(tmp_agg_column_name).apply(asfreq_compute)
+        output_df = output_df.set_index(tmp_idx_column_name)
+        output_df.index.names = self.index.names
 
-        return result_df
+        return output_df  # type: ignore[return-value]
 
     def astype(self, dtype: Union[str, Dtype, Dict[Name, Union[str, Dtype]]]) -> "DataFrame":
         """
