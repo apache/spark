@@ -2122,28 +2122,33 @@ CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part 
 
 ### TWS_ENCODER_UNSUPPORTED_PREFIX_KEY
 
-SQLSTATE: XXKST
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
-Encoder does not support prefix key for <stateStoreEncoder>. Please use another state store provider that supports prefix keys,
-or omit the prefix key.
+Encoder doesn't support prefix key for state store provider: `<stateStoreEncoder>`. Please use another state store provider that supports prefix keys, or omit the prefix key.
 
 ### TWS_IMPLICIT_KEY_NOT_FOUND
 
 SQLSTATE: 55019
 
-Implicit key not found for operation on stateName=`<stateName>`.
+Implicit key not found for operation on stateName=`<stateName>`
+
+### TWS_STORE_MULTIPLE_VALUES_PER_KEY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Store does not support multiple values per key
 
 ### TWS_UNSUPPORTED_OPERATION
 
-SQLSTATE: XXKST
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
-`<operationType>` operation not supported with `<entity>`.
+`<operationType>` operation not supported with `<entity>`
 
 ### TWS_VALUE_SHOULD_BE_NONNULL
 
 [SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-New value should be non-null for `<typeOfState>`.
+New value should be non-null for `<typeOfState>`
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
