@@ -20,9 +20,9 @@ package org.apache.spark.sql.connector.read.streaming;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan files which total size
- * doesn't go beyond a given maximum total size. Always reads at least one file so a stream can make progress
- * in case of a file larger than a given maximum.
+ * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan files which total
+ * size doesn't go beyond a given maximum total size. Always reads at least one file so a stream
+ * can make progress in case of a file larger than a given maximum.
  *
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
  * @since 4.0.0
