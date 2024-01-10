@@ -154,7 +154,7 @@ def generate_sql_configs_table_html(sql_configs, path, group):
 
 if __name__ == "__main__":
     jvm = launch_gateway().jvm
-    generated_dir = SPARK_PROJECT_ROOT / "docs" / "_generated_config_tables"
+    generated_dir = SPARK_PROJECT_ROOT / "docs" / "_generated" / "config_tables"
     shutil.rmtree(generated_dir, ignore_errors=True)
     generated_dir.mkdir()
 
