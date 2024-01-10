@@ -32,10 +32,10 @@ import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
  * One example is GPUs, where the addresses would be the indices of the GPUs
  *
  * @param resources The executor available resources and amount. eg,
- *                  Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.2),
- *                                   "1" -> ResourceAmountUtils.toInternalResource(1.0)),
- *                  "fpga" -> Map("a" -> ResourceAmountUtils.toInternalResource(0.3),
- *                                "b" -> ResourceAmountUtils.toInternalResource(0.9))
+ *                  Map("gpu" -&gt; Map("0" -&gt; ResourceAmountUtils.toInternalResource(0.2),
+ *                                   "1" -&gt; ResourceAmountUtils.toInternalResource(1.0)),
+ *                  "fpga" -&gt; Map("a" -&gt; ResourceAmountUtils.toInternalResource(0.3),
+ *                                "b" -&gt; ResourceAmountUtils.toInternalResource(0.9))
  *                  )
  */
 private[spark] class ExecutorResourcesAmounts(
@@ -52,12 +52,12 @@ private[spark] class ExecutorResourcesAmounts(
 
   /**
    * The total address count of each resource. Eg,
-   * Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.5),
-   *                  "1" -> ResourceAmountUtils.toInternalResource(0.5),
-   *                  "2" -> ResourceAmountUtils.toInternalResource(0.5)),
-   *     "fpga" -> Map("a" -> ResourceAmountUtils.toInternalResource(0.5),
-   *                   "b" -> ResourceAmountUtils.toInternalResource(0.5)))
-   * the resourceAmount will be Map("gpu" -> 3, "fpga" -> 2)
+   * Map("gpu" -&gt; Map("0" -&gt; ResourceAmountUtils.toInternalResource(0.5),
+   *                  "1" -&gt; ResourceAmountUtils.toInternalResource(0.5),
+   *                  "2" -&gt; ResourceAmountUtils.toInternalResource(0.5)),
+   *     "fpga" -&gt; Map("a" -&gt; ResourceAmountUtils.toInternalResource(0.5),
+   *                   "b" -&gt; ResourceAmountUtils.toInternalResource(0.5)))
+   * the resourceAmount will be Map("gpu" -&gt; 3, "fpga" -&gt; 2)
    */
   lazy val resourceAddressAmount: Map[String, Int] = internalResources.map {
     case (rName, addressMap) => rName -> addressMap.size
