@@ -448,7 +448,7 @@ class UserDefinedFunction:
                 jPythonUDF = judf.fromUDFExpr(jUDFExpr)
                 id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, profiler)
-            else:  # memory_profiler_enabled
+            elif memory_profiler_enabled:
                 f = self.func
                 memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
                 (sub_lines, start_line) = inspect.getsourcelines(f.__code__)
