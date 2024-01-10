@@ -674,9 +674,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     override def onTaskEnd(task: SparkListenerTaskEnd): Unit = {
       val info = task.taskInfo
-      if (info != null && taskInfos.contains(info)) {
-        taskInfos.remove(info)
-      }
+      taskInfos.remove(info)
     }
   }
 

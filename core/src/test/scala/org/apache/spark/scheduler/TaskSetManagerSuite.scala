@@ -61,11 +61,12 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       accumUpdates: Seq[AccumulatorV2[_, _]],
       metricPeaks: Array[Long],
       taskInfo: TaskInfo): Unit = {
+    // Set task accumulables emulating DAGScheduler behavior to enable tests related to
+    // `TaskInfo.accumulables`.
     accumUpdates.foreach(acc =>
       taskInfo.setAccumulables(
         acc.toInfo(Some(acc.value), Some(acc.value)) +: taskInfo.accumulables)
     )
-    taskScheduler.endedTasks(taskInfo.index) = reason
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
