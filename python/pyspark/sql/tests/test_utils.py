@@ -1750,6 +1750,10 @@ class UtilsTestsMixin:
         self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
         self.assertEqual(exception.getSqlState(), "42703")
         self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
+        self.assertEqual(
+            exception.getMessageTemplate(),
+            "A column, variable, or function parameter with name <objectName> cannot be resolved. ",
+        )
         self.assertIn(
             (
                 "[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column, variable, or function "

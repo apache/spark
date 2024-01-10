@@ -64,6 +64,7 @@ class PySparkException(Exception):
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
+        :meth:`PySparkException.getMessageTemplate`
         """
         return self._error_class
 
@@ -79,8 +80,29 @@ class PySparkException(Exception):
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
+        :meth:`PySparkException.getMessageTemplate`
         """
         return self._message_parameters
+
+    def getMessageTemplate(self) -> str:
+        """
+        Returns a message template as a string.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getQueryContext`
+        :meth:`PySparkException.getSqlState`
+        :meth:`PySparkException.getMessageParameters`
+        """
+        return (
+            self._error_reader.get_message_template(self._error_class)
+            if self._error_class is not None
+            else ""
+        )
 
     def getSqlState(self) -> Optional[str]:
         """
@@ -96,6 +118,7 @@ class PySparkException(Exception):
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
+        :meth:`PySparkException.getMessageTemplate`
         """
         return None
 
@@ -111,6 +134,7 @@ class PySparkException(Exception):
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
+        :meth:`PySparkException.getMessageTemplate`
         """
         return f"[{self.getErrorClass()}] {self._message}"
 
@@ -126,6 +150,7 @@ class PySparkException(Exception):
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getSqlState`
+        :meth:`PySparkException.getMessageTemplate`
         """
         return self._query_contexts
 

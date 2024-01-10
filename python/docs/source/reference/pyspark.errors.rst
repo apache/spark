@@ -72,5 +72,6 @@ Methods
     PySparkException.getErrorClass
     PySparkException.getMessage
     PySparkException.getMessageParameters
+    PySparkException.getMessageTemplate
     PySparkException.getQueryContext
     PySparkException.getSqlState

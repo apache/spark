@@ -112,6 +112,17 @@ class CapturedException(PySparkException):
         else:
             return None
 
+    def getMessageTemplate(self) -> str:
+        assert SparkContext._gateway is not None
+
+        gw = SparkContext._gateway
+        if self._origin is not None and is_instance_of(
+            gw, self._origin, "org.apache.spark.SparkThrowable"
+        ):
+            return self._origin.getMessageTemplate()
+        else:
+            return ""
+
     def getSqlState(self) -> Optional[str]:
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway

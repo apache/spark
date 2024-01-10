@@ -54,5 +54,9 @@ public interface SparkThrowable {
     return new HashMap<>();
   }
 
+  default String getMessageTemplate() {
+    return SparkThrowableHelper.getMessageTemplate(this.getErrorClass());
+  }
+
   default QueryContext[] getQueryContext() { return new QueryContext[0]; }
 }
