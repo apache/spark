@@ -128,7 +128,7 @@ Data source options of XML can be set via:
 
   <tr>
     <td><code>ignoreSurroundingSpaces</code></td>
-    <td><code>false</code></td>
+    <td><code>true</code></td>
     <td>Defines whether surrounding whitespaces from values being read should be skipped.</td>
     <td>read</td>
   </tr>
