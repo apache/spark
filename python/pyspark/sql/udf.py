@@ -413,7 +413,6 @@ class UserDefinedFunction:
                 PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             ]:
-                profiler_enabled = memory_profiler_enabled = False
                 warnings.warn(
                     "Profiling UDFs with iterators input/output is not supported.",
                     UserWarning,
