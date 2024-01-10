@@ -168,7 +168,7 @@ jobs:
     needs: [precondition, infra-image]
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
-    name: "Build modules: ${{ matrix.modules }}"
+    name: "Build modules: ${{ matrix.modules }} ${{ env.PYTHON_TO_TEST }}"
     runs-on: ubuntu-22.04
     timeout-minutes: 300
     container:
@@ -303,15 +303,15 @@ jobs:
         name: PySpark
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
+        name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
+        name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/unit-tests.log"
 
   sparkr:
