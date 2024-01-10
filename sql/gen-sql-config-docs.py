@@ -156,7 +156,7 @@ if __name__ == "__main__":
     jvm = launch_gateway().jvm
     generated_dir = SPARK_PROJECT_ROOT / "docs" / "_generated" / "config_tables"
     shutil.rmtree(generated_dir, ignore_errors=True)
-    generated_dir.mkdir()
+    generated_dir.mkdir(parents=True)
 
     sql_configs = get_sql_configs(jvm)
     for group in sorted(sql_configs):
