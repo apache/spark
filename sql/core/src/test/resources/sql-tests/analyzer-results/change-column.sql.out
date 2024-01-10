@@ -62,6 +62,7 @@ ALTER TABLE test_change CHANGE a TYPE STRING
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "newName" : "`a`",
     "newType" : "\"STRING\"",
@@ -207,6 +208,7 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`temp_view`"
@@ -235,6 +237,7 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`global_temp`.`global_temp_view`"

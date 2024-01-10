@@ -44,6 +44,8 @@ abstract class BasePythonUDFRunner(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
   protected override def newWriter(
@@ -90,12 +92,10 @@ abstract class BasePythonUDFRunner(
         }
         try {
           stream.readInt() match {
-            case length if length > 0 =>
-              val obj = new Array[Byte](length)
-              stream.readFully(obj)
+            case length if length >= 0 =>
+              val obj = PythonWorkerUtils.readBytes(length, stream)
               pythonMetrics("pythonDataReceived") += length
               obj
-            case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
@@ -152,8 +152,7 @@ object PythonUDFRunner {
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
-        dataOut.writeInt(f.command.length)
-        dataOut.write(f.command.toArray)
+        PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
     }
   }
@@ -178,8 +177,7 @@ object PythonUDFRunner {
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
-        dataOut.writeInt(f.command.length)
-        dataOut.write(f.command.toArray)
+        PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
     }
   }

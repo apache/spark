@@ -28,7 +28,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 from pyspark.sql.protobuf import functions as PyProtobufFunctions
 
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions import _invoke_function, _to_col, _options_to_col, lit
+from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, _options_to_col, lit
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName

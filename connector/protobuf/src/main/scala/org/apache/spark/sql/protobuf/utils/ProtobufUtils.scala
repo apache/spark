@@ -75,7 +75,7 @@ private[sql] object ProtobufUtils extends Logging {
     private[this] val protoFieldArray = descriptor.getFields.asScala.toArray
     private[this] val fieldMap = descriptor.getFields.asScala
       .groupBy(_.getName.toLowerCase(Locale.ROOT))
-      .mapValues(_.toSeq) // toSeq needed for scala 2.13
+      .transform((_, v) => v.toSeq) // toSeq needed for scala 2.13
 
     /** The fields which have matching equivalents in both Protobuf and Catalyst schemas. */
     val matchedFields: Seq[ProtoMatchedField] = catalystSchema.zipWithIndex.flatMap {

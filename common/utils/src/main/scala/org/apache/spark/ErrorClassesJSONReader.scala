@@ -97,9 +97,9 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val errorClasses = errorClass.split("\\.")
     errorClasses match {
       case Array(mainClass) => errorInfoMap.contains(mainClass)
-      case Array(mainClass, subClass) => errorInfoMap.get(mainClass).map { info =>
+      case Array(mainClass, subClass) => errorInfoMap.get(mainClass).exists { info =>
         info.subClass.get.contains(subClass)
-      }.getOrElse(false)
+      }
       case _ => false
     }
   }
@@ -130,7 +130,7 @@ private object ErrorClassesJsonReader {
  *
  * @param sqlState SQLSTATE associated with this class.
  * @param subClass SubClass associated with this class.
- * @param message C-style message format compatible with printf.
+ * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorInfo(
@@ -145,7 +145,7 @@ private case class ErrorInfo(
 /**
  * Information associated with an error subclass.
  *
- * @param message C-style message format compatible with printf.
+ * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorSubInfo(message: Seq[String]) {

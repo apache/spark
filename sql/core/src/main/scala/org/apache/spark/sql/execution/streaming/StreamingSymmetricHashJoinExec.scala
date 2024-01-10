@@ -221,6 +221,16 @@ case class StreamingSymmetricHashJoinExec(
 
   override def shortName: String = "symmetricHashJoin"
 
+  private val stateStoreNames =
+    SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo = stateStoreNames.map(StateStoreMetadataV1(_, 0, info.numPartitions)).toArray
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     val watermarkUsedForStateCleanup =
       stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty

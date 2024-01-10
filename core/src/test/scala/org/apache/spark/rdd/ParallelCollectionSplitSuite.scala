@@ -25,11 +25,12 @@ import org.scalacheck.Prop._
 import org.scalatestplus.scalacheck.Checkers
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.ArrayImplicits._
 
 class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   test("one element per slice") {
     val data = Array(1, 2, 3)
-    val slices = ParallelCollectionRDD.slice(data, 3)
+    val slices = ParallelCollectionRDD.slice(data.toImmutableArraySeq, 3)
     assert(slices.size === 3)
     assert(slices(0).mkString(",") === "1")
     assert(slices(1).mkString(",") === "2")
@@ -37,7 +38,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   }
 
   test("one slice") {
-    val data = Array(1, 2, 3)
+    val data = Seq(1, 2, 3)
     val slices = ParallelCollectionRDD.slice(data, 1)
     assert(slices.size === 1)
     assert(slices(0).mkString(",") === "1,2,3")
@@ -45,7 +46,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
 
   test("equal slices") {
     val data = Array(1, 2, 3, 4, 5, 6, 7, 8, 9)
-    val slices = ParallelCollectionRDD.slice(data, 3)
+    val slices = ParallelCollectionRDD.slice(data.toImmutableArraySeq, 3)
     assert(slices.size === 3)
     assert(slices(0).mkString(",") === "1,2,3")
     assert(slices(1).mkString(",") === "4,5,6")
@@ -54,7 +55,7 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
 
   test("non-equal slices") {
     val data = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    val slices = ParallelCollectionRDD.slice(data, 3)
+    val slices = ParallelCollectionRDD.slice(data.toImmutableArraySeq, 3)
     assert(slices.size === 3)
     assert(slices(0).mkString(",") === "1,2,3")
     assert(slices(1).mkString(",") === "4,5,6")
@@ -81,19 +82,19 @@ class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   }
 
   test("empty data") {
-    val data = new Array[Int](0)
+    val data = Seq.empty[Int]
     val slices = ParallelCollectionRDD.slice(data, 5)
     assert(slices.size === 5)
     for (slice <- slices) assert(slice.size === 0)
   }
 
   test("zero slices") {
-    val data = Array(1, 2, 3)
+    val data = Array(1, 2, 3).toImmutableArraySeq
     intercept[IllegalArgumentException] { ParallelCollectionRDD.slice(data, 0) }
   }
 
   test("negative number of slices") {
-    val data = Array(1, 2, 3)
+    val data = Array(1, 2, 3).toImmutableArraySeq
     intercept[IllegalArgumentException] { ParallelCollectionRDD.slice(data, -5) }
   }
 

@@ -99,6 +99,7 @@ ESCAPED	false
 EXCEPT	true
 EXCHANGE	false
 EXCLUDE	false
+EXECUTE	true
 EXISTS	false
 EXPLAIN	false
 EXPORT	false
@@ -133,6 +134,7 @@ IDENTIFIER	false
 IF	false
 IGNORE	false
 ILIKE	false
+IMMEDIATE	false
 IMPORT	false
 IN	true
 INCLUDE	false
@@ -320,6 +322,7 @@ VALUES	false
 VAR	false
 VARCHAR	false
 VARIABLE	false
+VARIANT	false
 VERSION	false
 VIEW	false
 VIEWS	false
@@ -365,6 +368,7 @@ ELSE
 END
 ESCAPE
 EXCEPT
+EXECUTE
 FALSE
 FETCH
 FILTER

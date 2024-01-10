@@ -157,8 +157,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("between expressions") {
-    assertEqual("a between b and c", $"a" >= $"b" && $"a" <= $"c")
-    assertEqual("a not between b and c", !($"a" >= $"b" && $"a" <= $"c"))
+    assertEqual("a between b and c",
+      UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
+    assertEqual("a not between b and c",
+      !UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
   }
 
   test("in expressions") {
@@ -823,9 +825,10 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
     checkError(
       exception = parseException("1.20E-38BD"),
-      errorClass = "_LEGACY_ERROR_TEMP_0061",
-      parameters = Map("msg" ->
-        "[DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION] Decimal precision 40 exceeds max precision 38."),
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map(
+        "precision" -> "40",
+        "maxPrecision" -> "38"),
       context = ExpectedContext(
         fragment = "1.20E-38BD",
         start = 0,

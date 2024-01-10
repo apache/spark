@@ -25,21 +25,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyDescribeMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
     def test_describe(self):
         # support for numeric type, not support for string type yet
         datas = []

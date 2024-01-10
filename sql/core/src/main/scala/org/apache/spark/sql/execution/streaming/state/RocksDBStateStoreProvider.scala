@@ -110,52 +110,65 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def metrics: StateStoreMetrics = {
-      val rocksDBMetrics = rocksDB.metrics
-      def commitLatencyMs(typ: String): Long = rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
-      def nativeOpsLatencyMillis(typ: String): Long = {
-        rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
-      }
-      def sumNativeOpsLatencyMillis(typ: String): Long = {
-        rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.sum / 1000).getOrElse(0)
-      }
-      def nativeOpsCount(typ: String): Long = {
-        rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.count).getOrElse(0)
-      }
-      def nativeOpsMetrics(typ: String): Long = {
-        rocksDBMetrics.nativeOpsMetrics.getOrElse(typ, 0)
-      }
+      val rocksDBMetricsOpt = rocksDB.metricsOpt
 
-      val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
-        CUSTOM_METRIC_SST_FILE_SIZE -> rocksDBMetrics.totalSSTFilesBytes,
-        CUSTOM_METRIC_GET_TIME -> sumNativeOpsLatencyMillis("get"),
-        CUSTOM_METRIC_PUT_TIME -> sumNativeOpsLatencyMillis("put"),
-        CUSTOM_METRIC_GET_COUNT -> nativeOpsCount("get"),
-        CUSTOM_METRIC_PUT_COUNT -> nativeOpsCount("put"),
-        CUSTOM_METRIC_FLUSH_TIME -> commitLatencyMs("flush"),
-        CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
-        CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
-        CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
-        CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
-        CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
-        CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
-        CUSTOM_METRIC_BLOCK_CACHE_MISS -> nativeOpsMetrics("readBlockCacheMissCount"),
-        CUSTOM_METRIC_BLOCK_CACHE_HITS -> nativeOpsMetrics("readBlockCacheHitCount"),
-        CUSTOM_METRIC_BYTES_READ -> nativeOpsMetrics("totalBytesRead"),
-        CUSTOM_METRIC_BYTES_WRITTEN -> nativeOpsMetrics("totalBytesWritten"),
-        CUSTOM_METRIC_ITERATOR_BYTES_READ -> nativeOpsMetrics("totalBytesReadThroughIterator"),
-        CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
-        CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
-        CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
-        CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
-        CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
-        CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage
-      ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
-        Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
+      if (rocksDBMetricsOpt.isDefined) {
+        val rocksDBMetrics = rocksDBMetricsOpt.get
 
-      StateStoreMetrics(
-        rocksDBMetrics.numUncommittedKeys,
-        rocksDBMetrics.totalMemUsageBytes,
-        stateStoreCustomMetrics)
+        def commitLatencyMs(typ: String): Long =
+          rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
+
+        def nativeOpsLatencyMillis(typ: String): Long = {
+          rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
+        }
+
+        def sumNativeOpsLatencyMillis(typ: String): Long = {
+          rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.sum / 1000).getOrElse(0)
+        }
+
+        def nativeOpsCount(typ: String): Long = {
+          rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.count).getOrElse(0)
+        }
+
+        def nativeOpsMetrics(typ: String): Long = {
+          rocksDBMetrics.nativeOpsMetrics.getOrElse(typ, 0)
+        }
+
+        val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
+          CUSTOM_METRIC_SST_FILE_SIZE -> rocksDBMetrics.totalSSTFilesBytes,
+          CUSTOM_METRIC_GET_TIME -> sumNativeOpsLatencyMillis("get"),
+          CUSTOM_METRIC_PUT_TIME -> sumNativeOpsLatencyMillis("put"),
+          CUSTOM_METRIC_GET_COUNT -> nativeOpsCount("get"),
+          CUSTOM_METRIC_PUT_COUNT -> nativeOpsCount("put"),
+          CUSTOM_METRIC_FLUSH_TIME -> commitLatencyMs("flush"),
+          CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
+          CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
+          CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
+          CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
+          CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
+          CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
+          CUSTOM_METRIC_BLOCK_CACHE_MISS -> nativeOpsMetrics("readBlockCacheMissCount"),
+          CUSTOM_METRIC_BLOCK_CACHE_HITS -> nativeOpsMetrics("readBlockCacheHitCount"),
+          CUSTOM_METRIC_BYTES_READ -> nativeOpsMetrics("totalBytesRead"),
+          CUSTOM_METRIC_BYTES_WRITTEN -> nativeOpsMetrics("totalBytesWritten"),
+          CUSTOM_METRIC_ITERATOR_BYTES_READ -> nativeOpsMetrics("totalBytesReadThroughIterator"),
+          CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
+          CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
+          CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
+          CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
+          CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
+          CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage
+        ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
+          Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
+
+        StateStoreMetrics(
+          rocksDBMetrics.numUncommittedKeys,
+          rocksDBMetrics.totalMemUsageBytes,
+          stateStoreCustomMetrics)
+      } else {
+        logInfo(s"Failed to collect metrics for store_id=$id and version=$version")
+        StateStoreMetrics(0, 0, Map.empty)
+      }
     }
 
     override def hasCommitted: Boolean = state == COMMITTED

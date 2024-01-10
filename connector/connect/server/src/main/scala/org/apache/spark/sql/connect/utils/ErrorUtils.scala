@@ -40,8 +40,9 @@ import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SparkConnectService}
+import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 
 private[connect] object ErrorUtils extends Logging {
 
@@ -104,8 +105,34 @@ private[connect] object ErrorUtils extends Logging {
 
               stackTraceBuilder.build()
             }
-            .toIterable
+            .toImmutableArraySeq
             .asJava)
+      }
+
+      currentError match {
+        case sparkThrowable: SparkThrowable =>
+          val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
+            .newBuilder()
+          if (sparkThrowable.getErrorClass != null) {
+            sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
+          }
+          for (queryCtx <- sparkThrowable.getQueryContext) {
+            sparkThrowableBuilder.addQueryContexts(
+              FetchErrorDetailsResponse.QueryContext
+                .newBuilder()
+                .setObjectType(queryCtx.objectType())
+                .setObjectName(queryCtx.objectName())
+                .setStartIndex(queryCtx.startIndex())
+                .setStopIndex(queryCtx.stopIndex())
+                .setFragment(queryCtx.fragment())
+                .build())
+          }
+          if (sparkThrowable.getSqlState != null) {
+            sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
+          }
+          sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
+          builder.setSparkThrowable(sparkThrowableBuilder.build())
+        case _ =>
       }
 
       val causeIdx = buffer.size + 1
@@ -126,7 +153,17 @@ private[connect] object ErrorUtils extends Logging {
       .build()
   }
 
-  private def buildStatusFromThrowable(st: Throwable, sessionHolder: SessionHolder): RPCStatus = {
+  /**
+   * This is a helper method that can be used by any GRPC handler to convert existing Throwables
+   * into GRPC conform status objects.
+   *
+   * @param st
+   * @param sessionHolderOpt
+   * @return
+   */
+  private[connect] def buildStatusFromThrowable(
+      st: Throwable,
+      sessionHolderOpt: Option[SessionHolder]): RPCStatus = {
     val errorInfo = ErrorInfo
       .newBuilder()
       .setReason(st.getClass.getName)
@@ -135,22 +172,44 @@ private[connect] object ErrorUtils extends Logging {
         "classes",
         JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
 
-    if (sessionHolder.session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED)) {
+    val maxMetadataSize = SparkEnv.get.conf.get(Connect.CONNECT_GRPC_MAX_METADATA_SIZE)
+    // Add the SQL State and Error Class to the response metadata of the ErrorInfoObject.
+    st match {
+      case e: SparkThrowable =>
+        val state = e.getSqlState
+        if (state != null && state.nonEmpty) {
+          errorInfo.putMetadata("sqlState", state)
+        }
+        val errorClass = e.getErrorClass
+        if (errorClass != null && errorClass.nonEmpty) {
+          val messageParameters = JsonMethods.compact(
+            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
+          if (messageParameters.length <= maxMetadataSize) {
+            errorInfo.putMetadata("errorClass", errorClass)
+            errorInfo.putMetadata("messageParameters", messageParameters)
+          }
+        }
+      case _ =>
+    }
+
+    if (sessionHolderOpt.exists(_.session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED))) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString
 
       errorInfo.putMetadata("errorId", errorId)
 
-      sessionHolder.errorIdToError
+      sessionHolderOpt.get.errorIdToError
         .put(errorId, st)
     }
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
     val withStackTrace =
-      if (sessionHolder.session.conf.get(
-          SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty) {
-        val maxSize = SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE)
-        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
+      if (sessionHolderOpt.exists(
+          _.session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty)) {
+        val maxSize = Math.min(
+          SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
+          maxMetadataSize)
+        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize.toInt))
       } else {
         errorInfo
       }
@@ -178,6 +237,17 @@ private[connect] object ErrorUtils extends Logging {
    *   String value indicating the operation type (analysis, execution)
    * @param observer
    *   The GRPC response observer.
+   * @param userId
+   *   The user id.
+   * @param sessionId
+   *   The session id.
+   * @param events
+   *   The ExecuteEventsManager if present to report about failures.
+   * @param isInterrupted
+   *   Whether the error is caused by an interruption or during execution.
+   * @param callback
+   *   Optional callback to be called after the error has been sent that allows to caller to
+   *   execute additional cleanup logic.
    * @tparam V
    * @return
    */
@@ -187,20 +257,24 @@ private[connect] object ErrorUtils extends Logging {
       userId: String,
       sessionId: String,
       events: Option[ExecuteEventsManager] = None,
-      isInterrupted: Boolean = false): PartialFunction[Throwable, Unit] = {
-    val sessionHolder =
-      SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
+      isInterrupted: Boolean = false,
+      callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
+
+    // SessionHolder may not be present, e.g. if the session was already closed.
+    // When SessionHolder is not present error details will not be available for FetchErrorDetails.
+    val sessionHolderOpt =
+      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(
+        SessionKey(userId, sessionId))
 
     val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
       case se: SparkException if isPythonExecutionException(se) =>
         (
           se,
           StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(se.getCause, sessionHolder)))
+            buildStatusFromThrowable(se.getCause, sessionHolderOpt)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolder)))
+        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt)))
 
       case e: Throwable =>
         (
@@ -235,6 +309,7 @@ private[connect] object ErrorUtils extends Logging {
             executeEventsManager.postFailed(wrapped.getMessage)
           }
         }
+        callback.foreach(_.apply())
         observer.onError(wrapped)
       }
   }

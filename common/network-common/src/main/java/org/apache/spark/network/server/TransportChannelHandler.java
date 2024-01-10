@@ -136,10 +136,10 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
-    if (request instanceof RequestMessage) {
-      requestHandler.handle((RequestMessage) request);
-    } else if (request instanceof ResponseMessage) {
-      responseHandler.handle((ResponseMessage) request);
+    if (request instanceof RequestMessage msg) {
+      requestHandler.handle(msg);
+    } else if (request instanceof ResponseMessage msg) {
+      responseHandler.handle(msg);
     } else {
       ctx.fireChannelRead(request);
     }
@@ -148,8 +148,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   /** Triggered based on events from an {@link io.netty.handler.timeout.IdleStateHandler}. */
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-    if (evt instanceof IdleStateEvent) {
-      IdleStateEvent e = (IdleStateEvent) evt;
+    if (evt instanceof IdleStateEvent e) {
       // See class comment for timeout semantics. In addition to ensuring we only timeout while
       // there are outstanding requests, we also do a secondary consistency check to ensure
       // there's no race between the idle timeout and incrementing the numOutstandingRequests

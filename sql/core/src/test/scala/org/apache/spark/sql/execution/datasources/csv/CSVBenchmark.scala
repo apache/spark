@@ -70,6 +70,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark(s"Wide rows with $colsNum columns", rowsNum, output = output)
 
     withTempPath { path =>
+      import org.apache.spark.util.ArrayImplicits._
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
       val schema = StructType(fields)
       val values = (0 until colsNum).map(i => i.toString).mkString(",")
@@ -87,7 +88,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
       val cols100 = columnNames.take(100).map(Column(_))
       benchmark.addCase(s"Select 100 columns", numIters) { _ =>
-        ds.select(cols100: _*).noop()
+        ds.select(cols100.toImmutableArraySeq: _*).noop()
       }
       benchmark.addCase(s"Select one column", numIters) { _ =>
         ds.select($"col1").noop()
@@ -100,7 +101,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
         (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
       val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, one bad input field", numIters) { _ =>
-        dsErr1.select(cols100: _*).noop()
+        dsErr1.select(cols100.toImmutableArraySeq: _*).noop()
       }
 
       val badRecColName = "badRecord"
@@ -109,7 +110,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
         .option("columnNameOfCorruptRecord", badRecColName)
         .csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, corrupt record field", numIters) { _ =>
-        dsErr2.select((Column(badRecColName) +: cols100): _*).noop()
+        dsErr2.select((Column(badRecColName) +: cols100).toImmutableArraySeq: _*).noop()
       }
 
       benchmark.run()

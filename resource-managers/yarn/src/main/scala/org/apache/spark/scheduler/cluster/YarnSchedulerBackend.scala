@@ -64,14 +64,14 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
-  private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
+  private implicit val askTimeout: RpcTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
   /**
    * Declare implicit single thread execution context for futures doRequestTotalExecutors and
    * doKillExecutors below, avoiding using the global execution context that may cause conflict
    * with user code's execution of futures.
    */
-  private implicit val schedulerEndpointEC = ExecutionContext.fromExecutorService(
+  private implicit val schedulerEndpointEC: ExecutionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonSingleThreadExecutor("yarn-scheduler-endpoint"))
 
   /** Application ID. */
@@ -138,7 +138,7 @@ private[spark] abstract class YarnSchedulerBackend(
   override def applicationId(): String = {
     appId.map(_.toString).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
   }
 

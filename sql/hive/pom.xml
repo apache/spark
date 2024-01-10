@@ -173,6 +173,10 @@
       <artifactId>derby</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.derby</groupId>
+      <artifactId>derbytools</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-compiler</artifactId>
       <scope>test</scope>

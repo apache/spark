@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -26,19 +25,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameAnyAllMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_all(self):
         pdf = pd.DataFrame(
             {

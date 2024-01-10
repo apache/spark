@@ -24,6 +24,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
 
 /**
@@ -75,7 +76,7 @@ private class HistoryServerMemoryManager(
 
   private def approximateMemoryUsage(eventLogSize: Long, codec: Option[String]): Long = {
     codec match {
-      case Some("zstd") =>
+      case Some(CompressionCodec.ZSTD) =>
         eventLogSize * 10
       case Some(_) =>
         eventLogSize * 4

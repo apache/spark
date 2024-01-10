@@ -44,17 +44,18 @@ import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, Schem
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 object OrcUtils extends Logging {
 
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
-    "NONE" -> "",
-    "SNAPPY" -> ".snappy",
-    "ZLIB" -> ".zlib",
-    "ZSTD" -> ".zstd",
-    "LZ4" -> ".lz4",
-    "LZO" -> ".lzo")
+    OrcCompressionCodec.NONE.name() -> "",
+    OrcCompressionCodec.SNAPPY.name() -> ".snappy",
+    OrcCompressionCodec.ZLIB.name() -> ".zlib",
+    OrcCompressionCodec.ZSTD.name() -> ".zstd",
+    OrcCompressionCodec.LZ4.name() -> ".lz4",
+    OrcCompressionCodec.LZO.name() -> ".lzo")
 
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
@@ -502,7 +503,7 @@ object OrcUtils extends Logging {
         case (x, _) =>
           throw new IllegalArgumentException(
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
-      }
+      }.toImmutableArraySeq
 
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
       (0 until schemaWithoutGroupBy.length).toArray)

@@ -86,6 +86,12 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_registration_returns_udf_on_sql_context(self):
         super().test_udf_registration_returns_udf_on_sql_context()
 
+    def test_err_udf_registration(self):
+        self.check_err_udf_registration()
+
+    def test_err_udf_init(self):
+        self.check_err_udf_init()
+
 
 if __name__ == "__main__":
     import unittest

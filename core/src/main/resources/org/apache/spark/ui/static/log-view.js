@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-/* global $, getBaseURI */
+/* global $ */
+
+import {getBaseURI} from "./utils.js";
 
 var baseParams;
 

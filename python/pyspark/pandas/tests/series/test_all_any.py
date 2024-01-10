@@ -25,14 +25,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesAllAnyMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_all(self):
         for pser in [
             pd.Series([True, True], name="x"),

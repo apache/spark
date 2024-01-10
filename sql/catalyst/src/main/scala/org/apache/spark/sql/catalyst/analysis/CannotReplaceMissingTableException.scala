@@ -21,6 +21,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.quoteNameParts
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.util.ArrayImplicits._
 
 class CannotReplaceMissingTableException(
     tableIdentifier: Identifier,
@@ -28,4 +29,5 @@ class CannotReplaceMissingTableException(
   extends AnalysisException(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map("relationName"
-        -> quoteNameParts(tableIdentifier.namespace :+ tableIdentifier.name)))
+        -> quoteNameParts((tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq)),
+      cause = cause)

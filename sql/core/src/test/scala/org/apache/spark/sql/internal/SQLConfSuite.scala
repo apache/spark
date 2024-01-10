@@ -26,6 +26,7 @@ import org.apache.spark.{SPARK_DOC_ROOT, SparkNoSuchElementException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec.{GZIP, LZO}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -368,7 +369,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
     assert(spark.conf.get(fallback.key) ===
       SQLConf.PARQUET_COMPRESSION.defaultValue.get)
-    assert(spark.conf.get(fallback.key, "lzo") === "lzo")
+    assert(spark.conf.get(fallback.key, LZO.lowerCaseName()) === LZO.lowerCaseName())
 
     val displayValue = spark.sessionState.conf.getAllDefinedConfs
       .find { case (key, _, _, _) => key == fallback.key }
@@ -376,17 +377,17 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       .get
     assert(displayValue === fallback.defaultValueString)
 
-    spark.conf.set(SQLConf.PARQUET_COMPRESSION, "gzip")
-    assert(spark.conf.get(fallback.key) === "gzip")
+    spark.conf.set(SQLConf.PARQUET_COMPRESSION, GZIP.lowerCaseName())
+    assert(spark.conf.get(fallback.key) === GZIP.lowerCaseName())
 
-    spark.conf.set(fallback, "lzo")
-    assert(spark.conf.get(fallback.key) === "lzo")
+    spark.conf.set(fallback, LZO.lowerCaseName())
+    assert(spark.conf.get(fallback.key) === LZO.lowerCaseName())
 
     val newDisplayValue = spark.sessionState.conf.getAllDefinedConfs
       .find { case (key, _, _, _) => key == fallback.key }
       .map { case (_, v, _, _) => v }
       .get
-    assert(newDisplayValue === "lzo")
+    assert(newDisplayValue === LZO.lowerCaseName())
 
     SQLConf.unregister(fallback)
   }

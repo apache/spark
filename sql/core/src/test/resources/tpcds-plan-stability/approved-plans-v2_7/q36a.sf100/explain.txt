@@ -146,7 +146,7 @@ Input [4]: [i_category#12, i_class#11, sum#15, sum#16]
 Keys [2]: [i_category#12, i_class#11]
 Functions [2]: [sum(UnscaledValue(ss_net_profit#4)), sum(UnscaledValue(ss_ext_sales_price#3))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#4))#17, sum(UnscaledValue(ss_ext_sales_price#3))#18]
-Results [6]: [cast((MakeDecimal(sum(UnscaledValue(ss_net_profit#4))#17,17,2) / MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#3))#18,17,2)) as decimal(38,20)) AS gross_margin#19, i_category#12, i_class#11, 0 AS t_category#20, 0 AS t_class#21, 0 AS lochierarchy#22]
+Results [6]: [cast((MakeDecimal(sum(UnscaledValue(ss_net_profit#4))#17,17,2) / MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#3))#18,17,2)) as decimal(38,11)) AS gross_margin#19, i_category#12, i_class#11, 0 AS t_category#20, 0 AS t_class#21, 0 AS lochierarchy#22]
 
 (23) ReusedExchange [Reuses operator id: 21]
 Output [4]: [i_category#23, i_class#24, sum#25, sum#26]
@@ -174,7 +174,7 @@ Input [5]: [i_category#23, sum#37, isEmpty#38, sum#39, isEmpty#40]
 Keys [1]: [i_category#23]
 Functions [2]: [sum(ss_net_profit#31), sum(ss_ext_sales_price#32)]
 Aggregate Attributes [2]: [sum(ss_net_profit#31)#41, sum(ss_ext_sales_price#32)#42]
-Results [6]: [cast((sum(ss_net_profit#31)#41 / sum(ss_ext_sales_price#32)#42) as decimal(38,20)) AS gross_margin#43, i_category#23, null AS i_class#44, 0 AS t_category#45, 1 AS t_class#46, 1 AS lochierarchy#47]
+Results [6]: [(sum(ss_net_profit#31)#41 / sum(ss_ext_sales_price#32)#42) AS gross_margin#43, i_category#23, null AS i_class#44, 0 AS t_category#45, 1 AS t_class#46, 1 AS lochierarchy#47]
 
 (28) ReusedExchange [Reuses operator id: 21]
 Output [4]: [i_category#48, i_class#49, sum#50, sum#51]
@@ -202,7 +202,7 @@ Input [4]: [sum#60, isEmpty#61, sum#62, isEmpty#63]
 Keys: []
 Functions [2]: [sum(ss_net_profit#54), sum(ss_ext_sales_price#55)]
 Aggregate Attributes [2]: [sum(ss_net_profit#54)#64, sum(ss_ext_sales_price#55)#65]
-Results [6]: [cast((sum(ss_net_profit#54)#64 / sum(ss_ext_sales_price#55)#65) as decimal(38,20)) AS gross_margin#66, null AS i_category#67, null AS i_class#68, 1 AS t_category#69, 1 AS t_class#70, 2 AS lochierarchy#71]
+Results [6]: [(sum(ss_net_profit#54)#64 / sum(ss_ext_sales_price#55)#65) AS gross_margin#66, null AS i_category#67, null AS i_class#68, 1 AS t_category#69, 1 AS t_class#70, 2 AS lochierarchy#71]
 
 (33) Union
 

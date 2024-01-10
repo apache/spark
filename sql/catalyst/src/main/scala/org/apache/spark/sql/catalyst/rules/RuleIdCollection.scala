@@ -93,6 +93,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveOrderByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveRowLevelCommandAssignments" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
+      "org.apache.spark.sql.catalyst.analysis.SubstituteExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
@@ -123,6 +124,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.EliminateMapObjects" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateSerialization" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions" ::
       "org.apache.spark.sql.catalyst.optimizer.InferWindowGroupLimit" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
@@ -167,6 +169,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionals" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
+      "org.apache.spark.sql.catalyst.optimizer.EvalInlineTables" ::
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
   }
 
@@ -214,7 +217,7 @@ object RuleIdCollection {
   def getRuleId(ruleName: String): RuleId = {
     val ruleIdOpt = ruleToId.get(ruleName)
     // Please add the rule name to `rulesWithIds` if rule id is not found.
-    if (!ruleIdOpt.isDefined) {
+    if (ruleIdOpt.isEmpty) {
       throw QueryExecutionErrors.ruleIdNotFoundForRuleError(ruleName)
     }
     ruleIdOpt.get

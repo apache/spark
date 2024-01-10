@@ -64,7 +64,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     } else if ("text".equalsIgnoreCase(typeName)) {
       Some(StringType) // sqlType is  Types.VARCHAR
     } else if (sqlType == Types.ARRAY) {
-      val scale = md.build.getLong("scale").toInt
+      val scale = md.build().getLong("scale").toInt
       // postgres array type names start with underscore
       toCatalystType(typeName.drop(1), size, scale).map(ArrayType(_))
     } else None
@@ -149,7 +149,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
    */
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     cascade match {
       case Some(true) => s"TRUNCATE TABLE ONLY $table CASCADE"
       case _ => s"TRUNCATE TABLE ONLY $table"
@@ -254,7 +254,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
             val indexName = regex.findFirstMatchIn(message).get.group(1)
             val tableName = regex.findFirstMatchIn(message).get.group(2)
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case "2BP01" =>
+            throw NonEmptyNamespaceException(
+              namespace = Array.empty, details = message, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case unsupported: UnsupportedOperationException => throw unsupported

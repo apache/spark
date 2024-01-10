@@ -27,6 +27,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -63,8 +64,12 @@ private[deploy] class StandaloneRestServer(
     new StandaloneSubmitRequestServlet(masterEndpoint, masterUrl, masterConf)
   protected override val killRequestServlet =
     new StandaloneKillRequestServlet(masterEndpoint, masterConf)
+  protected override val killAllRequestServlet =
+    new StandaloneKillAllRequestServlet(masterEndpoint, masterConf)
   protected override val statusRequestServlet =
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
+  protected override val clearRequestServlet =
+    new StandaloneClearRequestServlet(masterEndpoint, masterConf)
 }
 
 /**
@@ -80,6 +85,23 @@ private[rest] class StandaloneKillRequestServlet(masterEndpoint: RpcEndpointRef,
     k.serverSparkVersion = sparkVersion
     k.message = response.message
     k.submissionId = submissionId
+    k.success = response.success
+    k
+  }
+}
+
+/**
+ * A servlet for handling killAll requests passed to the [[StandaloneRestServer]].
+ */
+private[rest] class StandaloneKillAllRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
+  extends KillAllRequestServlet {
+
+  protected def handleKillAll() : KillAllSubmissionResponse = {
+    val response = masterEndpoint.askSync[DeployMessages.KillAllDriversResponse](
+      DeployMessages.RequestKillAllDrivers)
+    val k = new KillAllSubmissionResponse
+    k.serverSparkVersion = sparkVersion
+    k.message = response.message
     k.success = response.success
     k
   }
@@ -104,6 +126,23 @@ private[rest] class StandaloneStatusRequestServlet(masterEndpoint: RpcEndpointRe
     d.workerHostPort = response.workerHostPort.orNull
     d.message = message.orNull
     d
+  }
+}
+
+/**
+ * A servlet for handling clear requests passed to the [[StandaloneRestServer]].
+ */
+private[rest] class StandaloneClearRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
+  extends ClearRequestServlet {
+
+  protected def handleClear(): ClearResponse = {
+    val response = masterEndpoint.askSync[Boolean](
+      DeployMessages.RequestClearCompletedDriversAndApps)
+    val c = new ClearResponse
+    c.serverSparkVersion = sparkVersion
+    c.message = ""
+    c.success = response
+    c
   }
 }
 
@@ -169,7 +208,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       .getOrElse(Seq.empty)
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
-    val javaModuleOptions = JavaModuleOptions.defaultModuleOptionArray().toSeq
+    val javaModuleOptions = JavaModuleOptions.defaultModuleOptionArray().toImmutableArraySeq
     val javaOpts = javaModuleOptions ++ sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",

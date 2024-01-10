@@ -17,9 +17,11 @@
 package org.apache.spark.examples.sql;
 
 // $example on:schema_merging$
+import com.google.common.collect.Lists;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 // $example off:schema_merging$
 import java.util.Properties;
@@ -109,6 +111,7 @@ public class JavaSQLDataSourceExample {
     runCsvDatasetExample(spark);
     runTextDatasetExample(spark);
     runJdbcDatasetExample(spark);
+    runXmlDatasetExample(spark);
 
     spark.stop();
   }
@@ -495,5 +498,55 @@ public class JavaSQLDataSourceExample {
       .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
     // $example off:jdbc_dataset$
+  }
+
+  private static void runXmlDatasetExample(SparkSession spark) {
+    // $example on:xml_dataset$
+    // Primitive types (Int, String, etc) and Product types (case classes) encoders are
+    // supported by importing this when creating a Dataset.
+
+    // An XML dataset is pointed to by path.
+    // The path can be either a single xml file or more xml files
+    String path = "examples/src/main/resources/people.xml";
+    Dataset<Row> peopleDF = spark.read().option("rowTag", "person").xml(path);
+
+    // The inferred schema can be visualized using the printSchema() method
+    peopleDF.printSchema();
+    // root
+    //  |-- age: long (nullable = true)
+    //  |-- name: string (nullable = true)
+
+    // Creates a temporary view using the DataFrame
+    peopleDF.createOrReplaceTempView("people");
+
+    // SQL statements can be run by using the sql methods provided by spark
+    Dataset<Row> teenagerNamesDF = spark.sql(
+            "SELECT name FROM people WHERE age BETWEEN 13 AND 19");
+    teenagerNamesDF.show();
+    // +------+
+    // |  name|
+    // +------+
+    // |Justin|
+    // +------+
+
+    // Alternatively, a DataFrame can be created for an XML dataset represented by a Dataset[String]
+    List<String> xmlData = Collections.singletonList(
+            "<person>" +
+            "<name>laglangyue</name><job>Developer</job><age>28</age>" +
+            "</person>");
+    Dataset<String> otherPeopleDataset = spark.createDataset(Lists.newArrayList(xmlData),
+            Encoders.STRING());
+
+    Dataset<Row> otherPeople = spark.read()
+        .option("rowTag", "person")
+        .xml(otherPeopleDataset);
+    otherPeople.show();
+    // +---+---------+----------+
+    // |age|      job|      name|
+    // +---+---------+----------+
+    // | 28|Developer|laglangyue|
+    // +---+---------+----------+
+    // $example off:xml_dataset$
+
   }
 }

@@ -19,10 +19,10 @@
 from typing import List, Tuple, TypeVar, Union
 
 from typing_extensions import Literal
-
-from pyspark.mllib.linalg import Vector
 from numpy import ndarray  # noqa: F401
 from py4j.java_gateway import JavaObject
+
+from pyspark.mllib.linalg import Vector
 
 VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]
 C = TypeVar("C", bound=type)

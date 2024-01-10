@@ -26,6 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class FilteredScanSource extends RelationProvider {
   override def createRelation(
@@ -78,7 +79,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
         Seq(c * 5 + c.toUpperCase(Locale.ROOT) * 5)
     }
 
-    FiltersPushed.list = filters
+    FiltersPushed.list = filters.toImmutableArraySeq
     ColumnsRequired.set = requiredColumns.toSet
 
     // Predicate test on integer column

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
 case class BroadcastNestedLoopJoinExec(
@@ -181,7 +182,7 @@ case class BroadcastNestedLoopJoinExec(
           }
         }
 
-        override def hasNext(): Boolean = {
+        override def hasNext: Boolean = {
           resultRow != null || findNextMatch()
         }
         override def next(): InternalRow = {
@@ -220,7 +221,7 @@ case class BroadcastNestedLoopJoinExec(
         // Only need to know whether streamed side is empty or not.
         val streamExists = !streamed.executeTake(1).isEmpty
         if (streamExists == exists) {
-          sparkContext.makeRDD(relation.value)
+          sparkContext.makeRDD(relation.value.toImmutableArraySeq)
         } else {
           sparkContext.emptyRDD
         }
@@ -289,7 +290,7 @@ case class BroadcastNestedLoopJoinExec(
     def notMatchedBroadcastRows: RDD[InternalRow] = {
       getMatchedBroadcastRowsBitSetRDD(streamRdd, relation)
         .repartition(1)
-        .mapPartitions(iter => Seq(iter.fold(new BitSet(relation.value.length))(_ | _)).toIterator)
+        .mapPartitions(iter => Seq(iter.fold(new BitSet(relation.value.length))(_ | _)).iterator)
         .flatMap { matchedBroadcastRows =>
           val nulls = new GenericInternalRow(streamed.output.size)
           val buf: CompactBuffer[InternalRow] = new CompactBuffer()

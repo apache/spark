@@ -184,7 +184,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
         .checkpointAppName(appName)
         .checkpointInterval(checkpointInterval)
         .storageLevel(storageLevel)
-        .build
+        .build()
     }
   }
 }

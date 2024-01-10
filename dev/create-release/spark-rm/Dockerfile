@@ -18,7 +18,7 @@
 # Image for building Spark releases. Based on Ubuntu 20.04.
 #
 # Includes:
-# * Java 8
+# * Java 17
 # * Ivy
 # * Python (3.8.5)
 # * R-base/R-base-dev (4.0.3)
@@ -37,12 +37,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-# TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
-#   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-#   We should use the latest Sphinx version once this is fixed.
-# TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
-#   See also https://issues.apache.org/jira/browse/SPARK-35375.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.20.3 pydata_sphinx_theme==0.8.0 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==2.11.3 twine==3.4.1 sphinx-plotly-directive==0.1.3 pandas==1.5.3 pyarrow==3.0.0 plotly==5.4.0 markupsafe==2.0.1 docutils<0.17 grpcio==1.56.0 protobuf==4.21.6 grpcio-status==1.56.0 googleapis-common-protos==1.56.4"
+ARG PIP_PKGS="sphinx==4.2.0 mkdocs==1.1.2 numpy==1.20.3 pydata_sphinx_theme==0.13.3 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0 jinja2==3.1.2 twine==3.4.1 sphinx-plotly-directive==0.1.3 sphinx-copybutton==0.5.2 pandas==1.5.3 pyarrow==3.0.0 plotly==5.4.0 markupsafe==2.0.1 docutils<0.17 grpcio==1.59.3 protobuf==4.21.6 grpcio-status==1.59.3 googleapis-common-protos==1.56.4"
 ARG GEM_PKGS="bundler:2.3.8"
 
 # Install extra needed repos and refresh.
@@ -61,9 +56,9 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   apt-get update && \
   $APT_INSTALL software-properties-common && \
   apt-get update && \
-  # Install openjdk 8.
-  $APT_INSTALL openjdk-8-jdk && \
-  update-alternatives --set java $(ls /usr/lib/jvm/java-8-openjdk-*/jre/bin/java) && \
+  # Install openjdk 17.
+  $APT_INSTALL openjdk-17-jdk && \
+  update-alternatives --set java $(ls /usr/lib/jvm/java-17-openjdk-*/bin/java) && \
   # Install build / source control tools
   $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
     pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \

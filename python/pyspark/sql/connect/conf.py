@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors import PySparkValueError, PySparkTypeError
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -79,21 +80,28 @@ class RuntimeConf:
     def isModifiable(self, key: str) -> bool:
         op_is_modifiable = proto.ConfigRequest.IsModifiable(keys=[key])
         operation = proto.ConfigRequest.Operation(is_modifiable=op_is_modifiable)
-        result = self._client.config(operation)
-        if result.pairs[0][1] == "true":
+        result = self._client.config(operation).pairs[0][1]
+        if result == "true":
             return True
-        elif result.pairs[0][1] == "false":
+        elif result == "false":
             return False
         else:
-            raise ValueError(f"Unknown boolean value: {result.pairs[0][1]}")
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ALLOWED",
+                message_parameters={"arg_name": "result", "allowed_values": "'true' or 'false'"},
+            )
 
     isModifiable.__doc__ = PySparkRuntimeConfig.isModifiable.__doc__
 
     def _checkType(self, obj: Any, identifier: str) -> None:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
-            raise TypeError(
-                "expected %s '%s' to be a string (was '%s')" % (identifier, obj, type(obj).__name__)
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={
+                    "arg_name": identifier,
+                    "arg_type": type(obj).__name__,
+                },
             )
 
 

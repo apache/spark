@@ -68,7 +68,7 @@ private[hive] class SparkGetFunctionsOperation(
     if (isAuthV2Enabled) {
       // authorize this call on the schema objects
       val privObjs =
-        HivePrivilegeObjectUtils.getHivePrivDbObjects(matchingDbs.toSeq.asJava)
+        HivePrivilegeObjectUtils.getHivePrivDbObjects(matchingDbs.asJava)
       authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdStr)
     }
 

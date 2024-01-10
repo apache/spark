@@ -334,7 +334,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       )
     }
     // Make sure that the format string does not contain any prohibited duplicate tokens.
-    val inputTokenCounts = formatTokens.groupBy(identity).mapValues(_.size)
+    val inputTokenCounts = formatTokens.groupBy(identity).transform((_, v) => v.size)
     Seq(DecimalPoint(),
       OptionalPlusOrMinusSign(),
       OptionalMinusSign(),

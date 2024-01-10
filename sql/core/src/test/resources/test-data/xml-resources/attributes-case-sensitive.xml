@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW>
+        <struct attr1="1">1</struct>
+        <array attr2="2">2</array>
+        <array Attr2="3">3</array>
+        <array aTTr2="4">4</array>
+    </ROW>
+    <ROW>
+        <struct Attr1="5">5</struct>
+    </ROW>
+</ROWSET>

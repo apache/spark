@@ -36,6 +36,8 @@
       url: sql-data-sources-csv.html
     - text: Text Files
       url: sql-data-sources-text.html
+    - text: XML Files
+      url: sql-data-sources-xml.html
     - text: Hive Tables
       url: sql-data-sources-hive-tables.html
     - text: JDBC To Other Databases
@@ -107,6 +109,8 @@
   subitems:
     - text: SQLSTATE Codes
       url: sql-error-conditions-sqlstates.html
+    - text: COLLECTION_SIZE_LIMIT_EXCEEDED error class
+      url: sql-error-conditions-collection-size-limit-exceeded-error-class.html
     - text: CONNECT error class
       url: sql-error-conditions-connect-error-class.html
     - text: DATATYPE_MISMATCH error class

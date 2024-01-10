@@ -129,7 +129,7 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
 
 ### Configuration
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
@@ -230,7 +230,7 @@ Data source options of ORC can be set via:
   * `DataStreamWriter`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table table-striped">
+<table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>mergeSchema</code></td>

@@ -17,7 +17,6 @@
 
 import sys
 import warnings
-
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import numpy as np

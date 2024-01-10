@@ -53,7 +53,7 @@ object GradientBoostingClassificationExample {
       val prediction = model.predict(point.features)
       (point.label, prediction)
     }
-    val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
+    val testErr = labelAndPreds.filter(r => r._1 != r._2).count().toDouble / testData.count()
     println(s"Test Error = $testErr")
     println(s"Learned classification GBT model:\n ${model.toDebugString}")
 

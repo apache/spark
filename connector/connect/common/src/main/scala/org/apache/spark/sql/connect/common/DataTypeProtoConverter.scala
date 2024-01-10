@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.connect.common
 
-import scala.collection.convert.ImplicitConversions._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -98,7 +99,7 @@ object DataTypeProtoConverter {
   }
 
   private def toCatalystStructType(t: proto.DataType.Struct): StructType = {
-    val fields = t.getFieldsList.toSeq.map { protoField =>
+    val fields = t.getFieldsList.asScala.toSeq.map { protoField =>
       val metadata = if (protoField.hasMetadata) {
         Metadata.fromJson(protoField.getMetadata)
       } else {
@@ -225,7 +226,7 @@ object DataTypeProtoConverter {
           .build()
 
       case StructType(fields: Array[StructField]) =>
-        val protoFields = fields.toSeq.map {
+        val protoFields = fields.toImmutableArraySeq.map {
           case StructField(
                 name: String,
                 dataType: DataType,
@@ -253,7 +254,7 @@ object DataTypeProtoConverter {
           .setStruct(
             proto.DataType.Struct
               .newBuilder()
-              .addAllFields(protoFields)
+              .addAllFields(protoFields.asJava)
               .build())
           .build()
 

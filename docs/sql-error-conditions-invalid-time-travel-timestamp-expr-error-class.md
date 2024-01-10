@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The time travel timestamp expression `<expr>` is invalid.
 
@@ -32,6 +32,10 @@ Cannot be casted to the "TIMESTAMP" type.
 ## NON_DETERMINISTIC
 
 Must be deterministic.
+
+## OPTION
+
+Timestamp string in the options must be able to cast to TIMESTAMP type.
 
 ## UNEVALUABLE
 

@@ -61,7 +61,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
 
   override def run(command: String): CommandProcessorResponse = {
     try {
-      val substitutorCommand = SQLConf.withExistingConf(context.conf) {
+      val substitutorCommand = SQLConf.withExistingConf(context.sparkSession.sessionState.conf) {
         new VariableSubstitution().substitute(command)
       }
       context.sparkContext.setJobDescription(substitutorCommand)

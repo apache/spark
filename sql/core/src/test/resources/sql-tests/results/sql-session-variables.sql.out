@@ -924,10 +924,11 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+  "sqlState" : "42623",
   "messageParameters" : {
     "colName" : "`system`.`session`.`var1`",
     "defaultValue" : "(SELECT c1 FROM VALUES(1) AS T(c1))",
-    "statement" : "CRETE VARIABLE"
+    "statement" : "DECLARE VARIABLE"
   }
 }
 
@@ -2278,6 +2279,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`default`.`v`",

@@ -212,7 +212,7 @@ trait FileSourceAggregatePushDownSuite
           "  min(id), p FROM tmp group by p"
         var expected = Array.empty[Row]
         withSQLConf(aggPushDownEnabledKey -> "false") {
-            expected = sql(query).collect
+            expected = sql(query).collect()
         }
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",
@@ -246,7 +246,7 @@ trait FileSourceAggregatePushDownSuite
           " p4, p2, p3, p1 FROM tmp GROUP BY p1, p2, p3, p4"
         var expected = Array.empty[Row]
         withSQLConf(aggPushDownEnabledKey -> "false") {
-          expected = sql(query).collect
+          expected = sql(query).collect()
         }
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",

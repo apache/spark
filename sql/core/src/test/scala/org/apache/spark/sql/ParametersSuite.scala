@@ -21,11 +21,12 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ParametersSuite extends QueryTest with SharedSparkSession {
+class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
 
   test("bind named parameters") {
     val sqlText =
@@ -532,6 +533,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-45033: maps as parameters") {
+    import org.apache.spark.util.ArrayImplicits._
     def fromArr(keys: Array[_], values: Array[_]): Column = {
       map_from_arrays(Column(Literal(keys)), Column(Literal(values)))
     }
@@ -540,21 +542,21 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
     def createMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
-      map(zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
+      map(zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def callMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
-      call_function("map", zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
+      call_function("map", zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def fromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
         .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
-      map_from_entries(array(structures: _*))
+      map_from_entries(array(structures.toImmutableArraySeq: _*))
     }
     def callFromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
         .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
-      call_function("map_from_entries", call_function("array", structures: _*))
+      call_function("map_from_entries", call_function("array", structures.toImmutableArraySeq: _*))
     }
 
     Seq(fromArr(_, _), createMap(_, _), callFromArr(_, _), callMap(_, _)).foreach { f =>
@@ -600,6 +602,25 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
               array(str_to_map(Column(Literal("a:1,b:2,c:3")))))))
       },
       errorClass = "INVALID_SQL_ARG",
-      parameters = Map("name" -> "m"))
+      parameters = Map("name" -> "m"),
+      context = ExpectedContext(
+        fragment = "map_from_arrays",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
+  }
+
+  test("SPARK-46481: Test variable folding") {
+    sql("DECLARE a INT = 1")
+    sql("SET VAR a = 1")
+    val expected = sql("SELECT 42 WHERE 1 = 1").queryExecution.optimizedPlan
+    val variableDirectly = sql("SELECT 42 WHERE 1 = a").queryExecution.optimizedPlan
+    val parameterizedSpark =
+      spark.sql("SELECT 42 WHERE 1 = ?", Array(1)).queryExecution.optimizedPlan
+    val parameterizedSql =
+      spark.sql("EXECUTE IMMEDIATE 'SELECT 42 WHERE 1 = ?' USING a").queryExecution.optimizedPlan
+
+    comparePlans(expected, variableDirectly)
+    comparePlans(expected, parameterizedSpark)
+    comparePlans(expected, parameterizedSql)
   }
 }

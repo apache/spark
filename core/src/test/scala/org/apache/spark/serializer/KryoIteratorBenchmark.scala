@@ -99,15 +99,15 @@ object KryoIteratorBenchmark extends BenchmarkBase {
       }
     }
 
-    createCase("int", 1, Random.nextInt)
-    createCase("int", 10, Random.nextInt)
-    createCase("int", 100, Random.nextInt)
+    createCase("int", 1, Random.nextInt())
+    createCase("int", 10, Random.nextInt())
+    createCase("int", 100, Random.nextInt())
     createCase("string", 1, Random.nextString(5))
     createCase("string", 10, Random.nextString(5))
     createCase("string", 100, Random.nextString(5))
-    createCase("Array[int]", 1, Array.fill(10)(Random.nextInt))
-    createCase("Array[int]", 10, Array.fill(10)(Random.nextInt))
-    createCase("Array[int]", 100, Array.fill(10)(Random.nextInt))
+    createCase("Array[int]", 1, Array.fill(10)(Random.nextInt()))
+    createCase("Array[int]", 10, Array.fill(10)(Random.nextInt()))
+    createCase("Array[int]", 100, Array.fill(10)(Random.nextInt()))
   }
 
   def createSerializer(): SerializerInstance = {

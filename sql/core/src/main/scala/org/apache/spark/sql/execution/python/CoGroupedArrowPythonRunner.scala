@@ -46,7 +46,7 @@ class CoGroupedArrowPythonRunner(
     rightSchema: StructType,
     timeZoneId: String,
     conf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
@@ -56,6 +56,8 @@ class CoGroupedArrowPythonRunner(
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)
+
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 

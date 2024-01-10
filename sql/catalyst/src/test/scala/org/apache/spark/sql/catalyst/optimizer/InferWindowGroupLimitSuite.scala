@@ -179,7 +179,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
               windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
             windowExpr(function,
               windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn2"))
-          .where('rn < 2 && 'rn2 === 3)
+          .where(Symbol("rn") < 2 && Symbol("rn2") === 3)
 
       val correctAnswer =
         testRelation
@@ -189,7 +189,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
               windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
             windowExpr(function,
               windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn2"))
-          .where('rn < 2 && 'rn2 === 3)
+          .where(Symbol("rn") < 2 && Symbol("rn2") === 3)
 
       comparePlans(
         Optimize.execute(originalQuery.analyze),
@@ -205,7 +205,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
           windowExpr(Rank(c :: Nil),
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
-        .where('rn < 2)
+        .where(Symbol("rn") < 2)
 
     val correctAnswer =
       testRelation
@@ -215,7 +215,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
           windowExpr(Rank(c :: Nil),
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
-        .where('rn < 2)
+        .where(Symbol("rn") < 2)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),
@@ -230,7 +230,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
           windowExpr(new NthValue(c, Literal(1)),
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
-        .where('rn < 2)
+        .where(Symbol("rn") < 2)
 
     val correctAnswer =
       testRelation
@@ -240,7 +240,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
           windowExpr(new NthValue(c, Literal(1)),
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
-        .where('rn < 2)
+        .where(Symbol("rn") < 2)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),
@@ -255,7 +255,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
           windowExpr(Rank(c :: Nil),
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
-        .where('rn < 2 && 'rank === 3)
+        .where(Symbol("rn") < 2 && Symbol("rank") === 3)
 
     val correctAnswer =
       testRelation
@@ -265,7 +265,7 @@ class InferWindowGroupLimitSuite extends PlanTest {
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
           windowExpr(Rank(c :: Nil),
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
-        .where('rn < 2 && 'rank === 3)
+        .where(Symbol("rn") < 2 && Symbol("rank") === 3)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),

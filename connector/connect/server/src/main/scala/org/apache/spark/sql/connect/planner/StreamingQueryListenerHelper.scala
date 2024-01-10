@@ -18,10 +18,9 @@
 package org.apache.spark.sql.connect.planner
 
 import java.io.EOFException
-import java.nio.charset.StandardCharsets
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.python.{PythonException, PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
@@ -47,28 +46,28 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
   val (dataOut, dataIn) = runner.init()
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
-    PythonRDD.writeUTF(event.json, dataOut)
+    PythonWorkerUtils.writeUTF(event.json, dataOut)
     dataOut.writeInt(0)
     dataOut.flush()
     handlePythonWorkerError("onQueryStarted")
   }
 
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
-    PythonRDD.writeUTF(event.json, dataOut)
+    PythonWorkerUtils.writeUTF(event.json, dataOut)
     dataOut.writeInt(1)
     dataOut.flush()
     handlePythonWorkerError("onQueryProgress")
   }
 
   override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {
-    PythonRDD.writeUTF(event.json, dataOut)
+    PythonWorkerUtils.writeUTF(event.json, dataOut)
     dataOut.writeInt(2)
     dataOut.flush()
     handlePythonWorkerError("onQueryIdle")
   }
 
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
-    PythonRDD.writeUTF(event.json, dataOut)
+    PythonWorkerUtils.writeUTF(event.json, dataOut)
     dataOut.writeInt(3)
     dataOut.flush()
     handlePythonWorkerError("onQueryTerminated")
@@ -85,10 +84,7 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
         case 0 =>
           logInfo(s"Streaming query listener function $functionName completed (ret: 0)")
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val exLength = dataIn.readInt()
-          val obj = new Array[Byte](exLength)
-          dataIn.readFully(obj)
-          val msg = new String(obj, StandardCharsets.UTF_8)
+          val msg = PythonWorkerUtils.readUTF(dataIn)
           throw new PythonException(
             s"Found error inside Streaming query listener Python " +
               s"process for function $functionName: $msg",

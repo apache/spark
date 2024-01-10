@@ -24,6 +24,7 @@ import java.util.Locale
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.security.SocketAuthServer
@@ -159,7 +160,7 @@ private[sql] object PythonSQLUtils extends Logging {
       case "HOUR" => Column(zero.copy(hours = e.expr))
       case "MINUTE" => Column(zero.copy(mins = e.expr))
       case "SECOND" => Column(zero.copy(secs = e.expr))
-      case _ => throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+      case _ => throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
     }
   }
 

@@ -5,6 +5,7 @@ select * from dummy(3)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
+  "sqlState" : "42883",
   "messageParameters" : {
     "name" : "`dummy`"
   },
@@ -312,7 +313,7 @@ select * from explode(explode(array(1)))
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
-  "sqlState" : "0A000",
+  "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
   },
@@ -332,6 +333,7 @@ select * from explode(array(1, 2)) t(c1, c2)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "2",
     "funcName" : "`explode`",
@@ -455,6 +457,7 @@ select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
     "funcName" : "`inline`",
@@ -591,7 +594,7 @@ select * from posexplode(explode(array(1)))
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
-  "sqlState" : "0A000",
+  "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"posexplode(explode(array(1)))\""
   },
@@ -611,6 +614,7 @@ select * from posexplode(array(1, 2)) t(x)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
     "funcName" : "`posexplode`",
@@ -780,6 +784,7 @@ select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
     "funcName" : "`json_tuple`",
@@ -873,6 +878,7 @@ select * from stack(2, 1, 2, 3) t(a, b, c)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
     "funcName" : "`stack`",
@@ -919,7 +925,7 @@ select * from stack(2, explode(array(1, 2, 3)))
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
-  "sqlState" : "0A000",
+  "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"stack(2, explode(array(1, 2, 3)))\""
   },

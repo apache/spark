@@ -66,25 +66,19 @@ class StreamTestHelper {
   }
 
   public ByteBuffer srcBuffer(String name) {
-    switch (name) {
-      case "largeBuffer":
-        return largeBuffer;
-      case "smallBuffer":
-        return smallBuffer;
-      case "emptyBuffer":
-        return emptyBuffer;
-      default:
-        throw new IllegalArgumentException("Invalid stream: " + name);
-    }
+    return switch (name) {
+      case "largeBuffer" -> largeBuffer;
+      case "smallBuffer" -> smallBuffer;
+      case "emptyBuffer" -> emptyBuffer;
+      default -> throw new IllegalArgumentException("Invalid stream: " + name);
+    };
   }
 
   public ManagedBuffer openStream(TransportConf conf, String streamId) {
-    switch (streamId) {
-      case "file":
-        return new FileSegmentManagedBuffer(conf, testFile, 0, testFile.length());
-      default:
-        return new NioManagedBuffer(srcBuffer(streamId));
+    if ("file".equals(streamId)) {
+      return new FileSegmentManagedBuffer(conf, testFile, 0, testFile.length());
     }
+    return new NioManagedBuffer(srcBuffer(streamId));
   }
 
   void cleanup() {

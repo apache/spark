@@ -16,16 +16,17 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.io.test_io import FrameIOMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameParityIOTests(FrameIOMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+class FrameParityIOTests(
+    FrameIOMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

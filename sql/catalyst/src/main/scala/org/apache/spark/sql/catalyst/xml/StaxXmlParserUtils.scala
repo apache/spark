@@ -24,7 +24,7 @@ import javax.xml.stream.events._
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 
-private[sql] object StaxXmlParserUtils {
+object StaxXmlParserUtils {
 
   private[sql] val factory: XMLInputFactory = {
     val factory = XMLInputFactory.newInstance()
@@ -38,9 +38,14 @@ private[sql] object StaxXmlParserUtils {
   def filteredReader(xml: String): XMLEventReader = {
     val filter = new EventFilter {
       override def accept(event: XMLEvent): Boolean =
-        // Ignore comments and processing instructions
         event.getEventType match {
+          // Ignore comments and processing instructions
           case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
+          // unsupported events
+          case XMLStreamConstants.DTD |
+               XMLStreamConstants.ENTITY_DECLARATION |
+               XMLStreamConstants.ENTITY_REFERENCE |
+               XMLStreamConstants.NOTATION_DECLARATION => false
           case _ => true
         }
     }
@@ -53,7 +58,7 @@ private[sql] object StaxXmlParserUtils {
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
     val rootEvent =
       StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
-    rootEvent.asStartElement.getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+    rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 
   /**
@@ -95,8 +100,9 @@ private[sql] object StaxXmlParserUtils {
     } else {
       attributes.map { attr =>
         val key = options.attributePrefix + getName(attr.getName, options)
-        val value = attr.getValue match {
-          case v if options.treatEmptyValuesAsNulls && v.trim.isEmpty => null
+        val data = if (options.ignoreSurroundingSpaces) attr.getValue.trim else attr.getValue
+        val value = data match {
+          case v if (v == options.nullValue) => null
           case v => v
         }
         key -> value
@@ -120,15 +126,17 @@ private[sql] object StaxXmlParserUtils {
   /**
    * Convert the current structure of XML document to a XML string.
    */
-  def currentStructureAsString(parser: XMLEventReader): String = {
+  def currentStructureAsString(
+      parser: XMLEventReader,
+      startElementName: String,
+      options: XmlOptions): String = {
     val xmlString = new StringBuilder()
     var indent = 0
     do {
       parser.nextEvent match {
         case e: StartElement =>
           xmlString.append('<').append(e.getName)
-          e.getAttributes.asScala.foreach { a =>
-            val att = a.asInstanceOf[Attribute]
+          e.getAttributes.asScala.foreach { att =>
             xmlString
               .append(' ')
               .append(att.getName)
@@ -151,6 +159,7 @@ private[sql] object StaxXmlParserUtils {
         indent > 0
       case _ => true
     })
+    skipNextEndElement(parser, startElementName, options)
     xmlString.toString()
   }
 
@@ -176,6 +185,23 @@ private[sql] object StaxXmlParserUtils {
           shouldStop = checkEndElement(parser)
         case _: XMLEvent => // do nothing
       }
+    }
+  }
+
+  @tailrec
+  def skipNextEndElement(
+      parser: XMLEventReader,
+      expectedNextEndElementName: String,
+      options: XmlOptions): Unit = {
+    parser.nextEvent() match {
+      case c: Characters if c.isWhiteSpace =>
+        skipNextEndElement(parser, expectedNextEndElementName, options)
+      case endElement: EndElement =>
+        assert(
+          getName(endElement.getName, options) == expectedNextEndElementName,
+          s"Expected EndElement </$expectedNextEndElementName>")
+      case _ => throw new IllegalStateException(
+        s"Expected EndElement </$expectedNextEndElementName>")
     }
   }
 }

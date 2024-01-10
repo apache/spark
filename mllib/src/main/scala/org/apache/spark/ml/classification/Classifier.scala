@@ -152,7 +152,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
       logWarning(s"$uid: ClassificationModel.transform() does nothing" +
         " because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   final override def transformImpl(dataset: Dataset[_]): DataFrame =

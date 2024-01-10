@@ -44,6 +44,7 @@
 | org.apache.spark.sql.catalyst.expressions.Atanh | atanh | SELECT atanh(0) | struct<ATANH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.BRound | bround | SELECT bround(2.5, 0) | struct<bround(2.5, 0):decimal(2,0)> |
 | org.apache.spark.sql.catalyst.expressions.Base64 | base64 | SELECT base64('Spark SQL') | struct<base64(Spark SQL):string> |
+| org.apache.spark.sql.catalyst.expressions.Between | between | SELECT 0.5 between 0.1 AND 1.0 | struct<between(0.5, 0.1, 1.0):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
 | org.apache.spark.sql.catalyst.expressions.BitLength | bit_length | SELECT bit_length('Spark SQL') | struct<bit_length(Spark SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.BitmapBitPosition | bitmap_bit_position | SELECT bitmap_bit_position(1) | struct<bitmap_bit_position(1):bigint> |
@@ -98,14 +99,14 @@
 | org.apache.spark.sql.catalyst.expressions.CumeDist | cume_dist | SELECT a, b, cume_dist() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,cume_dist() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double> |
 | org.apache.spark.sql.catalyst.expressions.CurDateExpressionBuilder | curdate | SELECT curdate() | struct<current_date():date> |
 | org.apache.spark.sql.catalyst.expressions.CurrentCatalog | current_catalog | SELECT current_catalog() | struct<current_catalog():string> |
-| org.apache.spark.sql.catalyst.expressions.CurrentDatabase | current_database | SELECT current_database() | struct<current_database():string> |
-| org.apache.spark.sql.catalyst.expressions.CurrentDatabase | current_schema | SELECT current_schema() | struct<current_database():string> |
+| org.apache.spark.sql.catalyst.expressions.CurrentDatabase | current_database | SELECT current_database() | struct<current_schema():string> |
+| org.apache.spark.sql.catalyst.expressions.CurrentDatabase | current_schema | SELECT current_schema() | struct<current_schema():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentDate | current_date | SELECT current_date() | struct<current_date():date> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTimeZone | current_timezone | SELECT current_timezone() | struct<current_timezone():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTimestamp | current_timestamp | SELECT current_timestamp() | struct<current_timestamp():timestamp> |
 | org.apache.spark.sql.catalyst.expressions.CurrentUser | current_user | SELECT current_user() | struct<current_user():string> |
-| org.apache.spark.sql.catalyst.expressions.CurrentUser | session_user | SELECT session_user() | struct<current_user():string> |
-| org.apache.spark.sql.catalyst.expressions.CurrentUser | user | SELECT user() | struct<current_user():string> |
+| org.apache.spark.sql.catalyst.expressions.CurrentUser | session_user | SELECT session_user() | struct<session_user():string> |
+| org.apache.spark.sql.catalyst.expressions.CurrentUser | user | SELECT user() | struct<user():string> |
 | org.apache.spark.sql.catalyst.expressions.DateAdd | date_add | SELECT date_add('2016-07-30', 1) | struct<date_add(2016-07-30, 1):date> |
 | org.apache.spark.sql.catalyst.expressions.DateAdd | dateadd | SELECT dateadd('2016-07-30', 1) | struct<date_add(2016-07-30, 1):date> |
 | org.apache.spark.sql.catalyst.expressions.DateDiff | date_diff | SELECT date_diff('2009-07-31', '2009-07-30') | struct<date_diff(2009-07-31, 2009-07-30):int> |
@@ -220,6 +221,7 @@
 | org.apache.spark.sql.catalyst.expressions.Minute | minute | SELECT minute('2009-07-30 12:58:59') | struct<minute(2009-07-30 12:58:59):int> |
 | org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID | monotonically_increasing_id | SELECT monotonically_increasing_id() | struct<monotonically_increasing_id():bigint> |
 | org.apache.spark.sql.catalyst.expressions.Month | month | SELECT month('2016-07-30') | struct<month(2016-07-30):int> |
+| org.apache.spark.sql.catalyst.expressions.MonthName | monthname | SELECT monthname('2008-02-20') | struct<monthname(2008-02-20):string> |
 | org.apache.spark.sql.catalyst.expressions.MonthsBetween | months_between | SELECT months_between('1997-02-28 10:30:00', '1996-10-30') | struct<months_between(1997-02-28 10:30:00, 1996-10-30, true):double> |
 | org.apache.spark.sql.catalyst.expressions.Multiply | * | SELECT 2 * 3 | struct<(2 * 3):int> |
 | org.apache.spark.sql.catalyst.expressions.Murmur3Hash | hash | SELECT hash('Spark', array(123), 2) | struct<hash(Spark, array(123), 2):int> |
@@ -254,7 +256,7 @@
 | org.apache.spark.sql.catalyst.expressions.RLike | regexp_like | SELECT regexp_like('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP_LIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RLike | rlike | SELECT rlike('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<RLIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RPadExpressionBuilder | rpad | SELECT rpad('hi', 5, '??') | struct<rpad(hi, 5, ??):string> |
-| org.apache.spark.sql.catalyst.expressions.RaiseError | raise_error | SELECT raise_error('custom error message') | struct<raise_error(USER_RAISED_EXCEPTION, map(errorMessage, custom error message)):void> |
+| org.apache.spark.sql.catalyst.expressions.RaiseErrorExpressionBuilder | raise_error | SELECT raise_error('custom error message') | struct<raise_error(USER_RAISED_EXCEPTION, map(errorMessage, custom error message)):void> |
 | org.apache.spark.sql.catalyst.expressions.Rand | rand | SELECT rand() | struct<rand():double> |
 | org.apache.spark.sql.catalyst.expressions.Rand | random | SELECT random() | struct<rand():double> |
 | org.apache.spark.sql.catalyst.expressions.Randn | randn | SELECT randn() | struct<randn():double> |
@@ -262,7 +264,7 @@
 | org.apache.spark.sql.catalyst.expressions.RegExpCount | regexp_count | SELECT regexp_count('Steven Jones and Stephen Smith are the best players', 'Ste(v&#124;ph)en') | struct<regexp_count(Steven Jones and Stephen Smith are the best players, Ste(v&#124;ph)en):int> |
 | org.apache.spark.sql.catalyst.expressions.RegExpExtract | regexp_extract | SELECT regexp_extract('100-200', '(\\d+)-(\\d+)', 1) | struct<regexp_extract(100-200, (\d+)-(\d+), 1):string> |
 | org.apache.spark.sql.catalyst.expressions.RegExpExtractAll | regexp_extract_all | SELECT regexp_extract_all('100-200, 300-400', '(\\d+)-(\\d+)', 1) | struct<regexp_extract_all(100-200, 300-400, (\d+)-(\d+), 1):array<string>> |
-| org.apache.spark.sql.catalyst.expressions.RegExpInStr | regexp_instr | SELECT regexp_instr('user@spark.apache.org', '@[^.]*') | struct<regexp_instr(user@spark.apache.org, @[^.]*, 0):int> |
+| org.apache.spark.sql.catalyst.expressions.RegExpInStr | regexp_instr | SELECT regexp_instr(r"\abc", r"^\\abc$") | struct<regexp_instr(\abc, ^\\abc$, 0):int> |
 | org.apache.spark.sql.catalyst.expressions.RegExpReplace | regexp_replace | SELECT regexp_replace('100-200', '(\\d+)', 'num') | struct<regexp_replace(100-200, (\d+), num, 1):string> |
 | org.apache.spark.sql.catalyst.expressions.RegExpSubStr | regexp_substr | SELECT regexp_substr('Steven Jones and Stephen Smith are the best players', 'Ste(v&#124;ph)en') | struct<regexp_substr(Steven Jones and Stephen Smith are the best players, Ste(v&#124;ph)en):string> |
 | org.apache.spark.sql.catalyst.expressions.Remainder | % | SELECT 2 % 1.8 | struct<(2 % 1.8):decimal(2,1)> |
@@ -318,6 +320,7 @@
 | org.apache.spark.sql.catalyst.expressions.StringTrimRight | rtrim | SELECT rtrim('    SparkSQL   ') | struct<rtrim(    SparkSQL   ):string> |
 | org.apache.spark.sql.catalyst.expressions.StructsToCsv | to_csv | SELECT to_csv(named_struct('a', 1, 'b', 2)) | struct<to_csv(named_struct(a, 1, b, 2)):string> |
 | org.apache.spark.sql.catalyst.expressions.StructsToJson | to_json | SELECT to_json(named_struct('a', 1, 'b', 2)) | struct<to_json(named_struct(a, 1, b, 2)):string> |
+| org.apache.spark.sql.catalyst.expressions.StructsToXml | to_xml | SELECT to_xml(named_struct('a', 1, 'b', 2)) | struct<to_xml(named_struct(a, 1, b, 2)):string> |
 | org.apache.spark.sql.catalyst.expressions.Substring | substr | SELECT substr('Spark SQL', 5) | struct<substr(Spark SQL, 5, 2147483647):string> |
 | org.apache.spark.sql.catalyst.expressions.Substring | substring | SELECT substring('Spark SQL', 5) | struct<substring(Spark SQL, 5, 2147483647):string> |
 | org.apache.spark.sql.catalyst.expressions.SubstringIndex | substring_index | SELECT substring_index('www.apache.org', '.', 2) | struct<substring_index(www.apache.org, ., 2):string> |
@@ -406,8 +409,10 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.Median | median | SELECT median(col) FROM VALUES (0), (10) AS tab(col) | struct<median(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Min | min | SELECT min(col) FROM VALUES (10), (-1), (20) AS tab(col) | struct<min(col):int> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.MinBy | min_by | SELECT min_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y) | struct<min_by(x, y):string> |
-| org.apache.spark.sql.catalyst.expressions.aggregate.Mode | mode | SELECT mode(col) FROM VALUES (0), (10), (10) AS tab(col) | struct<mode(col, false):int> |
+| org.apache.spark.sql.catalyst.expressions.aggregate.ModeBuilder | mode | SELECT mode(col) FROM VALUES (0), (10), (10) AS tab(col) | struct<mode(col):int> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Percentile | percentile | SELECT percentile(col, 0.3) FROM VALUES (0), (10) AS tab(col) | struct<percentile(col, 0.3, 1):double> |
+| org.apache.spark.sql.catalyst.expressions.aggregate.PercentileContBuilder | percentile_cont | SELECT percentile_cont(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col) | struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY col):double> |
+| org.apache.spark.sql.catalyst.expressions.aggregate.PercentileDiscBuilder | percentile_disc | SELECT percentile_disc(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col) | struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.RegrAvgX | regr_avgx | SELECT regr_avgx(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x) | struct<regr_avgx(y, x):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.RegrAvgY | regr_avgy | SELECT regr_avgy(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x) | struct<regr_avgy(y, x):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.RegrCount | regr_count | SELECT regr_count(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x) | struct<regr_count(y, x):bigint> |
@@ -428,6 +433,7 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.VariancePop | var_pop | SELECT var_pop(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_pop(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | var_samp | SELECT var_samp(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_samp(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | variance | SELECT variance(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<variance(col):double> |
+| org.apache.spark.sql.catalyst.expressions.variant.ParseJson | parse_json | SELECT parse_json('{"a":1,"b":0.8}') | struct<parse_json({"a":1,"b":0.8}):variant> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathBoolean | xpath_boolean | SELECT xpath_boolean('<a><b>1</b></a>','a/b') | struct<xpath_boolean(<a><b>1</b></a>, a/b):boolean> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathDouble | xpath_double | SELECT xpath_double('<a><b>1</b><b>2</b></a>', 'sum(a/b)') | struct<xpath_double(<a><b>1</b><b>2</b></a>, sum(a/b)):double> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathDouble | xpath_number | SELECT xpath_number('<a><b>1</b><b>2</b></a>', 'sum(a/b)') | struct<xpath_number(<a><b>1</b><b>2</b></a>, sum(a/b)):double> |

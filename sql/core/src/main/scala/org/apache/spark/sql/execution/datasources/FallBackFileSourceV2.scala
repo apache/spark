@@ -36,7 +36,7 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(
         d @ DataSourceV2Relation(table: FileTable, _, _, _, _), _, _, _, _, _, _) =>
-      val v1FileFormat = table.fallbackFileFormat.newInstance()
+      val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
       val relation = HadoopFsRelation(
         table.fileIndex,
         table.fileIndex.partitionSchema,

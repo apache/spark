@@ -36,11 +36,11 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoI
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
-import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
@@ -249,7 +249,7 @@ private object InMemoryV1Provider {
 }
 
 class InMemoryV1Provider
-  extends SimpleTableProvider
+  extends FakeV2ProviderWithCustomSchema
   with DataSourceRegister
   with CreatableRelationProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
@@ -386,7 +386,7 @@ class InMemoryTableWithV1Fallback(
             } else if (dataMap.contains(partition)) {
               throw new IllegalStateException("Partition was not removed properly")
             } else {
-              dataMap.put(partition, elements)
+              dataMap.put(partition, elements.toImmutableArraySeq)
             }
           }
         }
@@ -414,7 +414,7 @@ class InMemoryTableWithV1Fallback(
     override def schema: StructType = requiredSchema
     override def buildScan(): RDD[Row] = {
       val data = InMemoryV1Provider.getTableData(context.sparkSession, name).collect()
-      context.sparkContext.makeRDD(data)
+      context.sparkContext.makeRDD(data.toImmutableArraySeq)
     }
   }
 }

@@ -71,7 +71,7 @@ class AppClientSuite
     workers = makeWorkers(10, 2048)
     // Wait until all workers register with master successfully
     eventually(timeout(1.minute), interval(10.milliseconds)) {
-      assert(getMasterState.workers.size === numWorkers)
+      assert(getMasterState.workers.length === numWorkers)
     }
   }
 
@@ -99,7 +99,7 @@ class AppClientSuite
       eventually(timeout(10.seconds), interval(10.millis)) {
         val apps = getApplications()
         assert(ci.listener.connectedIdList.size === 1, "client listener should have one connection")
-        assert(apps.size === 1, "master should have 1 registered app")
+        assert(apps.length === 1, "master should have 1 registered app")
       }
 
       // Send message to Master to request Executors, verify request by change in executor limit
@@ -176,7 +176,7 @@ class AppClientSuite
       eventually(timeout(10.seconds), interval(10.millis)) {
         val apps = getApplications()
         assert(ci.listener.connectedIdList.size === 1, "client listener should have one connection")
-        assert(apps.size === 1, "master should have 1 registered app")
+        assert(apps.length === 1, "master should have 1 registered app")
       }
 
       // Send message to Master to request Executors with multiple resource profiles.
@@ -265,7 +265,7 @@ class AppClientSuite
   }
 
   /** Get the applications that are active from Master */
-  private def getApplications(): Seq[ApplicationInfo] = {
+  private def getApplications(): Array[ApplicationInfo] = {
     getMasterState.activeApps
   }
 

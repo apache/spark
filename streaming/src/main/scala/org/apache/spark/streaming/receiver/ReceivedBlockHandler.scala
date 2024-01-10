@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.receiver
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.concurrent.duration._
 
 import org.apache.hadoop.conf.Configuration
@@ -82,7 +82,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
         val countIterator = new CountingIterator(iterator)
         val putResult = blockManager.putIterator(blockId, countIterator, storageLevel,
           tellMaster = true)
-        numRecords = countIterator.count
+        numRecords = countIterator.count()
         putResult
       case ByteBufferBlock(byteBuffer) =>
         blockManager.putBytes(
@@ -159,8 +159,8 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   // For processing futures used in parallel block storing into block manager and write ahead log
   // # threads = 2, so that both writing to BM and WAL can proceed in parallel
-  implicit private val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
+  implicit private val executionContext: ExecutionContextExecutorService = ExecutionContext
+    .fromExecutorService(ThreadUtils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
 
   /**
    * This implementation stores the block into the block manager as well as a write ahead log.
@@ -178,7 +178,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
       case IteratorBlock(iterator) =>
         val countIterator = new CountingIterator(iterator)
         val serializedBlock = serializerManager.dataSerialize(blockId, countIterator)
-        numRecords = countIterator.count
+        numRecords = countIterator.count()
         serializedBlock
       case ByteBufferBlock(byteBuffer) =>
         new ChunkedByteBuffer(byteBuffer.duplicate())

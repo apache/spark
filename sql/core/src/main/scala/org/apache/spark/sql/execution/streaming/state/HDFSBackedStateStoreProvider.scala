@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -706,7 +707,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Fetch all the files that back the store */
   private def fetchFiles(): Seq[StoreFile] = {
     val files: Seq[FileStatus] = try {
-      fm.list(baseDir)
+      fm.list(baseDir).toImmutableArraySeq
     } catch {
       case _: java.io.FileNotFoundException =>
         Seq.empty

@@ -31,8 +31,6 @@ import scala.jdk.CollectionConverters._
 private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
   extends Iterable[A] with Growable[A] with Serializable {
 
-  //  Note: this class supports Scala 2.13. A parallel source tree has a 2.12 implementation.
-
   private val underlying = new JPriorityQueue[A](maxSize, ord)
 
   override def iterator: Iterator[A] = underlying.iterator.asScala
@@ -42,7 +40,7 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
   override def knownSize: Int = size
 
   override def addAll(xs: IterableOnce[A]): this.type = {
-    xs.foreach { this += _ }
+    xs.iterator.foreach { this += _ }
     this
   }
 

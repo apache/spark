@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -302,7 +303,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
         df.schema.asNullable,
-        partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
+        partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq,
         tableSpec,
         ignoreIfExists = false)
       Dataset.ofRows(df.sparkSession, cmd)
@@ -369,7 +370,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources =
-        Utils.stringToSeq(df.sparkSession.sqlContext.conf.disabledV2StreamingWriters)
+        Utils.stringToSeq(df.sparkSession.sessionState.conf.disabledV2StreamingWriters)
       val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
         // file source v2 does not support streaming yet.
         classOf[FileDataSourceV2].isAssignableFrom(cls)
@@ -384,7 +385,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = df.sparkSession.sessionState.conf)
-        val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
           optionsWithPath.originalMap
         val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
         // If the source accepts external table metadata, here we pass the schema of input query

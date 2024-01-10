@@ -481,9 +481,9 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
         :: Literal.create(null, DecimalType(22, 10))
         :: Literal.create(null, DecimalType(38, 38))
         :: Nil),
-      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 38))
-        :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 38))
-        :: Literal.create(null, DecimalType(38, 38))
+      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 26))
+        :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 26))
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 26))
         :: Nil))
   }
 
@@ -530,9 +530,9 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
         :: Literal.create(null, DecimalType(38, 38))
         :: Nil),
       CreateMap(Literal(1)
-        :: Literal.create(null, DecimalType(38, 0)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 0))
         :: Literal(2)
-        :: Literal.create(null, DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 0))
         :: Nil))
     // type coercion for both map keys and values
     ruleTest(AnsiTypeCoercion.FunctionArgumentConversion,

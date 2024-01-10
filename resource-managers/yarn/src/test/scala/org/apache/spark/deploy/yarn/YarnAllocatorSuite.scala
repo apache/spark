@@ -49,6 +49,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
@@ -181,7 +182,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumContainersPendingAllocate should be (1)
 
     val container = createContainer("host1")
-    handler.handleAllocatedContainers(Array(container))
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -213,7 +214,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       handler.getNumContainersPendingAllocate should be (1)
 
       val container = createContainer("host1", priority = Priority.newInstance(rprof.id))
-      handler.handleAllocatedContainers(Array(container))
+      handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
       handler.getNumExecutorsRunning should be (1)
       handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -260,7 +261,8 @@ class YarnAllocatorSuite extends SparkFunSuite
         priority = Priority.newInstance(rprof2.id))
       val container3 = createContainer("host3", resource = containerResourcerp2,
         priority = Priority.newInstance(rprof2.id))
-      handler.handleAllocatedContainers(Array(container, container2, container3))
+      handler.handleAllocatedContainers(
+        Array(container, container2, container3).toImmutableArraySeq)
 
       handler.getNumExecutorsRunning should be (3)
       handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -290,7 +292,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       handler.updateResourceRequests()
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
       val container = createContainer("host1", resource = defaultResource)
-      handler.handleAllocatedContainers(Array(container))
+      handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
       // get amount of memory and vcores from resource, so effectively skipping their validation
       val expectedResources = Resource.newInstance(defaultResource.getMemorySize(),
@@ -370,7 +372,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumContainersPendingAllocate should be (1)
 
     val container = createContainer("host1")
-    handler.handleAllocatedContainers(Array(container))
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -378,7 +380,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     hostTocontainer.get("host1").get should contain(container.getId)
 
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container2))
+    handler.handleAllocatedContainers(Array(container2).toImmutableArraySeq)
     handler.getNumExecutorsRunning should be (1)
   }
 
@@ -392,7 +394,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     val container1 = createContainer("host1")
     val container2 = createContainer("host1")
     val container3 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2, container3))
+    handler.handleAllocatedContainers(Array(container1, container2, container3).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (3)
     handler.allocatedContainerToHostMap.get(container1.getId).get should be ("host1")
@@ -413,7 +415,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
     val container3 = createContainer("host4")
-    handler.handleAllocatedContainers(Array(container1, container2, container3))
+    handler.handleAllocatedContainers(Array(container1, container2, container3).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (2)
     handler.allocatedContainerToHostMap.get(container1.getId).get should be ("host1")
@@ -439,7 +441,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumContainersPendingAllocate should be (3)
 
     val container = createContainer("host1")
-    handler.handleAllocatedContainers(Array(container))
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -468,7 +470,7 @@ class YarnAllocatorSuite extends SparkFunSuite
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (2)
 
@@ -488,7 +490,7 @@ class YarnAllocatorSuite extends SparkFunSuite
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
 
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 1)
     val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
@@ -513,7 +515,7 @@ class YarnAllocatorSuite extends SparkFunSuite
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
     handler.getNumExecutorsRunning should be (2)
     handler.getNumContainersPendingAllocate should be (0)
 
@@ -540,7 +542,7 @@ class YarnAllocatorSuite extends SparkFunSuite
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
     handler.getNumExecutorsRunning should be (2)
     handler.getNumContainersPendingAllocate should be (0)
 
@@ -560,7 +562,7 @@ class YarnAllocatorSuite extends SparkFunSuite
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
 
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 2)
     val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
@@ -853,7 +855,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumContainersPendingAllocate should be(1)
 
     val container = createContainer("host1")
-    handler.handleAllocatedContainers(Array(container))
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
     handler.getNumExecutorsRunning should be(1)
     handler.getNumContainersPendingAllocate should be(0)
 

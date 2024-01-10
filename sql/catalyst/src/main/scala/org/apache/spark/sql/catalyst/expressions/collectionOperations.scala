@@ -22,13 +22,15 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
@@ -40,7 +42,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
 
 /**
@@ -1768,7 +1769,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
       startInt - 1
     }
     if (lengthInt < 0) {
-      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName)
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, lengthInt)
     }
     // startIndex can be negative if start is negative and its absolute value is greater than the
     // number of elements in the array
@@ -1796,7 +1797,8 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |  $startIdx = $start - 1;
          |}
          |if ($length < 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError("$prettyName");
+         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(
+         |    "$prettyName", $length);
          |} else if ($length > $x.numElements() - $startIdx) {
          |  $resLength = $x.numElements() - $startIdx;
          |} else {
@@ -2002,8 +2004,8 @@ case class ArrayJoin(
          |${ev.value} = $buffer.build();""".stripMargin
 
     if (array.nullable || delimiter.nullable) {
-      arrayGen.code + ctx.nullSafeExec(array.nullable, arrayGen.isNull) {
-        delimiterGen.code + ctx.nullSafeExec(delimiter.nullable, delimiterGen.isNull) {
+      arrayGen.code.toString + ctx.nullSafeExec(array.nullable, arrayGen.isNull) {
+        delimiterGen.code.toString + ctx.nullSafeExec(delimiter.nullable, delimiterGen.isNull) {
           s"""
              |${ev.isNull} = false;
              |$resultCode""".stripMargin
@@ -2086,7 +2088,7 @@ case class ArrayMin(child: Expression)
 
   @transient override lazy val dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
-    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+    case _ => throw SparkException.internalError(s"$prettyName accepts only arrays.")
   }
 
   override def prettyName: String = "array_min"
@@ -2159,7 +2161,7 @@ case class ArrayMax(child: Expression)
 
   @transient override lazy val dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
-    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+    case _ => throw SparkException.internalError(s"$prettyName accepts only arrays.")
   }
 
   override def prettyName: String = "array_max"
@@ -2525,7 +2527,7 @@ case class ElementAt(
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Option[QueryContext] = {
     if (failOnError && left.resolved && left.dataType.isInstanceOf[ArrayType]) {
       Some(origin.context)
     } else {
@@ -2649,14 +2651,15 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       }
     case ArrayType(elementType, _) =>
       input => {
-        val inputs = children.toStream.map(_.eval(input))
+        val inputs = children.to(LazyList).map(_.eval(input))
         if (inputs.contains(null)) {
           null
         } else {
           val arrayData = inputs.map(_.asInstanceOf[ArrayData])
           val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
           if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-            throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
+            throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+              prettyName, numberOfElements)
           }
           val finalData = new Array[AnyRef](numberOfElements.toInt)
           var position = 0
@@ -2837,7 +2840,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
       val arrayData = elements.map(_.asInstanceOf[ArrayData])
       val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
       if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.flattenArraysWithElementsExceedLimitError(numberOfElements)
+        throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+          prettyName, numberOfElements)
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
@@ -3086,9 +3090,9 @@ case class Sequence(
 
     if (nullable) {
       val nullSafeEval =
-        startGen.code + ctx.nullSafeExec(start.nullable, startGen.isNull) {
-          stopGen.code + ctx.nullSafeExec(stop.nullable, stopGen.isNull) {
-            stepGen.code + ctx.nullSafeExec(stepOpt.exists(_.nullable), stepGen.isNull) {
+        startGen.code.toString + ctx.nullSafeExec(start.nullable, startGen.isNull) {
+          stopGen.code.toString + ctx.nullSafeExec(stop.nullable, stopGen.isNull) {
+            stepGen.code.toString + ctx.nullSafeExec(stepOpt.exists(_.nullable), stepGen.isNull) {
               s"""
                  |${ev.isNull} = false;
                  |$resultCode
@@ -3118,6 +3122,34 @@ case class Sequence(
 }
 
 object Sequence {
+  private def prettyName: String = "sequence"
+
+  def sequenceLength(start: Long, stop: Long, step: Long): Int = {
+    try {
+      val delta = Math.subtractExact(stop, start)
+      if (delta == Long.MinValue && step == -1L) {
+        // We must special-case division of Long.MinValue by -1 to catch potential unchecked
+        // overflow in next operation. Division does not have a builtin overflow check. We
+        // previously special-case div-by-zero.
+        throw new ArithmeticException("Long overflow (Long.MinValue / -1)")
+      }
+      val len = if (stop == start) 1L else Math.addExact(1L, (delta / step))
+      if (len > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, len)
+      }
+      len.toInt
+    } catch {
+      // We handle overflows in the previous try block by raising an appropriate exception.
+      case _: ArithmeticException =>
+        val safeLen =
+          BigInt(1) + (BigInt(stop) - BigInt(start)) / BigInt(step)
+        if (safeLen > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+          throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, safeLen)
+        }
+        throw internalError("Unreachable code reached.")
+      case e: Exception => throw e
+    }
+  }
 
   private type LessThanOrEqualFn = (Any, Any) => Boolean
 
@@ -3154,7 +3186,7 @@ object Sequence {
     (elemType: IntegralType)(implicit num: Integral[T]) extends InternalSequence {
 
     override val defaultStep: DefaultStep = new DefaultStep(
-      (PhysicalDataType.ordering(elemType).lteq _).asInstanceOf[LessThanOrEqualFn],
+      PhysicalDataType.ordering(elemType).lteq _,
       elemType,
       num.one)
 
@@ -3489,13 +3521,7 @@ object Sequence {
         || (estimatedStep == num.zero && start == stop),
       s"Illegal sequence boundaries: $start to $stop by $step")
 
-    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / estimatedStep.toLong
-
-    require(
-      len <= MAX_ROUNDED_ARRAY_LENGTH,
-      s"Too long sequence: $len. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
-
-    len.toInt
+    sequenceLength(start.toLong, stop.toLong, estimatedStep.toLong)
   }
 
   private def genSequenceLengthCode(
@@ -3505,7 +3531,7 @@ object Sequence {
       step: String,
       estimatedStep: String,
       len: String): String = {
-    val longLen = ctx.freshName("longLen")
+    val calcFn = classOf[Sequence].getName + ".sequenceLength"
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
@@ -3513,12 +3539,7 @@ object Sequence {
        |  throw new IllegalArgumentException(
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
-       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $estimatedStep;
-       |if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
-       |  throw new IllegalArgumentException(
-       |    "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH");
-       |}
-       |int $len = (int) $longLen;
+       |int $len = $calcFn((long) $start, (long) $stop, (long) $estimatedStep);
        """.stripMargin
   }
 }
@@ -3550,7 +3571,8 @@ case class ArrayRepeat(left: Expression, right: Expression)
       null
     } else {
       if (count.asInstanceOf[Int] > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(count)
+        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+          prettyName, count)
       }
       val element = left.eval(input)
       new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
@@ -3840,10 +3862,12 @@ trait ArraySetLike {
       builder: String,
       value : String,
       size : String,
-      nullElementIndex : String): String = withResultArrayNullCheck(
+      nullElementIndex : String,
+      functionName: String): String = withResultArrayNullCheck(
     s"""
        |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($size);
+       |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+       |    "$functionName", $size);
        |}
        |
        |if (!UnsafeArrayData.shouldUseGenericArrayData(${et.defaultSize}, $size)) {
@@ -3901,7 +3925,8 @@ case class ArrayDistinct(child: Expression)
         (value: Any) =>
           if (!hs.contains(value)) {
             if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+              throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+                prettyName, arrayBuffer.size)
             }
             arrayBuffer += value
             hs.add(value)
@@ -4011,7 +4036,7 @@ case class ArrayDistinct(child: Expression)
            |for (int $i = 0; $i < $array.numElements(); $i++) {
            |  $processArray
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4046,13 +4071,6 @@ trait ArrayBinaryLike
   }
 }
 
-object ArrayBinaryLike {
-  def throwUnionLengthOverflowException(length: Int): Unit = {
-    throw QueryExecutionErrors.unionArrayWithElementsExceedLimitError(length)
-  }
-}
-
-
 /**
  * Returns an array of the elements in the union of x and y, without duplicates
  */
@@ -4080,7 +4098,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
           (value: Any) =>
             if (!hs.contains(value)) {
               if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+                throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+                  prettyName, arrayBuffer.size)
               }
               arrayBuffer += value
               hs.add(value)
@@ -4123,7 +4142,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
           }
           if (!found) {
             if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
+              throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+                prettyName, arrayBuffer.length)
             }
             arrayBuffer += elem
           }
@@ -4211,7 +4231,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
            |    $processArray
            |  }
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4226,44 +4246,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ArrayUnion = copy(left = newLeft, right = newRight)
-}
-
-object ArrayUnion {
-  def unionOrdering(
-      array1: ArrayData,
-      array2: ArrayData,
-      elementType: DataType,
-      ordering: Ordering[Any]): ArrayData = {
-    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-    var alreadyIncludeNull = false
-    Seq(array1, array2).foreach(_.foreach(elementType, (_, elem) => {
-      var found = false
-      if (elem == null) {
-        if (alreadyIncludeNull) {
-          found = true
-        } else {
-          alreadyIncludeNull = true
-        }
-      } else {
-        // check elem is already stored in arrayBuffer or not?
-        var j = 0
-        while (!found && j < arrayBuffer.size) {
-          val va = arrayBuffer(j)
-          if (va != null && ordering.equiv(va, elem)) {
-            found = true
-          }
-          j = j + 1
-        }
-      }
-      if (!found) {
-        if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.length)
-        }
-        arrayBuffer += elem
-      }
-    }))
-    new GenericArrayData(arrayBuffer)
-  }
 }
 
 /**
@@ -4480,7 +4462,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
            |  $processArray1
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4691,7 +4673,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
            |for (int $i = 0; $i < $array1.numElements(); $i++) {
            |  $processArray1
            |}
-           |${buildResultArray(builder, ev.value, size, nullElementIndex)}
+           |${buildResultArray(builder, ev.value, size, nullElementIndex, prettyName)}
          """.stripMargin
       })
     } else {
@@ -4806,7 +4788,8 @@ case class ArrayInsert(
       val newArrayLength = math.max(baseArr.numElements() + 1, positivePos.get)
 
       if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+        throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+          prettyName, newArrayLength)
       }
 
       val newArray = new Array[Any](newArrayLength)
@@ -4840,7 +4823,8 @@ case class ArrayInsert(
         val newArrayLength = -posInt + baseOffset
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+          throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+            prettyName, newArrayLength)
         }
 
         val newArray = new Array[Any](newArrayLength)
@@ -4864,7 +4848,8 @@ case class ArrayInsert(
         val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+          throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+            prettyName, newArrayLength)
         }
 
         val newArray = new Array[Any](newArrayLength)
@@ -4910,7 +4895,8 @@ case class ArrayInsert(
            |
            |final int $resLength = java.lang.Math.max($arr.numElements() + 1, ${positivePos.get});
            |if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+           |    "$prettyName", $resLength);
            |}
            |
            |$allocation
@@ -4947,7 +4933,8 @@ case class ArrayInsert(
            |
            |  $resLength = java.lang.Math.abs($pos) + $baseOffset;
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |    throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+           |      "$prettyName", $resLength);
            |  }
            |
            |  $allocation
@@ -4974,7 +4961,8 @@ case class ArrayInsert(
            |
            |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+           |      "$prettyName", $resLength);
            |  }
            |
            |  $allocation
@@ -5005,8 +4993,8 @@ case class ArrayInsert(
 
     if (nullable) {
       val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(first.nullable, leftGen.isNull) {
-          midGen.code + ctx.nullSafeExec(second.nullable, midGen.isNull) {
+        leftGen.code.toString + ctx.nullSafeExec(first.nullable, leftGen.isNull) {
+          midGen.code.toString + ctx.nullSafeExec(second.nullable, midGen.isNull) {
             s"""
               ${rightGen.code}
               ${ev.isNull} = false;
@@ -5045,7 +5033,7 @@ case class ArrayInsert(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
     copy(srcArrayExpr = newSrcArrayExpr, posExpr = newPosExpr, itemExpr = newItemExpr)
 
-  override def initQueryContext(): Option[SQLQueryContext] = Some(origin.context)
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(

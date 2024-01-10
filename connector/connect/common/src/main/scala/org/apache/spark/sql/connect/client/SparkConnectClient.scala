@@ -18,15 +18,17 @@
 package org.apache.spark.sql.connect.client
 
 import java.net.URI
-import java.util.UUID
+import java.util.{Locale, UUID}
 import java.util.concurrent.Executor
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.Properties
 
 import com.google.protobuf.ByteString
 import io.grpc._
 
+import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -41,8 +43,11 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
-  private[this] val stub = new CustomSparkConnectStub(channel, configuration.retryPolicy)
+  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicies)
+  private[this] val bstub =
+    new CustomSparkConnectBlockingStub(channel, stubState)
+  private[this] val stub =
+    new CustomSparkConnectStub(channel, stubState)
 
   private[client] def userAgent: String = configuration.userAgent
 
@@ -241,6 +246,16 @@ private[sql] class SparkConnectClient(
     bstub.interrupt(request)
   }
 
+  private[sql] def releaseSession(): proto.ReleaseSessionResponse = {
+    val builder = proto.ReleaseSessionRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .build()
+    bstub.releaseSession(request)
+  }
+
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
     override def childValue(parent: mutable.Set[String]): mutable.Set[String] = {
       // Note: make a clone such that changes in the parent tags aren't reflected in
@@ -285,6 +300,43 @@ private[sql] class SparkConnectClient(
    * Currently only local files with extensions .jar and .class are supported.
    */
   def addArtifact(uri: URI): Unit = artifactManager.addArtifact(uri)
+
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(bytes: Array[Byte], target: String): Unit =
+    artifactManager.addArtifact(bytes, target)
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(source: String, target: String): Unit =
+    artifactManager.addArtifact(source, target)
 
   /**
    * Add multiple artifacts to the session.
@@ -428,9 +480,13 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
-    def retryPolicy(policy: GrpcRetryHandler.RetryPolicy): Builder = {
-      _configuration = _configuration.copy(retryPolicy = policy)
+    def retryPolicy(policies: Seq[RetryPolicy]): Builder = {
+      _configuration = _configuration.copy(retryPolicies = policies)
       this
+    }
+
+    def retryPolicy(policy: RetryPolicy): Builder = {
+      retryPolicy(List(policy))
     }
 
     private object URIParams {
@@ -466,7 +522,7 @@ object SparkConnectClient {
 
     def userAgent(value: String): Builder = {
       require(value != null)
-      _configuration = _configuration.copy(userAgent = value)
+      _configuration = _configuration.copy(userAgent = genUserAgent(value))
       this
     }
 
@@ -586,6 +642,27 @@ object SparkConnectClient {
   }
 
   /**
+   * Appends the Spark, Scala & JVM version, and the used OS to the user-provided user agent.
+   */
+  private def genUserAgent(value: String): String = {
+    val scalaVersion = Properties.versionNumberString
+    val jvmVersion = System.getProperty("java.version").split("_")(0)
+    val osName = {
+      val os = System.getProperty("os.name").toLowerCase(Locale.ROOT)
+      if (os.contains("mac")) "darwin"
+      else if (os.contains("linux")) "linux"
+      else if (os.contains("win")) "windows"
+      else "unknown"
+    }
+    List(
+      value,
+      s"spark/$SPARK_VERSION",
+      s"scala/$scalaVersion",
+      s"jvm/$jvmVersion",
+      s"os/$osName").mkString(" ")
+  }
+
+  /**
    * Helper class that fully captures the configuration for a [[SparkConnectClient]].
    */
   private[sql] case class Configuration(
@@ -596,8 +673,9 @@ object SparkConnectClient {
       token: Option[String] = None,
       isSslEnabled: Option[Boolean] = None,
       metadata: Map[String, String] = Map.empty,
-      userAgent: String = DEFAULT_USER_AGENT,
-      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      userAgent: String = genUserAgent(
+        sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
+      retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None) {

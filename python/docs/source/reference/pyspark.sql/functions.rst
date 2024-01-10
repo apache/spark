@@ -58,6 +58,7 @@ Predicate Functions
 .. autosummary::
     :toctree: api/
 
+    equal_null
     ilike
     isnan
     isnotnull
@@ -139,8 +140,6 @@ Mathematical Functions
     sqrt
     tan
     tanh
-    toDegrees
-    toRadians
     try_add
     try_divide
     try_multiply
@@ -224,14 +223,10 @@ Bitwise Functions
 
     bit_count
     bit_get
-    bitwiseNOT
     bitwise_not
     getbit
-    shiftLeft
     shiftleft
-    shiftRight
     shiftright
-    shiftRightUnsigned
     shiftrightunsigned
 
 
@@ -275,6 +270,7 @@ Date and Timestamp Functions
     make_ym_interval
     minute
     month
+    monthname
     months_between
     next_day
     now
@@ -406,7 +402,6 @@ Aggregate Functions
     :toctree: api/
 
     any_value
-    approxCountDistinct
     approx_count_distinct
     approx_percentile
     array_agg
@@ -464,7 +459,6 @@ Aggregate Functions
     stddev_pop
     stddev_samp
     sum
-    sumDistinct
     sum_distinct
     try_avg
     try_sum
@@ -508,11 +502,11 @@ Partition Transformation Functions
 .. autosummary::
     :toctree: api/
 
-    years
-    months
-    days
-    hours
-    bucket
+    partitioning.years
+    partitioning.months
+    partitioning.days
+    partitioning.hours
+    partitioning.bucket
 
 
 CSV Functions
@@ -546,6 +540,7 @@ XML Functions
 
     from_xml
     schema_of_xml
+    to_xml
     xpath
     xpath_boolean
     xpath_double
@@ -582,7 +577,6 @@ Misc Functions
     current_database
     current_schema
     current_user
-    equal_null
     hll_sketch_estimate
     hll_union
     input_file_block_length
@@ -592,6 +586,7 @@ Misc Functions
     monotonically_increasing_id
     raise_error
     reflect
+    session_user
     spark_partition_id
     try_aes_decrypt
     try_reflect

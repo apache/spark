@@ -497,8 +497,8 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   test("wrapped array") {
-    val encoder = ScalaReflection.encoderFor[mutable.WrappedArray[Int]]
-    val input = mutable.WrappedArray.make[Int](Array(1, 98, 7, 6))
+    val encoder = ScalaReflection.encoderFor[mutable.ArraySeq[Int]]
+    val input = mutable.ArraySeq.make[Int](Array(1, 98, 7, 6))
     val iterator = roundTrip(encoder, Iterator.single(input))
     val Seq(result) = iterator.toSeq
     assert(result == input)
@@ -511,7 +511,7 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     val encoder = toRowEncoder(schema)
     val iterator = roundTrip(encoder, Iterator.single(Row(Seq())))
     val Seq(Row(raw)) = iterator.toSeq
-    val seq = raw.asInstanceOf[mutable.WrappedArray[String]]
+    val seq = raw.asInstanceOf[mutable.ArraySeq[String]]
     assert(seq.isEmpty)
     assert(seq.array.getClass == classOf[Array[String]])
     iterator.close()

@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 
+from typing import Any, Callable, Iterator
+
 import torch
 import numpy as np
-from typing import Any, Callable, Iterator
+
 from pyspark.sql.types import StructType
 
 

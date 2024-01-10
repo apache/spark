@@ -27,7 +27,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, GrpcRetryHandler, SparkConnectClient, WrappedCloseableIterator}
+import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, RetryPolicy, SparkConnectClient, SparkConnectStubState}
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
@@ -59,10 +59,6 @@ trait SparkConnectServerTest extends SharedSparkSession {
     withSparkEnvConfs((Connect.CONNECT_GRPC_BINDING_PORT.key, serverPort.toString)) {
       SparkConnectService.start(spark.sparkContext)
     }
-    // register udf directly on the server, we're not testing client UDFs here...
-    val serverSession =
-      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
-    serverSession.udf.register("sleep", ((ms: Int) => { Thread.sleep(ms); ms }))
   }
 
   override def afterAll(): Unit = {
@@ -84,6 +80,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
   protected def clearAllExecutions(): Unit = {
     SparkConnectService.executionManager.listExecuteHolders.foreach(_.close())
     SparkConnectService.executionManager.periodicMaintenance(0)
+    SparkConnectService.sessionManager.invalidateAllSessions()
     assertNoActiveExecutions()
   }
 
@@ -150,13 +147,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   protected def getReattachableIterator(
       stubIterator: CloseableIterator[proto.ExecutePlanResponse]) = {
-    // This depends on the wrapping in CustomSparkConnectBlockingStub.executePlanReattachable:
-    // GrpcExceptionConverter.convertIterator
-    stubIterator
-      .asInstanceOf[WrappedCloseableIterator[proto.ExecutePlanResponse]]
-      // ExecutePlanResponseReattachableIterator
-      .innerIterator
-      .asInstanceOf[ExecutePlanResponseReattachableIterator]
+    ExecutePlanResponseReattachableIterator.fromIterator(stubIterator)
   }
 
   protected def assertNoActiveRpcs(): Unit = {
@@ -165,7 +156,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
       case Right(executions) =>
         // all rpc detached.
         assert(
-          executions.forall(_.lastAttachedRpcTime.isDefined),
+          executions.forall(_.lastAttachedRpcTimeMs.isDefined),
           s"Expected no RPCs, but got $executions")
     }
   }
@@ -215,12 +206,24 @@ trait SparkConnectServerTest extends SharedSparkSession {
     }
   }
 
+  protected def withClient(sessionId: String = defaultSessionId, userId: String = defaultUserId)(
+      f: SparkConnectClient => Unit): Unit = {
+    withClient(f, sessionId, userId)
+  }
+
   protected def withClient(f: SparkConnectClient => Unit): Unit = {
+    withClient(f, defaultSessionId, defaultUserId)
+  }
+
+  protected def withClient(
+      f: SparkConnectClient => Unit,
+      sessionId: String,
+      userId: String): Unit = {
     val client = SparkConnectClient
       .builder()
       .port(serverPort)
-      .sessionId(defaultSessionId)
-      .userId(defaultUserId)
+      .sessionId(sessionId)
+      .userId(userId)
       .enableReattachableExecute()
       .build()
     try f(client)
@@ -241,11 +244,12 @@ trait SparkConnectServerTest extends SharedSparkSession {
   }
 
   protected def withCustomBlockingStub(
-      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy())(
+      retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies())(
       f: CustomSparkConnectBlockingStub => Unit): Unit = {
     val conf = SparkConnectClient.Configuration(port = serverPort)
     val channel = conf.createChannel()
-    val bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
+    val stubState = new SparkConnectStubState(channel, retryPolicies)
+    val bstub = new CustomSparkConnectBlockingStub(channel, stubState)
     try f(bstub)
     finally {
       channel.shutdownNow()

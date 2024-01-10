@@ -804,6 +804,106 @@ Wabca
 
 
 -- !query
+set spark.sql.legacy.javaCharsets=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	true
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query schema
+struct<encode(hello, WINDOWS-1252):binary>
+-- !query output
+hello
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<encode(scol, ecol):binary>
+-- !query output
+hello
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	false
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode('hello', 'Windows-xxx')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
 select decode()
 -- !query schema
 struct<>
@@ -915,6 +1015,106 @@ select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.')
 struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks, NULL, .):string>
 -- !query output
 SQL
+
+
+-- !query
+select decode(X'68656c6c6f', 'Windows-xxx')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'Windows-xxx') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	true
+
+
+-- !query
+select decode(X'68656c6c6f', 'WINDOWS-1252')
+-- !query schema
+struct<decode(X'68656C6C6F', WINDOWS-1252):string>
+-- !query output
+hello
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<decode(scol, ecol):string>
+-- !query output
+hello
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	false
+
+
+-- !query
+select decode(X'68656c6c6f', 'WINDOWS-1252')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
 
 
 -- !query

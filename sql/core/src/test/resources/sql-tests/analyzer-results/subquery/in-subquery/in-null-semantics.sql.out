@@ -192,9 +192,49 @@ Project [c#x, d#x]
 
 
 -- !query
+set spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled,Some(true))
+
+
+-- !query
+select * from t left join t2 on (t.c in (select e from t_empty)) is null
+-- !query analysis
+Project [c#x, d#x]
++- Join LeftOuter, isnull(c#x IN (list#x []))
+   :  +- Project [e#x]
+   :     +- SubqueryAlias spark_catalog.default.t_empty
+   :        +- Relation spark_catalog.default.t_empty[e#x] json
+   :- SubqueryAlias spark_catalog.default.t
+   :  +- Relation spark_catalog.default.t[c#x] json
+   +- SubqueryAlias spark_catalog.default.t2
+      +- Relation spark_catalog.default.t2[d#x] json
+
+
+-- !query
+select * from t left join t2 on (t.c not in (select e from t_empty)) is null
+-- !query analysis
+Project [c#x, d#x]
++- Join LeftOuter, isnull(NOT c#x IN (list#x []))
+   :  +- Project [e#x]
+   :     +- SubqueryAlias spark_catalog.default.t_empty
+   :        +- Relation spark_catalog.default.t_empty[e#x] json
+   :- SubqueryAlias spark_catalog.default.t
+   :  +- Relation spark_catalog.default.t[c#x] json
+   +- SubqueryAlias spark_catalog.default.t2
+      +- Relation spark_catalog.default.t2[d#x] json
+
+
+-- !query
 set spark.sql.legacy.nullInEmptyListBehavior = true
 -- !query analysis
 SetCommand (spark.sql.legacy.nullInEmptyListBehavior,Some(true))
+
+
+-- !query
+set spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled,Some(false))
 
 
 -- !query
@@ -281,6 +321,12 @@ Project [c#x, d#x]
 reset spark.sql.legacy.nullInEmptyListBehavior
 -- !query analysis
 ResetCommand spark.sql.legacy.nullInEmptyListBehavior
+
+
+-- !query
+reset spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled
+-- !query analysis
+ResetCommand spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled
 
 
 -- !query

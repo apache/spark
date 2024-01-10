@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.util.ArrayImplicits._
 
 trait V1WritesHiveUtils {
 
@@ -85,7 +86,9 @@ trait V1WritesHiveUtils {
       // Report error if any static partition appears after a dynamic partition
       val isDynamic = partitionColumnNames.map(partitionSpec(_).isEmpty)
       if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
-        throw new AnalysisException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3079",
+          messageParameters = Map.empty)
       }
     }
 
@@ -99,7 +102,7 @@ trait V1WritesHiveUtils {
       // during `loadDynamicPartitions`. Spark needs to write partition directories with lower-cased
       // column names in order to make `loadDynamicPartitions` work.
       attr.withName(name.toLowerCase(Locale.ROOT))
-    }
+    }.toImmutableArraySeq
   }
 
   def getOptionsWithHiveBucketWrite(bucketSpec: Option[BucketSpec]): Map[String, String] = {

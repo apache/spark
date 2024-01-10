@@ -279,6 +279,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
@@ -343,6 +344,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
@@ -400,6 +402,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
@@ -420,6 +423,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
@@ -587,6 +591,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
@@ -604,6 +609,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
@@ -621,6 +627,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
@@ -638,6 +645,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
@@ -794,6 +802,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal1`",
@@ -843,6 +852,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal2`",
@@ -892,6 +902,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal3`",
@@ -941,6 +952,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal4`",
@@ -958,6 +970,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal5`",

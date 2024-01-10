@@ -182,7 +182,7 @@ final class OneVsRestModel private[ml] (
     if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
       logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
         " because no output columns were set.")
-      return dataset.toDF
+      return dataset.toDF()
     }
 
     val isProbModel = models.head.isInstanceOf[ProbabilisticClassificationModel[_, _]]
@@ -213,9 +213,10 @@ final class OneVsRestModel private[ml] (
         tmpModel.asInstanceOf[ProbabilisticClassificationModel[_, _]].setProbabilityCol("")
       }
 
+      import org.apache.spark.util.ArrayImplicits._
       tmpModel.transform(df)
         .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
-        .select(columns: _*)
+        .select(columns.toImmutableArraySeq: _*)
     }
 
     if (handlePersistence) {

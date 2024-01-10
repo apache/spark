@@ -47,6 +47,7 @@ function renderPlanViz() {
     .attr("ry", "5");
 
   setupLayoutForSparkPlanCluster(g, svg);
+  setupSelectionForSparkPlanNode(g);
   setupTooltipForSparkPlanNode(g);
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
@@ -268,4 +269,46 @@ function togglePlanViz() { // eslint-disable-line no-unused-vars
   } else {
     planVizContainer().style("display", "none");
   }
+}
+
+/*
+ * Light up the selected node and its linked nodes and edges.
+ */
+function setupSelectionForSparkPlanNode(g) {
+  const linkedNodes = new Map();
+  const linkedEdges = new Map();
+
+  g.edges().forEach(function (e) {
+    const edge = g.edge(e);
+    const from = g.node(e.v);
+    const to = g.node(e.w);
+    collectLinks(linkedNodes, from.id, to.id);
+    collectLinks(linkedNodes, to.id, from.id);
+    collectLinks(linkedEdges, from.id, edge.arrowheadId);
+    collectLinks(linkedEdges, to.id, edge.arrowheadId);
+  });
+
+  linkedNodes.forEach((linkedNodes, selectNode) => {
+    d3.select("#" + selectNode).on("click", () => {
+      planVizContainer().selectAll(".selected").classed("selected", false);
+      planVizContainer().selectAll(".linked").classed("linked", false);
+      d3.select("#" + selectNode + " rect").classed("selected", true);
+      linkedNodes.forEach((linkedNode) => {
+        d3.select("#" + linkedNode + " rect").classed("linked", true);
+      });
+      linkedEdges.get(selectNode).forEach((linkedEdge) => {
+        const arrowHead = d3.select("#" + linkedEdge + " path");
+        arrowHead.classed("linked", true);
+        const arrowShaft = $(arrowHead.node()).parents("g.edgePath").children("path");
+        arrowShaft.addClass("linked");
+      });
+    });
+  });
+}
+
+function collectLinks(map, key, value) {
+  if (!map.has(key)) {
+    map.set(key, new Set());
+  }
+  map.get(key).add(value);
 }

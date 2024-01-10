@@ -899,14 +899,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
   test("Leaf expression as aggregate expressions should be eligible to lift up") {
     // literal
     sql(s"select 1, avg(salary) as m, m + 1 from $testTable group by dept")
-      .queryExecution.assertAnalyzed
+      .queryExecution.assertAnalyzed()
     // leaf expression current_date, now and etc
     sql(s"select current_date(), max(salary) as m, m + 1 from $testTable group by dept")
-      .queryExecution.assertAnalyzed
+      .queryExecution.assertAnalyzed()
     sql("select dateadd(month, 5, current_date()), min(salary) as m, m + 1 as n " +
-      s"from $testTable group by dept").queryExecution.assertAnalyzed
+      s"from $testTable group by dept").queryExecution.assertAnalyzed()
     sql(s"select now() as n, dateadd(day, -1, n) from $testTable group by name")
-      .queryExecution.assertAnalyzed
+      .queryExecution.assertAnalyzed()
   }
 
   test("Aggregate expressions containing no aggregate or grouping expressions still resolves") {

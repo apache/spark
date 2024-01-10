@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time._
+import java.time.format.TextStyle
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields, Temporal}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
@@ -70,7 +71,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   // the "GMT" string. For example, it returns 2000-01-01T00:00+01:00 for 2000-01-01T00:00GMT+01:00.
   def cleanLegacyTimestampStr(s: UTF8String): UTF8String = s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
 
-  def doubleToTimestampAnsi(d: Double, context: SQLQueryContext): Long = {
+  def doubleToTimestampAnsi(d: Double, context: QueryContext): Long = {
     if (d.isNaN || d.isInfinite) {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(d, TimestampType, context)
     } else {
@@ -91,7 +92,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   def stringToTimestampWithoutTimeZoneAnsi(
       s: UTF8String,
-      context: SQLQueryContext): Long = {
+      context: QueryContext): Long = {
     stringToTimestampWithoutTimeZone(s, true).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampNTZType, context)
     }
@@ -194,6 +195,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def dateAddMonths(days: Int, months: Int): Int = {
     localDateToDays(daysToLocalDate(days).plusMonths(months))
+  }
+
+  /**
+   * Returns the three-letter abbreviated month name for the given number of days since 1970-01-01.
+   */
+  def getMonthName(days: Int): UTF8String = {
+    val monthName = Month
+      .of(getMonth(days))
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
+
+    UTF8String.fromString(monthName)
   }
 
   /**
@@ -505,11 +517,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Obtains the current instant as microseconds since the epoch at the UTC time zone.
-   */
-  def currentTimestamp(): Long = instantToMicros(Instant.now())
-
-  /**
    * Obtains the current date as days since the epoch in the specified time-zone.
    */
   def currentDate(zoneId: ZoneId): Int = localDateToDays(LocalDate.now(zoneId))
@@ -560,7 +567,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
     extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
-      case "now" => Some(currentTimestamp())
+      case "now" => Some(instantToMicros(Instant.now()))
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
       case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
       case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
@@ -678,11 +685,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
       }
     } catch {
       case _: scala.MatchError =>
-        throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+        throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
       case _: ArithmeticException | _: DateTimeException =>
         throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
       case e: Throwable =>
-        throw new IllegalStateException(s"Failure of 'timestampAdd': ${e.getMessage}")
+        throw SparkException.internalError(s"Failure of 'timestampAdd': ${e.getMessage}")
     }
   }
 
@@ -716,7 +723,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val endLocalTs = getLocalDateTime(endTs, zoneId)
       timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
     } else {
-      throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+      throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
     }
   }
 }

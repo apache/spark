@@ -168,11 +168,11 @@ class KryoSerializer(conf: SparkConf)
     // GenericDatum(Reader|Writer).
     def registerAvro[T <: GenericContainer]()(implicit ct: ClassTag[T]): Unit =
       kryo.register(ct.runtimeClass, new GenericAvroSerializer[T](avroSchemas))
-    registerAvro[GenericRecord]
-    registerAvro[GenericData.Record]
-    registerAvro[GenericData.Array[_]]
-    registerAvro[GenericData.EnumSymbol]
-    registerAvro[GenericData.Fixed]
+    registerAvro[GenericRecord]()
+    registerAvro[GenericData.Record]()
+    registerAvro[GenericData.Array[_]]()
+    registerAvro[GenericData.EnumSymbol]()
+    registerAvro[GenericData.Fixed]()
 
     // Use the default classloader when calling the user registrator.
     Utils.withContextClassLoader(classLoader) {

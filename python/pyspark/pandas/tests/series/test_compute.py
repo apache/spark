@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 from itertools import product
 
 import numpy as np
@@ -28,14 +27,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesComputeMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_duplicated(self):
         for pser in [
             pd.Series(["beetle", None, "beetle", None, "lama", "beetle"], name="objects"),

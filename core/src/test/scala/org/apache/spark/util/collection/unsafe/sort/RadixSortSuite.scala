@@ -136,7 +136,7 @@ class RadixSortSuite extends SparkFunSuite {
   def randomBitMask(rand: Random): Long = {
     var tmp = ~0L
     for (i <- 0 to rand.nextInt(5)) {
-      tmp &= rand.nextLong
+      tmp &= rand.nextLong()
     }
     tmp
   }

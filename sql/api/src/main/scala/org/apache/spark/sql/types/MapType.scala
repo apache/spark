@@ -76,6 +76,14 @@ case class MapType(
   override private[spark] def asNullable: MapType =
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
 
+  /**
+   * Returns the same data type but set all nullability fields are true
+   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   *
+   * @since 4.0.0
+   */
+  def toNullable: MapType = asNullable
+
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
   }

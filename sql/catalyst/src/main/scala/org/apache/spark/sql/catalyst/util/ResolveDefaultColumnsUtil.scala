@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -85,7 +86,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
         } else {
           field
         }
-      }
+      }.toImmutableArraySeq
       StructType(newFields)
     } else {
       tableSchema
@@ -374,7 +375,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
    * above, for convenience.
    */
   def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
-    Array.fill[Boolean](existenceDefaultValues(schema).size)(true)
+    Array.fill[Boolean](existenceDefaultValues(schema).length)(true)
   }
 
   /**
@@ -383,7 +384,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
    */
   def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
     val defaultValues = existenceDefaultValues(schema)
-    for (i <- 0 until defaultValues.size) {
+    for (i <- 0 until defaultValues.length) {
       bitmask(i) = (defaultValues(i) != null)
     }
   }
@@ -395,7 +396,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       bitmask: Array[Boolean]): Unit = {
     val existingValues = existenceDefaultValues(schema)
     if (hasExistenceDefaultValues(schema)) {
-      for (i <- 0 until existingValues.size) {
+      for (i <- 0 until existingValues.length) {
         if (bitmask(i)) {
           row.update(i, existingValues(i))
         }
@@ -450,7 +451,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
     override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
     override def name(): String = CatalogManager.SESSION_CATALOG_NAME
     override def listFunctions(namespace: Array[String]): Array[Identifier] = {
-      throw new UnsupportedOperationException()
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3111")
     }
     override def loadFunction(ident: Identifier): UnboundFunction = {
       V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))

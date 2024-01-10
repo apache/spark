@@ -57,7 +57,7 @@ private[spark] class BarrierCoordinator(
   private val listener = new SparkListener {
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
       val stageInfo = stageCompleted.stageInfo
-      val barrierId = ContextBarrierId(stageInfo.stageId, stageInfo.attemptNumber)
+      val barrierId = ContextBarrierId(stageInfo.stageId, stageInfo.attemptNumber())
       // Clear ContextBarrierState from a finished stage attempt.
       cleanupBarrierStage(barrierId)
     }

@@ -14,17 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Any, Dict, Union, List, Tuple, Callable, Optional
+import math
+
+import torch
+import torch.nn as torch_nn
+import numpy as np
+import pandas as pd
 
 from pyspark import keyword_only
 from pyspark.ml.connect.base import _PredictorParams
-
 from pyspark.ml.param.shared import HasProbabilityCol
-
-from typing import Any, Dict, Union, List, Tuple, Callable, Optional
-import numpy as np
-import pandas as pd
-import math
-
 from pyspark.sql import DataFrame
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
@@ -41,10 +41,7 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.ml.connect.base import Predictor, PredictionModel
 from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
-from pyspark.sql.functions import lit, count, countDistinct
-
-import torch
-import torch.nn as torch_nn
+from pyspark.sql import functions as sf
 
 
 class _LogisticRegressionParams(
@@ -232,18 +229,20 @@ class LogisticRegression(
             num_train_workers
         )
 
-        # TODO: check label values are in range of [0, num_classes)
-        num_rows, num_classes = dataset.agg(
-            count(lit(1)), countDistinct(self.getLabelCol())
+        num_rows, num_features, classes = dataset.select(
+            sf.count(sf.lit(1)),
+            sf.first(sf.array_size(self.getFeaturesCol())),
+            sf.collect_set(self.getLabelCol()),
         ).head()  # type: ignore[misc]
+
+        num_classes = len(classes)
+        if num_classes < 2:
+            raise ValueError("Training dataset distinct labels must >= 2.")
+        if any(c not in range(0, num_classes) for c in classes):
+            raise ValueError("Training labels must be integers in [0, numClasses).")
 
         num_batches_per_worker = math.ceil(num_rows / num_train_workers / batch_size)
         num_samples_per_worker = num_batches_per_worker * batch_size
-
-        num_features = len(dataset.select(self.getFeaturesCol()).head()[0])  # type: ignore[index]
-
-        if num_classes < 2:
-            raise ValueError("Training dataset distinct labels must >= 2.")
 
         # TODO: support GPU.
         distributor = TorchDistributor(

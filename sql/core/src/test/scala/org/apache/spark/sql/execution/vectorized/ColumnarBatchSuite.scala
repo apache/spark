@@ -45,7 +45,8 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.util.ArrayImplicits._
 
 @ExtendedSQLTest
 class ColumnarBatchSuite extends SparkFunSuite {
@@ -1476,7 +1477,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
           case StructType(childFields) =>
-            compareStruct(childFields, r1.getStruct(ordinal, fields.length),
+            compareStruct(childFields.toImmutableArraySeq, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>
             throw new UnsupportedOperationException("Not implemented " + field.dataType)
@@ -1526,9 +1527,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
     var i = 0
     while (i < NUM_ITERS) {
       val schema = if (flatSchema) {
-        RandomDataGenerator.randomSchema(random, numFields, types)
+        RandomDataGenerator.randomSchema(random, numFields, types.toImmutableArraySeq)
       } else {
-        RandomDataGenerator.randomNestedSchema(random, numFields, types)
+        RandomDataGenerator.randomNestedSchema(random, numFields, types.toImmutableArraySeq)
       }
       val rows = mutable.ArrayBuffer.empty[Row]
       var j = 0
@@ -1649,6 +1650,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         StructField("int_to_int", MapType(IntegerType, IntegerType)) ::
         StructField("binary", BinaryType) ::
         StructField("ts_ntz", TimestampNTZType) ::
+        StructField("variant", VariantType) ::
         Nil)
     var mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     mapBuilder.put(1, 10)
@@ -1662,6 +1664,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val ts2 = DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(tsString2))
     val tsNTZ2 =
       DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(tsString2.replace(" ", "T")))
+
+    val variantVal1 = new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5))
+    val variantVal2 = new VariantVal(Array[Byte](6), Array[Byte](7, 8))
 
     val row1 = new GenericInternalRow(Array[Any](
       UTF8String.fromString("a string"),
@@ -1680,7 +1685,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
       mapBuilder.build(),
       "Spark SQL".getBytes(),
-      tsNTZ1
+      tsNTZ1,
+      variantVal1
     ))
 
     mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
@@ -1703,10 +1709,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
       mapBuilder.build(),
       "Parquet".getBytes(),
-      tsNTZ2
+      tsNTZ2,
+      variantVal2
     ))
 
     val row3 = new GenericInternalRow(Array[Any](
+      null,
       null,
       null,
       null,
@@ -1851,6 +1859,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(16).getLong(0) == tsNTZ1)
       assert(columns(16).getLong(1) == tsNTZ2)
       assert(columns(16).isNullAt(2))
+
+      assert(columns(17).dataType() == VariantType)
+      assert(columns(17).getVariant(0).debugString() == variantVal1.debugString())
+      assert(columns(17).getVariant(1).debugString() == variantVal2.debugString())
+      assert(columns(17).isNullAt(2))
+      assert(columns(17).getChild(0).isNullAt(2))
+      assert(columns(17).getChild(1).isNullAt(2))
     } finally {
       batch.close()
     }

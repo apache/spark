@@ -87,7 +87,7 @@ private[hive] class SparkGetColumnsOperation(
     }.toMap
 
     if (isAuthV2Enabled) {
-      val privObjs = getPrivObjs(db2Tabs).toSeq.asJava
+      val privObjs = getPrivObjs(db2Tabs).asJava
       authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr)
     }
 

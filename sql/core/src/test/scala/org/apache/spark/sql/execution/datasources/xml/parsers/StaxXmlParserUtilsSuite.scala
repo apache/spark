@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.datasources.xml.parsers
 
 import java.io.StringReader
 import javax.xml.stream.{XMLInputFactory, XMLStreamConstants}
-import javax.xml.stream.events.Attribute
 
 import scala.jdk.CollectionConverters._
 
@@ -52,7 +51,7 @@ final class StaxXmlParserUtilsSuite extends SparkFunSuite with BeforeAndAfterAll
     val event =
       StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
     val attributes =
-      event.asStartElement().getAttributes.asScala.map(_.asInstanceOf[Attribute]).toArray
+      event.asStartElement().getAttributes.asScala.toArray
     val valuesMap =
       StaxXmlParserUtils.convertAttributesToValuesMap(attributes, new XmlOptions())
     assert(valuesMap === Map(s"${XmlOptions.DEFAULT_ATTRIBUTE_PREFIX}id" -> "2"))
@@ -64,7 +63,7 @@ final class StaxXmlParserUtilsSuite extends SparkFunSuite with BeforeAndAfterAll
     val parser = factory.createXMLEventReader(new StringReader(input.toString))
     // Skip until </id>
     StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.END_ELEMENT)
-    val xmlString = StaxXmlParserUtils.currentStructureAsString(parser)
+    val xmlString = StaxXmlParserUtils.currentStructureAsString(parser, "ROW", new XmlOptions())
     val expected = <info>
       <name>Sam Mad Dog Smith</name><amount><small>1</small><large>9</large></amount></info>
     assert(xmlString === expected.toString())

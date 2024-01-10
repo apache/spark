@@ -102,7 +102,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
 
     val content =
-      <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
+      <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
       <div>
         {linkToMaster}
         {range}

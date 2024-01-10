@@ -94,6 +94,9 @@ if TYPE_CHECKING:
     import socket
     import io
 
+    from py4j.java_gateway import JavaObject
+    from py4j.java_collections import JavaArray
+
     from pyspark._typing import NonUDFType
     from pyspark._typing import S, NumberOrArray
     from pyspark.context import SparkContext
@@ -107,6 +110,8 @@ if TYPE_CHECKING:
         PandasCogroupedMapUDFType,
         ArrowMapIterUDFType,
         PandasGroupedMapUDFWithStateType,
+        ArrowGroupedMapUDFType,
+        ArrowCogroupedMapUDFType,
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
@@ -118,9 +123,6 @@ if TYPE_CHECKING:
         SQLBatchedUDFType,
         SQLTableUDFType,
     )
-
-    from py4j.java_gateway import JavaObject
-    from py4j.java_collections import JavaArray
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -158,6 +160,8 @@ class PythonEvalType:
     SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
+    SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
+    SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301

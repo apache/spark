@@ -411,11 +411,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"),
       new JavaStrLen(new JavaStrLenNoImpl))
-    // TODO assign a error-classes name
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
-      errorClass = null,
-      parameters = Map.empty,
+      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      parameters = Map("scalarFunc" -> "strlen"),
       context = ExpectedContext(
         fragment = "testcat.ns.strlen('abc')",
         start = 7,
@@ -446,11 +445,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("SPARK-35390: scalar function w/ mismatch type parameters from magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMismatchMagic))
-    // TODO assign a error-classes name
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.add(1L, 2L)").collect()),
-      errorClass = null,
-      parameters = Map.empty,
+      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      parameters = Map("scalarFunc" -> "long_add_mismatch_magic"),
       context = ExpectedContext(
         fragment = "testcat.ns.add(1L, 2L)",
         start = 7,

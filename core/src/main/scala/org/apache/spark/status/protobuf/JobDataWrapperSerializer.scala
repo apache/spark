@@ -107,6 +107,6 @@ private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWr
       numCompletedStages = info.getNumCompletedStages,
       numSkippedStages = info.getNumSkippedStages,
       numFailedStages = info.getNumFailedStages,
-      killedTasksSummary = info.getKillTasksSummaryMap.asScala.mapValues(_.toInt).toMap)
+      killedTasksSummary = info.getKillTasksSummaryMap.asScala.toMap.transform((_, v) => v.toInt))
   }
 }

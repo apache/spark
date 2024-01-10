@@ -42,8 +42,8 @@ class GroupStateSuite extends SparkFunSuite {
     assert(testState.get === prodState.get)
     assert(testState.getTimeoutTimestampMs === prodState.getTimeoutTimestampMs)
     assert(testState.hasTimedOut === prodState.hasTimedOut)
-    assert(testState.getCurrentProcessingTimeMs === prodState.getCurrentProcessingTimeMs)
-    assert(testState.getCurrentWatermarkMs === prodState.getCurrentWatermarkMs)
+    assert(testState.getCurrentProcessingTimeMs() === prodState.getCurrentProcessingTimeMs())
+    assert(testState.getCurrentWatermarkMs() === prodState.getCurrentWatermarkMs())
 
     testState.update(6)
     prodState.update(6)
@@ -403,7 +403,8 @@ class GroupStateSuite extends SparkFunSuite {
 
         // Tests for getCurrentProcessingTimeMs in batch queries
         val currentTime = System.currentTimeMillis()
-        assert(batchState(timeoutConf, watermarkPresent).getCurrentProcessingTimeMs >= currentTime)
+        assert(
+          batchState(timeoutConf, watermarkPresent).getCurrentProcessingTimeMs() >= currentTime)
       }
     }
   }

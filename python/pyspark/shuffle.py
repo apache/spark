@@ -24,8 +24,8 @@ import itertools
 import operator
 import random
 import sys
-
 import heapq
+
 from pyspark.serializers import (
     BatchedSerializer,
     CPickleSerializer,

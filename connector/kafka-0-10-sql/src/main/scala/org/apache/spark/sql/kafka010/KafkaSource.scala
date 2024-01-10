@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A [[Source]] that reads data from Kafka using the following design.
@@ -180,7 +181,7 @@ private[kafka010] class KafkaSource(
     latestPartitionOffsets = if (latest.isEmpty) None else Some(latest)
 
     val limits: Seq[ReadLimit] = limit match {
-      case rows: CompositeReadLimit => rows.getReadLimits
+      case rows: CompositeReadLimit => rows.getReadLimits.toImmutableArraySeq
       case rows => Seq(rows)
     }
 

@@ -433,9 +433,6 @@ class FrameComputeMixin:
 
 
 class FrameComputeTests(FrameComputeMixin, ComparisonTestBase, SQLTestUtils):
-    def test_quantile(self):
-        super().test_quantile()
-
     pass
 
 

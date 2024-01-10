@@ -213,11 +213,11 @@ object ArrowDeserializers {
 
       case (IterableEncoder(tag, element, _, _), v: ListVector) =>
         val deserializer = deserializerFor(element, v.getDataVector, timeZoneId)
-        if (isSubClass(Classes.WRAPPED_ARRAY, tag)) {
-          // Wrapped array is a bit special because we need to use an array of the element type.
+        if (isSubClass(Classes.MUTABLE_ARRAY_SEQ, tag)) {
+          // mutable ArraySeq is a bit special because we need to use an array of the element type.
           // Some parts of our codebase (unfortunately) rely on this for type inference on results.
-          new VectorFieldDeserializer[mutable.WrappedArray[Any], ListVector](v) {
-            def value(i: Int): mutable.WrappedArray[Any] = {
+          new VectorFieldDeserializer[mutable.ArraySeq[Any], ListVector](v) {
+            def value(i: Int): mutable.ArraySeq[Any] = {
               val array = getArray(vector, i, deserializer)(element.clsTag)
               ScalaCollectionUtils.wrap(array)
             }

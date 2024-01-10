@@ -282,8 +282,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof ArrayRecord)) return false;
-      ArrayRecord other = (ArrayRecord) obj;
+      if (!(obj instanceof ArrayRecord other)) return false;
       return (other.id == this.id) && Objects.equals(other.intervals, this.intervals) &&
               Arrays.equals(other.ints, ints);
     }
@@ -330,8 +329,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof MapRecord)) return false;
-      MapRecord other = (MapRecord) obj;
+      if (!(obj instanceof MapRecord other)) return false;
       return (other.id == this.id) && Objects.equals(other.intervals, this.intervals);
     }
 
@@ -376,8 +374,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof Interval)) return false;
-      Interval other = (Interval) obj;
+      if (!(obj instanceof Interval other)) return false;
       return (other.startTime == this.startTime) && (other.endTime == this.endTime);
     }
 
@@ -635,10 +632,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
 
     public boolean equals(Object o) {
-      if (!(o instanceof Item)) {
+      if (!(o instanceof Item other)) {
         return false;
       }
-      Item other = (Item) o;
       if (other.getK().equals(k) && other.getV() == v) {
         return true;
       }

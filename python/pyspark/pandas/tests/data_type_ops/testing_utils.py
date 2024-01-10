@@ -22,14 +22,11 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.pandas.typedef import extension_dtypes
-
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-
 from pyspark.testing.pandasutils import ComparisonTestBase
 
 if extension_dtypes_available:

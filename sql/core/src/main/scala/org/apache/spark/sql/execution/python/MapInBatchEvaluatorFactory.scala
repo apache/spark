@@ -36,7 +36,7 @@ class MapInBatchEvaluatorFactory(
     sessionLocalTimeZone: String,
     largeVarTypes: Boolean,
     pythonRunnerConf: Map[String, String],
-    pythonMetrics: Map[String, SQLMetric],
+    val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
     extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 

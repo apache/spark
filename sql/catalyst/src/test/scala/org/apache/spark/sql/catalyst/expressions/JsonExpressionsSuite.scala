@@ -269,7 +269,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     Nil
 
   private def checkJsonTuple(jt: JsonTuple, expected: InternalRow): Unit = {
-    assert(jt.eval(null).toSeq.head === expected)
+    assert(jt.eval(null).iterator.to(Seq).head === expected)
   }
 
   test("json_tuple escaping") {

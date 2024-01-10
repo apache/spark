@@ -704,11 +704,11 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       List<List<T>> expected, List<List<T>> actual) {
     List<Set<T>> expectedSets = new ArrayList<>();
     for (List<T> list: expected) {
-      expectedSets.add(Collections.unmodifiableSet(new HashSet<>(list)));
+      expectedSets.add(Set.copyOf(list));
     }
     List<Set<T>> actualSets = new ArrayList<>();
     for (List<T> list: actual) {
-      actualSets.add(Collections.unmodifiableSet(new HashSet<>(list)));
+      actualSets.add(Set.copyOf(list));
     }
     Assertions.assertEquals(expectedSets, actualSets);
   }

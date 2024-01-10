@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.sources.{And, Filter}
 import org.apache.spark.sql.types.{AtomicType, BinaryType, DataType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Methods that can be shared when upgrading the built-in Hive.
@@ -60,7 +61,7 @@ trait OrcFiltersBase {
       fields.flatMap { f =>
         f.dataType match {
           case st: StructType =>
-            getPrimitiveFields(st.fields, parentFieldNames :+ f.name)
+            getPrimitiveFields(st.fields.toImmutableArraySeq, parentFieldNames :+ f.name)
           case BinaryType => None
           case _: AtomicType =>
             val fieldName = (parentFieldNames :+ f.name).quoted
@@ -71,7 +72,7 @@ trait OrcFiltersBase {
       }
     }
 
-    val primitiveFields = getPrimitiveFields(schema.fields)
+    val primitiveFields = getPrimitiveFields(schema.fields.toImmutableArraySeq)
     if (caseSensitive) {
       primitiveFields.toMap
     } else {
@@ -81,8 +82,8 @@ trait OrcFiltersBase {
       val dedupPrimitiveFields = primitiveFields
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
-        .mapValues(_.head._2)
-      CaseInsensitiveMap(dedupPrimitiveFields.toMap)
+        .transform((_, v) => v.head._2)
+      CaseInsensitiveMap(dedupPrimitiveFields)
     }
   }
 }

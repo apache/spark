@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.connect.proto.{NAReplace, Relation}
 import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}
 import org.apache.spark.connect.proto.NAReplace.Replacement
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Functionality for working with missing data in `DataFrame`s.
@@ -57,7 +58,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    *
    * @since 3.4.0
    */
-  def drop(cols: Array[String]): DataFrame = drop(cols.toSeq)
+  def drop(cols: Array[String]): DataFrame = drop(cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that drops rows containing any null or NaN values
@@ -76,7 +77,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    *
    * @since 3.4.0
    */
-  def drop(how: String, cols: Array[String]): DataFrame = drop(how, cols.toSeq)
+  def drop(how: String, cols: Array[String]): DataFrame = drop(how, cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that drops rows containing null or NaN values in
@@ -107,7 +108,8 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    *
    * @since 3.4.0
    */
-  def drop(minNonNulls: Int, cols: Array[String]): DataFrame = drop(minNonNulls, cols.toSeq)
+  def drop(minNonNulls: Int, cols: Array[String]): DataFrame =
+    drop(minNonNulls, cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that drops rows containing less than `minNonNulls`
@@ -152,7 +154,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    *
    * @since 3.4.0
    */
-  def fill(value: Long, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+  def fill(value: Long, cols: Array[String]): DataFrame = fill(value, cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
@@ -179,7 +181,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    *
    * @since 3.4.0
    */
-  def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+  def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
@@ -206,7 +208,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    *
    * @since 3.4.0
    */
-  def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+  def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified string
@@ -233,7 +235,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    *
    * @since 3.4.0
    */
-  def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+  def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified boolean
@@ -374,7 +376,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def replace[T](cols: Array[String], replacement: java.util.Map[T, T]): DataFrame = {
-    replace(cols.toSeq, replacement.asScala.toMap)
+    replace(cols.toImmutableArraySeq, replacement.asScala.toMap)
   }
 
   /**

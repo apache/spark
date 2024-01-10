@@ -17,7 +17,6 @@
 
 import datetime
 import unittest
-from distutils.version import LooseVersion
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype

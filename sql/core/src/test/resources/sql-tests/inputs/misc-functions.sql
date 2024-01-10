@@ -21,21 +21,20 @@ CREATE TEMPORARY VIEW tbl_misc AS SELECT * FROM (VALUES (1), (8), (2)) AS T(v);
 SELECT raise_error('error message');
 SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc;
 
-SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`'));
--- Error class is case insensitive
-SELECT raise_error('VIEW_NOT_FOund', Map('relationName', '`v`'));
--- parameters are case sensitive
-SELECT raise_error('VIEW_NOT_FOund', Map('relationNAME', '`v`'));
--- Too few parameters
-SELECT raise_error('VIEW_NOT_FOUND', Map());
 -- Too many parameters
-SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`', 'totallymadeup', '5'));
+SELECT raise_error('error message', Map());
 
--- Empty parameter list
-SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', Map());
-SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', NULL);
+-- Too many parameters
+SELECT raise_error('error message', 'some args');
 
-SELECT raise_error(NULL, NULL);
+-- Too few parameters
+SELECT raise_error();
+
+-- Passing null as message
+SELECT raise_error(NULL);
+
+-- Passing non-string type
+SELECT raise_error(1);
 
 -- Check legacy config disables printing of [USER_RAISED_EXCEPTION]
 SET spark.sql.legacy.raiseErrorWithoutErrorClass=true;

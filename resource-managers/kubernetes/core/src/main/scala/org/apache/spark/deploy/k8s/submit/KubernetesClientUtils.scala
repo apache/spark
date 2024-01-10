@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] object KubernetesClientUtils extends Logging {
 
@@ -134,7 +135,6 @@ private[spark] object KubernetesClientUtils extends Logging {
           case e: MalformedInputException =>
             logWarning(
               s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
-            None
         } finally {
           source.close()
         }
@@ -171,7 +171,7 @@ private[spark] object KubernetesClientUtils extends Logging {
     val confFiles: Seq[File] = {
       val dir = new File(confDir)
       if (dir.isDirectory) {
-        dir.listFiles.filter(x => fileFilter(x)).toSeq
+        dir.listFiles.filter(x => fileFilter(x)).toImmutableArraySeq
       } else {
         Nil
       }

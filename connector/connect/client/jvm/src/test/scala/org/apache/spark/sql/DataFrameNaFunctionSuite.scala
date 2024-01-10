@@ -293,7 +293,7 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
     val df = createDFWithNestedColumns
 
     // Rows with the specified nested columns whose null values are dropped.
-    assert(df.count == 3)
+    assert(df.count() == 3)
     checkAnswer(df.na.drop("any", Seq("c1.c1-1")), Seq(Row(Row("b1", "b2"))))
   }
 

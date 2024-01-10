@@ -75,14 +75,9 @@ object OrcOptions extends DataSourceOptions {
   val COMPRESSION = newOption("compression")
 
   // The ORC compression short names
-  private val shortOrcCompressionCodecNames = Map(
-    "none" -> "NONE",
-    "uncompressed" -> "NONE",
-    "snappy" -> "SNAPPY",
-    "zlib" -> "ZLIB",
-    "lzo" -> "LZO",
-    "lz4" -> "LZ4",
-    "zstd" -> "ZSTD")
+  private val shortOrcCompressionCodecNames = OrcCompressionCodec.values().map {
+    mapper => mapper.lowerCaseName() -> mapper.getCompressionKind.name()
+  }.toMap
 
   def getORCCompressionCodecName(name: String): String = shortOrcCompressionCodecNames(name)
 }

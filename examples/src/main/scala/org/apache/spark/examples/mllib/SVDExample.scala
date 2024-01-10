@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import scala.collection.immutable
+
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 // $example on$
@@ -44,7 +46,7 @@ object SVDExample {
       Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
 
-    val rows = sc.parallelize(data)
+    val rows = sc.parallelize(immutable.ArraySeq.unsafeWrapArray(data))
 
     val mat: RowMatrix = new RowMatrix(rows)
 

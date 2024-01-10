@@ -108,6 +108,7 @@ ability to generate logical and physical plan for a given query using
  * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
  * [SET VAR](sql-ref-syntax-aux-set-var.html)
+ * [EXECUTE IMMEDIATE](sql-ref-syntax-aux-exec-imm.html)
  * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
  * [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.html)
  * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)

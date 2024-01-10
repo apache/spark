@@ -24,6 +24,7 @@ import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
@@ -34,6 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
@@ -47,6 +49,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 
   def changelogVersionsPresent(dir: File): Seq[Long] = {
@@ -54,6 +57,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".changelog"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 }
 
@@ -240,6 +244,35 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("SPARK-45419: Do not reuse SST files" +
+    " in different RocksDB instances") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 2) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 3.zip
+      db.doMaintenance()
+      // Roll back to version 1 and start to process data.
+      for (version <- 1 to 3) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // Upload snapshot 4.zip, should not reuse the SST files in 3.zip
+      db.doMaintenance()
+    }
+
+    withDB(remoteDir, conf = conf) { db =>
+      // Open the db to verify that the state in 4.zip is no corrupted.
+      db.load(4)
+    }
+  }
+
   // A rocksdb instance with changelog checkpointing enabled should be able to load
   // an existing checkpoint without changelog.
   testWithChangelogCheckpointingEnabled(
@@ -341,6 +374,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(version, readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
+    }
+  }
+
+  test("RocksDB: compression conf") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy(compression = "zstd")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
+    }
+
+    // Test the default is LZ4
+    withDB(remoteDir, conf = RocksDBConf().copy()) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
   }
 
@@ -803,7 +851,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val file2 = new File(dir, "json")
       val json2 = """{"sstFiles":[],"numKeys":0}"""
-      FileUtils.write(file2, s"v2\n$json2")
+      FileUtils.write(file2, s"v2\n$json2", Charset.defaultCharset)
       val e = intercept[SparkException] {
         RocksDBCheckpointMetadata.readFromFile(file2)
       }
@@ -874,13 +922,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir) { db =>
-        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
         db.load(0)
         db.put("a", "1") // put also triggers a db get
         db.get("a") // this is found in-memory writebatch - no get triggered in db
         db.get("b") // key doesn't exists - triggers db get
         db.commit()
-        verifyMetrics(putCount = 1, getCount = 3, metrics = db.metrics)
+        verifyMetrics(putCount = 1, getCount = 3, metrics = db.metricsOpt.get)
 
         db.load(1)
         db.put("b", "2") // put also triggers a db get
@@ -888,7 +935,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.get("c") // key doesn't exists - triggers db get
         assert(iterator(db).toSet === Set(("a", "1"), ("b", "2")))
         db.commit()
-        verifyMetrics(putCount = 1, getCount = 3, iterCountPositive = true, db.metrics)
+        verifyMetrics(putCount = 1, getCount = 3, iterCountPositive = true, db.metricsOpt.get)
       }
     }
 
@@ -896,19 +943,18 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir, conf = dbConf.copy(resetStatsOnLoad = false)) { db =>
-        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
         db.load(0)
         db.put("a", "1") // put also triggers a db get
         db.commit()
         // put and get counts are cumulative
-        verifyMetrics(putCount = 1, getCount = 1, metrics = db.metrics)
+        verifyMetrics(putCount = 1, getCount = 1, metrics = db.metricsOpt.get)
 
         db.load(1)
         db.put("b", "2") // put also triggers a db get
         db.get("a")
         db.commit()
         // put and get counts are cumulative: existing get=1, put=1: new get=2, put=1
-        verifyMetrics(putCount = 2, getCount = 3, metrics = db.metrics)
+        verifyMetrics(putCount = 2, getCount = 3, metrics = db.metricsOpt.get)
       }
     }
 
@@ -926,7 +972,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.put("b", "25")
         db.commit()
 
-        val metrics = db.metrics
+        val metrics = db.metricsOpt.get
         assert(metrics.nativeOpsHistograms("compaction").count > 0)
         assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
         assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
@@ -1011,6 +1057,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  test("Verify that fallocate is allowed by default") {
+     val sqlConf = new SQLConf
+     val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+     assert(dbConf.allowFAllocate == true)
+  }
+
  /** RocksDB memory management tests for bounded memory usage */
   test("Memory mgmt - invalid config") {
     withTempDir { dir =>
@@ -1065,7 +1117,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
-              db.getWriteBufferManagerAndCache
+              db.getWriteBufferManagerAndCache()
             }
 
             val remoteDir2 = dir2.getCanonicalPath
@@ -1073,7 +1125,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
-              db.getWriteBufferManagerAndCache
+              db.getWriteBufferManagerAndCache()
             }
 
             if (boundedMemoryUsage == "true") {
@@ -1140,13 +1192,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.put("a", "5")
         db.put("b", "5")
 
-        assert(db.metrics.numUncommittedKeys === 2)
-        assert(db.metrics.numCommittedKeys === 0)
-
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === 2)
-        assert(db.metrics.numCommittedKeys === 2)
+        assert(db.metricsOpt.get.numUncommittedKeys === 2)
+        assert(db.metricsOpt.get.numCommittedKeys === 2)
       }
 
       // restart with config "trackTotalNumberOfRows = false"
@@ -1154,16 +1203,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = false)) { db =>
         db.load(curVersion)
 
-        assert(db.metrics.numUncommittedKeys === -1)
-        assert(db.metrics.numCommittedKeys === -1)
-
         db.put("b", "7")
         db.put("c", "7")
 
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === -1)
-        assert(db.metrics.numCommittedKeys === -1)
+        assert(db.metricsOpt.get.numUncommittedKeys === -1)
+        assert(db.metricsOpt.get.numCommittedKeys === -1)
       }
 
       // restart with config "trackTotalNumberOfRows = true" again
@@ -1171,19 +1217,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = true)) { db =>
         db.load(curVersion)
 
-        assert(db.metrics.numUncommittedKeys === 3)
-        assert(db.metrics.numCommittedKeys === 3)
-
         db.put("c", "8")
         db.put("d", "8")
 
-        assert(db.metrics.numUncommittedKeys === 4)
-        assert(db.metrics.numCommittedKeys === 3)
-
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === 4)
-        assert(db.metrics.numCommittedKeys === 4)
+        assert(db.metricsOpt.get.numUncommittedKeys === 4)
+        assert(db.metricsOpt.get.numCommittedKeys === 4)
       }
     }
   }
@@ -1215,7 +1255,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
-      FileUtils.write(file, "a" * length)
+      FileUtils.write(file, "a" * length, Charset.defaultCharset)
     }
   }
 
@@ -1256,6 +1296,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
     file.listFiles.filter(file => !file.getName.endsWith("crc") && !file.isDirectory)
+      .toImmutableArraySeq
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))

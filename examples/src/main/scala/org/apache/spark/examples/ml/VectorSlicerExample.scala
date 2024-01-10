@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
 object VectorSlicerExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("VectorSlicerExample")
       .getOrCreate()
 

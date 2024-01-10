@@ -80,7 +80,12 @@ public class LevelDBProvider {
         }
       }
       // if there is a version mismatch, we throw an exception, which means the service is unusable
-      checkVersion(tmpDb, version, mapper);
+      try {
+        checkVersion(tmpDb, version, mapper);
+      } catch (IOException ioe) {
+        tmpDb.close();
+        throw ioe;
+      }
     }
     return tmpDb;
   }

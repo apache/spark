@@ -285,7 +285,7 @@ class DataFrameJoinSuite extends QueryTest
   test("process outer join results using the non-nullable columns in the join input") {
     // Filter data using a non-nullable column from a right table
     val df1 = Seq((0, 0), (1, 0), (2, 0), (3, 0), (4, 0)).toDF("id", "count")
-    val df2 = Seq(Tuple1(0), Tuple1(1)).toDF("id").groupBy("id").count
+    val df2 = Seq(Tuple1(0), Tuple1(1)).toDF("id").groupBy("id").count()
     checkAnswer(
       df1.join(df2, df1("id") === df2("id"), "left_outer").filter(df2("count").isNull),
       Row(2, 0, null, null) ::

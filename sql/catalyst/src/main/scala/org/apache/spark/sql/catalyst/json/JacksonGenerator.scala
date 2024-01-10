@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * `JackGenerator` can only be initialized with a `StructType`, a `MapType` or an `ArrayType`.
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types._
  * of map. An exception will be thrown if trying to write out a struct if it is initialized with
  * a `MapType`, and vice verse.
  */
-private[sql] class JacksonGenerator(
+class JacksonGenerator(
     dataType: DataType,
     writer: Writer,
     options: JSONOptions) {
@@ -74,7 +75,8 @@ private[sql] class JacksonGenerator(
   private val gen = {
     val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
     if (options.pretty) {
-      generator.setPrettyPrinter(new DefaultPrettyPrinter(""))
+      generator.setPrettyPrinter(
+        new DefaultPrettyPrinter(PrettyPrinter.DEFAULT_SEPARATORS.withRootSeparator("")))
     }
     if (options.writeNonAsciiCharacterAsCodePoint) {
       generator.setHighestNonEscapedChar(0x7F)
@@ -283,7 +285,7 @@ private[sql] class JacksonGenerator(
    */
   def write(row: InternalRow): Unit = {
     writeObject(writeFields(
-      fieldWriters = rootFieldWriters,
+      fieldWriters = rootFieldWriters.toImmutableArraySeq,
       row = row,
       schema = dataType.asInstanceOf[StructType]))
   }

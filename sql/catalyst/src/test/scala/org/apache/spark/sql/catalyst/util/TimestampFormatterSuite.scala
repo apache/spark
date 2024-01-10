@@ -268,7 +268,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
             withClue(s"zoneId = ${zoneId.getId}") {
               val formatters = LegacyDateFormats.values.toSeq.map { legacyFormat =>
                 TimestampFormatter(
-                  TimestampFormatter.defaultPattern,
+                  TimestampFormatter.defaultPattern(),
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
@@ -486,9 +486,20 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
 
     assert(fastFormatter.parseOptional("2023-12-31 23:59:59.9990").contains(1704067199999000L))
     assert(fastFormatter.parseOptional("abc").isEmpty)
+    assert(fastFormatter.parseOptional("23012150952").isEmpty)
 
     assert(simpleFormatter.parseOptional("2023-12-31 23:59:59.9990").contains(1704067208990000L))
     assert(simpleFormatter.parseOptional("abc").isEmpty)
+    assert(simpleFormatter.parseOptional("23012150952").isEmpty)
+  }
 
+  test("SPARK-45424: do not return optional parse results when only prefix match") {
+    val formatter = new Iso8601TimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss",
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true, zoneId = DateTimeTestUtils.LA)
+    assert(formatter.parseOptional("9999-12-31 23:59:59.999").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.999", true).isEmpty)
   }
 }

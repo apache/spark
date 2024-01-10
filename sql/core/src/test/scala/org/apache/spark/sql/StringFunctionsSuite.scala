@@ -812,7 +812,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect
+        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect()
       },
       errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
@@ -879,7 +879,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "funcName" -> s"`$funcName`",
           "paramName" -> "`format`",
-          "paramType" -> "\"STRING\""))
+          "paramType" -> "\"STRING\""),
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           df2.select(func(col("input"), lit("invalid_format"))).collect()
@@ -888,7 +891,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "parameter" -> "`format`",
           "functionName" -> s"`$funcName`",
-          "invalidFormat" -> "'invalid_format'"))
+          "invalidFormat" -> "'invalid_format'"),
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"select $funcName('a', 'b', 'c')")
@@ -997,6 +1003,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("a ilike b escape '/'"), Seq(Row(true)))
     checkAnswer(df.select(ilike(col("a"), col("b"), lit('/'))), Seq(Row(true)))
+
+    val df2 = Seq(("""abc\""", """%\\""")).toDF("i", "p")
+    checkAnswer(df2.select(like(col("i"), col("p"))), Seq(Row(true)))
+    val df3 = Seq(("""\abc""", """\\abc""")).toDF("i", "p")
+    checkAnswer(df3.select(like(col("i"), col("p"))), Seq(Row(true)))
 
     checkError(
       exception = intercept[AnalysisException] {

@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class KafkaSinkSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
   protected var testUtils: KafkaTestUtils = _
@@ -364,7 +365,7 @@ class KafkaContinuousSinkSuite extends KafkaSinkStreamingSuiteBase {
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)
-      val row = new SpecificInternalRow(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
       row.update(0, data)
       val iter = Seq.fill(1000)(converter.apply(row)).iterator
       iter.foreach(writeTask.write(_))
@@ -556,7 +557,7 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
 
   test("batch - unsupported save modes") {
     testUnsupportedSaveModes((mode) =>
-      Seq(s"cannot be written with ${mode.name} mode", "does not support truncate"))
+      Seq(s"cannot be written in the \"${mode.name}\" mode", "does not support truncate"))
   }
 
   test("generic - write big data with small producer buffer") {
@@ -580,7 +581,7 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)
-      val row = new SpecificInternalRow(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
       row.update(0, data)
       val iter = Seq.fill(1000)(converter.apply(row)).iterator
       writeTask.execute(iter)

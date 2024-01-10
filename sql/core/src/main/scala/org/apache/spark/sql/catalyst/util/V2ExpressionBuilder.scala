@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
@@ -283,6 +285,27 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       } else {
         None
       }
+    case Invoke(Literal(obj, _), functionName, _, arguments, _, _, _, _) =>
+      obj match {
+        case function: ScalarFunction[_] if ScalarFunction.MAGIC_METHOD_NAME == functionName =>
+          val argumentExpressions = arguments.flatMap(generateExpression(_))
+          if (argumentExpressions.length == arguments.length) {
+            Some(new UserDefinedScalarFunc(
+              function.name(), function.canonicalName(), argumentExpressions.toArray[V2Expression]))
+          } else {
+            None
+          }
+        case _ =>
+          None
+      }
+    case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
+      val argumentExpressions = arguments.flatMap(generateExpression(_))
+      if (argumentExpressions.length == arguments.length) {
+        Some(new UserDefinedScalarFunc(
+          scalarFunc.name(), scalarFunc.canonicalName(), argumentExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
     case _ => None
   }
 
@@ -322,6 +345,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       Some(new GeneralAggregateFunc("REGR_SLOPE", isDistinct, Array(left, right)))
     case aggregate.RegrSXY(PushableExpression(left), PushableExpression(right)) =>
       Some(new GeneralAggregateFunc("REGR_SXY", isDistinct, Array(left, right)))
+    // Translate Mode if it is deterministic or reverse is defined.
+    case aggregate.Mode(PushableExpression(expr), _, _, Some(reverse)) =>
+      Some(new GeneralAggregateFunc("MODE", isDistinct,
+        Array(expr, LiteralValue(reverse, BooleanType))))
     // TODO supports other aggregate functions
     case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
       val translatedExprs = children.flatMap(PushableExpression.unapply(_))

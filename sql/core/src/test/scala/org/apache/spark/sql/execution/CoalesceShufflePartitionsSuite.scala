@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 
 class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
@@ -102,7 +103,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
         // Check the answer first.
         QueryTest.checkAnswer(
           agg,
-          spark.range(0, 20).selectExpr("id", "50 as cnt").collect())
+          spark.range(0, 20).selectExpr("id", "50 as cnt").collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
@@ -148,7 +149,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
             .union(spark.range(0, 1000).selectExpr("id % 500 as key", "id as value"))
         QueryTest.checkAnswer(
           join,
-          expectedAnswer.collect())
+          expectedAnswer.collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
@@ -199,7 +200,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
             .selectExpr("id", "2 as cnt")
         QueryTest.checkAnswer(
           join,
-          expectedAnswer.collect())
+          expectedAnswer.collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
@@ -250,7 +251,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
             .selectExpr("id % 500 as key", "2 as cnt", "id as value")
         QueryTest.checkAnswer(
           join,
-          expectedAnswer.collect())
+          expectedAnswer.collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
@@ -293,7 +294,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
             .union(spark.range(500, 1000).selectExpr("id % 500", "id as value"))
           QueryTest.checkAnswer(
             join,
-            expectedAnswer.collect())
+            expectedAnswer.collect().toImmutableArraySeq)
 
           // Then, let's make sure we do not reduce number of post shuffle partitions.
           val finalPlan = join.queryExecution.executedPlan

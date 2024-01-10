@@ -84,7 +84,7 @@ public class AuthEngineSuite {
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage corruptChallenge =
-              new AuthMessage("junk", clientChallenge.salt, clientChallenge.ciphertext);
+              new AuthMessage("junk", clientChallenge.salt(), clientChallenge.ciphertext());
       assertThrows(IllegalArgumentException.class, () -> server.response(corruptChallenge));
     }
   }
@@ -95,7 +95,7 @@ public class AuthEngineSuite {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
-      clientChallenge.salt[0] ^= 1;
+      clientChallenge.salt()[0] ^= 1;
       assertThrows(GeneralSecurityException.class, () -> server.response(clientChallenge));
     }
   }
@@ -106,7 +106,7 @@ public class AuthEngineSuite {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
-      clientChallenge.ciphertext[0] ^= 1;
+      clientChallenge.ciphertext()[0] ^= 1;
       assertThrows(GeneralSecurityException.class, () -> server.response(clientChallenge));
     }
   }
@@ -119,7 +119,7 @@ public class AuthEngineSuite {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
       AuthMessage corruptResponse =
-              new AuthMessage("junk", serverResponse.salt, serverResponse.ciphertext);
+              new AuthMessage("junk", serverResponse.salt(), serverResponse.ciphertext());
       assertThrows(IllegalArgumentException.class,
         () -> client.deriveSessionCipher(clientChallenge, corruptResponse));
     }
@@ -132,7 +132,7 @@ public class AuthEngineSuite {
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
-      serverResponse.salt[0] ^= 1;
+      serverResponse.salt()[0] ^= 1;
       assertThrows(GeneralSecurityException.class,
         () -> client.deriveSessionCipher(clientChallenge, serverResponse));
     }
@@ -145,7 +145,7 @@ public class AuthEngineSuite {
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge = client.challenge();
       AuthMessage serverResponse = server.response(clientChallenge);
-      serverResponse.ciphertext[0] ^= 1;
+      serverResponse.ciphertext()[0] ^= 1;
       assertThrows(GeneralSecurityException.class,
         () -> client.deriveSessionCipher(clientChallenge, serverResponse));
     }

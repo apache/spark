@@ -25,14 +25,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesSortMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_sort_values(self):
         pdf = pd.DataFrame({"x": [1, 2, 3, 4, 5, None, 7]}, index=np.random.rand(7))
         psdf = ps.from_pandas(pdf)

@@ -51,9 +51,11 @@ private[spark] object SparkThrowableHelper {
       messageParameters: Map[String, String],
       context: String): String = {
     val displayMessage = errorReader.getErrorMessage(errorClass, messageParameters)
+    val sqlState = getSqlState(errorClass)
+    val displaySqlState = if (sqlState == null) "" else s" SQLSTATE: $sqlState"
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
     val prefix = if (errorClass.startsWith("_LEGACY_ERROR_")) "" else s"[$errorClass] "
-    s"$prefix$displayMessage$displayQueryContext"
+    s"$prefix$displayMessage$displaySqlState$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {
@@ -112,13 +114,19 @@ private[spark] object SparkThrowableHelper {
             g.writeArrayFieldStart("queryContext")
             e.getQueryContext.foreach { c =>
               g.writeStartObject()
-              g.writeStringField("objectType", c.objectType())
-              g.writeStringField("objectName", c.objectName())
-              val startIndex = c.startIndex() + 1
-              if (startIndex > 0) g.writeNumberField("startIndex", startIndex)
-              val stopIndex = c.stopIndex() + 1
-              if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
-              g.writeStringField("fragment", c.fragment())
+              c.contextType() match {
+                case QueryContextType.SQL =>
+                  g.writeStringField("objectType", c.objectType())
+                  g.writeStringField("objectName", c.objectName())
+                  val startIndex = c.startIndex() + 1
+                  if (startIndex > 0) g.writeNumberField("startIndex", startIndex)
+                  val stopIndex = c.stopIndex() + 1
+                  if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
+                  g.writeStringField("fragment", c.fragment())
+                case QueryContextType.DataFrame =>
+                  g.writeStringField("fragment", c.fragment())
+                  g.writeStringField("callSite", c.callSite())
+              }
               g.writeEndObject()
             }
             g.writeEndArray()

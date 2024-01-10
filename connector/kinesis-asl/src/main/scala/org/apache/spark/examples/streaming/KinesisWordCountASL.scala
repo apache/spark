@@ -230,9 +230,9 @@ object KinesisWordProducerASL {
     // Iterate and put records onto the stream per the given recordPerSec and wordsPerRecord
     for (i <- 1 to 10) {
       // Generate recordsPerSec records to put onto the stream
-      val records = (1 to recordsPerSecond.toInt).foreach { recordNum =>
+      val records = (1 to recordsPerSecond).foreach { recordNum =>
         // Randomly generate wordsPerRecord number of words
-        val data = (1 to wordsPerRecord.toInt).map(x => {
+        val data = (1 to wordsPerRecord).map(x => {
           // Get a random index to a word
           val randomWordIdx = Random.nextInt(randomWords.size)
           val randomWord = randomWords(randomWordIdx)

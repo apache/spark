@@ -42,7 +42,7 @@ object TriangleCountingExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession.
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"${this.getClass.getSimpleName}")
       .getOrCreate()
     val sc = spark.sparkContext

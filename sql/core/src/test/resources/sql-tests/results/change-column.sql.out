@@ -82,6 +82,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "newName" : "`a`",
     "newType" : "\"STRING\"",
@@ -271,6 +272,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`temp_view`"
@@ -301,6 +303,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+  "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`global_temp`.`global_temp_view`"

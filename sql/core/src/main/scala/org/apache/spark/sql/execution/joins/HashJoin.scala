@@ -341,7 +341,7 @@ trait HashJoin extends JoinCodegenSupport {
           s"HashJoin should not take $x as the JoinType")
     }
 
-    val resultProj = createResultProjection
+    val resultProj = createResultProjection()
     joinedIter.map { r =>
       numOutputRows += 1
       resultProj(r)

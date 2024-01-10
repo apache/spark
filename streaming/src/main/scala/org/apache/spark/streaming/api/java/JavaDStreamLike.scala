@@ -32,6 +32,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.java.JavaDStream._
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * As a workaround for https://issues.scala-lang.org/browse/SI-8905, implementations
@@ -146,7 +147,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * an array.
    */
   def glom(): JavaDStream[JList[T]] =
-    new JavaDStream(dstream.glom().map(_.toSeq.asJava))
+    new JavaDStream(dstream.glom().map(_.toImmutableArraySeq.asJava))
 
 
   /** Return the [[org.apache.spark.streaming.StreamingContext]] associated with this DStream */

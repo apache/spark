@@ -53,7 +53,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val registeredExecutorsDB = "registeredExecutors"
 
   private val transportConf =
-    SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
+    SparkTransportConf.fromSparkConf(
+      sparkConf,
+      "shuffle",
+      numUsableCores = 0,
+      sslOptions = Some(securityManager.getRpcSSLOptions()))
   private val blockHandler = newShuffleBlockHandler(transportConf)
   private var transportContext: TransportContext = _
 

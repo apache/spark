@@ -61,7 +61,7 @@ class ApplyInPandasWithStatePythonRunner(
     keySchema: StructType,
     outputSchema: StructType,
     stateValueSchema: StructType,
-    val pythonMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]
@@ -70,6 +70,8 @@ class ApplyInPandasWithStatePythonRunner(
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)
+
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
   private val sqlConf = SQLConf.get
 
@@ -214,7 +216,7 @@ class ApplyInPandasWithStatePythonRunner(
         STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER)
 
       stateMetadataBatch.rowIterator().asScala.take(numRows).flatMap { row =>
-        implicit val formats = org.json4s.DefaultFormats
+        implicit val formats: Formats = org.json4s.DefaultFormats
 
         // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
         // for the schema.

@@ -116,12 +116,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       }
 
       testCase match {
-        case _: PgSQLTest =>
+        case _: SQLQueryTestSuite#PgSQLTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
-        case _: AnsiTest =>
+        case _: SQLQueryTestSuite#AnsiTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
-        case _: TimestampNTZTest =>
+        case _: SQLQueryTestSuite#TimestampNTZTest =>
           statement.execute(s"SET ${SQLConf.TIMESTAMP_TYPE.key} = " +
             s"${TimestampTypes.TIMESTAMP_NTZ.toString}")
         case _ =>
@@ -246,7 +246,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var resultFile = resultFileForInputFile(file)
       // JDK-4511638 changes 'toString' result of Float/Double
       // JDK-8282081 changes DataTimeFormatter 'F' symbol
       if (Utils.isJavaVersionAtLeast21 && (new File(resultFile + ".java21")).exists()) {

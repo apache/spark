@@ -127,6 +127,9 @@ message WriteOperation {
   // (Optional) A list of configuration options.
   map<string, string> options = 9;
 
+  // (Optional) Columns used for clustering the table.
+  repeated string clustering_columns = 10;
+
   message SaveTable {
     // (Required) The table name.
     string table_name = 1;
@@ -191,6 +194,9 @@ message WriteOperationV2 {
 
   // (Optional) A condition for overwrite saving mode
   Expression overwrite_condition = 8;
+
+  // (Optional) Columns used for clustering the table.
+  repeated string clustering_columns = 9;
 }
 
 // Starts write stream operation as streaming query. Query ID and Run ID of the streaming

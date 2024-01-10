@@ -30,12 +30,13 @@ import scala.reflect.ClassTag
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{doNothing, mock, when}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{doNothing, mock, times, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+import org.scalatestplus.mockito.MockitoSugar.{mock => smock}
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -45,11 +46,13 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
+import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement}
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
 object MockWorker {
@@ -325,6 +328,85 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-46205: Recovery with Kryo Serializer") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "FILESYSTEM")
+    conf.set(RECOVERY_SERIALIZER, "Kryo")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      assert(e.serializer.isInstanceOf[KryoSerializer])
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
+  test("SPARK-46216: Recovery without compression") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "FILESYSTEM")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      assert(e.codec.isEmpty)
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
+  test("SPARK-46216: Recovery with compression") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "FILESYSTEM")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+    conf.set(RECOVERY_COMPRESSION_CODEC, "lz4")
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      assert(e.codec.get.isInstanceOf[LZ4CompressionCodec])
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
+  test("SPARK-46258: Recovery with RocksDB") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "ROCKSDB")
+    conf.set(RECOVERY_SERIALIZER, "Kryo")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[RocksDBPersistenceEngine]
+      assert(e.serializer.isInstanceOf[KryoSerializer])
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
   test("master/worker web ui available") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
@@ -452,7 +534,7 @@ class MasterSuite extends SparkFunSuite
         workerHtml should include ("Spark Worker at")
         workerHtml should include ("Running Executors (0)")
         verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
-      case _ => fail  // make sure we don't accidentially skip the tests
+      case _ => fail()  // make sure we don't accidentially skip the tests
     }
   }
 
@@ -802,6 +884,10 @@ class MasterSuite extends SparkFunSuite
   private val _waitingDrivers =
     PrivateMethod[mutable.ArrayBuffer[DriverInfo]](Symbol("waitingDrivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
+  private val _newDriverId = PrivateMethod[String](Symbol("newDriverId"))
+  private val _newApplicationId = PrivateMethod[String](Symbol("newApplicationId"))
+  private val _createApplication = PrivateMethod[ApplicationInfo](Symbol("createApplication"))
+  private val _persistenceEngine = PrivateMethod[PersistenceEngine](Symbol("persistenceEngine"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -1235,6 +1321,112 @@ class MasterSuite extends SparkFunSuite
 
   private def getState(master: Master): RecoveryState.Value = {
     master.invokePrivate(_state())
+  }
+
+  test("SPARK-45753: Support driver id pattern") {
+    val master = makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my-driver-%2$05d"))
+    val submitDate = new Date()
+    assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00000")
+    assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00001")
+  }
+
+  test("SPARK-45753: Prevent invalid driver id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my driver"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("SPARK-45754: Support app id pattern") {
+    val master = makeMaster(new SparkConf().set(APP_ID_PATTERN, "my-app-%2$05d"))
+    val submitDate = new Date()
+    assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00000")
+    assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00001")
+  }
+
+  test("SPARK-45754: Prevent invalid app id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeMaster(new SparkConf().set(APP_ID_PATTERN, "my app"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("SPARK-45785: Rotate app num with modulo operation") {
+    val conf = new SparkConf().set(APP_ID_PATTERN, "%2$d").set(APP_NUMBER_MODULO, 1000)
+    val master = makeMaster(conf)
+    val submitDate = new Date()
+    (0 to 2000).foreach { i =>
+      assert(master.invokePrivate(_newApplicationId(submitDate)) === s"${i % 1000}")
+    }
+  }
+
+  test("SPARK-45756: Use appName for appId") {
+    val conf = new SparkConf()
+      .set(MASTER_USE_APP_NAME_AS_APP_ID, true)
+    val master = makeMaster(conf)
+    val desc = new ApplicationDescription(
+        name = " spark - 45756 ",
+        maxCores = None,
+        command = null,
+        appUiUrl = "",
+        defaultProfile = DeployTestUtils.defaultResourceProfile,
+        eventLogDir = None,
+        eventLogCodec = None)
+    assert(master.invokePrivate(_createApplication(desc, null)).id === "spark-45756")
+  }
+
+  test("SPARK-46353: handleRegisterWorker in STANDBY mode") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+
+    assert(master.state === RecoveryState.STANDBY)
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(1)).send(meq(MasterInStandby))
+    verify(worker, times(0))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = true)))
+    verify(worker, times(0))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = false)))
+    assert(master.workers.isEmpty)
+    assert(master.idToWorker.isEmpty)
+  }
+
+  test("SPARK-46353: handleRegisterWorker in RECOVERING mode without workers") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+
+    master.state = RecoveryState.RECOVERING
+    master.persistenceEngine = new BlackHolePersistenceEngine()
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(0)).send(meq(MasterInStandby))
+    verify(worker, times(1))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = false)))
+    assert(master.workers.size === 1)
+    assert(master.idToWorker.size === 1)
+  }
+
+  test("SPARK-46353: handleRegisterWorker in RECOVERING mode with a unknown worker") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+    val workerInfo = smock[WorkerInfo]
+    when(workerInfo.state).thenReturn(WorkerState.UNKNOWN)
+
+    master.state = RecoveryState.RECOVERING
+    master.workers.add(workerInfo)
+    master.idToWorker("worker-0") = workerInfo
+    master.persistenceEngine = new BlackHolePersistenceEngine()
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(0)).send(meq(MasterInStandby))
+    verify(worker, times(1))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = true)))
+    assert(master.state === RecoveryState.RECOVERING)
+    assert(master.workers.nonEmpty)
+    assert(master.idToWorker.nonEmpty)
   }
 }
 

@@ -31,6 +31,7 @@ import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.KVStore
 
@@ -255,7 +256,7 @@ private[spark] class AppStatusStore(
       stageAttemptId: Int,
       unsortedQuantiles: Array[Double]): Option[v1.TaskMetricDistributions] = {
     val stageKey = Array(stageId, stageAttemptId)
-    val quantiles = unsortedQuantiles.sorted
+    val quantiles = unsortedQuantiles.sorted.toImmutableArraySeq
 
     // We don't know how many tasks remain in the store that actually have metrics. So scan one
     // metric and count how many valid tasks there are. Use skip() instead of next() since it's
@@ -370,7 +371,7 @@ private[spark] class AppStatusStore(
               Double.NaN
             }
           }
-        }.toIndexedSeq
+        }
       }
     }
 
@@ -745,7 +746,7 @@ private[spark] class AppStatusStore(
     } else {
       val values = summary.values.toIndexedSeq
       Some(new v1.ExecutorMetricsDistributions(
-        quantiles = quantiles,
+        quantiles = quantiles.toImmutableArraySeq,
         taskTime = getQuantilesValue(values.map(_.taskTime.toDouble).sorted, quantiles),
         failedTasks = getQuantilesValue(values.map(_.failedTasks.toDouble).sorted, quantiles),
         succeededTasks = getQuantilesValue(values.map(_.succeededTasks.toDouble).sorted, quantiles),
@@ -765,7 +766,7 @@ private[spark] class AppStatusStore(
         diskBytesSpilled =
           getQuantilesValue(values.map(_.diskBytesSpilled.toDouble).sorted, quantiles),
         peakMemoryMetrics =
-          new v1.ExecutorPeakMetricsDistributions(quantiles,
+          new v1.ExecutorPeakMetricsDistributions(quantiles.toImmutableArraySeq,
             values.flatMap(_.peakMemoryMetrics))
       ))
     }

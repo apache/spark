@@ -275,6 +275,8 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def isCompleted(): Boolean = synchronized(completed)
 
+  override def isFailed(): Boolean = synchronized(failureCauseOpt.isDefined)
+
   override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 
   override def getLocalProperty(key: String): String = localProperties.getProperty(key)
@@ -292,5 +294,5 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
-  private[spark] override def getLocalProperties(): Properties = localProperties
+  private[spark] override def getLocalProperties: Properties = localProperties
 }

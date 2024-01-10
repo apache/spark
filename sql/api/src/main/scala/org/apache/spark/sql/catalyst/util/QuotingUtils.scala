@@ -61,6 +61,14 @@ object QuotingUtils {
     }
   }
 
+  def fullyQuoted(ident: Identifier): String = {
+    if (ident.namespace.nonEmpty) {
+      ident.namespace.map(quoteIdentifier).mkString(".") + "." + quoteIdentifier(ident.name)
+    } else {
+      quoteIdentifier(ident.name)
+    }
+  }
+
   def escapeSingleQuotedString(str: String): String = {
     val builder = new StringBuilder
 

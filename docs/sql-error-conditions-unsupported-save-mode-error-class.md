@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The save mode `<saveMode>` is not supported for:
 

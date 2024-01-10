@@ -30,6 +30,7 @@ import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -52,13 +53,16 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
+    data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
+        .toImmutableArraySeq, 2)
       .map(_.asML)
     trainData =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120), 2)
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120)
+          .toImmutableArraySeq, 2)
         .map(_.asML)
     validationData =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80)
+          .toImmutableArraySeq, 2)
         .map(_.asML)
     linearRegressionData = sc.parallelize(LinearDataGenerator.generateLinearInput(
       intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
@@ -112,7 +116,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setMaxIter(2)
     val model = gbt.fit(trainData.toDF())
-    testPredictionModelSinglePrediction(model, validationData.toDF)
+    testPredictionModelSinglePrediction(model, validationData.toDF())
   }
 
   test("Checkpointing") {
@@ -149,7 +153,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     val data = TreeTests.getTwoTreesLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
-    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    val df = sc.parallelize(data.toImmutableArraySeq, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
@@ -241,14 +245,14 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
         .setMaxDepth(2)
         .setMaxIter(3)
         .setLossType(lossType)
-      val model3 = gbt.fit(trainData.toDF)
+      val model3 = gbt.fit(trainData.toDF())
       val model1 = new GBTRegressionModel("gbt-reg-model-test1",
         model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures)
       val model2 = new GBTRegressionModel("gbt-reg-model-test2",
         model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures)
 
       for (evalLossType <- GBTRegressor.supportedLossTypes) {
-        val evalArr = model3.evaluateEachIteration(validationData.toDF, evalLossType)
+        val evalArr = model3.evaluateEachIteration(validationData.toDF(), evalLossType)
         val lossErr1 = GradientBoostedTrees.computeWeightedError(validationData.map(_.toInstance),
           model1.trees, model1.treeWeights, model1.convertToOldLossType(evalLossType))
         val lossErr2 = GradientBoostedTrees.computeWeightedError(validationData.map(_.toInstance),
@@ -315,7 +319,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setCheckpointInterval(5)
       .setSeed(123)
-    val model = gbt.fit(trainData.toDF)
+    val model = gbt.fit(trainData.toDF())
 
     model.trees.foreach (i => {
       assert(i.getMaxDepth === model.getMaxDepth)

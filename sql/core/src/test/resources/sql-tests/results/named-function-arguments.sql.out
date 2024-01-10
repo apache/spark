@@ -134,7 +134,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
-  "sqlState" : "0A000",
+  "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
   },
@@ -156,7 +156,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
-  "sqlState" : "0A000",
+  "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
   },

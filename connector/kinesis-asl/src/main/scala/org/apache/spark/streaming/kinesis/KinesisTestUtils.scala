@@ -130,7 +130,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
     val producer = getProducer(aggregate)
     val shardIdToSeqNumbers = producer.sendData(streamName, testData)
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
-    shardIdToSeqNumbers.toMap
+    shardIdToSeqNumbers
   }
 
   /**
@@ -289,6 +289,6 @@ private[kinesis] class SimpleDataGenerator(
       sentSeqNumbers += ((num, seqNumber))
     }
 
-    shardIdToSeqNumbers.mapValues(_.toSeq).toMap
+    shardIdToSeqNumbers.toMap.transform((_, v) => v.toSeq)
   }
 }

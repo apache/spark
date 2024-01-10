@@ -30,6 +30,7 @@ import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -45,6 +46,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
@@ -64,7 +66,7 @@ class SessionCatalog(
     functionRegistry: FunctionRegistry,
     tableFunctionRegistry: TableFunctionRegistry,
     hadoopConf: Configuration,
-    parser: ParserInterface,
+    val parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
     functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
@@ -370,7 +372,7 @@ class SessionCatalog(
       validateLocation: Boolean = true): Unit = {
     val isExternal = tableDefinition.tableType == CatalogTableType.EXTERNAL
     if (isExternal && tableDefinition.storage.locationUri.isEmpty) {
-      throw QueryCompilationErrors.createExternalTableWithoutLocationError
+      throw QueryCompilationErrors.createExternalTableWithoutLocationError()
     }
 
     val qualifiedIdent = qualifyIdentifier(tableDefinition.identifier)
@@ -908,7 +910,7 @@ class SessionCatalog(
       val viewName = metadata.identifier.unquotedString
       val viewText = metadata.viewText.get
       val userSpecifiedColumns =
-        if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
+        if (metadata.schema.fieldNames.toImmutableArraySeq == metadata.viewQueryColumnNames) {
           " "
         } else {
           s" (${metadata.schema.fieldNames.mkString(", ")}) "
@@ -926,7 +928,7 @@ class SessionCatalog(
 
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
     val viewText = metadata.viewText.getOrElse {
-      throw new IllegalStateException("Invalid view without text.")
+      throw SparkException.internalError("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
     val origin = Origin(
@@ -947,7 +949,7 @@ class SessionCatalog(
       val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
         // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
         // output is the same with the view output.
-        metadata.schema.fieldNames.toSeq
+        metadata.schema.fieldNames.toImmutableArraySeq
       } else {
         assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
         metadata.viewQueryColumnNames
@@ -968,7 +970,7 @@ class SessionCatalog(
       } else {
         _.toLowerCase(Locale.ROOT)
       }
-      val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
+      val nameToCounts = viewColumnNames.groupBy(normalizeColName).transform((_, v) => v.length)
       val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
       val viewDDL = buildViewDDL(metadata, isTempView)
 
@@ -1091,6 +1093,25 @@ class SessionCatalog(
   }
 
   /**
+   * List all matching temp views in the specified database, including global/local temporary views.
+   */
+  def listTempViews(db: String, pattern: String): Seq[CatalogTable] = {
+    val globalTempViews = if (format(db) == globalTempViewManager.database) {
+      globalTempViewManager.listViewNames(pattern).flatMap { viewName =>
+        globalTempViewManager.get(viewName).map(_.tableMeta)
+      }
+    } else {
+      Seq.empty
+    }
+
+    val localTempViews = listLocalTempViews(pattern).flatMap { viewIndent =>
+      tempViews.get(viewIndent.table).map(_.tableMeta)
+    }
+
+    globalTempViews ++ localTempViews
+  }
+
+  /**
    * List all matching local temporary views.
    */
   def listLocalTempViews(pattern: String): Seq[TableIdentifier] = {
@@ -1124,7 +1145,7 @@ class SessionCatalog(
    *      updated.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
-    getLocalOrGlobalTempView(name).map(_.refresh).getOrElse {
+    getLocalOrGlobalTempView(name).map(_.refresh()).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
       val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)

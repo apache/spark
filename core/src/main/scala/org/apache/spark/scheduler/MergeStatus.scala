@@ -23,6 +23,7 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -102,7 +103,7 @@ private[spark] object MergeStatus {
         val mergeStatus = new MergeStatus(mergerLoc, shuffleMergeId, bitmap,
           mergeStatuses.sizes(index))
         (mergeStatuses.reduceIds(index), mergeStatus)
-    }
+    }.toImmutableArraySeq
   }
 
   def apply(

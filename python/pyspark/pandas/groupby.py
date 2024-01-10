@@ -44,7 +44,6 @@ import warnings
 
 import pandas as pd
 from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
-
 from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
@@ -57,7 +56,6 @@ from pyspark.sql.types import (
     StructType,
     StringType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, FrameLike, Label, Name
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
@@ -2616,20 +2614,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="bfill", limit=limit)
 
-    def backfill(self, limit: Optional[int] = None) -> FrameLike:
-        """
-        Alias for bfill.
-
-        .. deprecated:: 3.4.0
-        """
-        warnings.warn(
-            "The GroupBy.backfill method is deprecated "
-            "and will be removed in a future version. "
-            "Use GroupBy.bfill instead.",
-            FutureWarning,
-        )
-        return self.bfill(limit=limit)
-
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
         Synonym for `DataFrame.fillna()` with ``method=`ffill```.
@@ -2678,20 +2662,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         3  3.0  1.0  4
         """
         return self.fillna(method="ffill", limit=limit)
-
-    def pad(self, limit: Optional[int] = None) -> FrameLike:
-        """
-        Alias for ffill.
-
-        .. deprecated:: 3.4.0
-        """
-        warnings.warn(
-            "The GroupBy.pad method is deprecated "
-            "and will be removed in a future version. "
-            "Use GroupBy.ffill instead.",
-            FutureWarning,
-        )
-        return self.ffill(limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """

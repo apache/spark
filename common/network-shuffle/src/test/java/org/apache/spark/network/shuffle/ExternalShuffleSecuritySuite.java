@@ -39,9 +39,18 @@ import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleSecuritySuite {
 
-  TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+  TransportConf conf = createTransportConf(false);
   TransportServer server;
   TransportContext transportContext;
+
+  protected TransportConf createTransportConf(boolean encrypt) {
+    if (encrypt) {
+      return new TransportConf("shuffle", new MapConfigProvider(
+        ImmutableMap.of("spark.authenticate.enableSaslEncryption", "true")));
+    } else {
+      return new TransportConf("shuffle", MapConfigProvider.EMPTY);
+    }
+  }
 
   @BeforeEach
   public void beforeEach() throws IOException {
@@ -92,8 +101,7 @@ public class ExternalShuffleSecuritySuite {
         throws IOException, InterruptedException {
     TransportConf testConf = conf;
     if (encrypt) {
-      testConf = new TransportConf("shuffle", new MapConfigProvider(
-        ImmutableMap.of("spark.authenticate.enableSaslEncryption", "true")));
+      testConf = createTransportConf(encrypt);
     }
 
     try (ExternalBlockStoreClient client =

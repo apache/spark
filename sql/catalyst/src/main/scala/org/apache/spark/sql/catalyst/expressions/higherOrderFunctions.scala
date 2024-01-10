@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
@@ -200,9 +200,11 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
    */
   final def bind(
       f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction = {
-    val res = bindInternal(f)
-    res.copyTagsFrom(this)
-    res
+    CurrentOrigin.withOrigin(origin) {
+      val res = bindInternal(f)
+      res.copyTagsFrom(this)
+      res
+    }
   }
 
   protected def bindInternal(
@@ -248,7 +250,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
 
   def argumentType: AbstractDataType
 
-  override def argumentTypes(): Seq[AbstractDataType] = argumentType :: Nil
+  override def argumentTypes: Seq[AbstractDataType] = argumentType :: Nil
 
   def function: Expression
 
@@ -336,9 +338,9 @@ case class ArrayTransform(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    val result = new GenericArrayData(new Array[Any](arr.numElements))
+    val result = new GenericArrayData(new Array[Any](arr.numElements()))
     var i = 0
-    while (i < arr.numElements) {
+    while (i < arr.numElements()) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       if (indexVar.isDefined) {
         indexVar.get.value.set(i)
@@ -603,9 +605,9 @@ case class ArrayFilter(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    val buffer = new mutable.ArrayBuffer[Any](arr.numElements)
+    val buffer = new mutable.ArrayBuffer[Any](arr.numElements())
     var i = 0
-    while (i < arr.numElements) {
+    while (i < arr.numElements()) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       if (indexVar.isDefined) {
         indexVar.get.value.set(i)
@@ -683,7 +685,7 @@ case class ArrayExists(
     var exists = false
     var foundNull = false
     var i = 0
-    while (i < arr.numElements && !exists) {
+    while (i < arr.numElements() && !exists) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       val ret = f.eval(inputRow)
       if (ret == null) {
@@ -764,7 +766,7 @@ case class ArrayForAll(
     var forall = true
     var foundNull = false
     var i = 0
-    while (i < arr.numElements && forall) {
+    while (i < arr.numElements() && forall) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       val ret = f.eval(inputRow)
       if (ret == null) {
@@ -934,9 +936,9 @@ case class TransformKeys(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
-    val resultKeys = new GenericArrayData(new Array[Any](map.numElements))
+    val resultKeys = new GenericArrayData(new Array[Any](map.numElements()))
     var i = 0
-    while (i < map.numElements) {
+    while (i < map.numElements()) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
       val result = InternalRow.copyValue(functionForEval.eval(inputRow))
@@ -986,9 +988,9 @@ case class TransformValues(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
-    val resultValues = new GenericArrayData(new Array[Any](map.numElements))
+    val resultValues = new GenericArrayData(new Array[Any](map.numElements()))
     var i = 0
-    while (i < map.numElements) {
+    while (i < map.numElements()) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
       val v = InternalRow.copyValue(functionForEval.eval(inputRow))

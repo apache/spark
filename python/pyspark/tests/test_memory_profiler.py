@@ -45,6 +45,32 @@ class MemoryProfilerTests(PySparkTestCase):
         self.sc = SparkContext("local[4]", class_name, conf=conf)
         self.spark = SparkSession(sparkContext=self.sc)
 
+    def test_code_map(self):
+        from pyspark.profiler import CodeMapForUDF
+
+        code_map = CodeMapForUDF(include_children=False, backend="psutil")
+
+        def f(x):
+            return x + 1
+
+        code = f.__code__
+        code_map.add(code)
+        code_map.add(code)  # no-op, will return directly
+
+        self.assertIn(code, code_map)
+        self.assertEqual(len(code_map._toplevel), 1)
+
+    def test_udf_line_profiler(self):
+        from pyspark.profiler import UDFLineProfiler
+
+        profiler = UDFLineProfiler()
+
+        def f(x):
+            return x + 1
+
+        profiler.add_function(f)
+        self.assertTrue(profiler.code_map)
+
     def test_memory_profiler(self):
         self.exec_python_udf()
 

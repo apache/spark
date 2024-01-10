@@ -31,6 +31,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A base suite contains a set of view related test cases for different kind of views
@@ -475,7 +476,7 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
       val query = s"SELECT $funcName(max(a), min(a)) FROM VALUES (1), (2), (3) t(a)"
       val viewName = createView("tempView", query)
       withView(viewName) {
-        checkViewOutput(viewName, sql(query).collect())
+        checkViewOutput(viewName, sql(query).collect().toImmutableArraySeq)
       }
     }
   }
@@ -629,7 +630,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         val meta = catalog.getTableRawMetadata(TableIdentifier("test_view", Some("default")))
         // simulate a view meta with incompatible schema change
         val newProp = meta.properties
-          .mapValues(_.replace("col_i", "col_j")).toMap
+          .transform((_, v) => v.replace("col_i", "col_j"))
         val newSchema = StructType(Seq(StructField("col_j", IntegerType)))
         catalog.alterTable(meta.copy(properties = newProp, schema = newSchema))
         val e = intercept[AnalysisException] {

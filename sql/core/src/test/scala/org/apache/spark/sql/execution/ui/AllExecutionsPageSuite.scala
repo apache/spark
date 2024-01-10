@@ -275,7 +275,7 @@ class AllExecutionsPageWithInMemoryStoreSuite extends AllExecutionsPageSuite {
 @SlowSQLTest
 class AllExecutionsPageWithRocksDBBackendSuite extends AllExecutionsPageSuite {
   private val storePath = Utils.createTempDir()
-  override protected def createStatusStore(): SQLAppStatusStore = {
+  override protected def createStatusStore: SQLAppStatusStore = {
     val conf = sparkContext.conf
     conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
     val appStatusStore = AppStatusStore.createLiveStore(conf)

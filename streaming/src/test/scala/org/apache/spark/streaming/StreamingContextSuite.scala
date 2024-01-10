@@ -153,7 +153,7 @@ class StreamingContextSuite
     addInputStream(ssc).foreachRDD { rdd =>
       // Refer to this.appName from inside closure so that this closure refers to
       // the instance of StreamingContextSuite, and is therefore not serializable
-      rdd.count() + appName
+      s"${rdd.count()}$appName"
     }
 
     // Test whether start() fails early when checkpointing is enabled
@@ -177,7 +177,7 @@ class StreamingContextSuite
       ssc.start()
     }
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(ssc.scheduler.isStarted === false)
+    assert(ssc.scheduler.isStarted() === false)
   }
 
   test("start should set local properties of streaming jobs correctly") {
@@ -268,7 +268,7 @@ class StreamingContextSuite
     ssc.start()
     ssc.stop(stopSparkContext = false)
     assert(ssc.getState() === StreamingContextState.STOPPED)
-    assert(sc.makeRDD(1 to 100).collect().size === 100)
+    assert(sc.makeRDD(1 to 100).collect().length === 100)
     sc.stop()
 
     // Implicitly do not stop SparkContext
@@ -278,7 +278,7 @@ class StreamingContextSuite
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop()
-    assert(sc.makeRDD(1 to 100).collect().size === 100)
+    assert(sc.makeRDD(1 to 100).collect().length === 100)
     sc.stop()
   }
 
@@ -286,7 +286,7 @@ class StreamingContextSuite
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register()
     ssc.stop(stopSparkContext = false)
-    assert(ssc.sc.makeRDD(1 to 100).collect().size === 100)
+    assert(ssc.sc.makeRDD(1 to 100).collect().length === 100)
     ssc.stop(stopSparkContext = true)
     // Check that the SparkContext is actually stopped:
     intercept[Exception] {
@@ -600,7 +600,7 @@ class StreamingContextSuite
       newContextCreated = true
       val newSsc = new StreamingContext(sc, batchDuration)
       val input = addInputStream(newSsc)
-      input.foreachRDD { rdd => rdd.count }
+      input.foreachRDD { rdd => rdd.count() }
       newSsc
     }
 
@@ -641,7 +641,7 @@ class StreamingContextSuite
     // getActiveOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
       val sc = new SparkContext(conf)
-      ssc = creatingFunc(sc)  // Create
+      ssc = creatingFunc(sc)()  // Create
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()
@@ -733,13 +733,13 @@ class StreamingContextSuite
       conf.clone.set("spark.streaming.clock", "org.apache.spark.util.ManualClock"))
     ssc = new StreamingContext(sc, Seconds(1))
     val input = addInputStream(ssc)
-    input.foreachRDD { rdd => rdd.count }
+    input.foreachRDD { rdd => rdd.count() }
     ssc.start()
 
     // Creating another streaming context should not create errors
     val anotherSsc = new StreamingContext(sc, Seconds(10))
     val anotherInput = addInputStream(anotherSsc)
-    anotherInput.foreachRDD { rdd => rdd.count }
+    anotherInput.foreachRDD { rdd => rdd.count() }
 
     val exception = intercept[IllegalStateException] {
       anotherSsc.start()
@@ -760,7 +760,7 @@ class StreamingContextSuite
     require(ssc.getState() === StreamingContextState.INITIALIZED)
     val input = addInputStream(ssc)
     val transformed = input.map { x => x}
-    transformed.foreachRDD { rdd => rdd.count }
+    transformed.foreachRDD { rdd => rdd.count() }
 
     def testForException(clue: String, expectedErrorMsg: String)(body: => Unit): Unit = {
       withClue(clue) {
@@ -927,7 +927,7 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
     val thread = new Thread() {
       override def run(): Unit = {
         logInfo("Receiving started")
-        while (!isStopped) {
+        while (!isStopped()) {
           store(TestReceiver.counter.getAndIncrement)
         }
         logInfo("Receiving stopped at count value of " + TestReceiver.counter.get())

@@ -403,9 +403,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   private boolean containsPath(Type parquetType, String[] path, int depth) {
     if (path.length == depth) return true;
-    if (parquetType instanceof GroupType) {
+    if (parquetType instanceof GroupType parquetGroupType) {
       String fieldName = path[depth];
-      GroupType parquetGroupType = (GroupType) parquetType;
       if (parquetGroupType.containsField(fieldName)) {
         return containsPath(parquetGroupType.getType(fieldName), path, depth + 1);
       }

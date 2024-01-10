@@ -18,6 +18,7 @@ import unittest
 
 import pandas as pd
 import numpy as np
+
 from pyspark import pandas as ps
 from pyspark.pandas.tests.test_extension import ExtensionTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase

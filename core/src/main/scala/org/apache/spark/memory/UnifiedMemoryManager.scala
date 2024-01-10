@@ -145,7 +145,7 @@ private[spark] class UnifiedMemoryManager(
     }
 
     executionPool.acquireMemory(
-      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
+      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize())
   }
 
   override def acquireStorageMemory(

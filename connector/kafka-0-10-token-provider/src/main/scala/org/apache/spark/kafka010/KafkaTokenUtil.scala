@@ -195,7 +195,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       kerberosServiceName: String): String = {
     val params =
       s"""
-      |${SecurityUtils.getKrb5LoginModuleName} required
+      |${SecurityUtils.getKrb5LoginModuleName()} required
       | debug=${SecurityUtils.isGlobalKrbDebugEnabled()}
       | useKeyTab=true
       | serviceName="$kerberosServiceName"
@@ -209,7 +209,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   private def getTicketCacheJaasParams(clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
-      |${SecurityUtils.getKrb5LoginModuleName} required
+      |${SecurityUtils.getKrb5LoginModuleName()} required
       | debug=${SecurityUtils.isGlobalKrbDebugEnabled()}
       | useTicketCache=true
       | serviceName="${clusterConf.kerberosServiceName}";

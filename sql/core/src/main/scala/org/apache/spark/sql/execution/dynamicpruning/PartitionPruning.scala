@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -79,7 +80,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           None
         }
       case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _)) =>
-        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
+        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](
+          scan.filterAttributes.toImmutableArraySeq, r)
         if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
           Some(r)
         } else {

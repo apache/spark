@@ -110,7 +110,7 @@ class MapInPandasTestsMixin:
             df = (
                 self.spark.range(10, numPartitions=3)
                 .select(col("id").cast("string").alias("str"))
-                .withColumn("bin", encode(col("str"), "utf8"))
+                .withColumn("bin", encode(col("str"), "utf-8"))
             )
             actual = df.mapInPandas(func, "str string, bin binary").collect()
             expected = df.collect()
@@ -394,7 +394,7 @@ class MapInPandasTestsMixin:
 
             for offheap in ["true", "false"]:
                 with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
-                    self.assertEquals(
+                    self.assertEqual(
                         self.spark.read.parquet(path).mapInPandas(func, "id long").head(), Row(0)
                     )
         finally:

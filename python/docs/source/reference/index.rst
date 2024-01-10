@@ -33,6 +33,7 @@ This page lists an overview of all public PySpark modules, classes, functions an
    pyspark.pandas/index
    pyspark.ss/index
    pyspark.ml
+   pyspark.ml.connect
    pyspark.streaming
    pyspark.mllib
    pyspark

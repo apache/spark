@@ -565,7 +565,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 4.0.0
    */
   @scala.annotation.varargs
-  def xml(paths: String*): DataFrame = format("xml").load(paths: _*)
+  def xml(paths: String*): DataFrame = {
+    userSpecifiedSchema.foreach(checkXmlSchema)
+    format("xml").load(paths: _*)
+  }
 
   /**
    * Loads an `Dataset[String]` storing XML object and returns the result as a `DataFrame`.

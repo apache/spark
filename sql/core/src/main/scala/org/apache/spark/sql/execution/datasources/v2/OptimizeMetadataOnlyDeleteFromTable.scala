@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.RowLevelOperation
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A rule that replaces a rewritten DELETE operation with a delete using filters if the data source
@@ -46,7 +47,7 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
           val allPredicatesTranslated = normalizedPredicates.size == filters.length
           if (allPredicatesTranslated && table.canDeleteWhere(filters)) {
             logDebug(s"Switching to delete with filters: ${filters.mkString("[", ", ", "]")}")
-            DeleteFromTableWithFilters(relation, filters)
+            DeleteFromTableWithFilters(relation, filters.toImmutableArraySeq)
           } else {
             rowLevelPlan
           }

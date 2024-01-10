@@ -128,8 +128,8 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
 
         info.setAccumulables(accumulables)
 
-        val start = SparkListenerTaskStart(stageInfo.stageId, stageInfo.attemptNumber, info)
-        val end = SparkListenerTaskEnd(stageInfo.stageId, stageInfo.attemptNumber,
+        val start = SparkListenerTaskStart(stageInfo.stageId, stageInfo.attemptNumber(), info)
+        val end = SparkListenerTaskEnd(stageInfo.stageId, stageInfo.attemptNumber(),
           taskType = "",
           reason = null,
           info,

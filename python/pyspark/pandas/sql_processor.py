@@ -18,10 +18,10 @@
 import _string  # type: ignore[import]
 from typing import Any, Dict, Optional, Union, List
 import inspect
+
 import pandas as pd
 
 from pyspark.sql import SparkSession, DataFrame as SDataFrame
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
@@ -206,9 +206,7 @@ def _get_local_scope() -> Dict[str, Any]:
     # Get 2 scopes above (_get_local_scope -> sql -> ...) to capture the vars there.
     try:
         return inspect.stack()[_CAPTURE_SCOPES][0].f_locals
-    except Exception:
-        # TODO (rxin, thunterdb): use a narrower scope exception.
-        # See https://github.com/databricks/koalas/pull/448
+    except IndexError:
         return {}
 
 
@@ -222,9 +220,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
 
         shell = get_ipython()
         return shell.user_ns
-    except Exception:
-        # TODO (rxin, thunterdb): use a narrower scope exception.
-        # See https://github.com/databricks/koalas/pull/448
+    except (AttributeError, ModuleNotFoundError):
         return None
 
 

@@ -44,8 +44,10 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
     with Serializable {
 
   private val rdd = predictionAndLabels.map {
-    case (pred: Array[T], lab: Array[T]) => (pred, lab, Array.empty[Double])
-    case (pred: Array[T], lab: Array[T], rel: Array[Double]) => (pred, lab, rel)
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked) =>
+      (pred, lab, Array.empty[Double])
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked, rel: Array[Double]) =>
+      (pred, lab, rel)
     case _ => throw new IllegalArgumentException(s"Expected RDD of tuples or triplets")
   }
 
@@ -160,7 +162,7 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
       val relMap = Utils.toMap(lab, rel)
-      if (!useBinary && lab.size != rel.size) {
+      if (!useBinary && lab.length != rel.length) {
         logWarning(
           "# of ground truth set and # of relevance value set should be equal, " +
             "check input data")

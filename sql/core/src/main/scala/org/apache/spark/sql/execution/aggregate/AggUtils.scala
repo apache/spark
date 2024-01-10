@@ -427,8 +427,9 @@ object AggUtils {
     }
 
     if (groupWithoutSessionExpression.isEmpty) {
-      throw new AnalysisException("Global aggregation with session window in streaming query" +
-        " is not supported.")
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3068",
+        messageParameters = Map.empty)
     }
 
     val groupingWithoutSessionAttributes = groupWithoutSessionExpression.map(_.toAttribute)

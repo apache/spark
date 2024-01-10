@@ -121,6 +121,10 @@ The target JDBC server hosting table `<tableName>` does not support ALTER TABLE 
 
 Unable to convert `<orcType>` of Orc to data type `<toType>`.
 
+## OVERWRITE_BY_SUBQUERY
+
+INSERT OVERWRITE with a subquery condition.
+
 ## PANDAS_UDAF_IN_PIVOT
 
 Pandas user defined aggregate function in the PIVOT clause.
@@ -151,7 +155,7 @@ Purge table.
 
 ## PYTHON_UDF_IN_ON_CLAUSE
 
-Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause.
+Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause.
 
 ## REMOVE_NAMESPACE_COMMENT
 

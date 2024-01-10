@@ -129,7 +129,7 @@ class ColumnTypeSuite extends SparkFunSuite {
         val extracted = converter(columnType.extract(buffer))
         assert(expected === extracted,
           s"Extracted value didn't equal to the original one. $expected != $extracted, buffer =" +
-          dumpBuffer(buffer.duplicate().rewind().asInstanceOf[ByteBuffer]))
+          dumpBuffer(buffer.duplicate().rewind()))
       }
     }
   }

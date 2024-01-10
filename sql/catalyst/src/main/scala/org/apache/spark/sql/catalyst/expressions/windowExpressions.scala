@@ -62,7 +62,7 @@ case class WindowSpecDefinition(
       checkInputDataTypes().isSuccess
 
   override def nullable: Boolean = true
-  override def dataType: DataType = throw QueryCompilationErrors.dataTypeOperationUnsupportedError
+  override def dataType: DataType = throw QueryCompilationErrors.dataTypeOperationUnsupportedError()
 
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
@@ -182,7 +182,7 @@ case object CurrentRow extends SpecialFrameBoundary {
  * Represents a window frame.
  */
 sealed trait WindowFrame extends Expression with Unevaluable {
-  override def dataType: DataType = throw QueryCompilationErrors.dataTypeOperationUnsupportedError
+  override def dataType: DataType = throw QueryCompilationErrors.dataTypeOperationUnsupportedError()
   override def nullable: Boolean = false
 }
 

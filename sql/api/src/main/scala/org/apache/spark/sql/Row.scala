@@ -36,6 +36,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * @since 1.3.0
@@ -485,7 +486,7 @@ trait Row extends Serializable {
       values.update(i, get(i))
       i += 1
     }
-    values.toSeq
+    values.toImmutableArraySeq
   }
 
   /** Displays all elements of this sequence in a string (without a separator). */

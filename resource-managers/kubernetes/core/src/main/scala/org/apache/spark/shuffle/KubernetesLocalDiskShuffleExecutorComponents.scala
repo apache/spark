@@ -33,6 +33,7 @@ import org.apache.spark.shuffle.ShuffleChecksumUtils.{compareChecksums, getCheck
 import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputWriter, SingleSpillShuffleMapOutputWriter}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.{BlockId, BlockManager, ShuffleDataBlockId, StorageLevel, UnrecognizedBlockId}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class KubernetesLocalDiskShuffleExecutorComponents(sparkConf: SparkConf)
@@ -88,7 +89,7 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
           .flatMap(_.listFiles).filter(_.isDirectory) // blockmgr-xxx
           .flatMap(_.listFiles).filter(_.isDirectory) // 00
           .flatMap(_.listFiles)
-        if (files != null) files.toSeq else Seq.empty
+        if (files != null) files.toImmutableArraySeq else Seq.empty
       }
       .partition(_.getName.contains(".checksum"))
     val (indexFiles, dataFiles) = files.partition(_.getName.endsWith(".index"))

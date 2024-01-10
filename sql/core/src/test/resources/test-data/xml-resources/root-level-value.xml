@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW>value1</ROW>
+    <ROW attr="attr1">value2</ROW>
+    <ROW>
+        value3
+        <!-- this is a comment-->
+    </ROW>
+</ROWSET>

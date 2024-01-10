@@ -95,8 +95,7 @@ public class MergeStatuses extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof MergeStatuses) {
-      MergeStatuses o = (MergeStatuses) other;
+    if (other instanceof MergeStatuses o) {
       return Objects.equal(shuffleId, o.shuffleId)
         && Objects.equal(shuffleMergeId, o.shuffleMergeId)
         && Arrays.equals(bitmaps, o.bitmaps)

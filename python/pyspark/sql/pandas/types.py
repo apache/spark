@@ -49,7 +49,7 @@ from pyspark.sql.types import (
     UserDefinedType,
     _create_row,
 )
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -716,7 +716,10 @@ def _create_converter_to_pandas(
                 return convert_struct_as_dict
 
             else:
-                raise ValueError(f"Unknown value for `struct_in_pandas`: {_struct_in_pandas}")
+                raise PySparkValueError(
+                    error_class="UNKNOWN_VALUE_FOR",
+                    message_parameters={"var": str(_struct_in_pandas)},
+                )
 
         elif isinstance(dt, TimestampType):
             assert timezone is not None

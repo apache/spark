@@ -540,19 +540,21 @@ case class ThreadStackTrace(
     lockName: Option[String],
     lockOwnerName: Option[String],
     suspended: Boolean,
-    inNative: Boolean) {
+    inNative: Boolean,
+    isDaemon: Boolean,
+    priority: Int) {
 
   /**
    * Returns a string representation of this thread stack trace
    * w.r.t java.lang.management.ThreadInfo(JDK 8)'s toString.
    *
-   * TODO(SPARK-44895): Considering 'daemon', 'priority' from higher JDKs
-   *
    * TODO(SPARK-44896): Also considering adding information os_prio, cpu, elapsed, tid, nid, etc.,
    *   from the jstack tool
    */
   override def toString: String = {
-    val sb = new StringBuilder(s""""$threadName" Id=$threadId $threadState""")
+    val daemon = if (isDaemon) " daemon" else ""
+    val sb = new StringBuilder(
+      s""""$threadName"$daemon prio=$priority Id=$threadId $threadState""")
     lockName.foreach(lock => sb.append(s" on $lock"))
     lockOwnerName.foreach {
       owner => sb.append(s"""owned by "$owner"""")

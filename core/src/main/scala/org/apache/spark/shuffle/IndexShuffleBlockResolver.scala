@@ -24,7 +24,7 @@ import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.NioBufferedFileInputStream
@@ -58,7 +58,11 @@ private[spark] class IndexShuffleBlockResolver(
 
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
-  private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+  private val transportConf = {
+    val securityManager = new SecurityManager(conf)
+    SparkTransportConf.fromSparkConf(
+      conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
+  }
 
   private val remoteShuffleMaxDisk: Option[Long] =
     conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE)

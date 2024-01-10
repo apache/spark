@@ -16,7 +16,7 @@ Project [col1#x, col2#x]
    +- SubqueryAlias t
       +- Project [a#x AS col1#x, b#x AS col2#x]
          +- SubqueryAlias testdata
-            +- View (`testData`, [a#x,b#x])
+            +- View (`testData`, [a#x, b#x])
                +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                   +- Project [a#x, b#x]
                      +- SubqueryAlias testData
@@ -31,7 +31,7 @@ Project [col1#x, col2#x]
    +- SubqueryAlias t
       +- Project [a#x AS col1#x, b#x AS col2#x]
          +- SubqueryAlias testdata
-            +- View (`testData`, [a#x,b#x])
+            +- View (`testData`, [a#x, b#x])
                +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                   +- Project [a#x, b#x]
                      +- SubqueryAlias testData
@@ -45,7 +45,7 @@ Aggregate [col1#x], [col1#x AS k#x, sum(col2#x) AS sum(col2)#xL]
 +- SubqueryAlias t
    +- Project [a#x AS col1#x, b#x AS col2#x]
       +- SubqueryAlias testdata
-         +- View (`testData`, [a#x,b#x])
+         +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
@@ -182,14 +182,14 @@ Project [a#x, b#x, c#x, d#x]
       +- Join Inner, (id#x = id#x)
          :- SubqueryAlias s1
          :  +- SubqueryAlias src1
-         :     +- View (`src1`, [id#x,v1#x])
+         :     +- View (`src1`, [id#x, v1#x])
          :        +- Project [cast(id#x as int) AS id#x, cast(v1#x as string) AS v1#x]
          :           +- Project [id#x, v1#x]
          :              +- SubqueryAlias src1
          :                 +- LocalRelation [id#x, v1#x]
          +- SubqueryAlias s2
             +- SubqueryAlias src2
-               +- View (`src2`, [id#x,v2#x])
+               +- View (`src2`, [id#x, v2#x])
                   +- Project [cast(id#x as int) AS id#x, cast(v2#x as decimal(2,1)) AS v2#x]
                      +- Project [id#x, v2#x]
                         +- SubqueryAlias src2
@@ -205,14 +205,14 @@ Project [a#x, b#x, c#x, d#x]
       +- Join Inner, (id#x = id#x)
          :- SubqueryAlias s1
          :  +- SubqueryAlias src1
-         :     +- View (`src1`, [id#x,v1#x])
+         :     +- View (`src1`, [id#x, v1#x])
          :        +- Project [cast(id#x as int) AS id#x, cast(v1#x as string) AS v1#x]
          :           +- Project [id#x, v1#x]
          :              +- SubqueryAlias src1
          :                 +- LocalRelation [id#x, v1#x]
          +- SubqueryAlias s2
             +- SubqueryAlias src2
-               +- View (`src2`, [id#x,v2#x])
+               +- View (`src2`, [id#x, v2#x])
                   +- Project [cast(id#x as int) AS id#x, cast(v2#x as decimal(2,1)) AS v2#x]
                      +- Project [id#x, v2#x]
                         +- SubqueryAlias src2

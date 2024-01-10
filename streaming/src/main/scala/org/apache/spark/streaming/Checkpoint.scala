@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private[streaming]
@@ -136,7 +137,7 @@ object Checkpoint extends Logging {
       if (statuses != null) {
         val paths = statuses.filterNot(_.isDirectory).map(_.getPath)
         val filtered = paths.filter(p => REGEX.findFirstIn(p.getName).nonEmpty)
-        filtered.sortWith(sortFunc)
+        filtered.sortWith(sortFunc).toImmutableArraySeq
       } else {
         logWarning(s"Listing $path returned null")
         Seq.empty

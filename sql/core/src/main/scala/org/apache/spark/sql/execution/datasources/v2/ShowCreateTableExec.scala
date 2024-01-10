@@ -51,9 +51,9 @@ case class ShowCreateTableExec(
     showTableUsing(table, builder)
 
     val tableOptions = table.properties.asScala
-      .filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
-      case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
-    }.toMap
+      .filter { case (k, _) => k.startsWith(TableCatalog.OPTION_PREFIX) }.map {
+        case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
+      }.toMap
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
     showTableComment(table, builder)
@@ -133,9 +133,11 @@ case class ShowCreateTableExec(
       tableOptions: Map[String, String]): Unit = {
 
     val showProps = table.properties.asScala
-      .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
-        && !key.startsWith(TableCatalog.OPTION_PREFIX)
-        && !tableOptions.contains(key))
+      .filter { case (key, _) =>
+        !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key) &&
+        !key.startsWith(TableCatalog.OPTION_PREFIX) &&
+        !tableOptions.contains(key)
+      }
     if (showProps.nonEmpty) {
       val props = conf.redactOptions(showProps.toMap).toSeq.sortBy(_._1).map {
         case (key, value) =>

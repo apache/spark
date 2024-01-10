@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import numpy as np
 import unittest
+
+import numpy as np
 
 from pyspark.ml.functions import predict_batch_udf
 from pyspark.sql.functions import array, struct, col

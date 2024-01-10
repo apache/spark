@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.execution.window.{SlidingWindowFunctionFrame, UnboundedFollowingWindowFunctionFrame, UnboundedPrecedingWindowFunctionFrame, UnboundedWindowFunctionFrame, WindowEvaluatorFactoryBase, WindowFunctionFrame}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class WindowInPandasEvaluatorFactory(
@@ -140,7 +141,7 @@ class WindowInPandasEvaluatorFactory(
     private val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
 
     private val (numBoundIndices, lowerBoundIndex, upperBoundIndex, frameWindowBoundTypes) =
-      computeWindowBoundHelpers(factories)
+      computeWindowBoundHelpers(factories.toImmutableArraySeq)
     private val isBounded = { frameIndex: Int => lowerBoundIndex(frameIndex) >= 0 }
     private val numFrames = factories.length
 
@@ -287,7 +288,8 @@ class WindowInPandasEvaluatorFactory(
           new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
         var bufferIterator: Iterator[UnsafeRow] = _
 
-        val indexRow = new SpecificInternalRow(Array.fill(numBoundIndices)(IntegerType))
+        val indexRow =
+          new SpecificInternalRow(Array.fill(numBoundIndices)(IntegerType).toImmutableArraySeq)
 
         val frames = factories.map(_ (indexRow))
 

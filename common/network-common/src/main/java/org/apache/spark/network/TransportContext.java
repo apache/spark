@@ -23,13 +23,17 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 
 import com.codahale.metrics.Counter;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.handler.codec.MessageToMessageEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +41,8 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
+import org.apache.spark.network.protocol.Message;
+import org.apache.spark.network.protocol.SslMessageEncoder;
 import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
 import org.apache.spark.network.server.ChunkFetchRequestHandler;
@@ -45,6 +51,7 @@ import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.ssl.SSLFactory;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.NettyLogger;
@@ -72,6 +79,8 @@ public class TransportContext implements Closeable {
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
+  // Non-null if SSL is enabled, null otherwise.
+  @Nullable private final SSLFactory sslFactory;
   // Number of registered connections to the shuffle service
   private Counter registeredConnections = new Counter();
 
@@ -87,7 +96,8 @@ public class TransportContext implements Closeable {
    * RPC to load it and cause to load the non-exist matcher class again. JVM will report
    * `ClassCircularityError` to prevent such infinite recursion. (See SPARK-17714)
    */
-  private static final MessageEncoder ENCODER = MessageEncoder.INSTANCE;
+  private static final MessageToMessageEncoder<Message> ENCODER = MessageEncoder.INSTANCE;
+  private static final MessageToMessageEncoder<Message> SSL_ENCODER = SslMessageEncoder.INSTANCE;
   private static final MessageDecoder DECODER = MessageDecoder.INSTANCE;
 
   // Separate thread pool for handling ChunkFetchRequest. This helps to enable throttling
@@ -125,6 +135,7 @@ public class TransportContext implements Closeable {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
+    this.sslFactory = createSslFactory();
 
     if (conf.getModuleName() != null &&
         conf.getModuleName().equalsIgnoreCase("shuffle") &&
@@ -171,8 +182,12 @@ public class TransportContext implements Closeable {
     return createServer(0, new ArrayList<>());
   }
 
-  public TransportChannelHandler initializePipeline(SocketChannel channel) {
-    return initializePipeline(channel, rpcHandler);
+  public TransportChannelHandler initializePipeline(SocketChannel channel, boolean isClient) {
+    return initializePipeline(channel, rpcHandler, isClient);
+  }
+
+  public boolean sslEncryptionEnabled() {
+    return this.sslFactory != null;
   }
 
   /**
@@ -189,15 +204,30 @@ public class TransportContext implements Closeable {
    */
   public TransportChannelHandler initializePipeline(
       SocketChannel channel,
-      RpcHandler channelRpcHandler) {
+      RpcHandler channelRpcHandler,
+      boolean isClient) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       ChannelPipeline pipeline = channel.pipeline();
       if (nettyLogger.getLoggingHandler() != null) {
         pipeline.addLast("loggingHandler", nettyLogger.getLoggingHandler());
       }
+
+      if (sslEncryptionEnabled()) {
+        SslHandler sslHandler;
+        try {
+          sslHandler = new SslHandler(sslFactory.createSSLEngine(isClient, channel.alloc()));
+        } catch (Exception e) {
+          throw new IllegalStateException("Error creating Netty SslHandler", e);
+        }
+        pipeline.addFirst("NettySslEncryptionHandler", sslHandler);
+        // Cannot use zero-copy with HTTPS, so we add in our ChunkedWriteHandler just before the
+        // MessageEncoder
+        pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
+      }
+
       pipeline
-        .addLast("encoder", ENCODER)
+        .addLast("encoder", sslEncryptionEnabled()? SSL_ENCODER : ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", getDecoder())
         .addLast("idleStateHandler",
@@ -221,6 +251,34 @@ public class TransportContext implements Closeable {
 
   protected MessageToMessageDecoder<ByteBuf> getDecoder() {
     return DECODER;
+  }
+
+  private SSLFactory createSslFactory() {
+    if (conf.sslRpcEnabled()) {
+      if (conf.sslRpcEnabledAndKeysAreValid()) {
+        return new SSLFactory.Builder()
+          .openSslEnabled(conf.sslRpcOpenSslEnabled())
+          .requestedProtocol(conf.sslRpcProtocol())
+          .requestedCiphers(conf.sslRpcRequestedCiphers())
+          .keyStore(conf.sslRpcKeyStore(), conf.sslRpcKeyStorePassword())
+          .privateKey(conf.sslRpcPrivateKey())
+          .privateKeyPassword(conf.sslRpcPrivateKeyPassword())
+          .keyPassword(conf.sslRpcKeyPassword())
+          .certChain(conf.sslRpcCertChain())
+          .trustStore(
+            conf.sslRpcTrustStore(),
+            conf.sslRpcTrustStorePassword(),
+            conf.sslRpcTrustStoreReloadingEnabled(),
+            conf.sslRpctrustStoreReloadIntervalMs())
+          .build();
+      } else {
+        logger.error("RPC SSL encryption enabled but keys not found!" +
+          "Please ensure the configured keys are present.");
+        throw new IllegalArgumentException("RPC SSL encryption enabled but keys not found!");
+      }
+    } else {
+      return null;
+    }
   }
 
   /**
@@ -254,6 +312,9 @@ public class TransportContext implements Closeable {
   public void close() {
     if (chunkFetchWorkers != null) {
       chunkFetchWorkers.shutdownGracefully();
+    }
+    if (sslFactory != null) {
+      sslFactory.destroy();
     }
   }
 }

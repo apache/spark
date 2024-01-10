@@ -224,7 +224,7 @@ private[ml] object ANOVATest {
     // mean square within
     val msw = sswn / dfwn
     val fValue = msb / msw
-    val pValue = 1 - new FDistribution(dfbn, dfwn).cumulativeProbability(fValue)
+    val pValue = 1 - new FDistribution(dfbn.toDouble, dfwn.toDouble).cumulativeProbability(fValue)
     val degreesOfFreedom = dfbn + dfwn
     (pValue, degreesOfFreedom, fValue)
   }

@@ -64,7 +64,7 @@ object ExternalCatalogUtils {
   }
 
   def needsEscaping(c: Char): Boolean = {
-    c >= 0 && c < charToEscape.size() && charToEscape.get(c)
+    c < charToEscape.size() && charToEscape.get(c)
   }
 
   def escapePathName(path: String): String = {
@@ -207,7 +207,7 @@ object ExternalCatalogUtils {
   }
 
   def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {
-    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).map(identity).toMap
+    spec.transform((_, v) => if (v == null) DEFAULT_PARTITION_NAME else v).map(identity)
   }
 }
 

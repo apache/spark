@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A trait for subclasses that handle table scans.
@@ -170,7 +171,7 @@ class HadoopTableReader(
 
       val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
       // Partitioning columns are delimited by "/"
-      val partCols = partColsDelimited.trim().split("/").toSeq
+      val partCols = partColsDelimited.trim().split("/").toImmutableArraySeq
       // 'partValues[i]' contains the value for the partitioning column at 'partCols[i]'.
       val partValues = if (partSpec == null) {
         Array.fill(partCols.size)(new String)
@@ -497,7 +498,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
           val unwrapper = unwrapperFor(oi)
           (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
       }
-    }
+    }.toImmutableArraySeq
 
     val converter = ObjectInspectorConverters.getConverter(rawDeser.getObjectInspector, soi)
 

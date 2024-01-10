@@ -32,6 +32,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object Column {
 
@@ -70,8 +71,10 @@ private[sql] object Column {
       name: String,
       isDistinct: Boolean,
       ignoreNulls: Boolean,
-      inputs: Column*): Column = Column {
-    UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
+      inputs: Column*): Column = withOrigin {
+    Column {
+      UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
+    }
   }
 }
 
@@ -148,12 +151,14 @@ class TypedColumn[-T, U](
 @Stable
 class Column(val expr: Expression) extends Logging {
 
-  def this(name: String) = this(name match {
-    case "*" => UnresolvedStar(None)
-    case _ if name.endsWith(".*") =>
-      val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
-      UnresolvedStar(Some(parts))
-    case _ => UnresolvedAttribute.quotedString(name)
+  def this(name: String) = this(withOrigin {
+    name match {
+      case "*" => UnresolvedStar(None)
+      case _ if name.endsWith(".*") =>
+        val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
+        UnresolvedStar(Some(parts))
+      case _ => UnresolvedAttribute.quotedString(name)
+    }
   })
 
   private def fn(name: String): Column = {
@@ -180,7 +185,9 @@ class Column(val expr: Expression) extends Logging {
   }
 
   /** Creates a column based on the given expression. */
-  private def withExpr(newExpr: Expression): Column = new Column(newExpr)
+  private def withExpr(newExpr: => Expression): Column = withOrigin {
+    new Column(newExpr)
+  }
 
   /**
    * Returns the expression for this column either with an existing or auto assigned name.
@@ -1125,7 +1132,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Array[String]): Column = withExpr { MultiAlias(expr, aliases) }
+  def as(aliases: Array[String]): Column = withExpr {
+    MultiAlias(expr, aliases.toImmutableArraySeq)
+  }
 
   /**
    * Gives the column an alias.
@@ -1370,7 +1379,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
+  def over(window: expressions.WindowSpec): Column = withOrigin {
+    window.withAggregate(this)
+  }
 
   /**
    * Defines an empty analytic clause. In this case the analytic function is applied

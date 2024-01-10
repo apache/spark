@@ -272,9 +272,18 @@ object JsonBenchmark extends SqlBasedBenchmark {
       json_tuple_ds.noop()
     }
 
-    benchmark.addCase("get_json_object", iters) { _ =>
-      val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
-      get_json_object_ds.noop()
+    benchmark.addCase("get_json_object wholestage off", iters) { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
+        get_json_object_ds.noop()
+      }
+    }
+
+    benchmark.addCase("get_json_object wholestage on", iters) { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+        val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
+        get_json_object_ds.noop()
+      }
     }
 
     benchmark.run()

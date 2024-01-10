@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnsafeProjection}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.types.{AbstractDataType, DataType}
+import org.apache.spark.util.ArrayImplicits._
 
 case class V2Aggregator[BUF <: java.io.Serializable, OUT](
     aggrFunc: V2AggregateFunction[BUF, OUT],
@@ -35,7 +36,7 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
 
   override def nullable: Boolean = aggrFunc.isResultNullable
   override def dataType: DataType = aggrFunc.resultType()
-  override def inputTypes: Seq[AbstractDataType] = aggrFunc.inputTypes().toSeq
+  override def inputTypes: Seq[AbstractDataType] = aggrFunc.inputTypes().toImmutableArraySeq
   override def createAggregationBuffer(): BUF = aggrFunc.newAggregationState()
 
   override def update(buffer: BUF, input: InternalRow): BUF = {

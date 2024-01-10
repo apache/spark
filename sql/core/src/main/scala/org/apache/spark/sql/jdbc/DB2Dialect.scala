@@ -107,7 +107,7 @@ private object DB2Dialect extends JdbcDialect {
   // scalastyle:on line.size.limit
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     s"TRUNCATE TABLE $table IMMEDIATE"
   }
 
@@ -149,7 +149,8 @@ private object DB2Dialect extends JdbcDialect {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
-          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case "42893" => throw NonEmptyNamespaceException(
+            namespace = Array.empty, details = message, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case _ => super.classifyException(message, e)

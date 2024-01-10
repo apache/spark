@@ -20,12 +20,13 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
+import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
 import sun.util.calendar.ZoneInfo
 
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
@@ -36,12 +37,14 @@ trait SparkDateTimeUtils {
 
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
+  final val singleHourTz = Pattern.compile("(\\+|\\-)(\\d):")
+  final val singleMinuteTz = Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
+
   def getZoneId(timeZoneId: String): ZoneId = {
-    val formattedZoneId = timeZoneId
-      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-      .replaceFirst("(\\+|\\-)(\\d):", "$10$2:")
-      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
-      .replaceFirst("(\\+|\\-)(\\d\\d):(\\d)$", "$1$2:0$3")
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+    var formattedZoneId = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
+    // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+    formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
 
     ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
@@ -302,21 +305,28 @@ trait SparkDateTimeUtils {
       (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
         (segment != 0 && digits > 0 && digits <= 2)
     }
-    if (s == null || s.trimAll().numBytes() == 0) {
+    if (s == null) {
       return None
     }
+
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var sign = 1
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
-    val bytes = s.trimAll().getBytes
-    var j = 0
+    val bytes = s.getBytes
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
+
+    if (j == strEndTrimmed) {
+      return None
+    }
+
     if (bytes(j) == '-' || bytes(j) == '+') {
       sign = if (bytes(j) == '-') -1 else 1
       j += 1
     }
-    while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
+    while (j < strEndTrimmed && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
         if (!isValidDigits(i, currentSegmentDigits)) {
@@ -340,7 +350,7 @@ trait SparkDateTimeUtils {
     if (!isValidDigits(i, currentSegmentDigits)) {
       return None
     }
-    if (i < 2 && j < bytes.length) {
+    if (i < 2 && j < strEndTrimmed) {
       // For the `yyyy` and `yyyy-[m]m` formats, entire input must be consumed.
       return None
     }
@@ -355,7 +365,7 @@ trait SparkDateTimeUtils {
 
   def stringToDateAnsi(
       s: UTF8String,
-      context: SQLQueryContext = null): Int = {
+      context: QueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
     }
@@ -401,7 +411,7 @@ trait SparkDateTimeUtils {
         (segment == 7 && digits <= 2) ||
         (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
     }
-    if (s == null || s.trimAll().numBytes() == 0) {
+    if (s == null) {
       return (Array.empty, None, false)
     }
     var tz: Option[String] = None
@@ -409,8 +419,14 @@ trait SparkDateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
-    val bytes = s.trimAll().getBytes
-    var j = 0
+    val bytes = s.getBytes
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
+
+    if (j == strEndTrimmed) {
+      return (Array.empty, None, false)
+    }
+
     var digitsMilli = 0
     var justTime = false
     var yearSign: Option[Int] = None
@@ -418,7 +434,7 @@ trait SparkDateTimeUtils {
       yearSign = if (bytes(j) == '-') Some(-1) else Some(1)
       j += 1
     }
-    while (j < bytes.length) {
+    while (j < strEndTrimmed) {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
       if (parsedValue < 0 || parsedValue > 9) {
@@ -487,8 +503,8 @@ trait SparkDateTimeUtils {
             currentSegmentValue = 0
             currentSegmentDigits = 0
             i += 1
-            tz = Some(new String(bytes, j, bytes.length - j))
-            j = bytes.length - 1
+            tz = Some(new String(bytes, j, strEndTrimmed - j))
+            j = strEndTrimmed - 1
           }
           if (i == 6  && b != '.') {
             i += 1
@@ -567,7 +583,7 @@ trait SparkDateTimeUtils {
   def stringToTimestampAnsi(
       s: UTF8String,
       timeZoneId: ZoneId,
-      context: SQLQueryContext = null): Long = {
+      context: QueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampType, context)
     }
@@ -601,6 +617,39 @@ trait SparkDateTimeUtils {
     } catch {
       case NonFatal(_) => None
     }
+  }
+
+  /**
+   * Returns the index of the first non-whitespace and non-ISO control character in the byte array.
+   *
+   * @param bytes The byte array to be processed.
+   * @return The start index after trimming.
+   */
+  @inline private def getTrimmedStart(bytes: Array[Byte]) = {
+    var start = 0
+
+    while (start < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(start))) {
+      start += 1
+    }
+
+    start
+  }
+
+  /**
+   * Returns the index of the last non-whitespace and non-ISO control character in the byte array.
+   *
+   * @param start The starting index for the search.
+   * @param bytes The byte array to be processed.
+   * @return The end index after trimming.
+   */
+  @inline private def getTrimmedEnd(start: Int, bytes: Array[Byte]) = {
+    var end = bytes.length - 1
+
+    while (end > start && UTF8String.isWhitespaceOrISOControl(bytes(end))) {
+      end -= 1
+    }
+
+    end + 1
   }
 }
 

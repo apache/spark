@@ -136,7 +136,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
             // Check the query statistics page
             val activeQueryLink =
-              findAll(cssSelector("""#active-table td a""")).flatMap(_.attribute("href")).next
+              findAll(cssSelector("""#active-table td a""")).flatMap(_.attribute("href")).next()
             go to activeQueryLink
 
             findAll(cssSelector("h3"))
@@ -156,8 +156,9 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
             summaryText should contain ("Global Watermark Gap (?)")
             summaryText should contain ("Aggregated Number Of Total State Rows (?)")
             summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
+            summaryText should contain ("Aggregated Number Of Removed State Rows (?)")
             summaryText should contain ("Aggregated State Memory Used In Bytes (?)")
-            summaryText should contain ("Aggregated Number Of Rows Dropped By Watermark (?)")
+            summaryText should contain ("Aggregated Number Of Late Rows Dropped By Watermark (?)")
             summaryText should contain ("Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
               " (?)")
             summaryText should not contain ("Aggregated Custom Metric loadedMapCacheHitCount (?)")

@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.{lang => jl}
 import java.util.Locale
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -480,7 +480,7 @@ case class Conv(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
     Some(origin.context)
   } else {
     None
@@ -1509,7 +1509,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> toSQLId("scala"),
+              "inputName" -> toSQLId("scale"),
               "inputType" -> toSQLType(scale.dataType),
               "inputExpr" -> toSQLExpr(scale)))
         }
@@ -1523,7 +1523,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   private lazy val scaleV: Any = scale.eval(EmptyRow)
   protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
 
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Option[QueryContext] = {
     if (ansiEnabled) {
       Some(origin.context)
     } else {
@@ -1558,25 +1558,25 @@ abstract class RoundBase(child: Expression, scale: Expression,
       case ByteType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShortExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case ShortType =>
         BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
       case IntegerType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toIntExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case IntegerType =>
         BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
       case LongType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLongExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case LongType =>
         BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
       case FloatType =>

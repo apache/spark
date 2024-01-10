@@ -67,14 +67,10 @@ public class RpcIntegrationSuite {
         String msg = JavaUtils.bytesToString(message);
         String[] parts = msg.split("/");
         switch (parts[0]) {
-          case "hello":
+          case "hello" ->
             callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-            break;
-          case "return error":
-            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-            break;
-          case "throw error":
-            throw new RuntimeException("Thrown: " + parts[1]);
+          case "return error" -> callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+          case "throw error" -> throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
 
@@ -104,9 +100,9 @@ public class RpcIntegrationSuite {
     try {
       if (msg.startsWith("fail/")) {
         String[] parts = msg.split("/");
-        switch (parts[1]) {
-          case "exception-ondata":
-            return new StreamCallbackWithID() {
+        return switch (parts[1]) {
+          case "exception-ondata" ->
+            new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
                 throw new IOException("failed to read stream data!");
@@ -125,8 +121,8 @@ public class RpcIntegrationSuite {
                 return msg;
               }
             };
-          case "exception-oncomplete":
-            return new StreamCallbackWithID() {
+          case "exception-oncomplete" ->
+            new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
               }
@@ -145,11 +141,9 @@ public class RpcIntegrationSuite {
                 return msg;
               }
             };
-          case "null":
-            return null;
-          default:
-            throw new IllegalArgumentException("unexpected msg: " + msg);
-        }
+          case "null" -> null;
+          default -> throw new IllegalArgumentException("unexpected msg: " + msg);
+        };
       } else {
         VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
         streamCallbacks.put(msg, streamCallback);
@@ -236,17 +230,8 @@ public class RpcIntegrationSuite {
     return res;
   }
 
-  private static class RpcStreamCallback implements RpcResponseCallback {
-    final String streamId;
-    final RpcResult res;
-    final Semaphore sem;
-
-    RpcStreamCallback(String streamId, RpcResult res, Semaphore sem) {
-      this.streamId = streamId;
-      this.res = res;
-      this.sem = sem;
-    }
-
+  private record RpcStreamCallback(
+      String streamId, RpcResult res, Semaphore sem) implements RpcResponseCallback {
     @Override
     public void onSuccess(ByteBuffer message) {
       res.successMessages.add(streamId);

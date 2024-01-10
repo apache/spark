@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 /**
  * An [[InternalRow]] that projects particular columns from another [[InternalRow]] without copying
@@ -37,11 +38,11 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
   }
 
   override def setNullAt(i: Int): Unit = {
-    throw new UnsupportedOperationException(s"Cannot modify ${getClass.getName}")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3117")
   }
 
   override def update(i: Int, value: Any): Unit = {
-    throw new UnsupportedOperationException(s"Cannot modify ${getClass.getName}")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3117")
   }
 
   override def copy(): InternalRow = {
@@ -97,6 +98,10 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
 
   override def getInterval(ordinal: Int): CalendarInterval = {
     row.getInterval(colOrdinals(ordinal))
+  }
+
+  override def getVariant(ordinal: Int): VariantVal = {
+    row.getVariant(colOrdinals(ordinal))
   }
 
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = {

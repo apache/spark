@@ -23,7 +23,6 @@ from pyspark import pandas as ps
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.typedef.typehints import (
-    extension_dtypes,
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
@@ -31,14 +30,6 @@ from pyspark.pandas.typedef.typehints import (
 
 
 class SeriesAsTypeMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_astype(self):
         psers = [pd.Series([10, 20, 15, 30, 45], name="x")]
 

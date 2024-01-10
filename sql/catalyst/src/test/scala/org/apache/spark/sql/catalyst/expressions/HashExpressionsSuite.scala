@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjecti
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
@@ -623,7 +624,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def checkResult(schema: StructType, input: InternalRow): Unit = {
       val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
         BoundReference(i, f.dataType, true)
-      }
+      }.toImmutableArraySeq
       val murmur3HashExpr = Murmur3Hash(exprs, 42)
       val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
       val murmursHashEval = Murmur3Hash(exprs, 42).eval(input)
@@ -672,7 +673,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer)).toArray)
     val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val murmur3HashExpr = Murmur3Hash(exprs, 42)
     val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
 

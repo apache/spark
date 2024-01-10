@@ -49,7 +49,7 @@ trait TimeZoneAwareExpression extends Expression {
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
 
   final override val nodePatterns: Seq[TreePattern] =
-    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal
+    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal()
 
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
@@ -134,21 +134,13 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
-
+  extends LeafExpression with TimeZoneAwareExpression with Unevaluable {
   def this() = this(None)
-
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
-
   override def dataType: DataType = DateType
-
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  override def eval(input: InternalRow): Any = currentDate(zoneId)
 
   override def prettyName: String = "current_date"
 }
@@ -177,11 +169,9 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallback {
-  override def foldable: Boolean = true
+abstract class CurrentTimestampLike() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
-  override def eval(input: InternalRow): Any = currentTimestamp()
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
@@ -245,22 +235,13 @@ case class Now() extends CurrentTimestampLike {
   group = "datetime_funcs",
   since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
-  with TimeZoneAwareExpression with CodegenFallback {
-
+  with TimeZoneAwareExpression with Unevaluable {
   def this() = this(None)
-
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
-
   override def dataType: DataType = TimestampNTZType
-
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
-
   override def prettyName: String = "localtimestamp"
 }
 
@@ -911,6 +892,23 @@ case class WeekOfYear(child: Expression) extends GetDateField {
     copy(child = newChild)
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the three-letter abbreviated month name from the given date.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2008-02-20');
+       Feb
+  """,
+  group = "datetime_funcs",
+  since = "4.0.0")
+case class MonthName(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getMonthName
+  override val funcName = "getMonthName"
+  override def dataType: DataType = StringType
+  override protected def withNewChildInternal(newChild: Expression): MonthName =
+    copy(child = newChild)
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
@@ -1017,7 +1015,7 @@ case class ToUnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def prettyName: String = "to_unix_timestamp"
@@ -1073,7 +1071,7 @@ case class UnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   def this() = {
@@ -1409,7 +1407,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def prettyName: String = "from_unixtime"
 
   def this(unix: Expression) = {
-    this(unix, Literal(TimestampFormatter.defaultPattern))
+    this(unix, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def dataType: DataType = StringType

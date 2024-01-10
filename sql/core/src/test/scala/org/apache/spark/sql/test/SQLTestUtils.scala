@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
 
@@ -203,7 +204,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
    */
   protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
     val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files) finally {
+    try f(files.toImmutableArraySeq) finally {
       // wait for all tasks to finish before deleting files
       waitForTasksToFinish()
       files.foreach(Utils.deleteRecursively)
@@ -242,7 +243,7 @@ private[sql] trait SQLTestUtilsBase
     protected override def _sqlContext: SQLContext = self.spark.sqlContext
   }
 
-  protected override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+  protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
     SparkSession.setActiveSession(spark)
     super.withSQLConf(pairs: _*)(f)
   }

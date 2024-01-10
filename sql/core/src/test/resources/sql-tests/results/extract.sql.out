@@ -715,7 +715,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NON_FOLDABLE_ARGUMENT",
-  "sqlState" : "22024",
+  "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`date_part`",
     "paramName" : "`field`",
@@ -747,7 +747,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NON_FOLDABLE_ARGUMENT",
-  "sqlState" : "22024",
+  "sqlState" : "42K08",
   "messageParameters" : {
     "funcName" : "`date_part`",
     "paramName" : "`field`",

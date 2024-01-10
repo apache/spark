@@ -16,10 +16,8 @@
 #
 
 from abc import ABCMeta, abstractmethod
-
 import copy
 import threading
-
 from typing import (
     Any,
     Callable,

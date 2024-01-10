@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
+
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -37,8 +39,11 @@ private class DummyStreamObserver(p: Promise[ArtifactStatusesResponse])
 }
 
 class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelper {
+
+  val sessionId = UUID.randomUUID().toString
+
   def getStatuses(names: Seq[String], exist: Set[String]): ArtifactStatusesResponse = {
-    val promise = Promise[ArtifactStatusesResponse]
+    val promise = Promise[ArtifactStatusesResponse]()
     val handler = new SparkConnectArtifactStatusesHandler(new DummyStreamObserver(promise)) {
       override protected def cacheExists(
           userId: String,
@@ -54,7 +59,7 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
     val request = proto.ArtifactStatusesRequest
       .newBuilder()
       .setUserContext(context)
-      .setSessionId("abc")
+      .setSessionId(sessionId)
       .addAllNames(names.asJava)
       .build()
     handler.handle(request)

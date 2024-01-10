@@ -328,10 +328,10 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
        */
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorRunTime),
-        stageInfo + " executorRunTime")
+        stageInfo.toString + " executorRunTime")
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorDeserializeTime),
-        stageInfo + " executorDeserializeTime")
+        stageInfo.toString + " executorDeserializeTime")
 
       /* Test is disabled (SEE SPARK-2208)
       if (stageInfo.rddInfos.exists(_.name == d4.name)) {

@@ -16,6 +16,11 @@
  */
 
 /* global $, d3, timeFormat, timeTipStrings */
+export { showBootstrapTooltip, hideBootstrapTooltip,
+  getMaxMarginLeftForTimeline, getOnClickTimelineFunction,
+  registerHistogram, drawHistogram,
+  registerTimeline, drawTimeline
+}
 
 // timeFormat: StreamingPage.scala will generate a global "timeFormat" dictionary to store the time
 // and its formatted string. Because we cannot specify a timezone in JavaScript, to make sure the
@@ -37,14 +42,22 @@ var unitLabelYOffset = -10;
 var onClickTimeline = function() {};
 
 // Show a tooltip "text" for "node"
-function showBootstrapTooltip(node, text) {
-  $(node).tooltip({title: text, trigger: "manual", container: "body"});
-  $(node).tooltip("show");
+function showBootstrapTooltip(d3Selection, text) {
+  d3Selection.each(function() {
+    $(this).tooltip({title: text, trigger: "manual", container: "body"});
+    $(this).tooltip("show");
+  });
 }
 
 // Hide the tooltip for "node"
-function hideBootstrapTooltip(node) {
-  $(node).tooltip("dispose");
+function hideBootstrapTooltip(d3Selection) {
+  d3Selection.each(function() {
+    $(this).tooltip("dispose");
+  });
+}
+
+function getMaxMarginLeftForTimeline() {
+  return maxMarginLeftForTimeline;
 }
 
 /* eslint-disable no-unused-vars */
@@ -210,9 +223,9 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     .attr("cx", function(d) { return x(d.x); })
     .attr("cy", function(d) { return y(d.y); })
     .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "3";})
-    .on('mouseover', function(d) {
+    .on('mouseover', function(event, d) {
       var tip = yValueFormat(d.y) + " " + unitY + " at " + timeTipStrings[d.x];
-      showBootstrapTooltip(d3.select(this).node(), tip);
+      showBootstrapTooltip(d3.select(this), tip);
       // show the point
       d3.select(this)
         .attr("stroke", function(d) { return isFailedBatch(d.x) ? "red" : "steelblue";})
@@ -221,7 +234,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
         .attr("r", "3");
     })
     .on('mouseout',  function() {
-      hideBootstrapTooltip(d3.select(this).node());
+      hideBootstrapTooltip(d3.select(this));
       // hide the point
       d3.select(this)
         .attr("stroke", function(d) { return isFailedBatch(d.x) ? "red" : "white";})
@@ -296,10 +309,10 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
     .on('mouseover', function(event, d) {
       var percent = yValueFormat(d.length / values.length) + "%";
       var tip = d.length + " batches (" + percent + ") between " + yValueFormat(d.x0) + " and " + yValueFormat(d.x1) + " " + unitY;
-      showBootstrapTooltip(d3.select(this).node(), tip);
+      showBootstrapTooltip(d3.select(this), tip);
     })
     .on('mouseout',  function() {
-      hideBootstrapTooltip(d3.select(this).node());
+      hideBootstrapTooltip(d3.select(this));
     });
 
   if (batchInterval && batchInterval <= maxY) {
@@ -314,19 +327,19 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
       .text("stable")
       .on('mouseover', function(d) {
         var tip = "Processing Time <= Batch Interval (" + yValueFormat(batchInterval) +" " + unitY +")";
-        showBootstrapTooltip(d3.select(this).node(), tip);
+        showBootstrapTooltip(d3.select(this), tip);
       })
       .on('mouseout',  function() {
-        hideBootstrapTooltip(d3.select(this).node());
+        hideBootstrapTooltip(d3.select(this));
       });
   }
 }
 /* eslint-enable no-unused-vars */
 
-$(function() {
+$(function () {
   var status = window.localStorage && window.localStorage.getItem("show-streams-detail") == "true";
 
-  $("span.expand-input-rate").click(function() {
+  $("span.expand-input-rate").click(function () {
     status = !status;
     $("#inputs-table").toggle('collapsed');
     // Toggle the class of the arrow between open and closed

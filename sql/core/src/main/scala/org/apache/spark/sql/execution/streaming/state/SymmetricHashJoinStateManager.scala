@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.Locale
 
+import scala.annotation.tailrec
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
@@ -182,6 +184,57 @@ class SymmetricHashJoinStateManager(
       }
 
       override def close(): Unit = {}
+    }
+  }
+
+  /**
+   * Perform a full scan to provide all available data.
+   *
+   * This produces an iterator over the (key, value, match) tuples. Callers are expected
+   * to consume fully to clean up underlying iterators correctly.
+   */
+  def iterator: Iterator[KeyToValuePair] = {
+    new NextIterator[KeyToValuePair] {
+      // Reuse this object to avoid creation+GC overhead.
+      private val reusedRet = new KeyToValuePair()
+
+      private val allKeyToNumValues = keyToNumValues.iterator
+
+      private var currentKey: UnsafeRow = null
+      private var numValues: Long = 0L
+      private var index: Long = 0L
+
+      @tailrec
+      override def getNext(): KeyToValuePair = {
+        if (currentKey != null) {
+          assert(index < numValues)
+
+          val valueAndMatched = keyWithIndexToValue.get(currentKey, index)
+          index += 1
+
+          reusedRet.withNew(currentKey, valueAndMatched)
+
+          if (index == numValues) {
+            currentKey = null
+            numValues = 0L
+            index = 0L
+          }
+
+          reusedRet
+        } else if (allKeyToNumValues.hasNext) {
+          val newKeyToNumValues = allKeyToNumValues.next()
+          currentKey = newKeyToNumValues.key
+          numValues = newKeyToNumValues.numValue
+          index = 0L
+
+          getNext()
+        } else {
+          finished = true
+          null
+        }
+      }
+
+      override protected def close(): Unit = {}
     }
   }
 

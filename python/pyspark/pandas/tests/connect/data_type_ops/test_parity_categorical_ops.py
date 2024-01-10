@@ -30,18 +30,6 @@ class CategoricalOpsParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_astype(self):
-        super().test_astype()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_eq(self):
-        super().test_eq()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_ne(self):
-        super().test_ne()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_categorical_ops import *

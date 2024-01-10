@@ -129,8 +129,8 @@ object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Doubl
     s1
   }
   def finish(s: Array[Double]): Array[Double] = s
-  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
-  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]()
+  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]()
 }
 
 abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {

@@ -65,7 +65,7 @@ case class CreateHiveTableAsSelectCommand(
       qe.assertCommandExecuted()
     } else {
       tableDesc.storage.locationUri.foreach { p =>
-        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
       }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data

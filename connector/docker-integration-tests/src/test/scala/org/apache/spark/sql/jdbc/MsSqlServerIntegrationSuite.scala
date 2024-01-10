@@ -33,7 +33,7 @@ import org.apache.spark.tags.DockerTest
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1
  *   MSSQLSERVER_DOCKER_IMAGE_NAME=mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04
  *     ./build/sbt -Pdocker-integration-tests
- *     "testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
  * }}}
  */
 @DockerTest
@@ -172,7 +172,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         val types = row.toSeq.map(x => x.getClass.toString)
         assert(types.length == 12)
         assert(types(0).equals("class java.lang.Boolean"))
-        assert(types(1).equals("class java.lang.Integer"))
+        if (flag) {
+          assert(types(1).equals("class java.lang.Integer"))
+        } else {
+          assert(types(1).equals("class java.lang.Short"))
+        }
         if (flag) {
           assert(types(2).equals("class java.lang.Integer"))
         } else {
@@ -193,7 +197,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         assert(types(10).equals("class java.math.BigDecimal"))
         assert(types(11).equals("class java.math.BigDecimal"))
         assert(row.getBoolean(0) == false)
-        assert(row.getInt(1) == 255)
+        if (flag) {
+          assert(row.getInt(1) == 255)
+        } else {
+          assert(row.getShort(1) == 255)
+        }
         if (flag) {
           assert(row.getInt(2) == 32767)
         } else {
@@ -391,7 +399,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("prepareQuery", prepareQuery)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
   }
 
   test("SPARK-37259: prepareQuery and dbtable JDBC options") {
@@ -409,7 +417,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("prepareQuery", prepareQuery)
       .option("dbtable", dbtable)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
   }
 
   test("SPARK-37259: temp table prepareQuery and query JDBC options") {
@@ -427,6 +435,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("prepareQuery", prepareQuery)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
   }
 }

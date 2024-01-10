@@ -23,6 +23,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.util.SparkStringUtils.sideBySide
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class QueryTest extends RemoteSparkSession {
 
@@ -43,7 +44,11 @@ abstract class QueryTest extends RemoteSparkSession {
   }
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
-    checkAnswer(df, expectedAnswer.collect())
+    checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
+  }
+
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
+    checkAnswer(df, expectedAnswer.toImmutableArraySeq)
   }
 
   /**

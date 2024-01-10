@@ -27,6 +27,7 @@ import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Web UI server for the standalone master.
@@ -57,7 +58,7 @@ class MasterWebUI(
     attachHandler(createServletHandler("/workers/kill", new HttpServlet {
       override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
         val hostnames: Seq[String] = Option(req.getParameterValues("host"))
-          .getOrElse(Array[String]()).toSeq
+          .getOrElse(Array[String]()).toImmutableArraySeq
         if (!isDecommissioningRequestAllowed(req)) {
           resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
         } else {

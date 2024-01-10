@@ -70,6 +70,11 @@ class SparkConnectServiceStub(object):
             request_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
         )
+        self.ReleaseSession = channel.unary_unary(
+            "/spark.connect.SparkConnectService/ReleaseSession",
+            request_serializer=spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.FromString,
+        )
         self.FetchErrorDetails = channel.unary_unary(
             "/spark.connect.SparkConnectService/FetchErrorDetails",
             request_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
@@ -141,6 +146,16 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def ReleaseSession(self, request, context):
+        """Release a session.
+        All the executions in the session will be released. Any further requests for the session with
+        that session_id for the given user_id will fail. If the session didn't exist or was already
+        released, this is a noop.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def FetchErrorDetails(self, request, context):
         """FetchErrorDetails retrieves the matched exception with details based on a provided error id."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -189,6 +204,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.ReleaseExecute,
             request_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.SerializeToString,
+        ),
+        "ReleaseSession": grpc.unary_unary_rpc_method_handler(
+            servicer.ReleaseSession,
+            request_deserializer=spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.SerializeToString,
         ),
         "FetchErrorDetails": grpc.unary_unary_rpc_method_handler(
             servicer.FetchErrorDetails,
@@ -428,6 +448,35 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/ReleaseExecute",
             spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def ReleaseSession(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/ReleaseSession",
+            spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.FromString,
             options,
             channel_credentials,
             insecure,

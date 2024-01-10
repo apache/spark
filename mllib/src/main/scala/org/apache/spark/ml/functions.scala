@@ -19,7 +19,7 @@ package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.linalg.{Vector => OldVector}
+import org.apache.spark.mllib.linalg.{SparseVector => OldSparseVector, Vector => OldVector}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions.udf
 
@@ -27,7 +27,7 @@ import org.apache.spark.sql.functions.udf
 @Since("3.0.0")
 object functions {
 // scalastyle:on
-  private[spark] val vectorToArrayUdf = udf { vec: Any =>
+  private[spark] lazy val vectorToArrayUdf = udf { vec: Any =>
     vec match {
       case v: Vector => v.toArray
       case v: OldVector => v.toArray
@@ -38,13 +38,17 @@ object functions {
     }
   }.asNonNullable()
 
-  private[spark] val vectorToArrayFloatUdf = udf { vec: Any =>
+  private[spark] lazy val vectorToArrayFloatUdf = udf { vec: Any =>
     vec match {
       case v: SparseVector =>
         val data = new Array[Float](v.size)
-        v.foreachActive { (index, value) => data(index) = value.toFloat }
+        v.foreachNonZero { (index, value) => data(index) = value.toFloat }
         data
       case v: Vector => v.toArray.map(_.toFloat)
+      case v: OldSparseVector =>
+        val data = new Array[Float](v.size)
+        v.foreachNonZero { (index, value) => data(index) = value.toFloat }
+        data
       case v: OldVector => v.toArray.map(_.toFloat)
       case v => throw new IllegalArgumentException(
         "function vector_to_array requires a non-null input argument and input type must be " +
@@ -72,7 +76,7 @@ object functions {
     }
   }
 
-  private[spark] val arrayToVectorUdf = udf { array: Seq[Double] =>
+  private[spark] lazy val arrayToVectorUdf = udf { array: Seq[Double] =>
     Vectors.dense(array.toArray)
   }
 

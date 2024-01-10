@@ -28,6 +28,7 @@ import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._
+import org.apache.spark.ui.UIUtils.formatImportJavaScript
 import org.apache.spark.util.Utils
 
 /** Page showing statistics and task list for a given stage */
@@ -50,10 +51,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
           legendPairs.zipWithIndex.map {
             case ((classAttr, name), index) =>
-              <rect x={5 + (index / 3) * 210 + "px"} y={10 + (index % 3) * 15 + "px"}
+              <rect x={s"${5 + (index / 3) * 210}px"} y={s"${10 + (index % 3) * 15}px"}
                 width="10px" height="10px" class={classAttr}></rect>
-                <text x={25 + (index / 3) * 210 + "px"}
-                  y={20 + (index % 3) * 15 + "px"}>{name}</text>
+                <text x={s"${25 + (index / 3) * 210}px"}
+                  y={s"${20 + (index % 3) * 15}px"}>{name}</text>
           }
         }
       </svg>
@@ -205,6 +206,12 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val currentTime = System.currentTimeMillis()
 
+    val js =
+      s"""
+         |${formatImportJavaScript(request, "/static/stagepage.js", "setTaskThreadDumpEnabled")}
+         |
+         |setTaskThreadDumpEnabled(${parent.threadDumpEnabled});
+         |""".stripMargin
     val content =
       summary ++
       dagViz ++ <div id="showAdditionalMetrics"></div> ++
@@ -221,9 +228,10 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         eventTimelineTaskPage, eventTimelineTaskPageSize, eventTimelineTotalPages, stageId,
         stageAttemptId, totalTasks) ++
         <div id="parent-container">
-          <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
-          <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
-          <script>setTaskThreadDumpEnabled({parent.threadDumpEnabled})</script>
+          <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
+          <script type="module"
+                  src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
+          <script type="module">{Unparsed(js)}</script>
         </div>
         UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true,
           useDataTables = true)
@@ -350,7 +358,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
-                     if (!taskInfo.duration.isDefined) {
+                     if (taskInfo.duration.isEmpty) {
                        s"""<br>Finish Time: ${UIUtils.formatDate(new Date(finishTime))}"""
                      } else {
                         ""

@@ -159,7 +159,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       val connection =
         ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
       require(connection != null,
-        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+        s"The driver could not open a JDBC connection. Check the URL: ${options.getRedactUrl()}")
       connection
     }
   }
@@ -177,10 +177,12 @@ abstract class JdbcDialect extends Serializable with Logging {
    * To allow certain options to append when create a new table, which can be
    * table_options or partition_options.
    * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-   * @param statement
-   * @param tableName
-   * @param strSchema
-   * @param options
+   *
+   * @param statement The Statement object used to execute SQL statements.
+   * @param tableName The name of the table to be created.
+   * @param strSchema The schema of the table to be created.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
    */
   def createTable(
       statement: Statement,
@@ -189,6 +191,24 @@ abstract class JdbcDialect extends Serializable with Logging {
       options: JdbcOptionsInWrite): Unit = {
     val createTableOptions = options.createTableOptions
     statement.executeUpdate(s"CREATE TABLE $tableName ($strSchema) $createTableOptions")
+  }
+
+  /**
+   * Returns an Insert SQL statement template for inserting a row into the target table via JDBC
+   * conn. Use "?" as placeholder for each value to be inserted.
+   * E.g. `INSERT INTO t ("name", "age", "gender") VALUES (?, ?, ?)`
+   *
+   * @param table The name of the table.
+   * @param fields The fields of the row that will be inserted.
+   * @return The SQL query to use for insert data into table.
+   */
+  @Since("4.0.0")
+  def insertIntoTable(
+      table: String,
+      fields: Array[StructField]): String = {
+    val placeholders = fields.map(_ => "?").mkString(",")
+    val columns = fields.map(x => quoteIdentifier(x.name)).mkString(",")
+    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
   }
 
   /**
@@ -223,7 +243,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -237,7 +257,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 
@@ -417,7 +437,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   /**
@@ -541,6 +561,17 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Build a SQL statement to drop the given table.
+   *
+   * @param table the table name
+   * @return The SQL statement to use for drop the table.
+   */
+  @Since("4.0.0")
+  def dropTable(table: String): String = {
+    s"DROP TABLE $table"
+  }
+
+  /**
    * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
@@ -599,12 +630,34 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param e The dialect specific exception.
+   * @param errorClass The error class assigned in the case of an unclassified `e`
+   * @param messageParameters The message parameters of `errorClass`
+   * @param description The error description
+   * @return `AnalysisException` or its sub-class.
+   */
+  def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    classifyException(description, e)
+  }
+
+  /**
+   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param message The error message to be placed to the returned exception.
    * @param e The dialect specific exception.
    * @return `AnalysisException` or its sub-class.
    */
+  @deprecated("Please override the classifyException method with an error class", "4.0.0")
   def classifyException(message: String, e: Throwable): AnalysisException = {
-    new AnalysisException(message, cause = Some(e))
+    new AnalysisException(
+      errorClass = "FAILED_JDBC.UNCLASSIFIED",
+      messageParameters = Map(
+        "url" -> "jdbc:",
+        "message" -> message),
+      cause = Some(e))
   }
 
   /**

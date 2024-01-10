@@ -16,7 +16,6 @@
 #
 
 from multiprocessing.pool import ThreadPool
-
 from typing import (
     Any,
     Callable,
@@ -45,7 +44,6 @@ from pyspark.ml.param.shared import HasParallelism, HasSeed
 from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
-
 from pyspark.sql.utils import is_remote
 
 

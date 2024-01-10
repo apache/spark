@@ -382,7 +382,7 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
     new StageDataWrapper(
       info = info,
       jobIds = binary.getJobIdsList.asScala.map(_.toInt).toSet,
-      locality = binary.getLocalityMap.asScala.mapValues(_.toLong).toMap
+      locality = binary.getLocalityMap.asScala.toMap.transform((_, v) => v.toLong)
     )
   }
 
@@ -402,8 +402,8 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
         entry => (entry._1.toLong, deserializeTaskData(entry._2))).toMap)
     } else None
     val executorSummary = if (MapUtils.isNotEmpty(binary.getExecutorSummaryMap)) {
-      Some(binary.getExecutorSummaryMap.asScala.mapValues(
-        ExecutorStageSummarySerializer.deserialize).toMap)
+      Some(binary.getExecutorSummaryMap.asScala.toMap
+        .transform((_, v) => ExecutorStageSummarySerializer.deserialize(v)))
     } else None
     val speculationSummary =
       getOptional(binary.hasSpeculationSummary,
@@ -475,7 +475,8 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       tasks = tasks,
       executorSummary = executorSummary,
       speculationSummary = speculationSummary,
-      killedTasksSummary = binary.getKilledTasksSummaryMap.asScala.mapValues(_.toInt).toMap,
+      killedTasksSummary =
+        binary.getKilledTasksSummaryMap.asScala.toMap.transform((_, v) => v.toInt),
       resourceProfileId = binary.getResourceProfileId,
       peakExecutorMetrics = peakExecutorMetrics,
       taskMetricsDistributions = taskMetricsDistributions,
