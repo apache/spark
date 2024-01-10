@@ -47,10 +47,9 @@ object StateStoreErrors {
   }
 }
 class TransformWithStateImplicitKeyNotFound(stateName: String)
-  extends SparkRuntimeException(
+  extends SparkUnsupportedOperationException(
     errorClass = "TWS_IMPLICIT_KEY_NOT_FOUND",
-    messageParameters = Map("stateName" -> stateName),
-    cause = null
+    messageParameters = Map("stateName" -> stateName)
   )
 
 // Used for ListState

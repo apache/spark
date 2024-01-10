@@ -137,7 +137,7 @@ class StateStoreChangelogWriterV1(
   }
 
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    StateStoreErrors.unsupportedOperationException(
+    throw StateStoreErrors.unsupportedOperationException(
       operationName = "Put", entity = "changelog writer v1")
   }
 
@@ -151,7 +151,7 @@ class StateStoreChangelogWriterV1(
   }
 
   override def delete(key: Array[Byte], colFamilyName: String): Unit = {
-    StateStoreErrors.unsupportedOperationException(
+    throw StateStoreErrors.unsupportedOperationException(
       operationName = "Delete", entity = "changelog writer v1")
   }
 
@@ -189,7 +189,7 @@ class StateStoreChangelogWriterV2(
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    StateStoreErrors.unsupportedOperationException(
+    throw StateStoreErrors.unsupportedOperationException(
       operationName = "Put", entity = "changelog writer v2")
   }
 
@@ -206,7 +206,7 @@ class StateStoreChangelogWriterV2(
   }
 
   override def delete(key: Array[Byte]): Unit = {
-    StateStoreErrors.unsupportedOperationException(
+    throw StateStoreErrors.unsupportedOperationException(
       operationName = "Delete", entity = "changelog writer v1")
   }
 

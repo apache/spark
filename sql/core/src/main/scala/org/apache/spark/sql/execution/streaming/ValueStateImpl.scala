@@ -43,7 +43,7 @@ class ValueStateImpl[S](
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      StateStoreErrors.implicitKeyNotFound(stateName = stateName)
+      throw StateStoreErrors.implicitKeyNotFound(stateName = stateName)
     }
 
     val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
