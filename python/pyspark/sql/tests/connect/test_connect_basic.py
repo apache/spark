@@ -543,9 +543,20 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        with self.assertRaisesRegex(AnalysisException, "attribute.*missing"):
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
+
+        # Can not find the target plan node by plan id
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf1.select(cdf2.a).schema
 
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)

@@ -324,6 +324,12 @@
     ],
     "sqlState" : "0AKD0"
   },
+  "CANNOT_RESOLVE_DATAFRAME_COLUMN" : {
+    "message" : [
+      "Cannot resolve dataframe column <name>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
+    ],
+    "sqlState" : "42704"
+  },
   "CANNOT_RESOLVE_STAR_EXPAND" : {
     "message" : [
       "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."
@@ -6841,11 +6847,6 @@
   "_LEGACY_ERROR_TEMP_3050" : {
     "message" : [
       "Cannot modify the value of a static config: <k>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3051" : {
-    "message" : [
-      "When resolving <u>, fail to find subplan with plan_id=<planId> in <q>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {

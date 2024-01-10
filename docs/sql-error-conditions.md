@@ -282,6 +282,12 @@ Cannot recognize hive type string: `<fieldType>`, column: `<fieldName>`. The spe
 
 Renaming a `<type>` across schemas is not allowed.
 
+### CANNOT_RESOLVE_DATAFRAME_COLUMN
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve dataframe column `<name>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
+
 ### CANNOT_RESOLVE_STAR_EXPAND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
