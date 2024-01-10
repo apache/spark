@@ -54,8 +54,8 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
     Try(str.toInt).toOption.filter(_ > 0).map(op =>
       if (maxFilesPerTrigger.nonEmpty) {
         throw new IllegalArgumentException(
-          s"Options 'maxFilesPerTrigger' and 'maxBytesPerTrigger' " +
-            s"can't be both set at the same time")
+          "Options 'maxFilesPerTrigger' and 'maxBytesPerTrigger' " +
+            "can't be both set at the same time")
       } else op
     ).getOrElse {
       throw new IllegalArgumentException(
