@@ -62,8 +62,8 @@ class SQLMetric(
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
     case o: SQLMetric =>
-      if (o.isValid) {
-        if (!isValid) _value = defaultValidValue
+      if (!o.isZero) {
+        if (isZero) _value = 0
         _value += o.value
       }
     case _ => throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
@@ -80,7 +80,7 @@ class SQLMetric(
   def isValid: Boolean = _value >= defaultValidValue
 
   override def add(v: Long): Unit = {
-    if (!isValid) _value = defaultValidValue
+    if (isZero) _value = 0
     _value += v
   }
 
