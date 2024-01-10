@@ -104,6 +104,38 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  test("transformWithState - multiple input streams") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      val inputData1 = MemoryStream[String]
+      val inputData2 = MemoryStream[String]
+
+      val result = inputData1.toDS()
+        .union(inputData2.toDS())
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData1, "a"),
+        CheckNewAnswer(("a", "1")),
+        AddData(inputData2, "a", "b"),
+        CheckNewAnswer(("a", "2"), ("b", "1")),
+        StopStream,
+        StartStream(),
+        AddData(inputData1, "a", "b"), // should remove state for "a" and not return anything for a
+        CheckNewAnswer(("b", "2")),
+        StopStream,
+        StartStream(),
+        AddData(inputData2, "a", "c"), // should recreate state for "a" and return count as 1 and
+        CheckNewAnswer(("a", "1"), ("c", "1"))
+      )
+    }
+  }
+
   test("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
