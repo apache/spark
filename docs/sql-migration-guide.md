@@ -36,6 +36,7 @@ license: |
   - `spark.sql.parquet.int96RebaseModeInRead` instead of `spark.sql.legacy.parquet.int96RebaseModeInRead`
   - `spark.sql.avro.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.avro.datetimeRebaseModeInWrite`
   - `spark.sql.avro.datetimeRebaseModeInRead` instead of `spark.sql.legacy.avro.datetimeRebaseModeInRead`
+- Since Spark 4.0, the default value of `spark.sql.orc.compression.codec` is changed from `snappy` to `zstd`. To restore the previous behavior, set `spark.sql.orc.compression.codec` to `snappy`.
 
 ## Upgrading from Spark SQL 3.4 to 3.5
 
