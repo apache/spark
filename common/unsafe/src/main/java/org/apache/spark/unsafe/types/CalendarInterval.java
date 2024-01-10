@@ -130,7 +130,7 @@ public final class CalendarInterval implements Serializable, Comparable<Calendar
 
   /**
    * This method is not used to order CalendarInterval instances, as they are not orderable and
-   * can't be used in a ORDER BY statement.
+   * cannot be used in a ORDER BY statement.
    * Instead, it is used to find identical interval instances for aggregation purposes.
    * It compares the 'months', 'days', and 'microseconds' fields of this CalendarInterval
    * with another instance. The comparison is done first on the 'months', then on the 'days',
