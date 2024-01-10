@@ -22,6 +22,7 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Literal, ToPrettyString}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
@@ -89,8 +90,12 @@ class UnivocityGenerator(
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 
     case dt: DataType =>
-      (row: InternalRow, ordinal: Int) =>
-        row.get(ordinal, dt).toString
+      (row: InternalRow, ordinal: Int) => {
+        val valueUTF8String = ToPrettyString(
+          Literal(row.get(ordinal, dt), dataType)).eval(null)
+        if (valueUTF8String == null) "null" else valueUTF8String.toString
+      }
+
   }
 
   private def convertRow(row: InternalRow): Seq[String] = {
