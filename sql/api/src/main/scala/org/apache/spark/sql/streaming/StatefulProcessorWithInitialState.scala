@@ -20,44 +20,13 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
- * Represents the arbitrary stateful logic that needs to be provided by the user to perform
- * stateful manipulations on keyed streams.
+ * Similar usage as StatefulProcessor. Represents the arbitrary stateful logic that needs to
+ * be provided by the user to perform stateful manipulations on keyed streams.
+ * Accepts a user-defined type as initial state to be initialized in the first batch.
  */
 @Experimental
 @Evolving
 trait StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K, I, O] {
-
-  /**
-   * Function that will be invoked as the first method that allows for users to
-   * initialize all their state variables and perform other init actions before handling data.
-   * @param handle - reference to the statefulProcessorHandle that the user can use to perform
-   *               actions like creating state variables, accessing queryInfo etc. Please refer to
-   *               [[StatefulProcessorHandle]] for more details.
-   * @param outputMode - output mode for the stateful processor
-   */
-  override def init(
-    handle: StatefulProcessorHandle,
-    outputMode: OutputMode): Unit
-
-  /**
-   * Function that will allow users to interact with input data rows along with the grouping key
-   * and current timer values and optionally provide output rows.
-   * @param key - grouping key
-   * @param inputRows - iterator of input rows associated with grouping key
-   * @param timerValues - instance of TimerValues that provides access to current processing/event
-   *                    time if available
-   * @return - Zero or more output rows
-   */
-  override def handleInputRows(
-    key: K,
-    inputRows: Iterator[I],
-    timerValues: TimerValues): Iterator[O]
-
-  /**
-   * Function called as the last method that allows for users to perform
-   * any cleanup or teardown operations.
-   */
-  override def close (): Unit
 
   /**
    * Function that will be invoked only in the first batch for users to process initial states.

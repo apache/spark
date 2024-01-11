@@ -84,7 +84,13 @@ case class TransformWithStateExec(
 
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
-  // TODO not sure if this is the correct distribution
+  // TODO will we run into race condition for this variable?
+  private var isFirstBatch: Boolean = false
+
+  /**
+   * Distribute by grouping attributes - We need the underlying data and the initial state data
+   * to have the same grouping so that the data are co-lacated on the same task.
+   */
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(groupingAttributes,
       getStateInfo, conf) ::
@@ -93,7 +99,11 @@ case class TransformWithStateExec(
       Nil
   }
 
-  // TODO not sure if this is the correct ordering
+  /**
+   * Ordering needed for using GroupingIterator.
+   * We need the initial state to also use the ordering as the data so that we can co-locate the
+   * keys from the underlying data and the initial state.
+   */
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttributes.map(SortOrder(_, Ascending))
@@ -198,10 +208,14 @@ case class TransformWithStateExec(
     val groupedInitialStateIter =
       GroupedIterator(initStateIter, initialStateGroupingAttributes, initialState.output)
 
-    groupedInitialStateIter.foreach {
-      case (keyRow, valueRowIter) =>
-        processInitialStateRows(keyRow.asInstanceOf[UnsafeRow],
-          valueRowIter)
+    // Only process initial states for first batch
+    if (isFirstBatch) {
+      groupedInitialStateIter.foreach {
+        case (keyRow, valueRowIter) =>
+          processInitialStateRows(keyRow.asInstanceOf[UnsafeRow],
+            valueRowIter)
+      }
+      isFirstBatch = false
     }
 
     groupedChildDataIter.flatMap { case (keyRow, valueRowIter) =>
@@ -213,9 +227,9 @@ case class TransformWithStateExec(
     new CoGroupedIterator(
       groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
       case (keyRow, valueRowIter, initialStateRowIter) =>
+        // TODO in design doc: trying to re-initialize state for the same
+        // grouping key will result in an error?
         val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
-        processInitialStateRows(keyUnsafeRow, initialStateRowIter)
-        // We apply the values for the key after applying the initial state.
         handleInputRows(keyUnsafeRow, valueRowIter)
     }
   }
@@ -253,11 +267,10 @@ case class TransformWithStateExec(
           assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
           statefulProcessor.init(processorHandle, outputMode)
           processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
-          // Only process initial state if first batch
-          val curBatchId = processorHandle.getQueryInfo().getBatchId
-          val initialStateIterToProcess = if (curBatchId == 0) Option(initStateIterator) else None
+          // Check if is first batch
+          if (processorHandle.getQueryInfo().getBatchId == 0) isFirstBatch = true
           val result = processDataWithPartition(childDataIterator, store,
-            processorHandle, initialStateIterToProcess)
+            processorHandle, Option(initStateIterator))
           result
       }
     } else {
