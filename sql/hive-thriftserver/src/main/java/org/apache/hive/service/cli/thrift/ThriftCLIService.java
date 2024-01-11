@@ -17,14 +17,6 @@
 
 package org.apache.hive.service.cli.thrift;
 
-import javax.security.auth.login.LoginException;
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.service.AbstractService;
@@ -44,7 +36,13 @@ import org.apache.thrift.transport.TTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.sql.hive.HiveUtils;
+import javax.security.auth.login.LoginException;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ThriftCLIService.
@@ -71,8 +69,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   protected int minWorkerThreads;
   protected int maxWorkerThreads;
   protected long workerKeepAliveTime;
-
-  protected boolean exitOnServerError = true;
 
   protected TServerEventHandler serverEventHandler;
   protected ThreadLocal<ServerContext> currentServerContext;
@@ -170,9 +166,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
     minWorkerThreads = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_MIN_WORKER_THREADS);
     maxWorkerThreads = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_MAX_WORKER_THREADS);
-    exitOnServerError = Boolean.parseBoolean(hiveConf.get(
-        HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR().key(),
-        HiveUtils.HIVE_THRIFT_SERVER_EXIT_ON_ERROR().defaultValueString()));
     super.init(hiveConf);
   }
 

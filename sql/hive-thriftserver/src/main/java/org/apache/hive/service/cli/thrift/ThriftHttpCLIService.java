@@ -17,11 +17,6 @@
 
 package org.apache.hive.service.cli.thrift;
 
-import java.util.Arrays;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
@@ -33,6 +28,7 @@ import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2$;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
@@ -46,6 +42,11 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.ExecutorThreadPool;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
+
+import java.util.Arrays;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 
 public class ThriftHttpCLIService extends ThriftCLIService {
@@ -182,7 +183,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       } else {
         LOG.error("Error starting HiveServer2: could not start "
             + ThriftHttpCLIService.class.getSimpleName(), t);
-        if (exitOnServerError) {
+        if (HiveThriftServer2$.MODULE$.systemExitOnError().get()) {
           System.exit(-1);
         } else {
           throw new ServiceException(t);
