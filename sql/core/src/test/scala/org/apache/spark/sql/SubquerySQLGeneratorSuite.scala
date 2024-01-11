@@ -21,7 +21,7 @@ import java.io.File
 import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 
 class SubquerySQLGeneratorSuite
   extends SparkFunSuite with QueryGeneratorHelper {
@@ -357,11 +357,16 @@ class SubquerySQLGeneratorSuite
     val baseResourcePath =
       getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
     val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
-    val generatedSubqueryDirPath = new File(inputFilePath, "subquery/generated")
+    val generatedSubqueryDirPath = new File(inputFilePath,
+      SubquerySQLGeneratorSuite.GENERATED_SUBQUERY_DIR_NAME)
 
     // Create files for each partition.
     partitionedQueries.foreach { case ((isCorrelated, subqueryType), querySpec) =>
-      val correlationDirName = if (isCorrelated) "correlated" else "uncorrelated"
+      val correlationDirName = if (isCorrelated) {
+        SubquerySQLGeneratorSuite.CORRELATED_DIR_NAME
+      } else {
+        SubquerySQLGeneratorSuite.UNCORRELATED_DIR_NAME
+      }
       val resultFile = new File(generatedSubqueryDirPath, f"$correlationDirName/" +
         f"${subqueryType.toString.toLowerCase(Locale.ROOT)}.sql")
       val parent = resultFile.getParentFile
@@ -369,7 +374,24 @@ class SubquerySQLGeneratorSuite
         assert(parent.mkdirs(), "Could not create directory: " + parent)
       }
       val queryString = createTableSql + "\n\n" + querySpec.map(_.query).mkString(";\n\n") + ";\n"
-      stringToFile(resultFile, queryString)
+
+      val generateSqlFiles = System.getenv(SubquerySQLGeneratorSuite.GENERATE_SQL_FILES_ENV) == "1"
+      if (generateSqlFiles) {
+        stringToFile(resultFile, queryString)
+      } else {
+        assert(fileToString(resultFile) == queryString, "The generated query string is " +
+          s"different from the string in $resultFile. Please generate the queries and write to" +
+          s"file using ${SubquerySQLGeneratorSuite.GENERATE_SQL_FILES_ENV}=1.")
+      }
     }
   }
+}
+
+object SubquerySQLGeneratorSuite {
+
+  private val GENERATE_SQL_FILES_ENV = "GENERATE_SQL_FILES"
+
+  private val GENERATED_SUBQUERY_DIR_NAME = "subquery/generated"
+  private val CORRELATED_DIR_NAME = "correlated"
+  private val UNCORRELATED_DIR_NAME = "uncorrelated"
 }
