@@ -3103,11 +3103,9 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withOrigin {
-    withTypedPlan {
-      val groupCols = groupColsFromDropDuplicates(colNames)
-      Deduplicate(groupCols, logicalPlan)
-    }
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+    val groupCols = groupColsFromDropDuplicates(colNames)
+    Deduplicate(groupCols, logicalPlan)
   }
 
   /**
@@ -3184,12 +3182,10 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.5.0
    */
-  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withOrigin {
-    withTypedPlan {
-      val groupCols = groupColsFromDropDuplicates(colNames)
-      // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
-      DeduplicateWithinWatermark(groupCols, logicalPlan)
-    }
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+    val groupCols = groupColsFromDropDuplicates(colNames)
+    // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
+    DeduplicateWithinWatermark(groupCols, logicalPlan)
   }
 
   /**
