@@ -580,4 +580,23 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       $"csv", schema_of_csv("1,2\n2"), Map.empty[String, String].asJava))
     checkAnswer(actual, Row(Row(1, "2\n2")))
   }
+
+  test("SPARK-46654: to_csv can display complex types data") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", Array(100L, 200L, 300L))))
+
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value",
+        StructType(Seq(
+          StructField("age", LongType),
+          StructField("name", StringType),
+          StructField("scores", ArrayType(LongType))))
+      )
+    ))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual = df.select(to_csv($"value"))
+    checkAnswer(actual, Row("2,Alice,\"[100, 200, 300]\""))
+  }
 }

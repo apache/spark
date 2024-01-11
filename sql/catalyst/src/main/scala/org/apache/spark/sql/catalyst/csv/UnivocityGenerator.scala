@@ -91,11 +91,10 @@ class UnivocityGenerator(
 
     case dt: DataType =>
       (row: InternalRow, ordinal: Int) => {
-        val valueUTF8String = ToPrettyString(
-          Literal(row.get(ordinal, dt), dataType)).eval(null)
-        if (valueUTF8String == null) "null" else valueUTF8String.toString
+        val valueUTF8String = ToPrettyString(Literal(row.get(ordinal, dt), dt),
+          Some(options.zoneId.getId)).eval(null)
+        if (valueUTF8String != null) valueUTF8String.toString else null
       }
-
   }
 
   private def convertRow(row: InternalRow): Seq[String] = {
