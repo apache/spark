@@ -23,6 +23,11 @@ import java.util.Locale
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 
+/**
+ * This suite is used to generate subqueries. This suite generates SQL files in sql-tests. Golden
+ * files are generated for this with Spark, which introduces a form of regression testing in
+ * SQLQueryTestSuite. Then, these are also run against Postgres, in PostgreSQLQueryTestSuite.
+ */
 class SubquerySQLGeneratorSuite
   extends SparkFunSuite with QueryGeneratorHelper {
 
@@ -215,7 +220,7 @@ class SubquerySQLGeneratorSuite
       Attribute(SECOND_COLUMN, Some(NULL_TABLE_NAME)))
     val NULL_TABLE = TableRelation(NULL_TABLE_NAME, NULL_TABLE_SCHEMA)
 
-    val TABLE_COMBINATIONS = Seq(
+    val tableCombinations = Seq(
       (INNER_TABLE, OUTER_TABLE),
       (INNER_TABLE, NULL_TABLE),
       (NULL_TABLE, OUTER_TABLE),
@@ -256,18 +261,18 @@ class SubquerySQLGeneratorSuite
         |""".stripMargin.strip()
     // scalastyle:off line.size.limit
 
-    val INNER_SUBQUERY_ALIAS = "innerSubqueryAlias"
-    val SUBQUERY_ALIAS = "subqueryAlias"
-    val AGGREGATE_FUNCTION_ALIAS = "aggFunctionAlias"
-    val JOIN_TYPES = Seq(JoinType.INNER, JoinType.LEFT_OUTER, JoinType.RIGHT_OUTER)
-    val SET_OPERATIONS = Seq(
+    val innerSubqueryAlias = "innerSubqueryAlias"
+    val subqueryAlias = "subqueryAlias"
+    val aggregationFunctionAlias = "aggFunctionAlias"
+    val joinTypes = Seq(JoinType.INNER, JoinType.LEFT_OUTER, JoinType.RIGHT_OUTER)
+    val setOperations = Seq(
       SetOperationType.UNION, SetOperationType.EXCEPT, SetOperationType.INTERSECT)
 
     // Generate combinations of the inner table to have joins and set operations (with the
     // JOIN_TABLE).
-    val ALL_COMBINATIONS = TABLE_COMBINATIONS.flatMap {
+    val allRelationCombinations = tableCombinations.flatMap {
       case (innerTable, outerTable) =>
-        val joins = JOIN_TYPES.map(joinType => JoinedRelation(
+        val joins = joinTypes.map(joinType => JoinedRelation(
           leftRelation = innerTable,
           rightRelation = JOIN_TABLE,
           // Hardcoded keys for join condition.
@@ -276,11 +281,11 @@ class SubquerySQLGeneratorSuite
         // Hardcoded select all for set operation.
         val leftTableQuery = Query(SelectClause(innerTable.output), FromClause(Seq(innerTable)))()
         val rightTableQuery = Query(SelectClause(JOIN_TABLE.output), FromClause(Seq(JOIN_TABLE)))()
-        val setOps = SET_OPERATIONS.map(setOp =>
+        val setOps = setOperations.map(setOp =>
           SetOperation(leftTableQuery, rightTableQuery, setOp))
           .map(plan => {
-            val output = innerTable.output.map(a => a.copy(qualifier = Some(INNER_SUBQUERY_ALIAS)))
-            SubqueryRelation(name = INNER_SUBQUERY_ALIAS, output = output, inner = plan)
+            val output = innerTable.output.map(a => a.copy(qualifier = Some(innerSubqueryAlias)))
+            SubqueryRelation(name = innerSubqueryAlias, output = output, inner = plan)
           })
         (Seq(innerTable) ++ joins ++ setOps).map(inner => (inner, outerTable))
     }
@@ -320,7 +325,7 @@ class SubquerySQLGeneratorSuite
 
     // Generate queries across the different axis.
     for {
-      (innerTable, outerTable) <- ALL_COMBINATIONS
+      (innerTable, outerTable) <- allRelationCombinations
       subqueryLocation <-
         Seq(SubqueryLocation.WHERE, SubqueryLocation.SELECT, SubqueryLocation.FROM)
       subqueryType <- subqueryTypeChoices(subqueryLocation)
@@ -329,21 +334,21 @@ class SubquerySQLGeneratorSuite
       // Hardcoded aggregation column and group by column.
       val (aggColumn, groupByColumn) = innerTable.output.head -> innerTable.output(1)
       val aggFunctions = Seq(Sum(aggColumn), Count(aggColumn))
-        .map(af => Alias(af, AGGREGATE_FUNCTION_ALIAS))
+        .map(af => Alias(af, aggregationFunctionAlias))
       val groupByOptions = Seq(true, false)
       // Generate all combinations of (aggFunction = sum/count, groupBy = true/false).
       val combinations = aggFunctions.flatMap(agg => groupByOptions.map(groupBy => (agg, groupBy)))
       val aggregates = combinations.map {
         case (af, groupBy) => Aggregate(Seq(af), if (groupBy) Seq(groupByColumn) else Seq())
       }
-      val SUBQUERY_OPERATORS = Seq(Limit(1), Limit(10)) ++ aggregates
+      val subqueryOperators = Seq(Limit(1), Limit(10)) ++ aggregates
 
       for {
-        subqueryOperator <- SUBQUERY_OPERATORS
+        subqueryOperator <- subqueryOperators
         isDistinct <- distinctChoices(subqueryOperator)
       } {
         generatedQuerySpecs += SubquerySpec(
-          query = generateQuery(innerTable, outerTable, SUBQUERY_ALIAS,
+          query = generateQuery(innerTable, outerTable, subqueryAlias,
             subqueryLocation, subqueryType, isCorrelated, isDistinct, subqueryOperator),
           isCorrelated = isCorrelated,
           subqueryType = subqueryType)
@@ -362,18 +367,26 @@ class SubquerySQLGeneratorSuite
 
     // Create files for each partition.
     partitionedQueries.foreach { case ((isCorrelated, subqueryType), querySpec) =>
-      val correlationDirName = if (isCorrelated) {
-        SubquerySQLGeneratorSuite.CORRELATED_DIR_NAME
+      val correlationFilePrefix = if (isCorrelated) {
+        SubquerySQLGeneratorSuite.CORRELATED_FILE_PREFIX
       } else {
-        SubquerySQLGeneratorSuite.UNCORRELATED_DIR_NAME
+        SubquerySQLGeneratorSuite.UNCORRELATED_FILE_PREFIX
       }
-      val resultFile = new File(generatedSubqueryDirPath, f"$correlationDirName/" +
+      val resultFile = new File(generatedSubqueryDirPath, f"${correlationFilePrefix}_" +
         f"${subqueryType.toString.toLowerCase(Locale.ROOT)}.sql")
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
       }
-      val queryString = createTableSql + "\n\n" + querySpec.map(_.query).mkString(";\n\n") + ";\n"
+      var queryString = createTableSql + "\n\n" + querySpec.map(_.query).mkString(";\n\n") + ";\n"
+      if (SubquerySQLGeneratorSuite.FILES_WITH_KNOWN_FAILURES.exists(
+        f => resultFile.getAbsolutePath.toLowerCase(Locale.ROOT).contains(f))) {
+        queryString = "-- This test is excluded from PostgreSQLQueryTestSuite because " +
+          "there is an existing query returns different results in Spark and Postgres.\n" +
+          "--ONLY_IF spark\n" + queryString
+      }
+      queryString = "-- This file was automatically generated by SubquerySQLGeneratorSuite.\n" +
+        queryString
 
       val generateSqlFiles = System.getenv(SubquerySQLGeneratorSuite.GENERATE_SQL_FILES_ENV) == "1"
       if (generateSqlFiles) {
@@ -392,6 +405,11 @@ object SubquerySQLGeneratorSuite {
   private val GENERATE_SQL_FILES_ENV = "GENERATE_SQL_FILES"
 
   private val GENERATED_SUBQUERY_DIR_NAME = "subquery/generated"
-  private val CORRELATED_DIR_NAME = "correlated"
-  private val UNCORRELATED_DIR_NAME = "uncorrelated"
+  private val CORRELATED_FILE_PREFIX = "correlated"
+  private val UNCORRELATED_FILE_PREFIX = "uncorrelated"
+
+  private val FILES_WITH_KNOWN_FAILURES = Seq(
+    "correlated_attribute.sql",
+    "correlated_not_in.sql"
+  ).map(_.toLowerCase(Locale.ROOT))
 }
