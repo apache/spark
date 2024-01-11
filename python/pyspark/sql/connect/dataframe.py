@@ -72,19 +72,12 @@ from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
+    SortOrder,
     ColumnReference,
     UnresolvedRegex,
     UnresolvedStar,
 )
-from pyspark.sql.connect.functions.builtin import (
-    _to_col,
-    _invoke_function,
-    col,
-    lit,
-    udf,
-    struct,
-    expr as sql_expression,
-)
+from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema
 
 
@@ -199,9 +192,9 @@ class DataFrame:
             expr = expr[0]  # type: ignore[assignment]
         for element in expr:
             if isinstance(element, str):
-                sql_expr.append(sql_expression(element))
+                sql_expr.append(F.expr(element))
             else:
-                sql_expr.extend([sql_expression(e) for e in element])
+                sql_expr.extend([F.expr(e) for e in element])
 
         return DataFrame(plan.Project(self._plan, *sql_expr), session=self._session)
 
@@ -215,7 +208,7 @@ class DataFrame:
             )
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [_invoke_function(f, col(e)) for e, f in exprs[0].items()]
+            measures = [F._invoke_function(f, F.col(e)) for e, f in exprs[0].items()]
             return self.groupBy().agg(*measures)
         else:
             # other expressions
@@ -259,7 +252,7 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        table, _ = self.agg(_invoke_function("count", lit(1)))._to_table()
+        table, _ = self.agg(F._invoke_function("count", F.lit(1)))._to_table()
         return table[0][0].as_py()
 
     count.__doc__ = PySparkDataFrame.count.__doc__
@@ -352,8 +345,6 @@ class DataFrame:
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
         def _convert_col(col: "ColumnOrName") -> "ColumnOrName":
-            from pyspark.sql.connect.expressions import SortOrder, ColumnReference
-
             if isinstance(col, Column):
                 if isinstance(col._expr, SortOrder):
                     return col
@@ -471,7 +462,7 @@ class DataFrame:
 
     def filter(self, condition: Union[Column, str]) -> "DataFrame":
         if isinstance(condition, str):
-            expr = sql_expression(condition)
+            expr = F.expr(condition)
         else:
             expr = condition
         return DataFrame(plan.Filter(child=self._plan, filter=expr), session=self._session)
@@ -713,7 +704,7 @@ class DataFrame:
                     )
             else:
                 _c = c  # type: ignore[assignment]
-            _cols.append(_to_col(cast("ColumnOrName", _c)))
+            _cols.append(F._to_col(cast("ColumnOrName", _c)))
 
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
@@ -1652,8 +1643,6 @@ class DataFrame:
     def sampleBy(
         self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
     ) -> "DataFrame":
-        from pyspark.sql.connect.expressions import ColumnReference
-
         if isinstance(col, str):
             col = Column(ColumnReference(col))
         elif not isinstance(col, Column):
@@ -1754,7 +1743,7 @@ class DataFrame:
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            return col(self.columns[item])
+            return F.col(self.columns[item])
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
@@ -1767,11 +1756,6 @@ class DataFrame:
         return sorted(attrs)
 
     __dir__.__doc__ = PySparkDataFrame.__dir__.__doc__
-
-    def _print_plan(self) -> str:
-        if self._plan:
-            return self._plan.print()
-        return ""
 
     def collect(self) -> List[Row]:
         table, schema = self._to_table()
@@ -2084,8 +2068,8 @@ class DataFrame:
         def foreach_func(row: Any) -> None:
             f(row)
 
-        self.select(struct(*self.schema.fieldNames()).alias("row")).select(
-            udf(foreach_func, StructType())("row")  # type: ignore[arg-type]
+        self.select(F.struct(*self.schema.fieldNames()).alias("row")).select(
+            F.udf(foreach_func, StructType())("row")  # type: ignore[arg-type]
         ).collect()
 
     foreach.__doc__ = PySparkDataFrame.foreach.__doc__
