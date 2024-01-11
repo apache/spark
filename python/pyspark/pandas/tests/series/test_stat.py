@@ -26,14 +26,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesStatMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_nunique(self):
         pser = pd.Series([1, 2, 1, np.nan])
         psser = ps.from_pandas(pser)

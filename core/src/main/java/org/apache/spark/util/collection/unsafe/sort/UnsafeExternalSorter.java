@@ -862,8 +862,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     private void closeIfPossible(UnsafeSorterIterator iterator) {
-      if (iterator instanceof Closeable) {
-        IOUtils.closeQuietly(((Closeable) iterator));
+      if (iterator instanceof Closeable closeable) {
+        IOUtils.closeQuietly((closeable));
       }
     }
   }

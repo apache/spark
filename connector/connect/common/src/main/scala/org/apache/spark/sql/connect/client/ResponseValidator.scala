@@ -35,18 +35,20 @@ class ResponseValidator extends Logging {
     val field = response.getDescriptorForType.findFieldByName("server_side_session_id")
     // If the field does not exist, we ignore it. New / Old message might not contain it and this
     // behavior allows us to be compatible.
-    if (field != null) {
+    if (field != null && response.hasField(field)) {
       val value = response.getField(field).asInstanceOf[String]
       // Ignore, if the value is unset.
-      if (response.hasField(field) && value != null && value.nonEmpty) {
+      if (value != null && value.nonEmpty) {
         serverSideSessionId match {
-          case Some(id) if value != id && value != "" =>
-            throw new IllegalStateException(s"Server side session ID changed from $id to $value")
-          case _ if value != "" =>
-            synchronized {
-              serverSideSessionId = Some(value.toString)
+          case Some(id) =>
+            if (value != id) {
+              throw new IllegalStateException(
+                s"Server side session ID changed from $id to $value")
             }
-          case _ => // No-op
+          case _ =>
+            synchronized {
+              serverSideSessionId = Some(value)
+            }
         }
       }
     } else {
@@ -65,20 +67,9 @@ class ResponseValidator extends Logging {
 
       override def innerIterator: Iterator[T] = inner
 
-      override def hasNext: Boolean = {
-        innerIterator.hasNext
-      }
-
       override def next(): T = {
         verifyResponse {
           innerIterator.next()
-        }
-      }
-
-      override def close(): Unit = {
-        innerIterator match {
-          case it: CloseableIterator[T] => it.close()
-          case _ => // nothing
         }
       }
     }

@@ -192,7 +192,10 @@ private[spark] object SchemaUtils {
         case (x, ys) if ys.length > 1 => s"${x._2.mkString(".")}"
       }
       throw new AnalysisException(
-        s"Found duplicate column(s) $checkType: ${duplicateColumns.mkString(", ")}")
+        errorClass = "_LEGACY_ERROR_TEMP_3058",
+        messageParameters = Map(
+          "checkType" -> checkType,
+          "duplicateColumns" -> duplicateColumns.mkString(", ")))
     }
   }
 
@@ -225,9 +228,11 @@ private[spark] object SchemaUtils {
         case o =>
           if (column.length > 1) {
             throw new AnalysisException(
-              s"""Expected $columnPath to be a nested data type, but found $o. Was looking for the
-                 |index of ${UnresolvedAttribute(column).name} in a nested field
-              """.stripMargin)
+              errorClass = "_LEGACY_ERROR_TEMP_3062",
+              messageParameters = Map(
+                "columnPath" -> columnPath,
+                "o" -> o.toString,
+                "attr" -> UnresolvedAttribute(column).name))
           }
           Nil
       }
@@ -239,9 +244,12 @@ private[spark] object SchemaUtils {
     } catch {
       case i: IndexOutOfBoundsException =>
         throw new AnalysisException(
-          s"Couldn't find column ${i.getMessage} in:\n${schema.treeString}")
+          errorClass = "_LEGACY_ERROR_TEMP_3060",
+          messageParameters = Map("i" -> i.getMessage, "schema" -> schema.treeString))
       case e: AnalysisException =>
-        throw new AnalysisException(e.getMessage + s":\n${schema.treeString}")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3061",
+          messageParameters = Map("e" -> e.getMessage, "schema" -> schema.treeString))
     }
   }
 
@@ -261,7 +269,10 @@ private[spark] object SchemaUtils {
             (nameAndField._1 :+ nowField.name) -> nowField
           case _ =>
             throw new AnalysisException(
-              s"The positions provided ($pos) cannot be resolved in\n${schema.treeString}.")
+              errorClass = "_LEGACY_ERROR_TEMP_3059",
+              messageParameters = Map(
+                "pos" -> pos.toString,
+                "schema" -> schema.treeString))
       }
     }
     field._1

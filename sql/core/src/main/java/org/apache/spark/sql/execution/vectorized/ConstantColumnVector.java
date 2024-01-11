@@ -60,8 +60,8 @@ public class ConstantColumnVector extends ColumnVector {
     super(type);
     this.numRows = numRows;
 
-    if (type instanceof StructType) {
-      this.childData = new ConstantColumnVector[((StructType) type).fields().length];
+    if (type instanceof StructType structType) {
+      this.childData = new ConstantColumnVector[structType.fields().length];
     } else if (type instanceof CalendarIntervalType) {
       // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childData = new ConstantColumnVector[3];

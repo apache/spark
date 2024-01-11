@@ -72,6 +72,7 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
+    | executeImmediate                                                 #visitExecuteImmediate
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
@@ -228,6 +229,28 @@ statement
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+executeImmediate
+    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO targetVariable=multipartIdentifierList)? executeImmediateUsing?
+    ;
+
+executeImmediateUsing
+    : USING LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN
+    | USING params=namedExpressionSeq
+    ;
+
+executeImmediateQueryParam
+    : stringLit
+    | multipartIdentifier
+    ;
+
+executeImmediateArgument
+    : (constant|multipartIdentifier) (AS name=errorCapturingIdentifier)?
+    ;
+
+executeImmediateArgumentSeq
+    : executeImmediateArgument (COMMA executeImmediateArgument)*
     ;
 
 timezone
@@ -979,6 +1002,7 @@ primaryExpression
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
        (COMMA argument+=functionArgument)*)? RIGHT_PAREN
+       (WITHIN GROUP LEFT_PAREN ORDER BY sortItem (COMMA sortItem)* RIGHT_PAREN)?
        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier ARROW expression                                                              #lambda
@@ -994,9 +1018,6 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
-    | name=(PERCENTILE_CONT | PERCENTILE_DISC) LEFT_PAREN percentage=valueExpression RIGHT_PAREN
-        WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN
-        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #percentile
     ;
 
 literalType
@@ -1396,6 +1417,7 @@ ansiNonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | INCLUDE
     | INDEX
@@ -1687,6 +1709,7 @@ nonReserved
     | ESCAPED
     | EXCHANGE
     | EXCLUDE
+    | EXECUTE
     | EXISTS
     | EXPLAIN
     | EXPORT
@@ -1719,6 +1742,7 @@ nonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | IN
     | INCLUDE

@@ -52,9 +52,14 @@ private[ui] class ExecutorsPage(
   extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val imported = UIUtils.formatImportJavaScript(
+      request,
+      "/static/executorspage.js",
+      "setThreadDumpEnabled",
+      "setHeapHistogramEnabled")
     val js =
       s"""
-         |import {setThreadDumpEnabled, setHeapHistogramEnabled} from "/static/executorspage.js";
+         |$imported
          |
          |setThreadDumpEnabled($threadDumpEnabled);
          |setHeapHistogramEnabled($heapHistogramEnabled)

@@ -233,10 +233,12 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     NoPool.INSTANCE
   }
 
+  private val workers = conf.get(IO_COMPRESSION_ZSTD_WORKERS)
+
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
-    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool).setLevel(level)
+    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool).setLevel(level).setWorkers(workers)
     new BufferedOutputStream(os, bufferSize)
   }
 
@@ -244,7 +246,9 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // SPARK-29322: Set "closeFrameOnFlush" to 'true' to let continuous input stream not being
     // stuck on reading open frame.
     val os = new ZstdOutputStreamNoFinalizer(s, bufferPool)
-      .setLevel(level).setCloseFrameOnFlush(true)
+      .setLevel(level)
+      .setWorkers(workers)
+      .setCloseFrameOnFlush(true)
     new BufferedOutputStream(os, bufferSize)
   }
 

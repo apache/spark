@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import com.google.common.base.Objects
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -64,7 +65,13 @@ case class DataSourceV2Relation(
       Nil
   }
 
-  override def name: String = table.name()
+  override def name: String = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => s"${quoteIfNeeded(cat.name())}.${ident.quoted}"
+      case _ => table.name()
+    }
+  }
 
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
@@ -81,7 +88,7 @@ case class DataSourceV2Relation(
       // when testing, throw an exception if this computeStats method is called because stats should
       // not be accessed before pushing the projection and filters to create a scan. otherwise, the
       // stats are not accurate because they are based on a full table scan of all columns.
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
@@ -180,7 +187,7 @@ case class DataSourceV2ScanRelation(
       ordering = ordering.map(_.map(QueryPlan.normalizeExpressions(_, output)))
     )
 
-  override def name: String = relation.table.name()
+  override def name: String = relation.name
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"

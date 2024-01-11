@@ -31,6 +31,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
 from pandas.api.extensions import ExtensionDtype
 
+
 extension_dtypes: Tuple[type, ...]
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -147,8 +148,10 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-    if sys.version_info >= (3, 8):
+    from pyspark.loose_version import LooseVersion
+
+    # For NumPy typing, NumPy version should be 1.21+
+    if LooseVersion(np.__version__) >= LooseVersion("1.21"):
         if (
             hasattr(tpe, "__origin__")
             and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]

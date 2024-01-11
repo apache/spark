@@ -23,6 +23,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -265,31 +266,31 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
       name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def listFunction(): Seq[FunctionIdentifier] = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 
   override def clear(): Unit = {
-    throw new UnsupportedOperationException
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
   }
 }
 
@@ -478,6 +479,8 @@ object FunctionRegistry {
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
+    expressionBuilder("percentile_cont", PercentileContBuilder),
+    expressionBuilder("percentile_disc", PercentileDiscBuilder),
     expression[Median]("median"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
@@ -509,7 +512,7 @@ object FunctionRegistry {
     expression[RegrSYY]("regr_syy"),
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
-    expression[Mode]("mode"),
+    expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
 
@@ -646,6 +649,7 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
@@ -769,6 +773,7 @@ object FunctionRegistry {
     expression[PercentRank]("percent_rank"),
 
     // predicates
+    expression[Between]("between"),
     expression[And]("and"),
     expression[In]("in"),
     expression[Not]("not"),
@@ -874,9 +879,6 @@ object FunctionRegistry {
       "expr1 <> expr2 - Returns true if `expr1` is not equal to `expr2`."),
     "!=" -> makeExprInfoForVirtualOperator("!=",
       "expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`."),
-    "between" -> makeExprInfoForVirtualOperator("between",
-      "expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-        "evaluate if `expr1` is [not] in between `expr2` and `expr3`."),
     "case" -> makeExprInfoForVirtualOperator("case",
       "CASE expr1 WHEN expr2 THEN expr3 [WHEN expr4 THEN expr5]* [ELSE expr6] END " +
         "- When `expr1` = `expr2`, returns `expr3`; when `expr1` = `expr4`, return `expr5`; " +

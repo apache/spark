@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -700,7 +700,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.view.mapValues(lit(_).expr).toMap)
+          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
         } else {
           parsedPlan
         }
@@ -1217,7 +1217,7 @@ object SparkSession extends Logging {
    */
   def active: SparkSession = {
     getActiveSession.getOrElse(getDefaultSession.getOrElse(
-      throw new IllegalStateException("No active or default Spark session found")))
+      throw SparkException.internalError("No active or default Spark session found")))
   }
 
   /**
@@ -1316,7 +1316,7 @@ object SparkSession extends Logging {
   private def assertOnDriver(): Unit = {
     if (TaskContext.get() != null) {
       // we're accessing it during task execution, fail.
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "SparkSession should only be created and accessed on the driver.")
     }
   }

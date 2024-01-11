@@ -185,27 +185,26 @@ public class StreamSuite {
         ByteArrayOutputStream baos = null;
 
         switch (streamId) {
-          case "largeBuffer":
+          case "largeBuffer" -> {
             baos = new ByteArrayOutputStream();
             out = baos;
             srcBuffer = testData.largeBuffer;
-            break;
-          case "smallBuffer":
+          }
+          case "smallBuffer" -> {
             baos = new ByteArrayOutputStream();
             out = baos;
             srcBuffer = testData.smallBuffer;
-            break;
-          case "file":
+          }
+          case "file" -> {
             outFile = File.createTempFile("data", ".tmp", testData.tempDir);
             out = new FileOutputStream(outFile);
-            break;
-          case "emptyBuffer":
+          }
+          case "emptyBuffer" -> {
             baos = new ByteArrayOutputStream();
             out = baos;
             srcBuffer = testData.emptyBuffer;
-            break;
-          default:
-            throw new IllegalArgumentException(streamId);
+          }
+          default -> throw new IllegalArgumentException(streamId);
         }
 
         TestCallback callback = new TestCallback(out);

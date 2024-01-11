@@ -245,11 +245,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    */
   def allocatedExecutors(): Map[Int, Option[String]] = synchronized {
     if (isTrackerStarted) {
-      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).view.mapValues {
-        _.runningExecutor.map {
+      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).transform { (_, v) =>
+        v.runningExecutor.map {
           _.executorId
         }
-      }.toMap
+      }
     } else {
       Map.empty
     }

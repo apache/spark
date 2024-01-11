@@ -174,7 +174,7 @@ class StreamSuite extends StreamTest {
         try {
           query.processAllAvailable()
           val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
-          checkDatasetUnorderly[Long](outputDf, (0L to 10L).concat(0L to 10L): _*)
+          checkDatasetUnorderly[Long](outputDf, (0L to 10L) ++ (0L to 10L): _*)
         } finally {
           query.stop()
         }
@@ -713,9 +713,7 @@ class StreamSuite extends StreamTest {
         "columnName" -> "`rn_col`",
         "windowSpec" ->
           ("(PARTITION BY COL1 ORDER BY COL2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
-          "AND CURRENT ROW)")),
-      queryContext = Array(
-        ExpectedContext(fragment = "withColumn", callSitePattern = getCurrentClassCallSitePattern)))
+          "AND CURRENT ROW)")))
   }
 
 

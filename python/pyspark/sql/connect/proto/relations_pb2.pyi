@@ -2788,8 +2788,31 @@ class WithColumnsRenamed(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    class Rename(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        COL_NAME_FIELD_NUMBER: builtins.int
+        NEW_COL_NAME_FIELD_NUMBER: builtins.int
+        col_name: builtins.str
+        """(Required) The existing column name."""
+        new_col_name: builtins.str
+        """(Required) The new column name."""
+        def __init__(
+            self,
+            *,
+            col_name: builtins.str = ...,
+            new_col_name: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "col_name", b"col_name", "new_col_name", b"new_col_name"
+            ],
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_MAP_FIELD_NUMBER: builtins.int
+    RENAMES_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
@@ -2797,18 +2820,25 @@ class WithColumnsRenamed(google.protobuf.message.Message):
     def rename_columns_map(
         self,
     ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """(Required)
+        """(Optional)
 
         Renaming column names of input relation from A to B where A is the map key
         and B is the map value. This is a no-op if schema doesn't contain any A. It
         does not require that all input relation column names to present as keys.
         duplicated B are not allowed.
         """
+    @property
+    def renames(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___WithColumnsRenamed.Rename
+    ]: ...
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         rename_columns_map: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        renames: collections.abc.Iterable[global___WithColumnsRenamed.Rename] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -2816,7 +2846,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "input", b"input", "rename_columns_map", b"rename_columns_map"
+            "input", b"input", "rename_columns_map", b"rename_columns_map", "renames", b"renames"
         ],
     ) -> None: ...
 

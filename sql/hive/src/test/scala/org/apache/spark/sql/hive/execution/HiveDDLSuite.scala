@@ -133,7 +133,7 @@ class HiveDDLSuite
       createTime = 0L,
       lastAccessTime = 0L,
       owner = "",
-      properties = table.properties.view.filterKeys(!nondeterministicProps.contains(_)).toMap,
+      properties = table.properties.filter { case (k, _) => !nondeterministicProps.contains(k) },
       // View texts are checked separately
       viewText = None
     )
@@ -418,15 +418,15 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql("CREATE TABLE tab1 USING hive")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "_LEGACY_ERROR_TEMP_3083",
+          parameters = Map("tableName" -> "`spark_catalog`.`default`.`tab1`")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"CREATE TABLE tab2 USING hive location '${tempDir.getCanonicalPath}'")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "_LEGACY_ERROR_TEMP_3083",
+          parameters = Map("tableName" -> "`spark_catalog`.`default`.`tab2`")
         )
       }
     }
@@ -812,7 +812,7 @@ class HiveDDLSuite
           sql(s"CREATE TABLE $tabName (height INT, length INT) " +
             s"TBLPROPERTIES('EXTERNAL'='TRUE')")
         },
-        errorClass = null,
+        errorClass = "_LEGACY_ERROR_TEMP_3087",
         parameters = Map.empty
       )
     }
@@ -829,7 +829,7 @@ class HiveDDLSuite
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
         },
-        errorClass = null,
+        errorClass = "_LEGACY_ERROR_TEMP_3087",
         parameters = Map.empty
       )
       // The table type is not changed to external
@@ -1089,7 +1089,7 @@ class HiveDDLSuite
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assert(oldPart.storage.properties.view.filterKeys(expectedSerdeProps.contains) !=
+    assert(oldPart.storage.properties.filter { case (k, _) => expectedSerdeProps.contains(k) } !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -1097,7 +1097,7 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assert(newPart.storage.properties.view.filterKeys(expectedSerdeProps.contains).toMap ==
+    assert(newPart.storage.properties.filter { case (k, _) => expectedSerdeProps.contains(k) } ==
       expectedSerdeProps)
   }
 
@@ -1395,11 +1395,13 @@ class HiveDDLSuite
           },
           errorClass = caseSensitive match {
             case "false" => "UNSUPPORTED_FEATURE.DROP_DATABASE"
-            case _ => null
+            case _ => "_LEGACY_ERROR_TEMP_3065"
           },
           parameters = caseSensitive match {
             case "false" => Map("database" -> "`default`")
-            case _ => Map.empty
+            case _ => Map(
+              "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+              "msg" -> "MetaException(message:Can not drop default database)")
           }
         )
       }
@@ -1699,7 +1701,7 @@ class HiveDDLSuite
       "minFileSize"
     )
     assert(
-      targetTable.properties.view.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
+      targetTable.properties.forall { case (k, _) => metastoreGeneratedProperties.contains(k) },
       "the table properties of source tables should not be copied in the created table")
 
     provider match {
@@ -1892,8 +1894,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = 'loser')")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "_LEGACY_ERROR_TEMP_3086",
+          parameters = Map(
+            "tableName" -> "spark_catalog.default.tbl",
+            "invalidKeys" -> s"[${forbiddenPrefix}foo]")
         )
         checkError(
           exception = intercept[AnalysisException] {
@@ -1909,8 +1913,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"CREATE TABLE tbl2 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "_LEGACY_ERROR_TEMP_3086",
+          parameters = Map(
+            "tableName" -> "spark_catalog.default.tbl2",
+            "invalidKeys" -> s"[${forbiddenPrefix}foo]")
         )
       }
     }
@@ -2409,8 +2415,10 @@ class HiveDDLSuite
                exception = intercept[AnalysisException] {
                 sql("INSERT INTO TABLE t SELECT 1")
               },
-              errorClass = null,
-              parameters = Map.empty
+              errorClass = "_LEGACY_ERROR_TEMP_3065",
+              parameters = Map(
+                "clazz" -> "java.lang.IllegalArgumentException",
+                "msg" -> "java.net.URISyntaxException: Relative path in absolute URI: a:b")
             )
           }
         }
@@ -2454,16 +2462,20 @@ class HiveDDLSuite
                exception = intercept[AnalysisException] {
                 sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
               },
-              errorClass = null,
-              parameters = Map.empty
+              errorClass = "_LEGACY_ERROR_TEMP_3065",
+              parameters = Map(
+                "clazz" -> "java.lang.IllegalArgumentException",
+                "msg" -> "java.net.URISyntaxException: Relative path in absolute URI: a:b")
             )
 
             checkError(
                exception = intercept[AnalysisException] {
                 sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
               },
-              errorClass = null,
-              parameters = Map.empty
+              errorClass = "_LEGACY_ERROR_TEMP_3065",
+              parameters = Map(
+                "clazz" -> "java.lang.IllegalArgumentException",
+                "msg" -> "java.net.URISyntaxException: Relative path in absolute URI: a:b")
             )
           }
         }
@@ -2566,8 +2578,10 @@ class HiveDDLSuite
               exception = intercept[AnalysisException] {
                 sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
               },
-              errorClass = null,
-              parameters = Map.empty
+              errorClass = "_LEGACY_ERROR_TEMP_3065",
+              parameters = Map(
+                "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+                "msg" -> "Partition column name c2 conflicts with table columns.")
             )
 
             // hive catalog will still complains that c1 is duplicate column name because hive
@@ -2576,8 +2590,10 @@ class HiveDDLSuite
               exception = intercept[AnalysisException] {
                 sql("ALTER TABLE tab ADD COLUMNS (C1 string)")
               },
-              errorClass = null,
-              parameters = Map.empty
+              errorClass = "_LEGACY_ERROR_TEMP_3065",
+              parameters = Map(
+                "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+                "msg" -> "Duplicate column name c1 in the table definition.")
             )
           }
         }
@@ -2603,8 +2619,10 @@ class HiveDDLSuite
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE t2 STORED AS PARQUET AS SELECT null as null_col")
         },
-        errorClass = null,
-        parameters = Map.empty
+        errorClass = "_LEGACY_ERROR_TEMP_3065",
+        parameters = Map(
+          "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+          "msg" -> "java.lang.UnsupportedOperationException: Unknown field type: void")
       )
 
       sql("CREATE TABLE t3 AS SELECT NULL AS null_col")
@@ -2627,8 +2645,10 @@ class HiveDDLSuite
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE t2 (v VOID) STORED AS PARQUET")
         },
-        errorClass = null,
-        parameters = Map.empty
+        errorClass = "_LEGACY_ERROR_TEMP_3065",
+        parameters = Map(
+          "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+          "msg" -> "java.lang.UnsupportedOperationException: Unknown field type: void")
       )
 
       sql("CREATE TABLE t3 (v VOID) USING hive")
@@ -3270,7 +3290,7 @@ class HiveDDLSuite
       val jarName = "TestUDTF.jar"
       val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
       spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
-        .foreach(spark.sparkContext.addedJars("default").remove)
+        .foreach(k => spark.sparkContext.addedJars.get("default").foreach(_.remove(k)))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY FUNCTION f1 AS " +

@@ -490,37 +490,21 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     @Override
     protected boolean handle(String opt, String value) {
       switch (opt) {
-        case MASTER:
-          master = value;
-          break;
-        case REMOTE:
-          remote = value;
-          break;
-        case DEPLOY_MODE:
-          deployMode = value;
-          break;
-        case PROPERTIES_FILE:
-          propertiesFile = value;
-          break;
-        case DRIVER_MEMORY:
-          conf.put(SparkLauncher.DRIVER_MEMORY, value);
-          break;
-        case DRIVER_JAVA_OPTIONS:
-          conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
-          break;
-        case DRIVER_LIBRARY_PATH:
-          conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
-          break;
-        case DRIVER_CLASS_PATH:
-          conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
-          break;
-        case CONF:
+        case MASTER -> master = value;
+        case REMOTE -> remote = value;
+        case DEPLOY_MODE -> deployMode = value;
+        case PROPERTIES_FILE -> propertiesFile = value;
+        case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
+        case DRIVER_JAVA_OPTIONS -> conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
+        case DRIVER_LIBRARY_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
+        case DRIVER_CLASS_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
+        case CONF -> {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
           conf.put(setConf[0], setConf[1]);
-          break;
-        case CLASS:
+        }
+        case CLASS -> {
           // The special classes require some special command line handling, since they allow
           // mixing spark-submit arguments with arguments that should be propagated to the shell
           // itself. Note that for this to work, the "--class" argument must come before any
@@ -530,25 +514,22 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
             allowsMixedArguments = true;
             appResource = specialClasses.get(value);
           }
-          break;
-        case KILL_SUBMISSION:
-        case STATUS:
+        }
+        case KILL_SUBMISSION, STATUS -> {
           isSpecialCommand = true;
           parsedArgs.add(opt);
           parsedArgs.add(value);
-          break;
-        case HELP:
-        case USAGE_ERROR:
-        case VERSION:
+        }
+        case HELP, USAGE_ERROR, VERSION -> {
           isSpecialCommand = true;
           parsedArgs.add(opt);
-          break;
-        default:
+        }
+        default -> {
           parsedArgs.add(opt);
           if (value != null) {
             parsedArgs.add(value);
           }
-          break;
+        }
       }
       return true;
     }

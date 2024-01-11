@@ -32,6 +32,7 @@ from grpc_status import rpc_status
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+from pyspark.errors import PySparkRuntimeError
 
 
 class ExecutePlanResponseReattachableIterator(Generator):
@@ -255,10 +256,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             status = rpc_status.from_call(cast(grpc.Call, e))
             if status is not None and "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message:
                 if self._last_returned_response_id is not None:
-                    raise RuntimeError(
-                        "OPERATION_NOT_FOUND on the server but "
-                        "responses were already received from it.",
-                        e,
+                    raise PySparkRuntimeError(
+                        error_class="RESPONSE_ALREADY_RECEIVED",
+                        message_parameters={},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(

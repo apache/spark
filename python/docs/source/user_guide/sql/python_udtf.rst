@@ -92,7 +92,7 @@ To implement a Python UDTF, you first need to define a class implementing the me
             that all rows of the input table are consumed by the `eval` method from exactly one
             instance of the UDTF class. On the other hand, if the `partitionBy` list is non-empty,
             the query planner will arrange a repartitioning such that all rows with each unique
-            combination of values of the partitioning columns are consumed by a separate unique
+            combination of values of the partitioning expressions are consumed by a separate unique
             instance of the UDTF class. If `orderBy` is non-empty, this specifies the requested
             ordering of rows within each partition.
 

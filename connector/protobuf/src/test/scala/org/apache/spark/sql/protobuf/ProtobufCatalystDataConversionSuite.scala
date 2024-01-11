@@ -80,20 +80,9 @@ class ProtobufCatalystDataConversionSuite
         .eval()
     }
 
-    val expected = {
-      val expectedSchema = ProtobufUtils.buildDescriptor(descBytes, badSchema)
-      SchemaConverters.toSqlType(expectedSchema).dataType match {
-        case st: StructType =>
-          Row.fromSeq((0 until st.length).map { _ =>
-            null
-          })
-        case _ => null
-      }
-    }
-
     checkEvaluation(
       ProtobufDataToCatalyst(binary, badSchema, Some(descBytes), Map("mode" -> "PERMISSIVE")),
-      expected)
+      expected = null)
   }
 
   protected def prepareExpectedResult(expected: Any): Any = expected match {

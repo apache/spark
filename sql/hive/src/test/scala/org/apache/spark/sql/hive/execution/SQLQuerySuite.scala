@@ -246,8 +246,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
-      "Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-        "evaluate if `expr1` is [not] in between `expr2` and `expr3`")
+      "Usage: input [NOT] BETWEEN lower AND upper - " +
+        "evaluate if `input` is [not] in between `lower` and `upper`")
 
     checkKeywordsExist(sql("describe function  `case`"),
       "Function: case",
@@ -2667,6 +2667,32 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |""".stripMargin)
       val df = sql("SELECT * FROM t")
       checkAnswer(df, Seq.empty[Row])
+    }
+  }
+
+  test("SPARK-46388: HiveAnalysis convert InsertIntoStatement to InsertIntoHiveTable " +
+    "iff child resolved") {
+    withTable("t") {
+      sql("CREATE TABLE t (a STRING)")
+      checkError(
+        exception = intercept[AnalysisException](sql("INSERT INTO t SELECT a*2 FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 38,
+          stop = 38) )
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("INSERT INTO t SELECT cast(a as short) FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 51,
+          stop = 51))
     }
   }
 }

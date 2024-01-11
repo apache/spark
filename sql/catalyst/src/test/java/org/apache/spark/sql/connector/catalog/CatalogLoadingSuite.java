@@ -80,11 +80,8 @@ public class CatalogLoadingSuite {
     SparkException exc = Assertions.assertThrows(CatalogNotFoundException.class,
         () -> Catalogs.load("missing", conf));
 
-    Assertions.assertTrue(
-      exc.getMessage().contains("plugin class not found: spark.sql.catalog.missing is not defined"),
-      "Should complain that implementation is not configured");
-    Assertions.assertTrue(exc.getMessage().contains("missing"),
-      "Should identify the catalog by name");
+    Assertions.assertEquals(exc.getErrorClass(), "CATALOG_NOT_FOUND");
+    Assertions.assertEquals(exc.getMessageParameters().get("catalogName"), "`missing`");
   }
 
   @Test

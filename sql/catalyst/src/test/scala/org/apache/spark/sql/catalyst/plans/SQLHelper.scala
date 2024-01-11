@@ -23,46 +23,13 @@ import scala.util.control.NonFatal
 
 import org.scalatest.Assertions.fail
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
-trait SQLHelper {
-
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
-   * configurations, and returns the result of the f.
-   *
-   * @param pairs
-   * @param f
-   * @tparam T
-   * @return
-   */
-  protected def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
-    val conf = SQLConf.get
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (conf.contains(key)) {
-        Some(conf.getConfString(key))
-      } else {
-        None
-      }
-    }
-    keys.lazyZip(values).foreach { (k, v) =>
-      if (SQLConf.isStaticConfigKey(k)) {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
-      }
-      conf.setConfString(k, v)
-    }
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConfString(key, value)
-        case (key, None) => conf.unsetConf(key)
-      }
-    }
-  }
+trait SQLHelper extends SQLConfHelper {
 
   /**
    * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If

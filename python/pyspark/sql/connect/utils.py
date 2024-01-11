@@ -18,6 +18,7 @@ import sys
 
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+from pyspark.errors import PySparkImportError
 
 
 def check_dependencies(mod_name: str) -> None:
@@ -45,13 +46,21 @@ def require_minimum_grpc_version() -> None:
     try:
         import grpc
     except ImportError as error:
-        raise ImportError(
-            f"grpcio >= {minimum_grpc_version} must be installed; however, it was not found."
+        raise PySparkImportError(
+            error_class="PACKAGE_NOT_INSTALLED",
+            message_parameters={
+                "package_name": "grpcio",
+                "minimum_version": str(minimum_grpc_version),
+            },
         ) from error
     if LooseVersion(grpc.__version__) < LooseVersion(minimum_grpc_version):
-        raise ImportError(
-            f"grpcio >= {minimum_grpc_version} must be installed; however, "
-            f"your version was {grpc.__version__}."
+        raise PySparkImportError(
+            error_class="UNSUPPORTED_PACKAGE_VERSION",
+            message_parameters={
+                "package_name": "grpcio",
+                "minimum_version": str(minimum_grpc_version),
+                "current_version": str(grpc.__version__),
+            },
         )
 
 
@@ -62,8 +71,12 @@ def require_minimum_grpcio_status_version() -> None:
     try:
         import grpc_status  # noqa
     except ImportError as error:
-        raise ImportError(
-            f"grpcio-status >= {minimum_grpc_version} must be installed; however, it was not found."
+        raise PySparkImportError(
+            error_class="PACKAGE_NOT_INSTALLED",
+            message_parameters={
+                "package_name": "grpcio-status",
+                "minimum_version": str(minimum_grpc_version),
+            },
         ) from error
 
 
@@ -74,9 +87,12 @@ def require_minimum_googleapis_common_protos_version() -> None:
     try:
         import google.rpc  # noqa
     except ImportError as error:
-        raise ImportError(
-            f"googleapis-common-protos >= {minimum_common_protos_version} must be installed; "
-            "however, it was not found."
+        raise PySparkImportError(
+            error_class="PACKAGE_NOT_INSTALLED",
+            message_parameters={
+                "package_name": "googleapis-common-protos",
+                "minimum_version": str(minimum_common_protos_version),
+            },
         ) from error
 
 

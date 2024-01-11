@@ -24,21 +24,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyIndexMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
     def test_groupby_multiindex_columns(self):
         pdf = pd.DataFrame(
             {

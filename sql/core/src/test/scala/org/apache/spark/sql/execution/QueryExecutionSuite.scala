@@ -160,7 +160,9 @@ class QueryExecutionSuite extends SharedSparkSession {
 
     // Throw an AnalysisException - this should be captured.
     spark.experimental.extraStrategies = Seq[SparkStrategy](
-      (_: LogicalPlan) => throw new AnalysisException("exception"))
+      (_: LogicalPlan) => throw new AnalysisException(
+        "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+        messageParameters = Map("dataSourceType" -> "XXX")))
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.

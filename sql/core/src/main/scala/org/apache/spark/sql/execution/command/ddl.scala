@@ -374,6 +374,9 @@ case class AlterTableChangeColumnCommand(
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    // This command may change column default values, so we need to refresh the table relation cache
+    // here so that DML commands can resolve these default values correctly.
+    catalog.refreshTable(tableName)
     val table = catalog.getTableRawMetadata(tableName)
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)

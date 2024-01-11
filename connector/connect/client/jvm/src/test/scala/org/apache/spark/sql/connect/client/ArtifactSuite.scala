@@ -284,4 +284,54 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
 
   }
+
+  test("artifact with custom target") {
+    val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    val target = "sub/package/smallClassFile.class"
+    artifactManager.addArtifact(artifactPath.toString, target)
+    val receivedRequests = service.getAndClearLatestAddArtifactRequests()
+    // Single `AddArtifactRequest`
+    assert(receivedRequests.size == 1)
+
+    val request = receivedRequests.head
+    assert(request.hasBatch)
+
+    val batch = request.getBatch
+    // Single artifact in batch
+    assert(batch.getArtifactsList.size() == 1)
+
+    val singleChunkArtifact = batch.getArtifacts(0)
+    assert(singleChunkArtifact.getName.equals(s"classes/$target"))
+    assertFileDataEquality(singleChunkArtifact.getData, artifactPath)
+  }
+
+  test("in-memory artifact with custom target") {
+    val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    val artifactBytes = Files.readAllBytes(artifactPath)
+    val target = "sub/package/smallClassFile.class"
+    artifactManager.addArtifact(artifactBytes, target)
+    val receivedRequests = service.getAndClearLatestAddArtifactRequests()
+    // Single `AddArtifactRequest`
+    assert(receivedRequests.size == 1)
+
+    val request = receivedRequests.head
+    assert(request.hasBatch)
+
+    val batch = request.getBatch
+    // Single artifact in batch
+    assert(batch.getArtifactsList.size() == 1)
+
+    val singleChunkArtifact = batch.getArtifacts(0)
+    assert(singleChunkArtifact.getName.equals(s"classes/$target"))
+    assert(singleChunkArtifact.getData.getData == ByteString.copyFrom(artifactBytes))
+  }
+
+  test(
+    "When both source and target paths are given, extension conditions are checked " +
+      "on target path") {
+    val artifactPath = artifactFilePath.resolve("smallClassFile.class")
+    assertThrows[UnsupportedOperationException] {
+      artifactManager.addArtifact(artifactPath.toString, "dummy.extension")
+    }
+  }
 }

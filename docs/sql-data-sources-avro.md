@@ -330,7 +330,7 @@ Data source options of Avro can be set via:
   </tr></table>
 
 ## Configuration
-Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
+Configuration of Avro can be done via `spark.conf.set` or by running `SET key=value` commands using SQL.
 <table>
   <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>

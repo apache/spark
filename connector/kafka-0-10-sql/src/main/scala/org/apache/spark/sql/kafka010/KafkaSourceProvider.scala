@@ -172,9 +172,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       data: DataFrame): BaseRelation = {
     mode match {
       case SaveMode.Overwrite | SaveMode.Ignore =>
-        throw new AnalysisException(s"Save mode $mode not allowed for Kafka. " +
-          s"Allowed save modes are ${SaveMode.Append} and " +
-          s"${SaveMode.ErrorIfExists} (default).")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3081",
+          messageParameters = Map(
+            "mode" -> mode.toString,
+            "append" -> SaveMode.Append.toString,
+            "errorIfExists" -> SaveMode.ErrorIfExists.toString))
       case _ => // good
     }
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)

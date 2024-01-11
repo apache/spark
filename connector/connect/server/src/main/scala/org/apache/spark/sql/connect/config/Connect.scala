@@ -78,7 +78,8 @@ object Connect {
   val CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT =
     buildStaticConf("spark.connect.session.manager.defaultSessionTimeout")
       .internal()
-      .doc("Timeout after which sessions without any new incoming RPC will be removed.")
+      .doc("Timeout after which sessions without any new incoming RPC will be removed. " +
+        "Setting it to -1 indicates that sessions should be kept forever.")
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60m")
@@ -92,6 +93,14 @@ object Connect {
       .version("4.0.0")
       .intConf
       .createWithDefaultString("1000")
+
+  val CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL =
+    buildStaticConf("spark.connect.session.manager.maintenanceInterval")
+      .internal()
+      .doc("Interval at which session manager will search for expired sessions to remove.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30s")
 
   val CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT =
     buildStaticConf("spark.connect.execute.manager.detachedTimeout")
@@ -247,4 +256,13 @@ object Connect {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val CONNECT_GRPC_MAX_METADATA_SIZE =
+    buildStaticConf("spark.connect.grpc.maxMetadataSize")
+      .doc(
+        "Sets the maximum size of metadata fields. For instance, it restricts metadata fields " +
+          "in `ErrorInfo`.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(1024)
 }

@@ -675,7 +675,7 @@ case class DescribeTableCommand(
     )
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    table.toLinkedHashMap.view.filterKeys(!excludedTableInfo.contains(_)).foreach {
+    table.toLinkedHashMap.filter { case (k, _) => !excludedTableInfo.contains(k) }.foreach {
       s => append(buffer, s._1, s._2, "")
     }
   }
@@ -956,7 +956,7 @@ case class ShowTablePropertiesCommand(
             Seq(Row(p, propValue))
           }
         case None =>
-          properties.view.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
+          properties.filter { case (k, _) => !k.startsWith(CatalogTable.VIEW_PREFIX) }
             .toSeq.sortBy(_._1).map(p => Row(p._1, p._2))
       }
     }
@@ -1104,7 +1104,8 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
   }
 
   private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val viewProps = metadata.properties.view.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
+    val viewProps = metadata.properties
+      .filter { case (k, _) => !k.startsWith(CatalogTable.VIEW_PREFIX) }
     if (viewProps.nonEmpty) {
       val props = viewProps.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"

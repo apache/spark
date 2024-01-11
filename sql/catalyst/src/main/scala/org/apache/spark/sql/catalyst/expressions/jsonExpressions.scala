@@ -25,6 +25,7 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -361,7 +362,7 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
         val nextStyle = style match {
           case RawStyle => QuotedStyle
           case FlattenStyle => FlattenStyle
-          case QuotedStyle => throw new IllegalStateException()
+          case QuotedStyle => throw SparkException.internalError("Unexpected the quoted style.")
         }
 
         // temporarily buffer child matches, the emitted json will need to be
@@ -593,7 +594,7 @@ case class JsonTuple(children: Seq[Expression])
         // a special case that needs to be handled outside of this method.
         // if a requested field is null, the result must be null. the easiest
         // way to achieve this is just by ignoring null tokens entirely
-        throw new IllegalStateException("Do not attempt to copy a null field.")
+        throw SparkException.internalError("Do not attempt to copy a null field.")
 
       case _ =>
         // handle other types including objects, arrays, booleans and numbers

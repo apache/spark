@@ -17,8 +17,16 @@
 
 source "https://rubygems.org"
 
-gem "ffi", "1.15.5"
-gem "jekyll", "4.3.2"
-gem "rouge", "3.26.0"
-gem "jekyll-redirect-from", "0.16.0"
-gem "webrick", "1.8.1"
+# Keep these specifications as flexible as possible and leave it to Bundler
+# to pin versions in the lock file.
+# To update the lock file, run `bundle update`.
+# Version constraint reference: https://guides.rubygems.org/patterns/#declaring-dependencies
+
+gem "jekyll", "~> 4.3"
+gem "jekyll-redirect-from", "~> 0.16"
+# Rouge 4.0 drops support for Ruby < 2.7, which is EOL.
+# See: https://github.com/rouge-ruby/rouge/blob/61bdda18f204a661413daa93d9624bc65ad219a5/CHANGELOG.md#version-400-2022-09-04
+gem "rouge", "~> 3.26"
+# This resolves a build issue on Apple Silicon.
+# See: https://issues.apache.org/jira/browse/SPARK-38488
+gem "ffi", "~> 1.15"

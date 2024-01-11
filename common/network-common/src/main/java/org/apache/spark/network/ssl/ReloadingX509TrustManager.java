@@ -190,8 +190,8 @@ public final class ReloadingX509TrustManager
     trustManagerFactory.init(ks);
     TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
     for (TrustManager trustManager1 : trustManagers) {
-      if (trustManager1 instanceof X509TrustManager) {
-        trustManager = (X509TrustManager) trustManager1;
+      if (trustManager1 instanceof X509TrustManager x509TrustManager) {
+        trustManager = x509TrustManager;
         break;
       }
     }

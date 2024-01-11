@@ -856,7 +856,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
@@ -877,7 +877,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = getALSModel.recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
@@ -899,7 +899,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForUserSubset(userSubset, k)
       assert(topItems.count() == numUsersSubset)
       assert(topItems.columns.contains("user"))
@@ -921,7 +921,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = model.recommendForItemSubset(itemSubset, k)
       assert(topUsers.count() == numItemsSubset)
       assert(topUsers.columns.contains("item"))

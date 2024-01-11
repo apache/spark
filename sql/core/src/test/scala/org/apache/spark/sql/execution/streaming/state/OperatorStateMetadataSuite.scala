@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
@@ -208,9 +209,10 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
   }
 
   test("State metadata data source handle missing argument") {
-    val e = intercept[IllegalArgumentException] {
+    val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
       spark.read.format("state-metadata").load().collect()
     }
-    assert(e.getMessage == "Checkpoint path is not specified for state metadata data source.")
+    checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
+      Map("optionName" -> StateSourceOptions.PATH))
   }
 }

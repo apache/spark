@@ -15,17 +15,25 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
-from typing import final, Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
+from collections import UserDict
+from typing import Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
+from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType
     from pyspark.sql.session import SparkSession
 
 
-__all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
+__all__ = [
+    "DataSource",
+    "DataSourceReader",
+    "DataSourceWriter",
+    "DataSourceRegistration",
+    "InputPartition",
+    "WriterCommitMessage",
+]
 
 
 class DataSource(ABC):
@@ -44,15 +52,14 @@ class DataSource(ABC):
     .. versionadded: 4.0.0
     """
 
-    @final
-    def __init__(self, options: Dict[str, "OptionalPrimitiveType"]) -> None:
+    def __init__(self, options: Dict[str, str]) -> None:
         """
         Initializes the data source with user-provided options.
 
         Parameters
         ----------
         options : dict
-            A dictionary representing the options for this data source.
+            A case-insensitive dictionary representing the options for this data source.
 
         Notes
         -----
@@ -103,7 +110,10 @@ class DataSource(ABC):
         >>> def schema(self):
         ...   return StructType().add("a", "int").add("b", "string")
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "schema"},
+        )
 
     def reader(self, schema: StructType) -> "DataSourceReader":
         """
@@ -121,9 +131,12 @@ class DataSource(ABC):
         reader : DataSourceReader
             A reader instance for this data source.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "reader"},
+        )
 
-    def writer(self, schema: StructType, saveMode: str) -> "DataSourceWriter":
+    def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
         """
         Returns a ``DataSourceWriter`` instance for writing data.
 
@@ -133,16 +146,18 @@ class DataSource(ABC):
         ----------
         schema : StructType
             The schema of the data to be written.
-        saveMode : str
-            A string identifies the save mode. It can be one of the following:
-            `append`, `overwrite`, `error`, `ignore`.
+        overwrite : bool
+            A flag indicating whether to overwrite existing data when writing to the data source.
 
         Returns
         -------
         writer : DataSourceWriter
             A writer instance for this data source.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "writer"},
+        )
 
 
 class InputPartition:
@@ -239,7 +254,10 @@ class DataSourceReader(ABC):
         >>> def partitions(self):
         ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "partitions"},
+        )
 
     @abstractmethod
     def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:
@@ -391,3 +409,36 @@ class DataSourceRegistration:
         assert sc._jvm is not None
         ds = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonDataSource(wrapped)
         self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)
+
+
+class CaseInsensitiveDict(UserDict):
+    """
+    A case-insensitive map of string keys to values.
+
+    This is used by Python data source options to ensure consistent case insensitivity.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.update(*args, **kwargs)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        super().__setitem__(key.lower(), value)
+
+    def __getitem__(self, key: str) -> Any:
+        return super().__getitem__(key.lower())
+
+    def __delitem__(self, key: str) -> None:
+        super().__delitem__(key.lower())
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            return super().__contains__(key.lower())
+        return False
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        for k, v in dict(*args, **kwargs).items():
+            self[k] = v
+
+    def copy(self) -> "CaseInsensitiveDict":
+        return type(self)(self)

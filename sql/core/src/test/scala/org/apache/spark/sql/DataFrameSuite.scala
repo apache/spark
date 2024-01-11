@@ -24,6 +24,7 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.immutable.ListMap
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
@@ -35,10 +36,10 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -985,6 +986,12 @@ class DataFrameSuite extends QueryTest
       },
       errorClass = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`age`"))
+  }
+
+  test("SPARK-46260: withColumnsRenamed should respect the Map ordering") {
+    val df = spark.range(10).toDF()
+    assert(df.withColumnsRenamed(ListMap("id" -> "a", "a" -> "b")).columns === Array("b"))
+    assert(df.withColumnsRenamed(ListMap("a" -> "b", "id" -> "a")).columns === Array("a"))
   }
 
   test("SPARK-20384: Value class filter") {
@@ -3702,6 +3709,61 @@ class DataFrameSuite extends QueryTest
         errorClass = "_LEGACY_ERROR_TEMP_1321",
         parameters = Map("viewName" -> "AUTHORIZATION"))
     }
+  }
+
+  test("SPARK-46502: Unwrap timestamp cast on timestamp_ntz column") {
+    def getQueryResult(ruleEnabled: Boolean): Seq[Row] = {
+      val ruleName = if (ruleEnabled) {
+        ""
+      } else {
+        "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison"
+      }
+
+      var result: Seq[Row] = Seq.empty
+
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
+        withTable("table_timestamp") {
+          sql(
+            """
+              |CREATE TABLE table_timestamp (
+              |  batch TIMESTAMP_NTZ)
+              |USING parquet;
+              |""".stripMargin)
+          sql("INSERT INTO table_timestamp SELECT CAST('2023-12-21 09:00:00' AS TIMESTAMP)")
+          sql("INSERT INTO table_timestamp SELECT CAST('2023-12-21 10:00:00' AS TIMESTAMP)")
+          sql("INSERT INTO table_timestamp SELECT CAST('2023-12-21 12:00:00' AS TIMESTAMP)")
+
+          sql("CREATE OR REPLACE VIEW timestamp_view AS " +
+            "SELECT CAST(batch AS TIMESTAMP) FROM table_timestamp")
+          val df = sql("SELECT * from timestamp_view where batch >= '2023-12-21 10:00:00'")
+
+          val filter = df.queryExecution.optimizedPlan.collect {
+            case f: Filter => f
+          }
+          assert(filter.size == 1)
+
+          val filterCondition = filter.head.condition
+          val castExpr = filterCondition.collect {
+            case c: Cast => c
+          }
+
+          if (ruleEnabled) {
+            assert(castExpr.isEmpty)
+          } else {
+            assert(castExpr.size == 1)
+          }
+
+          result = df.collect().toSeq
+
+          sql("DROP VIEW timestamp_view")
+        }
+      }
+      result
+    }
+
+    val actual = getQueryResult(true).map(_.getTimestamp(0).toString).sorted
+    val expected = getQueryResult(false).map(_.getTimestamp(0).toString).sorted
+    assert(actual == expected)
   }
 }
 

@@ -70,8 +70,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         checker(maybeFilter.get)
 
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
+      case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 

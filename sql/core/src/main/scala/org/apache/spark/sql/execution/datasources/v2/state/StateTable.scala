@@ -41,10 +41,11 @@ class StateTable(
   import StateTable._
 
   if (!isValidSchema(schema)) {
-    throw new IllegalStateException(s"Invalid schema is provided. Provided schema: $schema for " +
-      s"checkpoint location: ${sourceOptions.stateCheckpointLocation} , operatorId: " +
-      s"${sourceOptions.operatorId} , storeName: ${sourceOptions.storeName}, " +
-      s"joinSide: ${sourceOptions.joinSide}")
+    throw StateDataSourceErrors.internalError(
+      s"Invalid schema is provided. Provided schema: $schema for " +
+        s"checkpoint location: ${sourceOptions.stateCheckpointLocation} , operatorId: " +
+        s"${sourceOptions.operatorId} , storeName: ${sourceOptions.storeName}, " +
+        s"joinSide: ${sourceOptions.joinSide}")
   }
 
   override def name(): String = {

@@ -508,8 +508,8 @@ class GaussianMixture @Since("2.0.0") (
     val gaussians = Array.tabulate(numClusters) { i =>
       val start = i * numSamples
       val end = start + numSamples
-      val sampleSlice = samples.view.slice(start, end)
-      val weightSlice = sampleWeights.view.slice(start, end)
+      val sampleSlice = samples.slice(start, end)
+      val weightSlice = sampleWeights.slice(start, end)
       val localWeightSum = weightSlice.sum
       weights(i) = localWeightSum / weightSum
 

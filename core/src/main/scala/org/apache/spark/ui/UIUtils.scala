@@ -21,7 +21,8 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.text.SimpleDateFormat
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
@@ -42,15 +43,14 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
-  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
-  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-  }
+  private val dateTimeFormatter = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
-  def formatDate(date: Date): String = dateFormat.get.format(date)
+  def formatDate(date: Date): String = dateTimeFormatter.format(date.toInstant)
 
-  def formatDate(timestamp: Long): String = dateFormat.get.format(new Date(timestamp))
+  def formatDate(timestamp: Long): String =
+    dateTimeFormatter.format(Instant.ofEpochMilli(timestamp))
 
   def formatDuration(milliseconds: Long): String = {
     if (milliseconds < 100) {
@@ -124,16 +124,13 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
-  private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-  }
+  private val batchTimeFormat = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
-  private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
-  }
+  private val batchTimeFormatWithMilliseconds = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
   /**
    * If `batchInterval` is less than 1 second, format `batchTime` with milliseconds. Otherwise,
@@ -150,30 +147,14 @@ private[spark] object UIUtils extends Logging {
       batchInterval: Long,
       showYYYYMMSS: Boolean = true,
       timezone: TimeZone = null): String = {
-    val oldTimezones =
-      (batchTimeFormat.get.getTimeZone, batchTimeFormatWithMilliseconds.get.getTimeZone)
-    if (timezone != null) {
-      batchTimeFormat.get.setTimeZone(timezone)
-      batchTimeFormatWithMilliseconds.get.setTimeZone(timezone)
-    }
-    try {
-      val formattedBatchTime =
-        if (batchInterval < 1000) {
-          batchTimeFormatWithMilliseconds.get.format(batchTime)
-        } else {
-          // If batchInterval >= 1 second, don't show milliseconds
-          batchTimeFormat.get.format(batchTime)
-        }
-      if (showYYYYMMSS) {
-        formattedBatchTime
-      } else {
-        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
-      }
-    } finally {
-      if (timezone != null) {
-        batchTimeFormat.get.setTimeZone(oldTimezones._1)
-        batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
-      }
+    // If batchInterval >= 1 second, don't show milliseconds
+    val format = if (batchInterval < 1000) batchTimeFormatWithMilliseconds else batchTimeFormat
+    val formatWithZone = if (timezone == null) format else format.withZone(timezone.toZoneId)
+    val formattedBatchTime = formatWithZone.format(Instant.ofEpochMilli(batchTime))
+    if (showYYYYMMSS) {
+      formattedBatchTime
+    } else {
+      formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
     }
   }
 
@@ -431,7 +412,7 @@ private[spark] object UIUtils extends Logging {
     }
 
     val headerRow: Seq[Node] = {
-      headers.view.zipWithIndex.map { x =>
+      headers.to(LazyList).zipWithIndex.map { x =>
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
@@ -441,7 +422,7 @@ private[spark] object UIUtils extends Logging {
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
-      }.toSeq
+      }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
@@ -733,5 +714,14 @@ private[spark] object UIUtils extends Logging {
     val (summary, isMultiline) = errorSummary(errorMessage)
     val details = detailsUINode(isMultiline, errorMessage)
     <td>{summary}{details}</td>
+  }
+
+  def formatImportJavaScript(
+      request: HttpServletRequest,
+      sourceFile: String,
+      methods: String*): String = {
+    val methodsStr = methods.mkString("{", ", ", "}")
+    val sourceFileStr = prependBaseUri(request, sourceFile)
+    s"""import $methodsStr from "$sourceFileStr";"""
   }
 }

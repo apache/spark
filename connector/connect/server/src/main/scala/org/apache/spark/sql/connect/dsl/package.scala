@@ -362,7 +362,7 @@ package object dsl {
       }
 
       def fillValueMap(valueMap: Map[String, Any]): Relation = {
-        val (cols, values) = valueMap.view.mapValues(toLiteralProto).toSeq.unzip
+        val (cols, values) = valueMap.transform((_, v) => toLiteralProto(v)).toSeq.unzip
         Relation
           .newBuilder()
           .setFillNa(

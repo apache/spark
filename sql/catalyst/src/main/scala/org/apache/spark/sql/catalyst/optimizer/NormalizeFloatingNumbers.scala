@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
@@ -99,7 +100,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case ArrayType(et, _) => needNormalize(et)
     // Currently MapType is not comparable and analyzer should fail earlier if this case happens.
     case _: MapType =>
-      throw new IllegalStateException("grouping/join/window partition keys cannot be map type.")
+      throw SparkException.internalError("grouping/join/window partition keys cannot be map type.")
     case _ => false
   }
 
@@ -143,7 +144,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val function = normalize(lv)
       KnownFloatingPointNormalized(ArrayTransform(expr, LambdaFunction(function, Seq(lv))))
 
-    case _ => throw new IllegalStateException(s"fail to normalize $expr")
+    case _ => throw SparkException.internalError(s"fail to normalize $expr")
   }
 
   val FLOAT_NORMALIZER: Any => Any = (input: Any) => {

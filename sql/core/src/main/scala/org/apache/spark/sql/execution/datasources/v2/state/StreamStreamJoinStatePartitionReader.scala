@@ -67,7 +67,7 @@ class StreamStreamJoinStatePartitionReader(
     case JoinSideValues.left => LeftSide
     case JoinSideValues.right => RightSide
     case JoinSideValues.none =>
-      throw new IllegalStateException("Unexpected join side for stream-stream read!")
+      throw StateDataSourceErrors.internalError("Unexpected join side for stream-stream read!")
   }
 
   /*

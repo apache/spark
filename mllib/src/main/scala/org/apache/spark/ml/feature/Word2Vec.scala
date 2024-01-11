@@ -218,7 +218,7 @@ class Word2VecModel private[ml] (
   @Since("1.5.0")
   @transient lazy val getVectors: DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    val wordVec = wordVectors.getVectors.view.mapValues(vec => Vectors.dense(vec.map(_.toDouble)))
+    val wordVec = wordVectors.getVectors.transform((_, vec) => Vectors.dense(vec.map(_.toDouble)))
     spark.createDataFrame(wordVec.toSeq).toDF("word", "vector")
   }
 

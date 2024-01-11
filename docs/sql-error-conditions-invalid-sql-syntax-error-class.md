@@ -45,6 +45,10 @@ CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed.
 
 Partition key `<partKey>` must set value.
 
+## FUNCTION_WITH_UNSUPPORTED_SYNTAX
+
+The function `<prettyName>` does not support `<syntax>`.
+
 ## INVALID_COLUMN_REFERENCE
 
 Expected a column reference for transform `<transform>`: `<expr>`.

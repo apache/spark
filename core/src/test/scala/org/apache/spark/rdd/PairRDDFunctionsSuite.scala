@@ -806,8 +806,9 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         seed: Long,
         n: Long): Unit = {
       val trials = stratifiedData.countByKey()
-      val expectedSampleSize = stratifiedData.countByKey().view.mapValues(count =>
-        math.ceil(count * samplingRate).toInt)
+      val expectedSampleSize = stratifiedData.countByKey().map { case (k, count) =>
+        (k, math.ceil(count * samplingRate).toInt)
+      }
       val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
       val sample = if (exact) {
         stratifiedData.sampleByKeyExact(true, fractions, seed)

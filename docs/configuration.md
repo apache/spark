@@ -522,6 +522,27 @@ of the most common options to set are:
   </td>
   <td>3.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.executor.maxNumFailures</code></td>
+  <td>numExecutors * 2, with minimum of 3</td>
+  <td>
+    The maximum number of executor failures before failing the application.
+    This configuration only takes effect on YARN, or Kubernetes when 
+    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+    Interval after which executor failures will be considered independent and
+    not accumulate towards the attempt count.
+    This configuration only takes effect on YARN, or Kubernetes when 
+    `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.
+  </td>
+  <td>3.5.0</td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
@@ -1759,6 +1780,25 @@ Apart from these, the following properties are also available, and may be useful
     configuration only applies to `spark.io.compression.codec`.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.bufferPool.enabled</code></td>
+  <td>true</td>
+  <td>
+    If true, enable buffer pool of ZSTD JNI library.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.zstd.workers</code></td>
+  <td>0</td>
+  <td>
+    Thread size spawned to compress in parallel when using Zstd. When value is 0
+    no worker is spawned, it works in single-threaded mode. When value > 0, it triggers
+    asynchronous mode, corresponding number of threads are spawned. More workers improve
+    performance, but also increase memory cost.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kryo.classesToRegister</code></td>
@@ -3262,9 +3302,6 @@ Spark subsystems.
 
 ### Spark SQL
 
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-runtime-sql-config-table.html' %}
-
 #### Runtime SQL Configuration
 
 Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
@@ -3272,13 +3309,7 @@ and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` th
 Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
 or by `SparkSession.conf`'s setter and getter methods in runtime.
 
-{% include_relative generated-runtime-sql-config-table.html %}
-        {% break %}
-    {% endif %}
-{% endfor %}
-
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-static-sql-config-table.html' %}
+{% include_api_gen generated-runtime-sql-config-table.html %}
 
 #### Static SQL Configuration
 
@@ -3286,11 +3317,7 @@ Static SQL configurations are cross-session, immutable Spark SQL configurations.
 and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
 External users can query the static sql config values via `SparkSession.conf` or via set command, e.g. `SET spark.sql.extensions;`, but cannot set/unset them.
 
-{% include_relative generated-static-sql-config-table.html %}
-        {% break %}
-    {% endif %}
-{% endfor %}
-
+{% include_api_gen generated-static-sql-config-table.html %}
 
 ### Spark Streaming
 

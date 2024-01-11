@@ -27,12 +27,12 @@ import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
+import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.{Time => KTime}
 import org.apache.zookeeper.client.ZKClientConfig
@@ -206,7 +206,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    sendMessages(topic, Map(messageToFreq.asScala.view.mapValues(_.intValue()).toSeq: _*))
+    sendMessages(topic, messageToFreq.asScala.toMap.transform((_, v) => v.intValue()))
   }
 
   /** Send the messages to the Kafka broker */
@@ -304,7 +304,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
         val leader = partitionState.leader
         val isr = partitionState.isr
         zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
-          Request.isValidBrokerId(leader) && !isr.isEmpty
+          FetchRequest.isValidBrokerId(leader) && !isr.isEmpty
       case _ =>
         false
     }

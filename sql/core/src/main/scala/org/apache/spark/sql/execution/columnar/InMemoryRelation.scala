@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -61,7 +61,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] =
-    throw new IllegalStateException("Columnar input is not supported")
+    throw SparkException.internalError("Columnar input is not supported")
 
   override def convertInternalRowToCachedBatch(
       input: RDD[InternalRow],
@@ -285,9 +285,11 @@ case class CachedRDDBuilder(
         cachedPlan.conf)
     }
     val cached = cb.mapPartitionsInternal { it =>
-      TaskContext.get().addTaskCompletionListener[Unit](_ => {
-        materializedPartitions.add(1L)
-      })
+      TaskContext.get().addTaskCompletionListener[Unit] { context =>
+        if (!context.isFailed() && !context.isInterrupted()) {
+          materializedPartitions.add(1L)
+        }
+      }
       new Iterator[CachedBatch] {
         override def hasNext: Boolean = it.hasNext
         override def next(): CachedBatch = {

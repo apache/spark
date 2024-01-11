@@ -144,8 +144,14 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class IdentifierHelper(ident: Identifier) {
+    /* Quote the identifier if needed. */
     def quoted: String = {
       QuotingUtils.quoted(ident)
+    }
+
+    /* Always quote the identifier. */
+    def fullyQuoted: String = {
+      QuotingUtils.fullyQuoted(ident)
     }
 
     def original: String = ident.namespace() :+ ident.name() mkString "."

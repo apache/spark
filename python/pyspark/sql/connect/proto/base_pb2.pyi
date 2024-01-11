@@ -3097,7 +3097,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         START_INDEX_FIELD_NUMBER: builtins.int
         STOP_INDEX_FIELD_NUMBER: builtins.int
         FRAGMENT_FIELD_NUMBER: builtins.int
-        CALLSITE_FIELD_NUMBER: builtins.int
+        CALL_SITE_FIELD_NUMBER: builtins.int
         SUMMARY_FIELD_NUMBER: builtins.int
         context_type: global___FetchErrorDetailsResponse.QueryContext.ContextType.ValueType
         object_type: builtins.str
@@ -3116,7 +3116,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """The stopping index in the query which throws the exception. The index starts from 0."""
         fragment: builtins.str
         """The corresponding fragment of the query which throws the exception."""
-        callSite: builtins.str
+        call_site: builtins.str
         """The user code (call site of the API) that caused throwing the exception."""
         summary: builtins.str
         """Summary of the exception cause."""
@@ -3129,14 +3129,14 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             start_index: builtins.int = ...,
             stop_index: builtins.int = ...,
             fragment: builtins.str = ...,
-            callSite: builtins.str = ...,
+            call_site: builtins.str = ...,
             summary: builtins.str = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "callSite",
-                b"callSite",
+                "call_site",
+                b"call_site",
                 "context_type",
                 b"context_type",
                 "fragment",

@@ -199,8 +199,8 @@ public class AuthIntegrationSuite {
     void createServer(String secret, boolean enableAes) throws Exception {
       TransportServerBootstrap introspector = (channel, rpcHandler) -> {
         this.serverChannel = channel;
-        if (rpcHandler instanceof AuthRpcHandler) {
-          this.authRpcHandler = (AuthRpcHandler) rpcHandler;
+        if (rpcHandler instanceof AuthRpcHandler authRpcHandler) {
+          this.authRpcHandler = authRpcHandler;
         }
         return rpcHandler;
       };

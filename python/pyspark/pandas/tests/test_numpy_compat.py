@@ -26,25 +26,17 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 class NumPyCompatTestsMixin:
     blacklist = [
-        # Koalas does not currently support
+        # Pandas-on-Spark does not currently support
         "conj",
         "conjugate",
         "isnat",
         "matmul",
         "frexp",
         # Values are close enough but tests failed.
-        "arccos",
-        "exp",
-        "expm1",
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
         "modf",
-        "floor_divide",  # flaky
-        # Results seem inconsistent in a different version of, I (Hyukjin) suspect, PyArrow.
-        # From PyArrow 0.15, seems it returns the correct results via PySpark. Probably we
-        # can enable it later when Koalas switches to PyArrow 0.15 completely.
-        "left_shift",
     ]
 
     @property

@@ -222,22 +222,6 @@ class LocalDataToArrowConversion:
                 if value is None:
                     return None
                 else:
-                    # only atomic types are supported
-                    assert isinstance(
-                        value,
-                        (
-                            bool,
-                            int,
-                            float,
-                            str,
-                            bytes,
-                            bytearray,
-                            decimal.Decimal,
-                            datetime.date,
-                            datetime.datetime,
-                            datetime.timedelta,
-                        ),
-                    )
                     if isinstance(value, bool):
                         # To match the PySpark which convert bool to string in
                         # the JVM side (python.EvaluatePython.makeFromJava)

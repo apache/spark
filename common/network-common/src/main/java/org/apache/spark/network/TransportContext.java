@@ -262,6 +262,7 @@ public class TransportContext implements Closeable {
           .requestedCiphers(conf.sslRpcRequestedCiphers())
           .keyStore(conf.sslRpcKeyStore(), conf.sslRpcKeyStorePassword())
           .privateKey(conf.sslRpcPrivateKey())
+          .privateKeyPassword(conf.sslRpcPrivateKeyPassword())
           .keyPassword(conf.sslRpcKeyPassword())
           .certChain(conf.sslRpcCertChain())
           .trustStore(

@@ -2276,7 +2276,13 @@ class Dataset[T] private[sql] (
     sparkSession.newDataFrame { builder =>
       builder.getWithColumnsRenamedBuilder
         .setInput(plan.getRoot)
-        .putAllRenameColumnsMap(colsMap)
+        .addAllRenames(colsMap.asScala.toSeq.map { case (colName, newColName) =>
+          proto.WithColumnsRenamed.Rename
+            .newBuilder()
+            .setColName(colName)
+            .setNewColName(newColName)
+            .build()
+        }.asJava)
     }
   }
 

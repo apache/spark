@@ -106,7 +106,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case o => o
         }
         throw new AnalysisException(
-          e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
+          errorClass = "_LEGACY_ERROR_TEMP_3065",
+          messageParameters = Map(
+            "clazz" -> e.getClass.getCanonicalName,
+            "msg" -> Option(e.getMessage).getOrElse("")),
+          cause = Some(e))
     }
   }
 
@@ -132,14 +136,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def verifyTableProperties(table: CatalogTable): Unit = {
     val invalidKeys = table.properties.keys.filter(_.startsWith(SPARK_SQL_PREFIX))
     if (invalidKeys.nonEmpty) {
-      throw new AnalysisException(s"Cannot persist ${table.qualifiedName} into Hive metastore " +
-        s"as table property keys may not start with '$SPARK_SQL_PREFIX': " +
-        invalidKeys.mkString("[", ", ", "]"))
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3086",
+        messageParameters = Map(
+          "tableName" -> table.qualifiedName,
+          "invalidKeys" -> invalidKeys.mkString("[", ", ", "]")))
     }
     // External users are not allowed to set/switch the table type. In Hive metastore, the table
     // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
     if (table.properties.contains("EXTERNAL")) {
-      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3087", messageParameters = Map.empty)
     }
   }
 
@@ -807,9 +814,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def reorderSchema(schema: StructType, partColumnNames: Seq[String]): StructType = {
     val partitionFields = partColumnNames.map { partCol =>
       schema.find(_.name == partCol).getOrElse {
-        throw new AnalysisException("The metadata is corrupted. Unable to find the " +
-          s"partition column names from the schema. schema: ${schema.catalogString}. " +
-          s"Partition columns: ${partColumnNames.mkString("[", ", ", "]")}")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3088",
+          messageParameters = Map(
+            "schema" -> schema.catalogString,
+            "partColumnNames" -> partColumnNames.mkString("[", ", ", "]")))
       }
     }
     StructType(schema.filterNot(partitionFields.contains) ++ partitionFields)
@@ -870,7 +879,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
     }
     val storageWithoutHiveGeneratedProperties = storageWithLocation.copy(properties =
-      storageWithLocation.properties.view.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)).toMap)
+      storageWithLocation.properties.filter { case (k, _) => !HIVE_GENERATED_STORAGE_PROPERTIES(k) }
+    )
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
     val schemaFromTableProps =
@@ -885,7 +895,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
       tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG),
-      properties = table.properties.view.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)).toMap)
+      properties = table.properties.filter { case (k, _) => !HIVE_GENERATED_TABLE_PROPERTIES(k) })
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
@@ -1160,15 +1170,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       properties: Map[String, String],
       table: String): Option[CatalogStatistics] = {
 
-    val statsProps = properties.view.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    val statsProps = properties.filter { case (k, _) => k.startsWith(STATISTICS_PREFIX) }
     if (statsProps.isEmpty) {
       None
     } else {
       val colStats = new mutable.HashMap[String, CatalogColumnStat]
       val colStatsProps =
-        properties.view.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX)).map {
+        properties.filter { case (k, _) => k.startsWith(STATISTICS_COL_STATS_PREFIX) }.map {
           case (k, v) => k.drop(STATISTICS_COL_STATS_PREFIX.length) -> v
-        }.toMap
+        }
 
       // Find all the column names by matching the KEY_VERSION properties for them.
       colStatsProps.keys.filter {
@@ -1261,7 +1271,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withClient {
     val catalogTable = getTable(db, table)
-    val partColNameMap = buildLowerCasePartColNameMap(catalogTable).view.mapValues(escapePathName)
+    val partColNameMap =
+      buildLowerCasePartColNameMap(catalogTable).transform((_, v) => escapePathName(v))
     val clientPartitionNames =
       client.getPartitionNames(catalogTable, partialSpec.map(toMetaStorePartitionSpec))
     clientPartitionNames.map { partitionPath =>
@@ -1422,9 +1433,12 @@ object HiveExternalCatalog {
     } yield props.getOrElse(
       s"$DATASOURCE_SCHEMA_PREFIX${colType}Col.$index",
       throw new AnalysisException(
-        s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
+        errorClass = "_LEGACY_ERROR_TEMP_3089",
+        messageParameters = Map(
+          "typeName" -> typeName,
+          "numCols" -> numCols,
+          "index" -> index.toString))
       )
-    )
   }
 
   private def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {

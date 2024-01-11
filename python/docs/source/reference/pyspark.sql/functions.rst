@@ -270,6 +270,7 @@ Date and Timestamp Functions
     make_ym_interval
     minute
     month
+    monthname
     months_between
     next_day
     now
@@ -585,6 +586,7 @@ Misc Functions
     monotonically_increasing_id
     raise_error
     reflect
+    session_user
     spark_partition_id
     try_aes_decrypt
     try_reflect

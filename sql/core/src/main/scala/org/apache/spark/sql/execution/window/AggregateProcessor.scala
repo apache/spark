@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.window
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -91,7 +92,7 @@ private[window] object AggregateProcessor {
         updateExpressions ++= noOps
         evaluateExpressions += imperative
       case other =>
-        throw new IllegalStateException(s"Unsupported aggregate function: $other")
+        throw SparkException.internalError(s"Unsupported aggregate function: $other")
     }
 
     // Create the projections.

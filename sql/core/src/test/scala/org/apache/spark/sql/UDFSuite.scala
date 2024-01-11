@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -527,7 +528,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
       StructType(Seq(StructField("col1", MapType(StringType, DecimalType(30, 0))))))
     val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
-      map.view.mapValues(value => if (value == null) null else value.toBigInteger.toString).toMap
+      map.transform((_, value) => if (value == null) null else value.toBigInteger.toString)
     })
     checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
@@ -828,6 +829,22 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .toDF("col")
       .select(myUdf(Column("col"))),
       Row(ArrayBuffer(100)))
+  }
+
+  test("SPARK-46586: UDF should not fail on immutable.ArraySeq") {
+    val myUdf1 = udf((a: immutable.ArraySeq[Int]) =>
+      immutable.ArraySeq.unsafeWrapArray[Int](Array(a.head + 99)))
+    checkAnswer(Seq(Array(1))
+      .toDF("col")
+      .select(myUdf1(Column("col"))),
+    Row(ArrayBuffer(100)))
+
+     val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
+      immutable.ArraySeq.unsafeWrapArray[Int](a.appended(5).appended(6).toArray))
+    checkAnswer(Seq(Array(1, 2, 3))
+      .toDF("col")
+      .select(myUdf2(Column("col"))),
+    Row(ArrayBuffer(1, 2, 3, 5, 6)))
   }
 
   test("SPARK-34388: UDF name is propagated with registration for ScalaUDF") {

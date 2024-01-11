@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.util;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,22 +98,22 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   @Override
   public String put(String key, String value) {
-    throw new UnsupportedOperationException(unsupportedOperationMsg);
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3132");
   }
 
   @Override
   public String remove(Object key) {
-    throw new UnsupportedOperationException(unsupportedOperationMsg);
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3132");
   }
 
   @Override
   public void putAll(Map<? extends String, ? extends String> m) {
-    throw new UnsupportedOperationException(unsupportedOperationMsg);
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3132");
   }
 
   @Override
   public void clear() {
-    throw new UnsupportedOperationException(unsupportedOperationMsg);
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3132");
   }
 
   @Override

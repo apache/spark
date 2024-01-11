@@ -143,59 +143,61 @@ class CommandBuilderUtils {
         escapeNext = false;
       } else if (inOpt) {
         switch (c) {
-        case '\\':
-          if (inSingleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            escapeNext = true;
+          case '\\' -> {
+            if (inSingleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              escapeNext = true;
+            }
           }
-          break;
-        case '\'':
-          if (inDoubleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            inSingleQuote = !inSingleQuote;
+          case '\'' -> {
+            if (inDoubleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              inSingleQuote = !inSingleQuote;
+            }
           }
-          break;
-        case '"':
-          if (inSingleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            inDoubleQuote = !inDoubleQuote;
+          case '"' -> {
+            if (inSingleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              inDoubleQuote = !inDoubleQuote;
+            }
           }
-          break;
-        default:
-          if (!Character.isWhitespace(c) || inSingleQuote || inDoubleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            opts.add(opt.toString());
-            opt.setLength(0);
-            inOpt = false;
-            hasData = false;
+          default -> {
+            if (!Character.isWhitespace(c) || inSingleQuote || inDoubleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              opts.add(opt.toString());
+              opt.setLength(0);
+              inOpt = false;
+              hasData = false;
+            }
           }
         }
       } else {
         switch (c) {
-        case '\'':
-          inSingleQuote = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        case '"':
-          inDoubleQuote = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        case '\\':
-          escapeNext = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        default:
-          if (!Character.isWhitespace(c)) {
+          case '\'' -> {
+            inSingleQuote = true;
             inOpt = true;
             hasData = true;
-            opt.appendCodePoint(c);
+          }
+          case '"' -> {
+            inDoubleQuote = true;
+            inOpt = true;
+            hasData = true;
+          }
+          case '\\' -> {
+            escapeNext = true;
+            inOpt = true;
+            hasData = true;
+          }
+          default -> {
+            if (!Character.isWhitespace(c)) {
+              inOpt = true;
+              hasData = true;
+              opt.appendCodePoint(c);
+            }
           }
         }
       }
@@ -256,12 +258,8 @@ class CommandBuilderUtils {
     for (int i = 0; i < arg.length(); i++) {
       int cp = arg.codePointAt(i);
       switch (cp) {
-      case '"':
-        quoted.append('"');
-        break;
-
-      default:
-        break;
+        case '"' -> quoted.append('"');
+        default -> {}
       }
       quoted.appendCodePoint(cp);
     }

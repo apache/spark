@@ -102,7 +102,7 @@ class KafkaContinuousStream(
     }
 
     val startOffsets = newPartitionOffsets ++
-      oldStartPartitionOffsets.view.filterKeys(!deletedPartitions.contains(_))
+      oldStartPartitionOffsets.filter { case (k, _) => !deletedPartitions.contains(k) }
     knownPartitions = startOffsets.keySet
 
     startOffsets.toSeq.map {

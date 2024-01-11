@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.types._
@@ -233,7 +234,8 @@ object InterpretedUnsafeProjection {
         case PhysicalNullType => (_, _) => {}
 
         case _ =>
-          throw new IllegalStateException(s"The data type '${dt.typeName}' is not supported in " +
+          throw SparkException.internalError(
+            s"The data type '${dt.typeName}' is not supported in " +
             "generating a writer function for a struct field, array element, map key or map value.")
       }
     }

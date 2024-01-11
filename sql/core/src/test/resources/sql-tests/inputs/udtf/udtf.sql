@@ -75,6 +75,8 @@ SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
     UDTFPartitionByOrderBy(TABLE(t2) PARTITION BY partition_col);
+SELECT * FROM UDTFPartitionByOrderByComplexExpr(TABLE(t2));
+SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2));
 -- As a reminder, UDTFInvalidPartitionByAndWithSinglePartition returns this analyze result:
 --     AnalyzeResult(
 --         schema=StructType()
@@ -133,6 +135,7 @@ SELECT * FROM UDTFWithSinglePartition(1, 2, 3);
 SELECT * FROM UDTFWithSinglePartition(1, invalid_arg_name => 2);
 SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2);
 SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2);
+SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2));
 
 -- cleanup
 DROP VIEW t1;

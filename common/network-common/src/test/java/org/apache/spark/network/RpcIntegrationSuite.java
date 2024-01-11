@@ -67,14 +67,10 @@ public class RpcIntegrationSuite {
         String msg = JavaUtils.bytesToString(message);
         String[] parts = msg.split("/");
         switch (parts[0]) {
-          case "hello":
+          case "hello" ->
             callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-            break;
-          case "return error":
-            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-            break;
-          case "throw error":
-            throw new RuntimeException("Thrown: " + parts[1]);
+          case "return error" -> callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+          case "throw error" -> throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
 

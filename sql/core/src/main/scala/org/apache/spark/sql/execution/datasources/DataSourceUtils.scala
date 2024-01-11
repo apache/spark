@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
@@ -172,7 +172,7 @@ object DataSourceUtils extends PredicateHelper {
         (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
       case "Avro" =>
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
-      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
@@ -182,7 +182,7 @@ object DataSourceUtils extends PredicateHelper {
       case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
       case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
       case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
-      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }

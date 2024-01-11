@@ -35,12 +35,6 @@ class FrameBinaryOpsMixin:
             index=np.random.rand(9),
         )
 
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_binary_operators(self):
         pdf = pd.DataFrame(
             {"A": [0, 2, 4], "B": [4, 2, 0], "X": [-1, 10, 0]}, index=np.random.rand(3)

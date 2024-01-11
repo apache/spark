@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.logging.log4j.Level
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
@@ -63,14 +64,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val schema3 = new StructType().add("c", ArrayType(CharType(5)))
     Seq(schema1, schema2, schema3).foreach { schema =>
       val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
-      intercept[IllegalStateException] {
-        DataSourceV2Relation(
-          table,
-          DataTypeUtils.toAttributes(schema),
-          None,
-          None,
-          CaseInsensitiveStringMap.empty()).analyze
-      }
+      checkError(
+        exception = intercept[SparkException] {
+          DataSourceV2Relation(
+            table,
+            DataTypeUtils.toAttributes(schema),
+            None,
+            None,
+            CaseInsensitiveStringMap.empty()).analyze
+        },
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" ->
+          "Logical plan should not have output of char/varchar type.*\n"),
+        matchPVals = true)
     }
   }
 
@@ -735,7 +741,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       false)
     val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
-    val mapInArrow = PythonMapInArrow(
+    val mapInArrow = MapInArrow(
       pythonUdf,
       output,
       project,
@@ -1457,6 +1463,30 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     assertAnalysisSuccess(finalPlan)
+  }
+
+  test("Execute Immediate plan transformation") {
+    try {
+    SimpleAnalyzer.catalogManager.tempVariableManager.create(
+      "res", "1", Literal(1), overrideIfExists = true)
+    SimpleAnalyzer.catalogManager.tempVariableManager.create(
+      "res2", "1", Literal(1), overrideIfExists = true)
+    val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
+    val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
+    comparePlans(actual1, expected1)
+    val actual2 = parsePlan(
+      "EXECUTE IMMEDIATE 'SELECT 42 WHERE :first = 1' USING 2 as first").analyze
+    val expected2 = parsePlan("SELECT 42 where 2 = 1").analyze
+    comparePlans(actual2, expected2)
+    // Test that plan is transformed to SET operation
+    val actual3 = parsePlan(
+      "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
+    val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
+      comparePlans(actual3, expected3)
+    } finally {
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res")
+      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res2")
+    }
   }
 
   test("SPARK-41271: bind named parameters to literals") {

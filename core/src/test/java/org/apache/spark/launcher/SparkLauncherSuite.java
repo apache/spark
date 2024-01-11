@@ -187,16 +187,9 @@ public class SparkLauncherSuite extends BaseSuite {
       InProcessLauncher launcher = new InProcessLauncher()
         .setAppResource(SparkLauncher.NO_RESOURCE);
       switch (args.length) {
-        case 2:
-          launcher.addSparkArg(args[0], args[1]);
-          break;
-
-        case 1:
-          launcher.addSparkArg(args[0]);
-          break;
-
-        default:
-          fail("FIXME: invalid test.");
+        case 2 -> launcher.addSparkArg(args[0], args[1]);
+        case 1 -> launcher.addSparkArg(args[0]);
+        default -> fail("FIXME: invalid test.");
       }
 
       SparkAppHandle handle = launcher.startApplication();

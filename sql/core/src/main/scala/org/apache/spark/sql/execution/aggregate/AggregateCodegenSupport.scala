@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, ExpressionEquals, UnsafeRow}
@@ -343,7 +344,7 @@ trait AggregateCodegenSupport
           "length of at least one split function went over the JVM limit: " +
           CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw new IllegalStateException(errMsg)
+          throw SparkException.internalError(errMsg)
         } else {
           logInfo(errMsg)
           None

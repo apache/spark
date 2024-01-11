@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
@@ -461,7 +461,7 @@ class TungstenAggregationIterator(
       hashMap.free()
       resultCopy
     } else {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "This method should not be called when groupingExpressions is not empty.")
     }
   }

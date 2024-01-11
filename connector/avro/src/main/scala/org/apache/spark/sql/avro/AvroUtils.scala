@@ -182,16 +182,19 @@ private[sql] object AvroUtils extends Logging {
 
     def hasNextRow: Boolean = {
       while (!completed && currentRow.isEmpty) {
-        val r = fileReader.hasNext && !fileReader.pastSync(stopPosition)
-        if (!r) {
+        if (fileReader.pastSync(stopPosition)) {
           fileReader.close()
           completed = true
           currentRow = None
-        } else {
+        } else if (fileReader.hasNext()) {
           val record = fileReader.next()
           // the row must be deserialized in hasNextRow, because AvroDeserializer#deserialize
           // potentially filters rows
           currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
+        } else {
+          // In this case, `fileReader.hasNext()` returns false but we are not past sync point yet.
+          // This means empty blocks, we need to continue reading the file in case there are non
+          // empty blocks or we are past sync point.
         }
       }
       currentRow.isDefined
@@ -244,8 +247,7 @@ private[sql] object AvroUtils extends Logging {
     private[this] val avroFieldArray = avroSchema.getFields.asScala.toArray
     private[this] val fieldMap = avroSchema.getFields.asScala
       .groupBy(_.name.toLowerCase(Locale.ROOT))
-      .view
-      .mapValues(_.toSeq) // toSeq needed for scala 2.13
+      .transform((_, v) => v.toSeq) // toSeq needed for scala 2.13
 
     /** The fields which have matching equivalents in both Avro and Catalyst schemas. */
     val matchedFields: Seq[AvroMatchedField] = catalystSchema.zipWithIndex.flatMap {

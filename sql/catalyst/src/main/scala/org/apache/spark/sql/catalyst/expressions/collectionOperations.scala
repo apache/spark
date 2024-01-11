@@ -22,7 +22,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
@@ -2088,7 +2088,7 @@ case class ArrayMin(child: Expression)
 
   @transient override lazy val dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
-    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+    case _ => throw SparkException.internalError(s"$prettyName accepts only arrays.")
   }
 
   override def prettyName: String = "array_min"
@@ -2161,7 +2161,7 @@ case class ArrayMax(child: Expression)
 
   @transient override lazy val dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
-    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+    case _ => throw SparkException.internalError(s"$prettyName accepts only arrays.")
   }
 
   override def prettyName: String = "array_max"

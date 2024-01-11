@@ -56,7 +56,10 @@ private[kafka010] object KafkaWriter extends Logging {
       headersExpression(schema)
       partitionExpression(schema)
     } catch {
-      case e: IllegalStateException => throw new AnalysisException(e.getMessage)
+      case e: IllegalStateException =>
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3080",
+          messageParameters = Map("msg" -> e.getMessage))
     }
   }
 

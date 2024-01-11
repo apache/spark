@@ -24,21 +24,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyAggregateMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
     def test_aggregate(self):
         pdf = pd.DataFrame(
             {"A": [1, 1, 2, 2], "B": [1, 2, 3, 4], "C": [0.362, 0.227, 1.267, -0.562]}

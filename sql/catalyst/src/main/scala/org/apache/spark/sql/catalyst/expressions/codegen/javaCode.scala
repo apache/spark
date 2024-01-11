@@ -22,6 +22,7 @@ import java.lang.{Boolean => JBool}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.trees.{LeafLike, TreeNode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -203,7 +204,7 @@ trait Block extends TreeNode[Block] with JavaCode {
 
   override def verboseString(maxFields: Int): String = toString
   override def simpleStringWithNodeId(): String = {
-    throw new IllegalStateException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
 }
 

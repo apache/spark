@@ -43,12 +43,6 @@ class FrameSparkMixin:
             index=np.random.rand(9),
         )
 
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_empty_dataframe(self):
         pdf = pd.DataFrame({"a": pd.Series([], dtype="i1"), "b": pd.Series([], dtype="str")})
 

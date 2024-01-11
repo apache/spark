@@ -637,6 +637,14 @@ replaced with one of the above namespaces.
     <td>rpc</td>
   </tr>
   <tr>
+    <td><code>${ns}.privateKeyPassword</code></td>
+    <td>None</td>
+    <td>
+      The password to the above private key file in PEM format.
+    </td>
+    <td>rpc</td>
+  </tr>
+  <tr>
     <td><code>${ns}.certChain</code></td>
     <td>None</td>
     <td>

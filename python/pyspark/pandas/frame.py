@@ -2103,9 +2103,7 @@ class DataFrame(Frame, Generic[T]):
             v = [row[c] for c in data_spark_column_names]
             return k, v
 
-        can_return_named_tuples = sys.version_info >= (3, 7) or len(self.columns) + index < 255
-
-        if name is not None and can_return_named_tuples:
+        if name is not None:
             itertuple = namedtuple(name, fields, rename=True)  # type: ignore[misc]
             for k, v in map(
                 extract_kv_from_spark_row,
@@ -6128,6 +6126,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
         if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
             raise ValueError("invalid limit_area: '{}'".format(limit_area))
+        for dtype in self.dtypes.values:
+            if dtype == "object":
+                warnings.warn(
+                    "DataFrame.interpolate with object dtype is deprecated and will raise in a "
+                    "future version. Convert to a specific numeric type before interpolating.",
+                    FutureWarning,
+                )
 
         numeric_col_names = []
         for label in self._internal.column_labels:

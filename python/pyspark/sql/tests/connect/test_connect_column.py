@@ -155,7 +155,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             exception=pe.exception,
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={
-                "arg_name": "length",
+                "arg_name": "startPos",
                 "arg_type": "float",
             },
         )

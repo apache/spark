@@ -335,8 +335,8 @@ class LauncherServer implements Closeable {
           }
           if (msg instanceof SetAppId set) {
             handle.setAppId(set.appId);
-          } else if (msg instanceof SetState) {
-            handle.setState(((SetState)msg).state);
+          } else if (msg instanceof SetState setState) {
+            handle.setState(setState.state);
           } else {
             throw new IllegalArgumentException("Invalid message: " + msgClassName);
           }

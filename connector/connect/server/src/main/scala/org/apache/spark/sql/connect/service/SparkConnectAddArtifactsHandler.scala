@@ -24,7 +24,6 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.io.CountingOutputStream
-import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -32,6 +31,7 @@ import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.artifact.util.ArtifactUtils
+import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -51,7 +51,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   private var chunkedArtifact: StagedChunkedArtifact = _
   private var holder: SessionHolder = _
 
-  override def onNext(req: AddArtifactsRequest): Unit = {
+  override def onNext(req: AddArtifactsRequest): Unit = try {
     if (this.holder == null) {
       this.holder = SparkConnectService.getOrCreateIsolatedSession(
         req.getUserContext.getUserId,
@@ -78,6 +78,17 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     } else {
       throw new UnsupportedOperationException(s"Unsupported data transfer request: $req")
     }
+  } catch {
+    ErrorUtils.handleError(
+      "addArtifacts.onNext",
+      responseObserver,
+      holder.userId,
+      holder.sessionId,
+      None,
+      false,
+      Some(() => {
+        cleanUpStagedArtifacts()
+      }))
   }
 
   override def onError(throwable: Throwable): Unit = {
@@ -128,7 +139,16 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       responseObserver.onNext(builder.build())
       responseObserver.onCompleted()
     } catch {
-      case e: StatusRuntimeException => onError(e)
+      ErrorUtils.handleError(
+        "addArtifacts.onComplete",
+        responseObserver,
+        holder.userId,
+        holder.sessionId,
+        None,
+        false,
+        Some(() => {
+          cleanUpStagedArtifacts()
+        }))
     }
   }
 

@@ -14,7 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors.exceptions.base import SessionNotSameException, PySparkIndexError
+from pyspark.errors.exceptions.base import (
+    SessionNotSameException,
+    PySparkIndexError,
+    PySparkAttributeError,
+)
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -174,7 +178,7 @@ class DataFrame:
     write.__doc__ = PySparkDataFrame.write.__doc__
 
     def isEmpty(self) -> bool:
-        return len(self.take(1)) == 0
+        return len(self.select().take(1)) == 0
 
     isEmpty.__doc__ = PySparkDataFrame.isEmpty.__doc__
 
@@ -1694,8 +1698,8 @@ class DataFrame:
             )
 
         if name not in self.columns:
-            raise AttributeError(
-                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
 
         return _to_col_with_plan_id(

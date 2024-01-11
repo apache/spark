@@ -37,6 +37,7 @@ import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -2124,6 +2125,37 @@ class DataFrameAggregateSuite extends QueryTest
         select(hll_sketch_estimate(hll_union_agg(col("sketch"), lit(true)))),
       Seq(Row(1))
     )
+  }
+
+  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
+    val numRows = 50
+    val configurations = Seq(
+      Seq.empty[(String, String)], // hash aggregate is used by default
+      Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+        "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
+      Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
+      Seq(
+        "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
+        SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
+      Seq("spark.sql.test.forceApplySortAggregate" -> "true")
+    )
+
+    val dfSame = (0 until numRows)
+      .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
+      .toDF("c0")
+
+    val dfDifferent = (0 until numRows)
+      .map(i => Tuple1(new CalendarInterval(i, i, i)))
+      .toDF("c0")
+
+    for (conf <- configurations) {
+      withSQLConf(conf: _*) {
+        assert(createAggregate(dfSame).count() == 1)
+        assert(createAggregate(dfDifferent).count() == numRows)
+      }
+    }
+
+    def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
   }
 }
 

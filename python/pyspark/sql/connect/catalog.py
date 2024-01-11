@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -215,16 +216,11 @@ class Catalog:
         schema: Optional[StructType] = None,
         **options: str,
     ) -> DataFrame:
-        catalog = plan.CreateExternalTable(
-            table_name=tableName,
-            path=path,  # type: ignore[arg-type]
-            source=source,
-            schema=schema,
-            options=options,
+        warnings.warn(
+            "createExternalTable is deprecated since Spark 4.0, please use createTable instead.",
+            FutureWarning,
         )
-        df = DataFrame(catalog, session=self._sparkSession)
-        df._to_table()  # Eager execution.
-        return df
+        return self.createTable(tableName, path, source, schema, **options)
 
     createExternalTable.__doc__ = PySparkCatalog.createExternalTable.__doc__
 
@@ -237,6 +233,14 @@ class Catalog:
         description: Optional[str] = None,
         **options: str,
     ) -> DataFrame:
+        if schema is not None and not isinstance(schema, StructType):
+            raise PySparkTypeError(
+                error_class="NOT_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
         catalog = plan.CreateTable(
             table_name=tableName,
             path=path,  # type: ignore[arg-type]

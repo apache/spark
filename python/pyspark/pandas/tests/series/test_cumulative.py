@@ -24,14 +24,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesCumulativeMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_cummin(self):
         pser = pd.Series([1.0, None, 0.0, 4.0, 9.0])
         psser = ps.from_pandas(pser)

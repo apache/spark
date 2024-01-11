@@ -150,12 +150,12 @@ jobs:
           restore-keys: |
             java${{ matrix.java }}-maven-
       - name: Install Java ${{ matrix.java }}
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
       - name: Install Python 3.9
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -174,7 +174,7 @@ jobs:
         shell: 'script -q -e -c "bash {0}"'
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
-          export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
+          export TERM=vt100
           # `set -e` to make the exit status as expected due to use `script -q -e -c` to run the commands
           set -e
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"

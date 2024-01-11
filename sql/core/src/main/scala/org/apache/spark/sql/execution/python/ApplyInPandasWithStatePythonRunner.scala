@@ -61,7 +61,7 @@ class ApplyInPandasWithStatePythonRunner(
     keySchema: StructType,
     outputSchema: StructType,
     stateValueSchema: StructType,
-    val pythonMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]

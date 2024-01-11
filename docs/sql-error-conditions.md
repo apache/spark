@@ -29,6 +29,12 @@ Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
 
 Non-deterministic expression `<sqlExpr>` should not appear in the arguments of an aggregate function.
 
+### ALL_PARAMETERS_MUST_BE_NAMED
+
+SQLSTATE: 07001
+
+Using name parameterized queries requires all parameters to be named. Parameters missing names: `<exprs>`.
+
 ### ALL_PARTITION_COLUMNS_NOT_ALLOWED
 
 SQLSTATE: KD005
@@ -163,6 +169,14 @@ Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because schema i
 
 Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` is not in defined values for enum: `<enumString>`.
 
+### [CANNOT_CREATE_DATA_SOURCE_TABLE](sql-error-conditions-cannot-create-data-source-table-error-class.html)
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create data source table `<tableName>`:
+
+For more details see [CANNOT_CREATE_DATA_SOURCE_TABLE](sql-error-conditions-cannot-create-data-source-table-error-class.html)
+
 ### CANNOT_DECODE_URL
 
 [SQLSTATE: 22546](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -268,6 +282,12 @@ Cannot recognize hive type string: `<fieldType>`, column: `<fieldName>`. The spe
 
 Renaming a `<type>` across schemas is not allowed.
 
+### CANNOT_RESOLVE_DATAFRAME_COLUMN
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve dataframe column `<name>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
+
 ### CANNOT_RESOLVE_STAR_EXPAND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -326,6 +346,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+
+### CATALOG_NOT_FOUND
+
+[SQLSTATE: 42P08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The catalog `<catalogName>` not found. Consider to set the SQL config `<config>` to a catalog plugin.
 
 ### CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND
 
@@ -458,7 +484,7 @@ DataType `<type>` requires a length parameter, for example `<type>`(10). Please 
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Data source '`<provider>`' already exists in the registry. Please use a different name for the new data source.
+Data source '`<provider>`' already exists. Please choose a different name for the new data source.
 
 ### DATA_SOURCE_NOT_EXIST
 
@@ -471,6 +497,14 @@ Data source '`<provider>`' not found. Please make sure the data source is regist
 [SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to find the data source: `<provider>`. Please find packages at `https://spark.apache.org/third-party-projects.html`.
+
+### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The schema of the data source table does not match the expected schema. If you are using the DataFrameReader.schema API or creating a table, avoid specifying the schema.
+Data Source schema: `<dsSchema>`
+Expected schema: `<expectedSchema>`
 
 ### DATETIME_OVERFLOW
 
@@ -599,6 +633,12 @@ EXCEPT column `<columnName>` was resolved and expected to be StructType, but fou
 
 Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
 
+### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
+
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (`<aliases>`), which is invalid; please update the command to specify unique aliases and then try it again.
+
 ### EXPECT_PERMANENT_VIEW_NOT_TEMP
 
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -650,6 +690,14 @@ User defined function (`<functionName>`: (`<signature>`) => `<result>`) failed d
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
 Failed preparing of the function `<funcName>` for call. Please, double check function's arguments.
+
+### [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
+
+SQLSTATE: HV000
+
+Failed JDBC `<url>` on the operation:
+
+For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.html)
 
 ### FAILED_PARSE_STRUCT_TYPE
 
@@ -843,12 +891,6 @@ For more details see [INCOMPLETE_TYPE_DEFINITION](sql-error-conditions-incomplet
 You may get a different result due to the upgrading to
 
 For more details see [INCONSISTENT_BEHAVIOR_CROSS_VERSION](sql-error-conditions-inconsistent-behavior-cross-version-error-class.html)
-
-### INCORRECT_END_OFFSET
-
-[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-Max offset with `<rowsPerSecond>` rowsPerSecond is `<maxSeconds>`, but it's `<endSeconds>` now.
 
 ### INCORRECT_RAMP_UP_RATE
 
@@ -1125,6 +1167,14 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+SQLSTATE: ID001
+
+Invalid inverse distribution function `<funcName>`.
+
+For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
 ### INVALID_JSON_ROOT_FIELD
 
 [SQLSTATE: 22032](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1227,6 +1277,18 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 `<value>` is an invalid property value, please use quotes, e.g. SET `<key>`=`<value>`
 
+### INVALID_QUERY_MIXED_QUERY_PARAMETERS
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Parameterized query must either use positional, or named parameters, but not both.
+
+### INVALID_SAVE_MODE
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The specified save mode `<mode>` is invalid. Valid save modes include "append", "overwrite", "ignore", "error", "errorifexists", and "default".
+
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
 [SQLSTATE: 42K07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1260,6 +1322,12 @@ The argument `<name>` of `sql()` is invalid. Consider to replace it either by a 
 Invalid SQL syntax:
 
 For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
+
+### INVALID_STATEMENT_FOR_EXECUTE_INTO
+
+SQLSTATE: 07501
+
+The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1313,6 +1381,12 @@ The url is invalid: `<url>`. If necessary set `<ansiConfig>` to "false" to bypas
 
 Invalid usage of `<elem>` in `<prettyName>`.
 
+### INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Variable type must be string type but got `<varType>`.
+
 ### INVALID_VIEW_TEXT
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -1331,6 +1405,12 @@ Rewrite the query to avoid window functions, aggregate functions, and generator 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot specify ORDER BY or a window frame for `<aggFunc>`.
+
+### INVALID_WRITER_COMMIT_MESSAGE
+
+[SQLSTATE: 42KDE](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The data source writer has generated an invalid number of commit messages. Expected exactly one writer commit message from each task, but received `<detail>`.
 
 ### [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-write-distribution-error-class.html)
 
@@ -1457,6 +1537,12 @@ Set "spark.sql.allowNamedFunctionArguments" to "true" to turn on feature.
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
 
+### NESTED_EXECUTE_IMMEDIATE
+
+SQLSTATE: 07501
+
+Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
+
 ### NON_FOLDABLE_ARGUMENT
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1567,6 +1653,12 @@ Can't determine the default value for `<colName>` since it is not nullable and i
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 No handler for UDAF '`<functionName>`'. Use sparkSession.udf.register(...) instead.
+
+### NO_MERGE_ACTION_SPECIFIED
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource.
 
 ### NO_SQL_TYPE_IN_PROTOBUF_SCHEMA
 
@@ -1734,11 +1826,11 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
-### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+### PYTHON_DATA_SOURCE_ERROR
 
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
-Failed to `<action>` Python data source `<type>` in Python: `<msg>`
+Failed to `<action>` Python data source `<type>`: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
@@ -1914,6 +2006,66 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 
 Static partition column `<staticName>` is also specified in the column list.
 
+### STDS_COMMITTED_BATCH_UNAVAILABLE
+
+SQLSTATE: KD006
+
+No committed batch found, checkpoint location: `<checkpointLocation>`. Ensure that the query has run and committed any microbatch before stopping.
+
+### STDS_CONFLICT_OPTIONS
+
+[SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The options `<options>` cannot be specified together. Please specify the one.
+
+### STDS_FAILED_TO_READ_STATE_SCHEMA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to read the state schema. Either the file does not exist, or the file is corrupted. options: `<sourceOptions>`.
+Rerun the streaming query to construct the state schema, and report to the corresponding communities or vendors if the error persists.
+
+### STDS_INTERNAL_ERROR
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Internal error: `<message>`
+Please, report this bug to the corresponding communities or vendors, and provide the full stack trace.
+
+### [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+[SQLSTATE: 42616](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for source option '`<optionName>`':
+
+For more details see [STDS_INVALID_OPTION_VALUE](sql-error-conditions-stds-invalid-option-value-error-class.html)
+
+### STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE
+
+SQLSTATE: KD006
+
+The state does not have any partition. Please double check that the query points to the valid state. options: `<sourceOptions>`
+
+### STDS_OFFSET_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+The offset log for `<batchId>` does not exist, checkpoint location: `<checkpointLocation>`.
+Please specify the batch ID which is available for querying - you can query the available batch IDs via using state metadata data source.
+
+### STDS_OFFSET_METADATA_LOG_UNAVAILABLE
+
+SQLSTATE: KD006
+
+Metadata is not available for offset log for `<batchId>`, checkpoint location: `<checkpointLocation>`.
+The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata.
+
+### STDS_REQUIRED_OPTION_UNSPECIFIED
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+'`<optionName>`' must be specified.
+
 ### STREAM_FAILED
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -1993,6 +2145,12 @@ CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part 
 The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.
 Expected `<aliasesSize>` aliases, but got `<aliasesNames>`.
 Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
+
+### UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 
@@ -2186,6 +2344,12 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 
 Unsupported data type `<typeName>`.
 
+### UNSUPPORTED_DATA_SOURCE_SAVE_MODE
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+The data source '`<source>`' cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
+
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -2221,6 +2385,14 @@ Cannot create generated column `<fieldName>` with generation expression `<expres
 A query operator contains one or more unsupported expressions.
 Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.
 Invalid expressions: [`<invalidExprSqls>`]
+
+### UNSUPPORTED_EXPR_FOR_PARAMETER
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A query parameter contains unsupported expression.
+Parameters can either be variables or literals.
+Invalid expression: [`<invalidExprSql>`]
 
 ### UNSUPPORTED_EXPR_FOR_WINDOW
 

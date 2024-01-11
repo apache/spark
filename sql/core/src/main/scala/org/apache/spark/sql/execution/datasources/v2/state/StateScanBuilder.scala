@@ -67,8 +67,7 @@ class StateScan(
     })
 
     if (partitions.headOption.isEmpty) {
-      throw new IllegalArgumentException("The state does not have any partition. Please double " +
-        s"check that the query points to the valid state. options: $sourceOptions")
+      throw StateDataSourceErrors.noPartitionDiscoveredInStateStore(sourceOptions)
     } else {
       // just a dummy query id because we are actually not running streaming query
       val queryId = UUID.randomUUID()

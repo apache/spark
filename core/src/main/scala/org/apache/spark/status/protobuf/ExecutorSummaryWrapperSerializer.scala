@@ -138,7 +138,7 @@ private[protobuf] class ExecutorSummaryWrapperSerializer
       peakMemoryMetrics = peakMemoryMetrics,
       attributes = binary.getAttributesMap.asScala.toMap,
       resources =
-        binary.getResourcesMap.asScala.view.mapValues(deserializeResourceInformation).toMap,
+        binary.getResourcesMap.asScala.toMap.transform((_, v) => deserializeResourceInformation(v)),
       resourceProfileId = binary.getResourceProfileId,
       isExcluded = binary.getIsExcluded,
       excludedInStages = binary.getExcludedInStagesList.asScala.map(_.toInt).toSet)

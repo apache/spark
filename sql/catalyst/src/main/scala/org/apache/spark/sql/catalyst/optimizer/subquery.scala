@@ -132,19 +132,22 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, _, _, conditions, subHint)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
+          val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
             LeftSemi, joinCond, subHint)
+          Project(p.output, join)
         case (p, Not(Exists(sub, _, _, conditions, subHint))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
+          val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
             LeftAnti, joinCond, subHint)
+          Project(p.output, join)
         case (p, InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
-          Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
+          val join = Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, JoinHint(None, subHint))
+          Project(p.output, join)
         case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
@@ -846,7 +849,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   private def checkScalarSubqueryInAgg(a: Aggregate): Unit = {
     if (a.groupingExpressions.exists(hasCorrelatedScalarSubquery) &&
         !a.aggregateExpressions.exists(hasCorrelatedScalarSubquery)) {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         s"Fail to rewrite correlated scalar subqueries in Aggregate:\n$a")
     }
   }

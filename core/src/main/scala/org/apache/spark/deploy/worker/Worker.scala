@@ -96,12 +96,18 @@ private[deploy] class Worker(
   private val HEARTBEAT_MILLIS = conf.get(WORKER_TIMEOUT) * 1000 / 4
 
   // Model retries to connect to the master, after Hadoop's model.
-  // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
-  // Afterwards, the next 10 attempts are between 30 and 90 seconds.
+  // The total number of retries are less than or equal to WORKER_MAX_REGISTRATION_RETRIES.
+  // Within the upper limit, WORKER_MAX_REGISTRATION_RETRIES,
+  // the first WORKER_INITIAL_REGISTRATION_RETRIES attempts to reconnect are in shorter intervals
+  // (between 5 and 15 seconds). Afterwards, the next attempts are between 30 and 90 seconds while
   // A bit of randomness is introduced so that not all of the workers attempt to reconnect at
   // the same time.
-  private val INITIAL_REGISTRATION_RETRIES = 6
-  private val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
+  private val INITIAL_REGISTRATION_RETRIES = conf.get(WORKER_INITIAL_REGISTRATION_RETRIES)
+  private val TOTAL_REGISTRATION_RETRIES = conf.get(WORKER_MAX_REGISTRATION_RETRIES)
+  if (INITIAL_REGISTRATION_RETRIES > TOTAL_REGISTRATION_RETRIES) {
+    logInfo(s"${WORKER_INITIAL_REGISTRATION_RETRIES.key} ($INITIAL_REGISTRATION_RETRIES) is " +
+      s"capped by ${WORKER_MAX_REGISTRATION_RETRIES.key} ($TOTAL_REGISTRATION_RETRIES)")
+  }
   private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
   private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
@@ -872,7 +878,12 @@ private[deploy] class Worker(
       case DriverState.FAILED =>
         logWarning(s"Driver $driverId exited with failure")
       case DriverState.FINISHED =>
-        logInfo(s"Driver $driverId exited successfully")
+        registrationRetryTimer match {
+          case Some(_) =>
+            logWarning(s"Driver $driverId exited successfully while master is disconnected.")
+          case _ =>
+            logInfo(s"Driver $driverId exited successfully")
+        }
       case DriverState.KILLED =>
         logInfo(s"Driver $driverId was killed by user")
       case _ =>

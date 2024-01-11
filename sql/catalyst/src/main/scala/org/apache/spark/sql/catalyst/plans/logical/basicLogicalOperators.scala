@@ -737,7 +737,7 @@ case class View(
   override def metadataOutput: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
-    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+    s"View (${desc.identifier}, ${truncatedString(output, "[", ", ", "]", maxFields)})"
   }
 
   override def doCanonicalize(): LogicalPlan = child match {
@@ -779,13 +779,14 @@ object View {
     // as optimization configs but they are still needed during the view resolution.
     // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
     // optimization phase.
-    val retainedConfigs = activeConf.getAllConfs.view.filterKeys(key =>
+    val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
       Seq(
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key) || key.startsWith("spark.sql.catalog."))
+      ).contains(key) || key.startsWith("spark.sql.catalog.")
+    }
     for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
@@ -1083,10 +1084,12 @@ case class Range(
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
     } else {
-      val (minVal, maxVal) = if (step > 0) {
-        (start, start + (numElements - 1) * step)
+      val (minVal, maxVal) = if (!numElements.isValidLong) {
+        (None, None)
+      } else if (step > 0) {
+        (Some(start), Some(start + (numElements.toLong - 1) * step))
       } else {
-        (start + (numElements - 1) * step, start)
+        (Some(start + (numElements.toLong - 1) * step), Some(start))
       }
 
       val histogram = if (conf.histogramEnabled) {
@@ -1097,8 +1100,8 @@ case class Range(
 
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
-        max = Some(maxVal),
-        min = Some(minVal),
+        max = maxVal,
+        min = minVal,
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
         maxLen = Some(LongType.defaultSize),

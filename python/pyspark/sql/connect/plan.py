@@ -1265,8 +1265,12 @@ class WithColumnsRenamed(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.with_columns_renamed.input.CopyFrom(self._child.plan(session))
-        for k, v in self._colsMap.items():
-            plan.with_columns_renamed.rename_columns_map[k] = v
+        if len(self._colsMap) > 0:
+            for k, v in self._colsMap.items():
+                rename = proto.WithColumnsRenamed.Rename()
+                rename.col_name = k
+                rename.new_col_name = v
+                plan.with_columns_renamed.renames.append(rename)
         return plan
 
 
@@ -1994,40 +1998,6 @@ class FunctionExists(LogicalPlan):
         plan.catalog.function_exists.function_name = self._function_name
         if self._db_name is not None:
             plan.catalog.function_exists.db_name = self._db_name
-        return plan
-
-
-class CreateExternalTable(LogicalPlan):
-    def __init__(
-        self,
-        table_name: str,
-        path: str,
-        source: Optional[str] = None,
-        schema: Optional[DataType] = None,
-        options: Mapping[str, str] = {},
-    ) -> None:
-        super().__init__(None)
-        self._table_name = table_name
-        self._path = path
-        self._source = source
-        self._schema = schema
-        self._options = options
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = self._create_proto_relation()
-        plan.catalog.create_external_table.table_name = self._table_name
-        if self._path is not None:
-            plan.catalog.create_external_table.path = self._path
-        if self._source is not None:
-            plan.catalog.create_external_table.source = self._source
-        if self._schema is not None:
-            plan.catalog.create_external_table.schema.CopyFrom(
-                pyspark_types_to_proto_types(self._schema)
-            )
-        for k in self._options.keys():
-            v = self._options.get(k)
-            if v is not None:
-                plan.catalog.create_external_table.options[k] = v
         return plan
 
 

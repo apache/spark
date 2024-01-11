@@ -2594,6 +2594,11 @@ object Decode {
       the corresponding result. If no match is found, then it returns default. If default
       is omitted, it returns null.
   """,
+  arguments = """
+    Arguments:
+      * bin - a binary expression to decode
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to decode `bin` into a STRING. It is case insensitive.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
@@ -2623,33 +2628,44 @@ case class Decode(params: Seq[Expression], replacement: Expression)
 }
 
 /**
- * Decodes the first argument into a String using the provided character set
- * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
- * If either argument is null, the result will also be null.
+ * Decodes the first argument into a String using the provided character set.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(bin, charset) - Decodes the first argument using the second argument character set.",
+  usage = "_FUNC_(bin, charset) - Decodes the first argument using the second argument character set. If either argument is null, the result will also be null.",
   examples = """
     Examples:
       > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
        abc
   """,
+  arguments = """
+    Arguments:
+      * bin - a binary expression to decode
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16' to decode `bin` into a STRING. It is case insensitive.
+  """,
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class StringDecode(bin: Expression, charset: Expression)
+case class StringDecode(bin: Expression, charset: Expression, legacyCharsets: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(bin: Expression, charset: Expression) =
+    this(bin, charset, SQLConf.get.legacyJavaCharsets)
 
   override def left: Expression = bin
   override def right: Expression = charset
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
 
+  private val supportedCharsets = Set(
+    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16")
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val fromCharset = input2.asInstanceOf[UTF8String].toString
     try {
-      UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
+      if (legacyCharsets || supportedCharsets.contains(fromCharset.toUpperCase(Locale.ROOT))) {
+        UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
+      } else throw new UnsupportedEncodingException
     } catch {
       case _: UnsupportedEncodingException =>
         throw QueryExecutionErrors.invalidCharsetError(prettyName, fromCharset)
@@ -2659,10 +2675,17 @@ case class StringDecode(bin: Expression, charset: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (bytes, charset) => {
       val fromCharset = ctx.freshName("fromCharset")
+      val sc = JavaCode.global(
+        ctx.addReferenceObj("supportedCharsets", supportedCharsets),
+        supportedCharsets.getClass)
       s"""
         String $fromCharset = $charset.toString();
         try {
-          ${ev.value} = UTF8String.fromString(new String($bytes, $fromCharset));
+          if ($legacyCharsets || $sc.contains($fromCharset.toUpperCase(java.util.Locale.ROOT))) {
+            ${ev.value} = UTF8String.fromString(new String($bytes, $fromCharset));
+          } else {
+            throw new java.io.UnsupportedEncodingException();
+          }
         } catch (java.io.UnsupportedEncodingException e) {
           throw QueryExecutionErrors.invalidCharsetError("$prettyName", $fromCharset);
         }
@@ -2675,6 +2698,10 @@ case class StringDecode(bin: Expression, charset: Expression)
     copy(bin = newLeft, charset = newRight)
 
   override def prettyName: String = "decode"
+}
+
+object StringDecode {
+  def apply(bin: Expression, charset: Expression): StringDecode = new StringDecode(bin, charset)
 }
 
 /**

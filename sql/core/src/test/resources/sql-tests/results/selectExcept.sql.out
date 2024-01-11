@@ -122,6 +122,20 @@ struct<id:int,name:string,data:struct<f1:int,s2:struct<f3:string>>>
 
 
 -- !query
+SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view
+-- !query schema
+struct<id:int,name:string,data:struct<>>
+-- !query output
+10	name1	{}
+20	name2	{}
+30	name3	{}
+40	name4	{}
+50	name5	{}
+60	name6	{}
+70	name7	{}
+
+
+-- !query
 SELECT * EXCEPT (id, name, data) FROM tbl_view
 -- !query schema
 struct<>

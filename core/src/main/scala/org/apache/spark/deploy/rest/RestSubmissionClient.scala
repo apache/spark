@@ -193,6 +193,35 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     response
   }
 
+  /** Check the readiness of Master. */
+  def readyz(): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to check the status of $master.")
+    var handled: Boolean = false
+    var response: SubmitRestProtocolResponse = new ErrorResponse
+    for (m <- masters if !handled) {
+      validateMaster(m)
+      val url = getReadyzUrl(m)
+      try {
+        response = get(url)
+        response match {
+          case k: ReadyzResponse =>
+            if (!Utils.responseFromBackup(k.message)) {
+              handleRestResponse(k)
+              handled = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e: SubmitRestConnectionException =>
+          if (handleConnectionException(m)) {
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
+          }
+      }
+    }
+    response
+  }
+
   /** Request the status of a submission from the server. */
   def requestSubmissionStatus(
       submissionId: String,
@@ -370,6 +399,12 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     new URL(s"$baseUrl/clear")
   }
 
+  /** Return the REST URL for requesting the readyz API. */
+  private def getReadyzUrl(master: String): URL = {
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/readyz")
+  }
+
   /** Return the REST URL for requesting the status of an existing submission. */
   private def getStatusUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
@@ -492,9 +527,9 @@ private[spark] object RestSubmissionClient {
    * Filter non-spark environment variables from any environment.
    */
   private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
-    env.view.filterKeys { k =>
+    env.filter { case (k, _) =>
       k.startsWith("SPARK_") && !EXCLUDED_SPARK_ENV_VARS.contains(k)
-    }.toMap
+    }
   }
 
   private[spark] def supportsRestClient(master: String): Boolean = {

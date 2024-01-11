@@ -30,7 +30,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{TaskContext, TaskKilledException}
+import org.apache.spark.{SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -544,7 +544,7 @@ class CodegenContext extends Logging {
         s"private $className $classInstance = new $className();"
     }
 
-    val declareNestedClasses = classFunctions.view.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filter { case (k, _) => k != outerClassName }.map {
       case (className, functions) =>
         s"""
            |private class $className {
@@ -627,6 +627,7 @@ class CodegenContext extends Logging {
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
+    case CalendarIntervalType => s"$c1.equals($c2)"
     case NullType => "false"
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError(
@@ -652,6 +653,7 @@ class CodegenContext extends Logging {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
+    case CalendarIntervalType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -1199,7 +1201,7 @@ class CodegenContext extends Logging {
           "the parameter length of at least one split function went over the JVM limit: " +
           MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw new IllegalStateException(errMsg)
+          throw SparkException.internalError(errMsg)
         } else {
           logInfo(errMsg)
           (localSubExprEliminationExprsForNonSplit, Seq.empty)

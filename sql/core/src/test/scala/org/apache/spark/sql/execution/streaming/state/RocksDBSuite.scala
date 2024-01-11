@@ -922,13 +922,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir) { db =>
-        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
         db.load(0)
         db.put("a", "1") // put also triggers a db get
         db.get("a") // this is found in-memory writebatch - no get triggered in db
         db.get("b") // key doesn't exists - triggers db get
         db.commit()
-        verifyMetrics(putCount = 1, getCount = 3, metrics = db.metrics)
+        verifyMetrics(putCount = 1, getCount = 3, metrics = db.metricsOpt.get)
 
         db.load(1)
         db.put("b", "2") // put also triggers a db get
@@ -936,7 +935,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.get("c") // key doesn't exists - triggers db get
         assert(iterator(db).toSet === Set(("a", "1"), ("b", "2")))
         db.commit()
-        verifyMetrics(putCount = 1, getCount = 3, iterCountPositive = true, db.metrics)
+        verifyMetrics(putCount = 1, getCount = 3, iterCountPositive = true, db.metricsOpt.get)
       }
     }
 
@@ -944,19 +943,18 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir, conf = dbConf.copy(resetStatsOnLoad = false)) { db =>
-        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
         db.load(0)
         db.put("a", "1") // put also triggers a db get
         db.commit()
         // put and get counts are cumulative
-        verifyMetrics(putCount = 1, getCount = 1, metrics = db.metrics)
+        verifyMetrics(putCount = 1, getCount = 1, metrics = db.metricsOpt.get)
 
         db.load(1)
         db.put("b", "2") // put also triggers a db get
         db.get("a")
         db.commit()
         // put and get counts are cumulative: existing get=1, put=1: new get=2, put=1
-        verifyMetrics(putCount = 2, getCount = 3, metrics = db.metrics)
+        verifyMetrics(putCount = 2, getCount = 3, metrics = db.metricsOpt.get)
       }
     }
 
@@ -974,7 +972,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.put("b", "25")
         db.commit()
 
-        val metrics = db.metrics
+        val metrics = db.metricsOpt.get
         assert(metrics.nativeOpsHistograms("compaction").count > 0)
         assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
         assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
@@ -1194,13 +1192,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.put("a", "5")
         db.put("b", "5")
 
-        assert(db.metrics.numUncommittedKeys === 2)
-        assert(db.metrics.numCommittedKeys === 0)
-
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === 2)
-        assert(db.metrics.numCommittedKeys === 2)
+        assert(db.metricsOpt.get.numUncommittedKeys === 2)
+        assert(db.metricsOpt.get.numCommittedKeys === 2)
       }
 
       // restart with config "trackTotalNumberOfRows = false"
@@ -1208,16 +1203,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = false)) { db =>
         db.load(curVersion)
 
-        assert(db.metrics.numUncommittedKeys === -1)
-        assert(db.metrics.numCommittedKeys === -1)
-
         db.put("b", "7")
         db.put("c", "7")
 
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === -1)
-        assert(db.metrics.numCommittedKeys === -1)
+        assert(db.metricsOpt.get.numUncommittedKeys === -1)
+        assert(db.metricsOpt.get.numCommittedKeys === -1)
       }
 
       // restart with config "trackTotalNumberOfRows = true" again
@@ -1225,19 +1217,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = true)) { db =>
         db.load(curVersion)
 
-        assert(db.metrics.numUncommittedKeys === 3)
-        assert(db.metrics.numCommittedKeys === 3)
-
         db.put("c", "8")
         db.put("d", "8")
 
-        assert(db.metrics.numUncommittedKeys === 4)
-        assert(db.metrics.numCommittedKeys === 3)
-
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === 4)
-        assert(db.metrics.numCommittedKeys === 4)
+        assert(db.metricsOpt.get.numUncommittedKeys === 4)
+        assert(db.metricsOpt.get.numCommittedKeys === 4)
       }
     }
   }

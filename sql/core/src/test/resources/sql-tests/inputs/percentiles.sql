@@ -64,6 +64,54 @@ SELECT
 FROM aggr;
 
 SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr;
+
+SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr;
+
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr;
+
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr;
+
+SELECT
+  percentile_cont(0.5)
+FROM aggr;
+
+SELECT
+  percentile_cont(0.5) OVER (PARTITION BY k)
+FROM aggr;
+
+SELECT
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY k, v)
+FROM aggr;
+
+SELECT
+  percentile_cont(k, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr;
+
+SELECT
   k,
   median(v),
   percentile(v, 0.5),

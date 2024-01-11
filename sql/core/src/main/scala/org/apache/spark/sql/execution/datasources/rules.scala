@@ -364,7 +364,10 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     }
   }
 
-  private def failAnalysis(msg: String) = throw new AnalysisException(msg)
+  private def failAnalysis(msg: String) = {
+    throw new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_3072", messageParameters = Map("msg" -> msg))
+  }
 }
 
 /**

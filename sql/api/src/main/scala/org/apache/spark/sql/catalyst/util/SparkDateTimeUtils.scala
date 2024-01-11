@@ -305,21 +305,28 @@ trait SparkDateTimeUtils {
       (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
         (segment != 0 && digits > 0 && digits <= 2)
     }
-    if (s == null || s.trimAll().numBytes() == 0) {
+    if (s == null) {
       return None
     }
+
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var sign = 1
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
-    val bytes = s.trimAll().getBytes
-    var j = 0
+    val bytes = s.getBytes
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
+
+    if (j == strEndTrimmed) {
+      return None
+    }
+
     if (bytes(j) == '-' || bytes(j) == '+') {
       sign = if (bytes(j) == '-') -1 else 1
       j += 1
     }
-    while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
+    while (j < strEndTrimmed && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
         if (!isValidDigits(i, currentSegmentDigits)) {
@@ -343,7 +350,7 @@ trait SparkDateTimeUtils {
     if (!isValidDigits(i, currentSegmentDigits)) {
       return None
     }
-    if (i < 2 && j < bytes.length) {
+    if (i < 2 && j < strEndTrimmed) {
       // For the `yyyy` and `yyyy-[m]m` formats, entire input must be consumed.
       return None
     }
@@ -404,7 +411,7 @@ trait SparkDateTimeUtils {
         (segment == 7 && digits <= 2) ||
         (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
     }
-    if (s == null || s.trimAll().numBytes() == 0) {
+    if (s == null) {
       return (Array.empty, None, false)
     }
     var tz: Option[String] = None
@@ -412,8 +419,14 @@ trait SparkDateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
-    val bytes = s.trimAll().getBytes
-    var j = 0
+    val bytes = s.getBytes
+    var j = getTrimmedStart(bytes)
+    val strEndTrimmed = getTrimmedEnd(j, bytes)
+
+    if (j == strEndTrimmed) {
+      return (Array.empty, None, false)
+    }
+
     var digitsMilli = 0
     var justTime = false
     var yearSign: Option[Int] = None
@@ -421,7 +434,7 @@ trait SparkDateTimeUtils {
       yearSign = if (bytes(j) == '-') Some(-1) else Some(1)
       j += 1
     }
-    while (j < bytes.length) {
+    while (j < strEndTrimmed) {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
       if (parsedValue < 0 || parsedValue > 9) {
@@ -490,8 +503,8 @@ trait SparkDateTimeUtils {
             currentSegmentValue = 0
             currentSegmentDigits = 0
             i += 1
-            tz = Some(new String(bytes, j, bytes.length - j))
-            j = bytes.length - 1
+            tz = Some(new String(bytes, j, strEndTrimmed - j))
+            j = strEndTrimmed - 1
           }
           if (i == 6  && b != '.') {
             i += 1
@@ -604,6 +617,39 @@ trait SparkDateTimeUtils {
     } catch {
       case NonFatal(_) => None
     }
+  }
+
+  /**
+   * Returns the index of the first non-whitespace and non-ISO control character in the byte array.
+   *
+   * @param bytes The byte array to be processed.
+   * @return The start index after trimming.
+   */
+  @inline private def getTrimmedStart(bytes: Array[Byte]) = {
+    var start = 0
+
+    while (start < bytes.length && UTF8String.isWhitespaceOrISOControl(bytes(start))) {
+      start += 1
+    }
+
+    start
+  }
+
+  /**
+   * Returns the index of the last non-whitespace and non-ISO control character in the byte array.
+   *
+   * @param start The starting index for the search.
+   * @param bytes The byte array to be processed.
+   * @return The end index after trimming.
+   */
+  @inline private def getTrimmedEnd(start: Int, bytes: Array[Byte]) = {
+    var end = bytes.length - 1
+
+    while (end > start && UTF8String.isWhitespaceOrISOControl(bytes(end))) {
+      end -= 1
+    }
+
+    end + 1
   }
 }
 

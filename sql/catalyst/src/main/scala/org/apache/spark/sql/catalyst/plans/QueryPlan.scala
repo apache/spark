@@ -361,6 +361,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         } else {
           transferAttrMapping ++ newOtherAttrMapping
         }
+        if (!(plan eq planAfterRule)) {
+          planAfterRule.copyTagsFrom(plan)
+        }
         planAfterRule -> resultAttrMapping.toSeq
       }
     }
@@ -532,6 +535,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
 
     transformDownWithPruning(cond, ruleId)(g)
+  }
+
+  /**
+   * A variant of [[foreach]] which considers plan nodes inside subqueries as well.
+   */
+  def foreachWithSubqueries(f: PlanType => Unit): Unit = {
+    def actualFunc(plan: PlanType): Unit = {
+      f(plan)
+      plan.subqueries.foreach(_.foreachWithSubqueries(f))
+    }
+    foreach(actualFunc)
   }
 
   /**
