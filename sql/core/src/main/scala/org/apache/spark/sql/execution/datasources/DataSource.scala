@@ -693,7 +693,7 @@ object DataSource extends Logging {
               .startsWith("org.apache.spark.sql.execution.datasources.xml.XmlFileFormat")
             ).head.getClass
             throw QueryCompilationErrors
-              .findMultipleXMLDataSourceError(provider1, sourceNames, externalSource.getName)
+              .foundMultipleXMLDataSourceError(provider1, sourceNames, externalSource.getName)
           } else if (internalSources.size == 1) {
             logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
               s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")

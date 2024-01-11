@@ -1644,17 +1644,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "sourceNames" -> sourceNames.mkString(", ")))
   }
 
-  def findMultipleXMLDataSourceError(provider: String,
-      sourceNames: Seq[String],
-      externalSource: String): Throwable = {
-    new AnalysisException(
-      errorClass = "MULTIPLE_XML_DATA_SOURCE",
-      messageParameters = Map("provider" -> provider,
-        "sourceNames" -> sourceNames.mkString(", "),
-        "externalSource" -> externalSource)
-    )
-  }
-
   def writeEmptySchemasUnsupportedByDataSourceError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1142",
@@ -3890,6 +3879,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
       messageParameters = Map("provider" -> provider))
+  }
+
+  def foundMultipleXMLDataSourceError(provider: String,
+      sourceNames: Seq[String],
+      externalSource: String): Throwable = {
+    new AnalysisException(
+      errorClass = "MULTIPLE_XML_DATA_SOURCE",
+      messageParameters = Map("provider" -> provider,
+        "sourceNames" -> sourceNames.mkString(", "),
+        "externalSource" -> externalSource)
+    )
   }
 
   def xmlRowTagRequiredError(optionName: String): Throwable = {
