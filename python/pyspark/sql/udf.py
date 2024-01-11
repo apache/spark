@@ -28,7 +28,6 @@ from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 from py4j.java_gateway import JavaObject
 
 from pyspark import SparkContext
-from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
