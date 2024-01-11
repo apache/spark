@@ -158,13 +158,13 @@ class SubquerySQLGeneratorSuite
         val expr = outerTable.output.last
         val whereClausePredicate = subqueryType match {
           case SubqueryType.SCALAR_PREDICATE_EQUALS =>
-            Equals(expr, ScalarSubquery(subqueryOrganization))
+            Equals(expr, Subquery(subqueryOrganization))
           case SubqueryType.SCALAR_PREDICATE_LESS_THAN =>
-            LessThan(expr, ScalarSubquery(subqueryOrganization))
+            LessThan(expr, Subquery(subqueryOrganization))
           case SubqueryType.EXISTS => Exists(subqueryOrganization)
-          case SubqueryType.NOT_EXISTS => NotExists(subqueryOrganization)
+          case SubqueryType.NOT_EXISTS => Not(Exists(subqueryOrganization))
           case SubqueryType.IN => In(expr, subqueryOrganization)
-          case SubqueryType.NOT_IN => NotIn(expr, subqueryOrganization)
+          case SubqueryType.NOT_IN => Not(In(expr, subqueryOrganization))
         }
         val whereClause = Some(WhereClause(Seq(whereClausePredicate)))
         (queryProjection, selectClause, fromClause, whereClause)
@@ -222,6 +222,39 @@ class SubquerySQLGeneratorSuite
       (INNER_TABLE, NO_MATCH_TABLE)
     )
 
+    // scalastyle:off line.size.limit
+    val createTableSql = f"""
+        |CREATE TEMPORARY VIEW ${INNER_TABLE.name}(${INNER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1, 1),
+        |    (2, 2),
+        |    (3, 3),
+        |    (4, 4),
+        |    (5, 5),
+        |    (8, 8),
+        |    (9, 9);
+        |
+        |CREATE TEMPORARY VIEW ${OUTER_TABLE.name}(${OUTER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1, 1),
+        |    (2, 1),
+        |    (3, 3),
+        |    (6, 6),
+        |    (7, 7),
+        |    (9, 9);
+        |
+        |CREATE TEMPORARY VIEW ${NO_MATCH_TABLE.name}(${NO_MATCH_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1000, 1000);
+        |
+        |CREATE TEMPORARY VIEW ${JOIN_TABLE.name}(${JOIN_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1, 1),
+        |    (2, 1),
+        |    (3, 3),
+        |    (7, 8),
+        |    (5, 6);
+        |
+        |CREATE TEMPORARY VIEW ${NULL_TABLE.name}(${NULL_TABLE.output.map(_.name).mkString(", ")}) AS SELECT CAST(null AS int), CAST(null as int);
+        |""".stripMargin.strip()
+    // scalastyle:off line.size.limit
+
     val INNER_SUBQUERY_ALIAS = "innerSubqueryAlias"
     val SUBQUERY_ALIAS = "subqueryAlias"
     val AGGREGATE_FUNCTION_ALIAS = "aggFunctionAlias"
@@ -236,7 +269,7 @@ class SubquerySQLGeneratorSuite
         val joins = JOIN_TYPES.map(joinType => JoinedRelation(
           leftRelation = innerTable,
           rightRelation = JOIN_TABLE,
-          // Hardcoded join condition.
+          // Hardcoded keys for join condition.
           condition = Equals(innerTable.output.head, JOIN_TABLE.output.head),
           joinType = joinType))
         val leftTableQuery = Query(SelectClause(innerTable.output), FromClause(Seq(innerTable)))()
@@ -334,7 +367,8 @@ class SubquerySQLGeneratorSuite
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
       }
-      stringToFile(resultFile, querySpec.map(_.query).mkString(";\n"))
+      val queryString = createTableSql + "\n\n" + querySpec.map(_.query).mkString(";\n\n") + "\n"
+      stringToFile(resultFile, queryString)
     }
   }
 }

@@ -76,6 +76,9 @@ trait QueryGeneratorHelper {
 
   trait Predicate extends Expression
 
+  case class Not(expr: Predicate) extends Predicate {
+    override def toString: String = f"NOT $expr"
+  }
   case class Equals(expr: Expression, rightSideExpr: Expression) extends Predicate {
     override def toString: String = f"$expr = $rightSideExpr"
   }
@@ -85,10 +88,6 @@ trait QueryGeneratorHelper {
   case class In(expr: Expression, inner: Operator)
     extends Predicate {
     override def toString: String = f"$expr IN ($inner)"
-  }
-  case class NotIn(expr: Expression, inner: Operator)
-    extends Predicate {
-    override def toString: String = f"$expr NOT IN ($inner)"
   }
 
   object SubqueryType extends Enumeration {
@@ -101,13 +100,9 @@ trait QueryGeneratorHelper {
     val inner: Operator
     override def toString: String = f"($inner)"
   }
-  case class Subquery(inner: Operator) extends SubqueryExpression
-  case class ScalarSubquery(inner: Operator) extends SubqueryExpression
-  case class Exists(inner: Operator) extends SubqueryExpression with Predicate {
+  case class Subquery(inner: Query) extends SubqueryExpression
+  case class Exists(inner: Query) extends SubqueryExpression with Predicate {
     override def toString: String = f"EXISTS ($inner)"
-  }
-  case class NotExists(inner: Operator) extends SubqueryExpression with Predicate {
-    override def toString: String = f"NOT EXISTS ($inner)"
   }
 
   trait AggregateFunction extends Expression
