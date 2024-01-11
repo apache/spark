@@ -253,8 +253,11 @@ case class TransformWithStateExec(
           assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
           statefulProcessor.init(processorHandle, outputMode)
           processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+          // Only process initial state if first batch
+          val curBatchId = processorHandle.getQueryInfo().getBatchId
+          val initialStateIterToProcess = if (curBatchId == 0) Option(initStateIterator) else None
           val result = processDataWithPartition(childDataIterator, store,
-            processorHandle, Option(initStateIterator))
+            processorHandle, initialStateIterToProcess)
           result
       }
     } else {
