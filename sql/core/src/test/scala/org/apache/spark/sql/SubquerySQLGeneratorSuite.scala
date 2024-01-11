@@ -108,14 +108,14 @@ class SubquerySQLGeneratorSuite
    * @param operatorInSubquery The operator to be included in the subquery.
    */
   private def generateQuery(
-                             innerTable: Relation,
-                             outerTable: Relation,
-                             subqueryAlias: String,
-                             subqueryLocation: SubqueryLocation.Value,
-                             subqueryType: SubqueryType.Value,
-                             isCorrelated: Boolean,
-                             isDistinct: Boolean,
-                             operatorInSubquery: Operator): Query = {
+      innerTable: Relation,
+      outerTable: Relation,
+      subqueryAlias: String,
+      subqueryLocation: SubqueryLocation.Value,
+      subqueryType: SubqueryType.Value,
+      isCorrelated: Boolean,
+      isDistinct: Boolean,
+      operatorInSubquery: Operator): Query = {
 
     // Correlation conditions, this is hardcoded for now.
     val correlationConditions = if (isCorrelated) {
