@@ -85,10 +85,10 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def start(): Unit = {}
   override def stop(exitCode: Int): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}
-  override def killAllTaskAttempts(
-    stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
   override def killTaskAttempt(
     taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
+  override def killAllTaskAttempts(
+    stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
   override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
