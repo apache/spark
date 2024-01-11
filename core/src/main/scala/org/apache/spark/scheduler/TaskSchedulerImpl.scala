@@ -300,7 +300,7 @@ private[spark] class TaskSchedulerImpl(
   // be aborted but will be marked as zombie. The stage attempt will be finished and cleaned up
   // once all the tasks has been finished. The stage attempt could be aborted after the call of
   // `cancelTasks` if required.
-  override def cancelTasks(
+  override def killAllTaskAttempts(
       stageId: Int,
       interruptThread: Boolean,
       reason: String): Unit = synchronized {

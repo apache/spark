@@ -207,7 +207,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
     }
-    override def cancelTasks(stageId: Int, interruptThread: Boolean, reason: String): Unit = {
+    override def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String)
+      : Unit = {
       cancelledStages += stageId
     }
     override def killTaskAttempt(
@@ -883,7 +884,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def submitTasks(taskSet: TaskSet): Unit = {
         taskSets += taskSet
       }
-      override def cancelTasks(stageId: Int, interruptThread: Boolean, reason: String): Unit = {
+      override def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String)
+        : Unit = {
         throw new UnsupportedOperationException
       }
       override def killTaskAttempt(

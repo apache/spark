@@ -1916,7 +1916,7 @@ private[spark] class DAGScheduler(
                         "or zombie tasks for this job")
                       // ResultStage is only used by this job. It's safe to kill speculative or
                       // zombie tasks in this stage.
-                      taskScheduler.cancelTasks(
+                      taskScheduler.killAllTaskAttempts(
                         stageId,
                         shouldInterruptTaskThread(job),
                         reason = "Stage finished")
@@ -2222,7 +2222,7 @@ private[spark] class DAGScheduler(
               "failed."
             val job = jobIdToActiveJob.get(failedStage.firstJobId)
             val shouldInterrupt = job.exists(j => shouldInterruptTaskThread(j))
-            taskScheduler.cancelTasks(stageId, shouldInterrupt, reason)
+            taskScheduler.killAllTaskAttempts(stageId, shouldInterrupt, reason)
           } catch {
             case e: UnsupportedOperationException =>
               // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.
@@ -2871,7 +2871,7 @@ private[spark] class DAGScheduler(
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
-              taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
+              taskScheduler.killAllTaskAttempts(stageId, shouldInterruptTaskThread(job), reason)
               if (legacyAbortStageAfterCancelTasks) {
                 stageFailed(stageId, reason)
               }
