@@ -69,7 +69,7 @@ class DataSourceManager(
     if (dataSourceExists(name)) {
       val normalizedName = normalize(name)
       staticDataSourceBuilders.getOrElse(
-        normalizedName, dataSourceBuilders.get(normalize(name)))
+        normalizedName, dataSourceBuilders.get(normalizedName))
     } else {
       throw QueryCompilationErrors.dataSourceDoesNotExist(name)
     }
