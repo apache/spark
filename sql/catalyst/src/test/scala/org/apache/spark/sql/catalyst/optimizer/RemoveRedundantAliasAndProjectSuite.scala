@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.MetadataBuilder
 
 class RemoveRedundantAliasAndProjectSuite extends PlanTest {
@@ -168,12 +168,12 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
       LocalRelation(a)
     )
 
-    withSQLConf(EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "true") {
+    withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "true") {
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expectedWhenExcluded)
     }
 
-    withSQLConf(EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "false") {
+    withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "false") {
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expectedWhenNotExcluded)
     }
