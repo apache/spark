@@ -21,8 +21,6 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -36,17 +34,16 @@ import org.apache.spark.util.Utils
  */
 class DataSourceManager(
     initDataSourceBuilders: => Option[
-      ConcurrentHashMap[String, UserDefinedPythonDataSource]] = None
+      Map[String, UserDefinedPythonDataSource]] = None
    ) extends Logging {
+  import DataSourceManager._
   // Lazy to avoid being invoked during Session initialization.
   // Otherwise, it goes infinite loop, session -> Python runner -> SQLConf -> session.
-  private lazy val dataSourceBuilders = initDataSourceBuilders.getOrElse {
-    val builders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
-    builders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
-    builders
+  private lazy val staticDataSourceBuilders = initDataSourceBuilders.getOrElse {
+    initialDataSourceBuilders
   }
 
-  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+  private val dataSourceBuilders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
 
   /**
    * Register a data source builder for the given provider.
@@ -54,6 +51,10 @@ class DataSourceManager(
    */
   def registerDataSource(name: String, source: UserDefinedPythonDataSource): Unit = {
     val normalizedName = normalize(name)
+    if (staticDataSourceBuilders.contains(normalizedName)) {
+      // Cannot overwrite static Python Data Sources.
+      throw QueryCompilationErrors.dataSourceAlreadyExists(name)
+    }
     val previousValue = dataSourceBuilders.put(normalizedName, source)
     if (previousValue != null) {
       logWarning(f"The data source $name replaced a previously registered data source.")
@@ -66,7 +67,9 @@ class DataSourceManager(
    */
   def lookupDataSource(name: String): UserDefinedPythonDataSource = {
     if (dataSourceExists(name)) {
-      dataSourceBuilders.get(normalize(name))
+      val normalizedName = normalize(name)
+      staticDataSourceBuilders.getOrElse(
+        normalizedName, dataSourceBuilders.get(normalize(name)))
     } else {
       throw QueryCompilationErrors.dataSourceDoesNotExist(name)
     }
@@ -76,11 +79,15 @@ class DataSourceManager(
    * Checks if a data source with the specified name exists (case-insensitive).
    */
   def dataSourceExists(name: String): Boolean = {
-    dataSourceBuilders.containsKey(normalize(name))
+    val normalizedName = normalize(name)
+    staticDataSourceBuilders.contains(normalizedName) ||
+      dataSourceBuilders.containsKey(normalizedName)
   }
 
   override def clone(): DataSourceManager = {
-    new DataSourceManager(Some(dataSourceBuilders))
+    val manager = new DataSourceManager(Some(staticDataSourceBuilders))
+    dataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
+    manager
   }
 }
 
@@ -93,6 +100,8 @@ object DataSourceManager extends Logging {
       // Make sure PySpark zipped files also exist.
       PythonUtils.sparkPythonPaths.forall(new File(_).exists())
   }
+
+  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
   private def initialDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
     if (Utils.isTesting || shouldLoadPythonDataSources) this.synchronized {
@@ -110,7 +119,7 @@ object DataSourceManager extends Logging {
 
         dataSourceBuilders = maybeResult.map { result =>
           result.names.zip(result.dataSources).map { case (name, dataSource) =>
-            name ->
+            normalize(name) ->
               UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
           }.toMap
         }
