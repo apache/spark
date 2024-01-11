@@ -171,9 +171,10 @@ class SubquerySQLGeneratorSuite
     }
     val orderByClause = Some(OrderByClause(queryProjection))
 
-    val comment = f"-- inner_table=$innerTable, outer_table=$outerTable," +
-      f" subqueryLocation=$subqueryLocation, subquery_type=$subqueryType," +
-      f" is_correlated=$isCorrelated, distinct=$isDistinct, subquery_operator=$operatorInSubquery"
+    val comment = f"-- innerTable=$innerTable, outerTable=$outerTable," +
+      f" subqueryLocation=$subqueryLocation, subqueryType=$subqueryType," +
+      f" isCorrelated=$isCorrelated, subqueryDistinct=$isDistinct," +
+      f" subqueryOperator=$operatorInSubquery"
     Query(selectClause, fromClause, whereClause, groupByClause = None,
       orderByClause, limitClause = None)(comment)
   }

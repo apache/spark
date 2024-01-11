@@ -200,6 +200,10 @@ trait QueryGeneratorHelper {
       exprs.map(expr => expr.name + " DESC NULLS FIRST").mkString(", ")
   }
 
+  /**
+   * Case that encapsulates a Query, built with its different clauses.
+   * @param comment A string that will be printed as a comment a line before the query string.
+   */
   case class Query(
       selectClause: SelectClause,
       fromClause: FromClause,
