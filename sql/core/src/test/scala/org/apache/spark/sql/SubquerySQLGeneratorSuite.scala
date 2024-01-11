@@ -86,11 +86,11 @@ class SubquerySQLGeneratorSuite
     // operator to be included is a Limit.
     val limitClause = if (requiresLimitOne) {
       Some(Limit(1))
-    } else operatorInSubquery match {
-      case limit: Limit =>
-        Some(limit)
-      case _ =>
-        None
+    } else {
+      operatorInSubquery match {
+        case limit: Limit => Some(limit)
+        case _ => None
+      }
     }
 
     Query(selectClause, fromClause, whereClause, groupByClause,
@@ -306,6 +306,14 @@ class SubquerySQLGeneratorSuite
         case _ => Seq(true, false)
       }
 
+    def distinctChoices(subqueryOperator: Operator): Seq[Boolean] = {
+      subqueryOperator match {
+        // Don't do DISTINCT if there is no group by because it is redundant.
+        case Aggregate(_, groupingExpressions) if groupingExpressions.isEmpty => Seq(false)
+        case _ => Seq(true, false)
+      }
+    }
+
     case class SubquerySpec(query: Query, isCorrelated: Boolean, subqueryType: SubqueryType.Value)
 
     val generatedQuerySpecs = scala.collection.mutable.Set[SubquerySpec]()
@@ -317,7 +325,6 @@ class SubquerySQLGeneratorSuite
         Seq(SubqueryLocation.WHERE, SubqueryLocation.SELECT, SubqueryLocation.FROM)
       subqueryType <- subqueryTypeChoices(subqueryLocation)
       isCorrelated <- correlationChoices(subqueryLocation)
-      isDistinct <- Seq(true, false)
     } {
       // Hardcoded aggregation column and group by column.
       val (aggColumn, groupByColumn) = innerTable.output.head -> innerTable.output(1)
@@ -331,7 +338,10 @@ class SubquerySQLGeneratorSuite
       }
       val SUBQUERY_OPERATORS = Seq(Limit(1), Limit(10)) ++ aggregates
 
-      for (subqueryOperator <- SUBQUERY_OPERATORS) {
+      for {
+        subqueryOperator <- SUBQUERY_OPERATORS
+        isDistinct <- distinctChoices(subqueryOperator)
+      } {
         generatedQuerySpecs += SubquerySpec(
           query = generateQuery(innerTable, outerTable, SUBQUERY_ALIAS,
             subqueryLocation, subqueryType, isCorrelated, isDistinct, subqueryOperator),
@@ -358,7 +368,7 @@ class SubquerySQLGeneratorSuite
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
       }
-      val queryString = createTableSql + "\n\n" + querySpec.map(_.query).mkString(";\n\n") + "\n"
+      val queryString = createTableSql + "\n\n" + querySpec.map(_.query).mkString(";\n\n") + ";\n"
       stringToFile(resultFile, queryString)
     }
   }
