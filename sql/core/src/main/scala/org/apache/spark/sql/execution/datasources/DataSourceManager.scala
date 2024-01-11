@@ -34,10 +34,13 @@ import org.apache.spark.util.Utils
  * A manager for user-defined data sources. It is used to register and lookup data sources by
  * their short names or fully qualified names.
  */
-class DataSourceManager extends Logging {
+class DataSourceManager(
+    initDataSourceBuilders: => Option[
+      ConcurrentHashMap[String, UserDefinedPythonDataSource]] = None
+   ) extends Logging {
   // Lazy to avoid being invoked during Session initialization.
   // Otherwise, it goes infinite loop, session -> Python runner -> SQLConf -> session.
-  private lazy val dataSourceBuilders = {
+  private lazy val dataSourceBuilders = initDataSourceBuilders.getOrElse {
     val builders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
     builders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
     builders
@@ -77,9 +80,7 @@ class DataSourceManager extends Logging {
   }
 
   override def clone(): DataSourceManager = {
-    val manager = new DataSourceManager
-    dataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
-    manager
+    new DataSourceManager(Some(dataSourceBuilders))
   }
 }
 
