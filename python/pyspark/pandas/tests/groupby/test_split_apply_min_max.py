@@ -16,24 +16,32 @@
 #
 import unittest
 
-from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
 
 
-class GroupbyParitySplitApplyTests(
-    GroupbySplitApplyMixin,
-    PandasOnSparkTestUtils,
-    ReusedConnectTestCase,
+class GroupbySplitApplyMMMixin(GroupbySplitApplyTestingFuncMixin):
+    def test_split_apply_combine_on_series(self):
+        funcs = [
+            ((True, False), ["min", "max"]),
+        ]
+        self._test_split_apply_func(funcs)
+
+
+class GroupbySplitApplyMMTests(
+    GroupbySplitApplyMMMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.groupby.test_parity_split_apply import *  # noqa: F401
+    from pyspark.pandas.tests.groupby.test_split_apply_min_max import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
