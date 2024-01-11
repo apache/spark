@@ -557,7 +557,9 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM UDTFAcquireExecutionMemory(argument => 4, min_memory_mb => 0)
+SELECT * FROM UDTFAcquireExecutionMemory(
+    requested_memory_mb => 4,
+    min_memory_mb => 0)
 -- !query schema
 struct<initial_request:bigint,acquired_memory:bigint,min_memory:bigint,status:string>
 -- !query output
@@ -565,7 +567,9 @@ struct<initial_request:bigint,acquired_memory:bigint,min_memory:bigint,status:st
 
 
 -- !query
-SELECT * FROM UDTFAcquireExecutionMemory(argument => 4, min_memory_mb => 10)
+SELECT * FROM UDTFAcquireExecutionMemory(
+    requested_memory_mb => 4,
+    min_memory_mb => 10)
 -- !query schema
 struct<initial_request:bigint,acquired_memory:bigint,min_memory:bigint,status:string>
 -- !query output

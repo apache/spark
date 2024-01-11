@@ -780,20 +780,22 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |
          |    @staticmethod
          |    def analyze(**kwargs):
-         |        argument = kwargs.get("argument")
+         |        requested_memory_mb = kwargs.get("requested_memory_mb")
          |        min_memory_mb = kwargs.get("min_memory_mb").value
-         |        if argument is not None:
-         |            assert(argument.dataType == IntegerType() or argument.dataType == LongType())
-         |            argument_value = argument.value
+         |        if requested_memory_mb is not None:
+         |            assert(
+         |                requested_memory_mb.dataType == IntegerType() or
+         |                requested_memory_mb.dataType == LongType())
+         |            requested_memory_mb_value = requested_memory_mb.value
          |        else:
-         |            argument_value = None
+         |            requested_memory_mb_value = None
          |        return CustomAnalyzeResult(
          |            schema=StructType()
          |                .add("initial_request", LongType())
          |                .add("acquired_memory", LongType())
          |                .add("min_memory", LongType())
          |                .add("status", StringType()),
-         |            acquireExecutionMemoryMbRequested=argument_value,
+         |            acquireExecutionMemoryMbRequested=requested_memory_mb_value,
          |            # Set this field to some junk value to show that it has no effect and gets
          |            # overwritten with the actual number of execution MB acquired from the
          |            # 'TaskMemoryManager.acquireExecutionMemory' method.
