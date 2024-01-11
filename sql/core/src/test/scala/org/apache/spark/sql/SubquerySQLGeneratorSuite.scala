@@ -128,18 +128,18 @@ class SubquerySQLGeneratorSuite
     val subqueryOrganization = generateSubquery(
       innerTable, correlationConditions, isDistinct, operatorInSubquery, isScalarSubquery)
 
-    // TODO: Clean up
     val (queryProjection, selectClause, fromClause, whereClause) = subqueryClause match {
       case SubqueryClause.SELECT =>
-        // If the subquery is in the FROM clause, then it is a scalar subquery.
+        // If the subquery is in the FROM clause, then it is treated as an Attribute.
         val queryProjection = outerTable.output ++
-          Seq(Alias(Subquery(subqueryOrganization), subqueryAlias, None))
+          Seq(Alias(Subquery(subqueryOrganization), subqueryAlias))
         val fromClause = FromClause(Seq(outerTable))
         val selectClause = SelectClause(queryProjection)
         (queryProjection, selectClause, fromClause, None)
       case SubqueryClause.FROM =>
         // If the subquery is in the FROM clause, then it is treated as a Relation.
         val subqueryProjection = subqueryOrganization.selectClause.projection
+        // Transform the subquery projection as Attributes from a Relation.
         val subqueryOutput = subqueryProjection.map {
           case a: Attribute => Attribute(name = a.name, qualifier = Some(subqueryAlias))
           case a: Alias => Attribute(name = a.name, qualifier = Some(subqueryAlias))
@@ -150,11 +150,12 @@ class SubquerySQLGeneratorSuite
         val fromClause = FromClause(Seq(subqueryRelation))
         (subqueryOutput, selectClause, fromClause, None)
       case SubqueryClause.WHERE =>
-        // If the subquery is in the FROM clause, then it is treated as a predicate.
+        // If the subquery is in the FROM clause, then it is treated as a Predicate.
         val queryProjection = outerTable.output
         val selectClause = SelectClause(queryProjection)
         val fromClause = FromClause(Seq(outerTable))
-        val expr = outerTable.output.last         // Hardcoded
+        // Hardcoded expression for "=", "<", "IN" and "NOT IN"
+        val expr = outerTable.output.last
         val whereClausePredicate = subqueryType match {
           case SubqueryType.SCALAR_PREDICATE_EQUALS =>
             Equals(expr, ScalarSubquery(subqueryOrganization))
@@ -234,7 +235,8 @@ class SubquerySQLGeneratorSuite
         val joins = JOIN_TYPES.map(joinType => JoinedRelation(
           leftRelation = innerTable,
           rightRelation = JOIN_TABLE,
-          condition = Equals(innerTable.output.head, JOIN_TABLE.output.head), // hardcoded
+          // Hardcoded join condition.
+          condition = Equals(innerTable.output.head, JOIN_TABLE.output.head),
           joinType = joinType))
         val setOps = SET_OPERATIONS.map(setOp => SetOperation(innerTable, JOIN_TABLE, setOp))
           .map(plan => {
@@ -269,6 +271,7 @@ class SubquerySQLGeneratorSuite
 
     val generatedQueries = scala.collection.mutable.ListBuffer[QueryOrganization]()
 
+    // Generate queries across the different axis.
     for {
       (innerTable, outerTable) <- ALL_COMBINATIONS
       subqueryClause <- Seq(SubqueryClause.WHERE, SubqueryClause.SELECT, SubqueryClause.FROM)
@@ -276,9 +279,10 @@ class SubquerySQLGeneratorSuite
       isCorrelated <- correlationChoices(subqueryClause)
       isDistinct <- Seq(true, false)
     } {
+      // Hardcoded aggregation column and group by column.
       val (aggColumn, groupByColumn) = innerTable.output.head -> innerTable.output(1)
       val aggFunctions = Seq(Sum(aggColumn), Count(aggColumn))
-        .map(af => Alias(af, AGGREGATE_FUNCTION_ALIAS, None))
+        .map(af => Alias(af, AGGREGATE_FUNCTION_ALIAS))
       val groupByOptions = Seq(true, false)
       // Generate all combinations of (aggFunction = sum/count, groupBy = true/false).
       val combinations = aggFunctions.flatMap(agg => groupByOptions.map(groupBy => (agg, groupBy)))
@@ -310,11 +314,11 @@ class SubquerySQLGeneratorSuite
     val baseResourcePath =
       getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
     val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
-    val generatedSubqueryFilePath = new File(inputFilePath, "subquery/generated")
+    val generatedSubqueryDirPath = new File(inputFilePath, "subquery/generated")
 
     fileNames.zip(arrayOfGeneratedQueries).foreach {
       case (fileName, queryString) =>
-        val file = new File(generatedSubqueryFilePath, fileName)
+        val file = new File(generatedSubqueryDirPath, fileName)
         val parent = file.getParentFile
         if (!parent.exists()) {
           assert(parent.mkdirs(), "Could not create directory: " + parent)

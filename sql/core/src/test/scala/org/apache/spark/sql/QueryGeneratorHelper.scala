@@ -28,7 +28,7 @@ trait QueryGeneratorHelper {
   case class Attribute(name: String, qualifier: Option[String] = None) extends NamedExpression {
     override def toString: String = f"${if (qualifier.isDefined) qualifier.get + "." else ""}$name"
   }
-  case class Alias(child: Expression, name: String, qualifier: Option[String])
+  case class Alias(child: Expression, name: String)
     extends NamedExpression {
     override def toString: String = f"$child AS $name"
   }
