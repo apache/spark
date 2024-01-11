@@ -45,7 +45,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -2109,19 +2109,28 @@ class SparkConnectPlanner(
     parser.parseExpression(expr.getExpression)
   }
 
-  private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): UnresolvedStar = {
-    if (star.hasUnparsedTarget) {
-      val target = star.getUnparsedTarget
-      if (!target.endsWith(".*")) {
-        throw InvalidPlanInput(
-          s"UnresolvedStar requires a unparsed target ending with '.*', " +
-            s"but got $target.")
-      }
+  private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): Expression = {
+    (star.hasUnparsedTarget, star.hasPlanId) match {
+      case (false, false) =>
+        // functions.col("*")
+        UnresolvedStar(None)
 
-      UnresolvedStar(
-        Some(UnresolvedAttribute.parseAttributeName(target.substring(0, target.length - 2))))
-    } else {
-      UnresolvedStar(None)
+      case (true, false) =>
+        // functions.col("s.*")
+        val target = star.getUnparsedTarget
+        if (!target.endsWith(".*")) {
+          throw InvalidPlanInput(
+            s"UnresolvedStar requires a unparsed target ending with '.*', but got $target.")
+        }
+        val parts = UnresolvedAttribute.parseAttributeName(target.dropRight(2))
+        UnresolvedStar(Some(parts))
+
+      case (false, true) =>
+        // dataframe.col("*")
+        UnresolvedDataFrameStar(star.getPlanId)
+
+      case _ =>
+        throw InvalidPlanInput("UnresolvedStar with both target and plan id is not supported.")
     }
   }
 

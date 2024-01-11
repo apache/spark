@@ -558,6 +558,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             cdf1.select(cdf2.a).schema
 
+        # Can not find the target plan node by plan id
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_STAR",
+        ):
+            cdf1.select(cdf2["*"]).schema
+
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)
         sdf = self.spark.read.table(self.tbl_name)
