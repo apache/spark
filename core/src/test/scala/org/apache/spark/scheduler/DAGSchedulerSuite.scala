@@ -209,8 +209,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     override def killTaskAttempt(
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
-    override def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String)
-      : Unit = {
+    override def killAllTaskAttempts(
+      stageId: Int, interruptThread: Boolean, reason: String): Unit = {
       cancelledStages += stageId
     }
     override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
@@ -888,8 +888,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           taskId: Long, interruptThread: Boolean, reason: String): Boolean = {
         throw new UnsupportedOperationException
       }
-      override def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String)
-        : Unit = {
+      override def killAllTaskAttempts(
+        stageId: Int, interruptThread: Boolean, reason: String): Unit = {
         throw new UnsupportedOperationException
       }
       override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
