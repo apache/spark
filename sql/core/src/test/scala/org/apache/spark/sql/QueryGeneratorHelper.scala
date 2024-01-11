@@ -20,8 +20,43 @@ package org.apache.spark.sql
 /**
  * Simple implementation of Expressions and Operators that can be used to generate SQL for testing.
  * For example, to construct a simple SELECT query using the defined classes, follow these steps:
- * 1. Create table references using the TableRelation class:
- *    `val myTable = TableRelation("your_table_name", Seq(Attribute("column1"), Attribute("column2")))`
+ *
+ * 1. Define a table name, and some column names for your table.
+ * {{{
+ *   val tableName = "t1"
+ *   val col1 = "col1"
+ *   val col2 = "col2"
+ * }}}
+ * 2. Define named expressions representing the columns to select using the Attribute class, and
+ *    define the table relation with TableRelation.
+ * {{{
+ *   val col1Attr = Attribute("column1", qualifier = Some(tableName))
+ *   val col2Attr = Attribute("column2", qualifier = Some(tableName))
+ *   val table = TableRelation(tableName, Seq(col1Attr, col2Attr))
+ * }}}
+ * 3. Create a SELECT clause using the SelectClause class, and specify the FROM clause with the
+ *    table relations using the FromClause class.
+ * {{{
+ *   val selectClause = SelectClause(Seq(col1Attr))
+ *   val fromClause = FromClause(Seq(table))
+ * }}}
+ * 4. (Optional) Add a WHERE clause using the WhereClause class for predicates. The OrderBy, Limit
+ * clauses are also optional.
+ * {{{
+ *   val condition = Equals(col1Attr, col2Attr)
+ *   val whereClause = WhereClause(Seq(condition))
+ * }}}
+ * 5. Construct the final query using the Query class:
+ * {{{
+ *   val myQuery = Query(selectClause, fromClause, Some(whereClause))()
+ * }}}
+ * 6. Print or use the generated SQL query:
+ * {{{
+ *   println(myQuery.toString)
+ * }}}
+ *
+ * Output: SELECT t1.column1 FROM t1 WHERE t1.column1 = t1.column2
+ *
  */
 trait QueryGeneratorHelper {
 
