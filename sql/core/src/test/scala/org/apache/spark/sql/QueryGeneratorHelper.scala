@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql
 
+/**
+ * Simple implementation of Expressions and Operators that can be used to generate SQL for testing.
+ * For example, to construct a simple SELECT query using the defined classes, follow these steps:
+ * 1. Create table references using the TableRelation class:
+ *    `val myTable = TableRelation("your_table_name", Seq(Attribute("column1"), Attribute("column2")))`
+ */
 trait QueryGeneratorHelper {
 
   trait Expression
@@ -118,12 +124,9 @@ trait QueryGeneratorHelper {
     val UNION = Value("UNION")
     val EXCEPT = Value("EXCEPT")
   }
-  case class SetOperation(leftRelation: Operator,
-      rightRelation: Operator, setOperationType: SetOperationType.Value) extends Operator {
-    override def toString: String = {
-      // Hardcoded SELECT *.
-      f"SELECT * FROM $leftRelation $setOperationType SELECT * FROM $rightRelation"
-    }
+  case class SetOperation(leftRelation: Query,
+      rightRelation: Query, setOperationType: SetOperationType.Value) extends Operator {
+    override def toString: String = f"$leftRelation $setOperationType $rightRelation"
   }
 
   case class Aggregate(

@@ -238,7 +238,10 @@ class SubquerySQLGeneratorSuite
           // Hardcoded join condition.
           condition = Equals(innerTable.output.head, JOIN_TABLE.output.head),
           joinType = joinType))
-        val setOps = SET_OPERATIONS.map(setOp => SetOperation(innerTable, JOIN_TABLE, setOp))
+        val leftTableQuery = Query(SelectClause(innerTable.output), FromClause(Seq(innerTable)))()
+        val rightTableQuery = Query(SelectClause(JOIN_TABLE.output), FromClause(Seq(JOIN_TABLE)))()
+        val setOps = SET_OPERATIONS.map(setOp =>
+          SetOperation(leftTableQuery, rightTableQuery, setOp))
           .map(plan => {
             val output = innerTable.output.map(a => a.copy(qualifier = Some(INNER_SUBQUERY_ALIAS)))
             SubqueryRelation(name = INNER_SUBQUERY_ALIAS, output = output, inner = plan)
