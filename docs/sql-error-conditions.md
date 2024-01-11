@@ -2504,13 +2504,13 @@ You're using untyped Scala UDF, which does not have the input type information. 
 
 ### UPSERT_KEY_COLUMNS_REQUIRED
 
-SQLSTATE: none assigned
+[SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Upsert requires key columns.
 
 ### UPSERT_NOT_ALLOWED
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Upsert is not allowed for table `<table>`: `<reason>`.
 
