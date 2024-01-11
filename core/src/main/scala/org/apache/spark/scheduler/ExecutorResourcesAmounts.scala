@@ -196,6 +196,21 @@ private[spark] class ExecutorResourcesAmounts(
     Some(allocatedAddresses.toMap)
   }
 
+  override def hashCode(): Int = super.hashCode()
+
+  override def equals(o: Any): Boolean = {
+    o match {
+      case other: ExecutorResourcesAmounts =>
+        if (resources == null && other.resources == null) {
+          true
+        } else if (resources == null || other.resources == null) {
+          false
+        } else {
+          resources.equals(other.resources)
+        }
+      case _ => false
+    }
+  }
 }
 
 private[spark] object ExecutorResourcesAmounts {
