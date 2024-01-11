@@ -36,6 +36,7 @@ import org.apache.http.impl.client.HttpClientBuilder
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.{THttpClient, TSocket}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -138,13 +139,16 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname, "true")
 
     try {
+      // Set exitOnError to false to avoid exiting the JVM process and tearing down the SparkContext
+      // instance in case of any exceptions here. Otherwise, the following retries are doomed to
+      // fail on a stopped context.
       hiveServer2 = HiveThriftServer2.startWithContext(sqlContext, exitOnError = false)
       hiveServer2.getServices.asScala.foreach {
         case t: ThriftCLIService =>
           serverPort = t.getPortNumber
           if (t.isInstanceOf[ThriftBinaryCLIService] && mode == ServerMode.http) {
             logError("A previous Hive's SessionState is leaked, aborting this retry")
-            throw new IllegalStateException("HiveThriftServer2 started in binary mode " +
+            throw SparkException.internalError("HiveThriftServer2 started in binary mode " +
               "while the test case is expecting HTTP mode")
           }
           logInfo(s"Started HiveThriftServer2: mode=$mode, port=$serverPort, attempt=$attempt")
