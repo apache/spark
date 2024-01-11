@@ -403,12 +403,12 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       iter.next() // open the iterator, guarantees that the RPC reached the server
 
       val executionHolder = getExecutionHolder
-      val lastAccessTime = executionHolder.sessionHolder.getAccessTime()
+      val lastAccessTime = executionHolder.sessionHolder.getSessionHolderInfo.lastAccessTimeMs
 
       // send reattach
       val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
       iter2.next() // open the iterator, guarantees that the RPC reached the server
-      val newAccessTime = executionHolder.sessionHolder.getAccessTime()
+      val newAccessTime = executionHolder.sessionHolder.getSessionHolderInfo.lastAccessTimeMs
 
       assert(newAccessTime > lastAccessTime, "reattach should update session holder access time")
     }

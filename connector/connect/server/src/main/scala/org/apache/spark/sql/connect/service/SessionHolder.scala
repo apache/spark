@@ -214,9 +214,6 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     logInfo(s"Session $key accessed, time $lastAccessTimeMs.")
   }
 
-  // Exposed for testing.
-  private[connect] def getAccessTime(): Long = lastAccessTimeMs
-
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
     customInactiveTimeoutMs = newInactiveTimeoutMs
     logInfo(s"Session $key inactive timout set to $customInactiveTimeoutMs ms.")

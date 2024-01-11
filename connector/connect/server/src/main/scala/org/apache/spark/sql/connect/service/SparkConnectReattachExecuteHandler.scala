@@ -41,7 +41,6 @@ class SparkConnectReattachExecuteHandler(
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
           messageParameters = Map("handle" -> v.getOperationId))
-
       } else {
         logDebug(s"Reattach operation not found: ${v.getOperationId}")
         throw new SparkSQLException(
