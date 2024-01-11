@@ -695,6 +695,7 @@ private class SmarterMaster(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEn
  * When handling a killAll request, the server returns an invalid JSON.
  * When handling a status request, the server throws an internal exception.
  * When handling a clear request, the server throws an internal exception.
+ * When handling a readyz request, the server throws an internal exception.
  * The purpose of this class is to test that client handles these cases gracefully.
  */
 private class FaultyStandaloneRestServer(
