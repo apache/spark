@@ -663,10 +663,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
       outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
-    println("I am inside transform without initial state")
     Dataset[U](
       sparkSession,
-      TransformWithState[K, V, U, U](
+      // The last K type is only to silence compiler error
+      TransformWithState[K, V, U, K](
         groupingAttributes,
         dataAttributes,
         statefulProcessor,
@@ -686,10 +686,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @tparam S The type of initial state objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
    *                          operator.
-   * @param timeoutMode       The timeout mode of the stateful processor.
-   * @param outputMode        The output mode of the stateful processor. Defaults to APPEND mode.
-   * @param initialState      User provided initial state that will be used to initiate state for
-   *                          the query in the first batch.
+   * @param timeoutMode The timeout mode of the stateful processor.
+   * @param outputMode The output mode of the stateful processor. Defaults to APPEND mode.
+   * @param initialState User provided initial state that will be used to initiate state for
+   *                     the query in the first batch.
    *
    */
   def transformWithState[U: Encoder, S: Encoder](

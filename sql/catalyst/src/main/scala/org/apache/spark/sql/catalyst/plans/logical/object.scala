@@ -588,14 +588,16 @@ object TransformWithState {
       CatalystSerde.generateObjAttr[U],
       child,
       false,
-      groupingAttributes,
-      dataAttributes,
+      // the following parameters will not be used in physical plan if hasInitialState = false
+      AttributeSet.empty.toSeq,
+      AttributeSet.empty.toSeq,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
-      LocalRelation(encoderFor[K].schema) // empty data set
+      LocalRelation(encoderFor[K].schema)
     )
     CatalystSerde.serialize[U](mapped)
   }
 
+  // This apply() is to invoke TransformWithState object with hasInitialState set to true
   def apply[K: Encoder, V: Encoder, U: Encoder, S: Encoder](
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
@@ -603,10 +605,9 @@ object TransformWithState {
       timeoutMode: TimeoutMode,
       outputMode: OutputMode,
       child: LogicalPlan,
-      initialStateGroupAttrs: Seq[Attribute],
+      initialStateGroupingAttrs: Seq[Attribute],
       initialStateDataAttrs: Seq[Attribute],
       initialState: LogicalPlan): LogicalPlan = {
-    println("I am here inside TransformWithState apply()")
     val mapped = new TransformWithState(
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
@@ -618,15 +619,12 @@ object TransformWithState {
       CatalystSerde.generateObjAttr[U],
       child,
       hasInitialState = true,
-      initialStateGroupAttrs,
+      initialStateGroupingAttrs,
       initialStateDataAttrs,
       UnresolvedDeserializer(encoderFor[S].deserializer, initialStateDataAttrs),
       initialState
     )
-    println("I am after mapped")
-    val res = CatalystSerde.serialize[U](mapped)
-    println("I am after serialize")
-    res
+    CatalystSerde.serialize[U](mapped)
   }
 }
 
@@ -641,7 +639,7 @@ case class TransformWithState(
     outputObjAttr: Attribute,
     child: LogicalPlan,
     hasInitialState: Boolean = false,
-    initialStateGroupAttr: Seq[Attribute],
+    initialStateGroupingAttrs: Seq[Attribute],
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
     initialState: LogicalPlan) extends BinaryNode with ObjectProducer {

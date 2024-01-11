@@ -36,8 +36,8 @@ trait StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K,
    * @param outputMode - output mode for the stateful processor
    */
   override def init(
-                     handle: StatefulProcessorHandle,
-                     outputMode: OutputMode): Unit
+    handle: StatefulProcessorHandle,
+    outputMode: OutputMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key
@@ -59,6 +59,12 @@ trait StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K,
    */
   override def close (): Unit
 
+  /**
+   * Function that will be invoked only in the first batch for users to process initial states.
+   *
+   * @param key - grouping key
+   * @param initialState - A row in the initial state to be processed
+   */
   def handleInitialState(key: K, initialState: S): Unit
 }
 

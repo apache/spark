@@ -728,15 +728,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
         dataAttributes, statefulProcessor, timeoutMode, outputMode,
-        outputAttr, child, hasInitialState, sgroupAttr, sdataAttr, sDeser, initialState) =>
+        outputAttr, child, hasInitialState, initialStateGroupingAttrs,
+        initialStateDataAttrs, initialStateDeserializer, initialState) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
           valueDeserializer,
-          sDeser,
+          initialStateDeserializer,
           groupingAttributes,
           dataAttributes,
-          sgroupAttr,
-          sdataAttr,
+          initialStateGroupingAttrs,
+          initialStateDataAttrs,
           statefulProcessor,
           timeoutMode,
           outputMode,
