@@ -97,14 +97,10 @@ class SparkConnectReattachTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOn
 
         e = check_error(query1)
         self.assertIsNotNone(e, "An exception has to be thrown")
-        self.assertTrue(
-            "OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.SESSION_CLOSED" in str(e)
-        )
+        self.assertTrue("OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.SESSION_CLOSED" in str(e))
         e = check_error(query2)
         self.assertIsNotNone(e, "An exception has to be thrown")
-        self.assertTrue(
-            "OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.SESSION_CLOSED" in str(e)
-        )
+        self.assertTrue("OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.SESSION_CLOSED" in str(e))
 
         # query3 has not been submitted before, so it should now fail with SESSION_CLOSED
         e = check_error(query3)

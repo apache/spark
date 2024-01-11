@@ -115,7 +115,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         }
         assert(
           queryAError.getMessage.contains("OPERATION_CANCELED") ||
-            queryAError.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+            queryAError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
 
         // B's query can run.
         while (queryB.hasNext) queryB.next()
