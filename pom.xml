@@ -32,7 +32,7 @@
   <url>https://spark.apache.org/</url>
   <licenses>
     <license>
-      <name>Apache 2.0 License</name>
+      <name>Apache-2.0</name>
       <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
       <distribution>repo</distribution>
     </license>
@@ -208,7 +208,7 @@
       Because it transitions Jakarta REST API from javax to jakarta package.
     -->
     <jersey.version>2.41</jersey.version>
-    <joda.version>2.12.5</joda.version>
+    <joda.version>2.12.6</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>

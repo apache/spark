@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+# This include enables functions like `cd` and `cp_r`.
 require 'fileutils'
 include FileUtils
 

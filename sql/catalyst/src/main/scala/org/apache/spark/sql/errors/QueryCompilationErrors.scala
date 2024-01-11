@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedAttribute, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -3863,6 +3863,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "reason" -> reason))
   }
 
+  def dataSourceAlreadyExists(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+      messageParameters = Map("provider" -> name))
+  }
+
   def dataSourceDoesNotExist(name: String): Throwable = {
     new AnalysisException(
       errorClass = "DATA_SOURCE_NOT_EXIST",
@@ -3933,5 +3939,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "dsSchema" -> toSQLType(dsSchema),
         "expectedSchema" -> toSQLType(expectedSchema)))
+  }
+
+  def cannotResolveColumn(u: UnresolvedAttribute): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+      messageParameters = Map("name" -> toSQLId(u.nameParts)),
+      origin = u.origin
+    )
+  }
+
+  def ambiguousColumnReferences(u: UnresolvedAttribute): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+      messageParameters = Map("name" -> toSQLId(u.nameParts)),
+      origin = u.origin
+    )
   }
 }

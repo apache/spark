@@ -3302,9 +3302,6 @@ Spark subsystems.
 
 ### Spark SQL
 
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-runtime-sql-config-table.html' %}
-
 #### Runtime SQL Configuration
 
 Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
@@ -3312,13 +3309,7 @@ and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` th
 Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
 or by `SparkSession.conf`'s setter and getter methods in runtime.
 
-{% include_relative generated-runtime-sql-config-table.html %}
-        {% break %}
-    {% endif %}
-{% endfor %}
-
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-static-sql-config-table.html' %}
+{% include_api_gen generated-runtime-sql-config-table.html %}
 
 #### Static SQL Configuration
 
@@ -3326,11 +3317,7 @@ Static SQL configurations are cross-session, immutable Spark SQL configurations.
 and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
 External users can query the static sql config values via `SparkSession.conf` or via set command, e.g. `SET spark.sql.extensions;`, but cannot set/unset them.
 
-{% include_relative generated-static-sql-config-table.html %}
-        {% break %}
-    {% endif %}
-{% endfor %}
-
+{% include_api_gen generated-static-sql-config-table.html %}
 
 ### Spark Streaming
 

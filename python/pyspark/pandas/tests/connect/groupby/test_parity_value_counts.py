@@ -19,10 +19,14 @@ import unittest
 
 from pyspark.pandas.tests.groupby.test_value_counts import ValueCountsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class ValueCountsParityTests(ValueCountsTestsMixin, PandasOnSparkTestCase, ReusedConnectTestCase):
+class ValueCountsParityTests(
+    ValueCountsTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

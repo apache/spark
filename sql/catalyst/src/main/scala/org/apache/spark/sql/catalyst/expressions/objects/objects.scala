@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.Builder
 import scala.jdk.CollectionConverters._
@@ -938,6 +939,14 @@ case class MapObjects private(
         executeFuncOnCollection(input).foreach(builder += _)
         mutable.ArraySeq.make(builder.result())
       }
+    case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
+      implicit val tag: ClassTag[Any] = elementClassTag()
+      input => {
+        val builder = mutable.ArrayBuilder.make[Any]
+        builder.sizeHint(input.size)
+        executeFuncOnCollection(input).foreach(builder += _)
+        immutable.ArraySeq.unsafeWrapArray(builder.result())
+      }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
       executeFuncOnCollection(_).toSeq
@@ -1108,7 +1117,20 @@ case class MapObjects private(
             s"(${cls.getName}) ${classOf[mutable.ArraySeq[_]].getName}$$." +
               s"MODULE$$.make($builder.result());"
           )
-
+        case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
+          val tag = ctx.addReferenceObj("tag", elementClassTag())
+          val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
+          val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            s"""
+               ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
+               $builder.sizeHint($dataLength);
+             """,
+            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
+            s"(${cls.getName}) ${classOf[immutable.ArraySeq[_]].getName}$$." +
+              s"MODULE$$.unsafeWrapArray($builder.result());"
+          )
         case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set

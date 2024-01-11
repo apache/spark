@@ -32,7 +32,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import java.util
 import java.util.Objects
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -91,6 +91,7 @@ object Literal {
     case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: mutable.ArraySeq[_] => apply(a.array)
+    case a: immutable.ArraySeq[_] => apply(a.unsafeArray)
     case a: Array[_] =>
       val elementType = componentTypeToDataType(a.getClass.getComponentType())
       val dataType = ArrayType(elementType)
@@ -242,7 +243,9 @@ object Literal {
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]
             st.fields.map(_.dataType).zipWithIndex.forall {
-              case (fieldDataType, i) => doValidate(row.get(i, fieldDataType), fieldDataType)
+              case (fieldDataType, i) =>
+                // Do not need to validate null values.
+                row.isNullAt(i) || doValidate(row.get(i, fieldDataType), fieldDataType)
             }
           }
         case _ => false

@@ -26,7 +26,6 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
-from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
 from pyspark.sql.types import (
@@ -69,6 +68,14 @@ class DataFrameTestsMixin:
         self.assertEqual(self.spark.range(0, 1 << 40, 1 << 39).count(), 2)
         self.assertEqual(self.spark.range(-2).count(), 0)
         self.assertEqual(self.spark.range(3).count(), 3)
+
+    def test_self_join(self):
+        df1 = self.spark.range(10).withColumn("a", lit(0))
+        df2 = df1.withColumnRenamed("a", "b")
+        df = df1.join(df2, df1["a"] == df2["b"])
+        self.assertTrue(df.count() == 100)
+        df = df2.join(df1, df2["b"] == df1["a"])
+        self.assertTrue(df.count() == 100)
 
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])

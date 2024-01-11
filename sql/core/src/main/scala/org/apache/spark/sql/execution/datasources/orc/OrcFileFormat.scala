@@ -31,6 +31,7 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -152,6 +153,12 @@ class OrcFileFormat
       assert(supportBatch(sparkSession, resultSchema))
     }
 
+    val memoryMode = if (sqlConf.offHeapColumnVectorEnabled) {
+      MemoryMode.OFF_HEAP
+    } else {
+      MemoryMode.ON_HEAP
+    }
+
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
@@ -196,7 +203,7 @@ class OrcFileFormat
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
         if (enableVectorizedReader) {
-          val batchReader = new OrcColumnarBatchReader(capacity)
+          val batchReader = new OrcColumnarBatchReader(capacity, memoryMode)
           // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
           // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
           // after opening a file.
