@@ -35,17 +35,21 @@ class TemperatureAlertStatefulProcessorWithInitialState(
   extends StatefulProcessorWithInitialState[String,
     InputRow, (String, Double, Long), (String, String)] {
   @transient private var _maxTemperatureState: ValueState[Double] = _
-  @transient private var _numViolationsState: ValueState[Long] = _
   @transient private var _processorHandle: StatefulProcessorHandle = _
+  private var hadHandledInitialState: Boolean = false
 
   override def handleInitialState(key: String,
      initialState: (String, String)): Unit = {
-    println(s"I am here in handleiniti: ${initialState._1}, ${initialState._2}")
-    _maxTemperatureState.update(1.0)
+    if (!hadHandledInitialState) {
+      println(s"I am here in handleInitialState: ${initialState._1}, ${initialState._2}")
+      _maxTemperatureState.update(1.0)
+      hadHandledInitialState = true
+    }
   }
 
   override def init(processorHandle: StatefulProcessorHandle,
                     operatorOutputMode: OutputMode): Unit = {
+    println("I am here in init")
     _processorHandle = processorHandle
     _maxTemperatureState = _processorHandle.getValueState[Double]("testInit")
   }
@@ -84,7 +88,9 @@ class StatefulProcessorWithInitialStateSuite extends StreamTest {
 
       testStream(query, OutputMode.Update())(
         AddData(inputData, InputRow("k1", "ac", "v1")),
-        CheckAnswer(("k1", 1.0, 1L))
+        CheckNewAnswer(("k1", 1.0, 1L)),
+        AddData(inputData, InputRow("k2", "ac", "v1")),
+        CheckNewAnswer(("k2", 1.0, 1L))
       )
     }
   }
