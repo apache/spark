@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -150,7 +151,7 @@ class SubquerySQLGeneratorSuite
         val fromClause = FromClause(Seq(subqueryRelation))
         (subqueryOutput, selectClause, fromClause, None)
       case SubqueryLocation.WHERE =>
-        // If the subquery is in the FROM clause, then it is treated as a Predicate.
+        // If the subquery is in the WHERE clause, then it is treated as a Predicate.
         val queryProjection = outerTable.output
         val selectClause = SelectClause(queryProjection)
         val fromClause = FromClause(Seq(outerTable))
@@ -284,7 +285,6 @@ class SubquerySQLGeneratorSuite
         (Seq(innerTable) ++ joins ++ setOps).map(inner => (inner, outerTable))
     }
 
-    // If the subquery is in the SELECT clause of the main query, it can only be a scalar subquery.
     def subqueryTypeChoices(subqueryLocation: SubqueryLocation.Value): Seq[SubqueryType.Value] = {
       subqueryLocation match {
         case SubqueryLocation.SELECT => Seq(SubqueryType.ATTRIBUTE)
@@ -306,10 +306,9 @@ class SubquerySQLGeneratorSuite
         case _ => Seq(true, false)
       }
 
-    case class QuerySpec(query: Query, isCorrelated: Boolean,
-        subqueryLocation: SubqueryLocation.Value, subqueryType: SubqueryType.Value)
+    case class SubquerySpec(query: Query, isCorrelated: Boolean, subqueryType: SubqueryType.Value)
 
-    val generatedQueries = scala.collection.mutable.Set[QuerySpec]()
+    val generatedQuerySpecs = scala.collection.mutable.Set[SubquerySpec]()
 
     // Generate queries across the different axis.
     for {
@@ -333,35 +332,28 @@ class SubquerySQLGeneratorSuite
       val SUBQUERY_OPERATORS = Seq(Limit(1), Limit(10)) ++ aggregates
 
       for (subqueryOperator <- SUBQUERY_OPERATORS) {
-        val generatedQuery = generateQuery(innerTable, outerTable, SUBQUERY_ALIAS, subqueryLocation,
-          subqueryType, isCorrelated, isDistinct, subqueryOperator)
-        generatedQueries += QuerySpec(generatedQuery, isCorrelated, subqueryLocation, subqueryType)
+        generatedQuerySpecs += SubquerySpec(
+          query = generateQuery(innerTable, outerTable, SUBQUERY_ALIAS,
+            subqueryLocation, subqueryType, isCorrelated, isDistinct, subqueryOperator),
+          isCorrelated = isCorrelated,
+          subqueryType = subqueryType)
       }
     }
 
     // Partition the queries by (isCorrelated, subqueryLocation, SubqueryType).
-    val partitionedQueries = generatedQueries.groupBy(query =>
-      (query.isCorrelated, query.subqueryLocation, query.subqueryType))
+    val partitionedQueries = generatedQuerySpecs.groupBy(query =>
+      (query.isCorrelated, query.subqueryType))
 
     val baseResourcePath =
       getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
     val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
     val generatedSubqueryDirPath = new File(inputFilePath, "subquery/generated")
 
-    partitionedQueries.foreach { case ((isCorrelated, subqueryLocation, subqueryType), querySpec) =>
+    // Create files for each partition.
+    partitionedQueries.foreach { case ((isCorrelated, subqueryType), querySpec) =>
       val correlationDirName = if (isCorrelated) "correlated" else "uncorrelated"
-      val subqueryLocationDirName = subqueryLocation match {
-        case SubqueryLocation.SELECT => "select"
-        case SubqueryLocation.FROM => "from"
-        case SubqueryLocation.WHERE => "where"
-      }
-      val subqueryTypeName = subqueryType match {
-        case SubqueryType.IN | SubqueryType.NOT_IN => "in"
-        case SubqueryType.EXISTS | SubqueryType.NOT_EXISTS => "exists"
-        case _ => "scalar"
-      }
-      val resultFile = new File(generatedSubqueryDirPath,
-        f"$correlationDirName/$subqueryLocationDirName/$subqueryTypeName.sql")
+      val resultFile = new File(generatedSubqueryDirPath, f"$correlationDirName/" +
+        f"${subqueryType.toString.toLowerCase(Locale.ROOT)}.sql")
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
