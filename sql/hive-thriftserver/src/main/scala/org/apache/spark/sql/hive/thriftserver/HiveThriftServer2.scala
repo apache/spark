@@ -67,6 +67,7 @@ object HiveThriftServer2 extends Logging {
     // Cleanup the scratch dir before starting
     ServerUtils.cleanUpScratchDir(executionHive.conf)
     val server = new HiveThriftServer2(sqlContext)
+
     server.init(executionHive.conf)
     server.start()
     logInfo("HiveThriftServer2 started")
