@@ -1285,7 +1285,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  testQuietly("max bytes per trigger & max files per trigger - both set") {
+  testQuietly("SPARK-46641: max bytes per trigger & max files per trigger - both set") {
     val testTable = "maxBytesPerTrigger_maxFilesPerTrigger_test"
     withTable(testTable) {
       withTempDir { case src =>
@@ -1831,7 +1831,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
 
-  test("SPARK-19813: Ignore maxFileAge when maxBytesPerTrigger and latestFirst is used") {
+  test("SPARK-46641: Ignore maxFileAge when maxBytesPerTrigger and latestFirst is used") {
     withTempDir { src =>
       // Prepare two files: 1.txt, 2.txt, and make sure they have different modified time.
       val f1 = stringToFile(new File(src, "1.txt"), "1")
