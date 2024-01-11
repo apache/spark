@@ -402,7 +402,7 @@ class QueryCompilationErrorsSuite
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
       errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
-      parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT>>\"")
+      parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
     )
   }
 
@@ -621,7 +621,7 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       parameters = Map(
-        "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+        "schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {
@@ -630,7 +630,7 @@ class QueryCompilationErrorsSuite
     checkError(
       exception = e2,
       errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "1"))
   }
 
