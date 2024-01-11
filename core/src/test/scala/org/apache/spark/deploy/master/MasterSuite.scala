@@ -250,6 +250,30 @@ class MasterSuite extends SparkFunSuite
     CustomRecoveryModeFactory.instantiationAttempts should be > instantiationAttempts
   }
 
+  test("SPARK-46664: master should recover quickly in case of zero workers and apps") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "CUSTOM")
+    conf.set(RECOVERY_MODE_FACTORY, classOf[FakeRecoveryModeFactory].getCanonicalName)
+    conf.set(MASTER_REST_SERVER_ENABLED, false)
+
+    var master: Master = null
+    try {
+      master = makeMaster(conf)
+      master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        getState(master) should be(RecoveryState.ALIVE)
+      }
+      master.workers.size should be(0)
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+        FakeRecoveryModeFactory.persistentData.clear()
+      }
+    }
+  }
+
   test("master correctly recover the application") {
     val conf = new SparkConf(loadDefaults = false)
     conf.set(RECOVERY_MODE, "CUSTOM")

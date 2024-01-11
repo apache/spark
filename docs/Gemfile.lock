@@ -9,9 +9,9 @@ GEM
       eventmachine (>= 0.12.9)
       http_parser.rb (~> 0)
     eventmachine (1.2.7)
-    ffi (1.15.5)
+    ffi (1.16.3)
     forwardable-extended (2.6.0)
-    google-protobuf (3.25.1)
+    google-protobuf (3.25.2)
     http_parser.rb (0.8.0)
     i18n (1.14.1)
       concurrent-ruby (~> 1.0)
@@ -54,7 +54,7 @@ GEM
     rb-inotify (0.10.1)
       ffi (~> 1.0)
     rexml (3.2.6)
-    rouge (3.26.0)
+    rouge (3.30.0)
     safe_yaml (1.0.5)
     sass-embedded (1.69.7)
       google-protobuf (~> 3.25)
@@ -68,11 +68,10 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  ffi (= 1.15.5)
+  ffi (~> 1.15)
   jekyll (~> 4.3)
-  jekyll-redirect-from (= 0.16.0)
-  rouge (= 3.26.0)
-  webrick (= 1.8.1)
+  jekyll-redirect-from (~> 0.16)
+  rouge (~> 3.26)
 
 BUNDLED WITH
-   2.3.8
+   2.4.22
