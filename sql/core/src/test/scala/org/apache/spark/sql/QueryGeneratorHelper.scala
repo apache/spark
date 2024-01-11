@@ -120,8 +120,10 @@ trait QueryGeneratorHelper {
   }
   case class SetOperation(leftRelation: Operator,
       rightRelation: Operator, setOperationType: SetOperationType.Value) extends Operator {
-    override def toString: String =
+    override def toString: String = {
+      // Hardcoded SELECT *.
       f"SELECT * FROM $leftRelation $setOperationType SELECT * FROM $rightRelation"
+    }
   }
 
   case class Aggregate(
@@ -135,7 +137,7 @@ trait QueryGeneratorHelper {
     override def toString: String = f"LIMIT $limitValue"
   }
 
-  object SubqueryClause extends Enumeration {
+  object SubqueryLocation extends Enumeration {
     val SELECT, FROM, WHERE = Value
   }
 
@@ -160,7 +162,7 @@ trait QueryGeneratorHelper {
       exprs.map(expr => expr.name + " DESC NULLS FIRST").mkString(", ")
   }
 
-  case class QueryOrganization(
+  case class Query(
       selectClause: SelectClause,
       fromClause: FromClause,
       whereClause: Option[WhereClause] = None,

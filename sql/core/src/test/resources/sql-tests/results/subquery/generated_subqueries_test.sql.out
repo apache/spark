@@ -52,7 +52,8 @@ struct<>
 
 
 -- !query
-CREATE TEMPORARY VIEW null_table (a, b) AS SELECT CAST(null AS int), CAST(null as int)
+CREATE TEMPORARY VIEW null_table (a, b) AS
+    SELECT CAST(null AS int), CAST(null as int)
 -- !query schema
 struct<>
 -- !query output

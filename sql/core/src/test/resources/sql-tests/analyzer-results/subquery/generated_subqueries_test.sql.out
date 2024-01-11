@@ -68,7 +68,8 @@ CreateViewCommand `join_table`, [(a,None), (b,None)], VALUES
 
 
 -- !query
-CREATE TEMPORARY VIEW null_table (a, b) AS SELECT CAST(null AS int), CAST(null as int)
+CREATE TEMPORARY VIEW null_table (a, b) AS
+    SELECT CAST(null AS int), CAST(null as int)
 -- !query analysis
 CreateViewCommand `null_table`, [(a,None), (b,None)], SELECT CAST(null AS int), CAST(null as int), false, false, LocalTempView, true
    +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]

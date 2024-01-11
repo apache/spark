@@ -38,7 +38,7 @@ class SubquerySQLGeneratorSuite
       correlationConditions: Seq[Predicate],
       isDistinct: Boolean,
       operatorInSubquery: Operator,
-      isScalarSubquery: Boolean): QueryOrganization = {
+      isScalarSubquery: Boolean): Query = {
 
     // Generating the From clause of the subquery:
     val fromClause = FromClause(Seq(innerTable))
@@ -92,7 +92,7 @@ class SubquerySQLGeneratorSuite
         None
     }
 
-    QueryOrganization(selectClause, fromClause, whereClause, groupByClause,
+    Query(selectClause, fromClause, whereClause, groupByClause,
       orderByClause, limitClause)()
   }
 
@@ -101,21 +101,21 @@ class SubquerySQLGeneratorSuite
    * @param innerTable Table within the subquery.
    * @param outerTable Table outside of the subquery, in the main query.
    * @param subqueryAlias
-   * @param subqueryClause The clause of the main query where the subquery is located.
+   * @param subqueryLocation The clause of the main query where the subquery is located.
    * @param subqueryType The type of subquery, such as SCALAR, PREDICATE (EQUALS, EXISTS, etc.)
    * @param isCorrelated Whether the subquery is to be correlated.
    * @param isDistinct Whether subquery results is to be de-duplicated, i.e. have a DISTINCT clause.
    * @param operatorInSubquery The operator to be included in the subquery.
    */
   private def generateQuery(
-      innerTable: Relation,
-      outerTable: Relation,
-      subqueryAlias: String,
-      subqueryClause: SubqueryClause.Value,
-      subqueryType: SubqueryType.Value,
-      isCorrelated: Boolean,
-      isDistinct: Boolean,
-      operatorInSubquery: Operator): QueryOrganization = {
+                             innerTable: Relation,
+                             outerTable: Relation,
+                             subqueryAlias: String,
+                             subqueryLocation: SubqueryLocation.Value,
+                             subqueryType: SubqueryType.Value,
+                             isCorrelated: Boolean,
+                             isDistinct: Boolean,
+                             operatorInSubquery: Operator): Query = {
 
     // Correlation conditions, this is hardcoded for now.
     val correlationConditions = if (isCorrelated) {
@@ -128,15 +128,15 @@ class SubquerySQLGeneratorSuite
     val subqueryOrganization = generateSubquery(
       innerTable, correlationConditions, isDistinct, operatorInSubquery, isScalarSubquery)
 
-    val (queryProjection, selectClause, fromClause, whereClause) = subqueryClause match {
-      case SubqueryClause.SELECT =>
+    val (queryProjection, selectClause, fromClause, whereClause) = subqueryLocation match {
+      case SubqueryLocation.SELECT =>
         // If the subquery is in the FROM clause, then it is treated as an Attribute.
         val queryProjection = outerTable.output ++
           Seq(Alias(Subquery(subqueryOrganization), subqueryAlias))
         val fromClause = FromClause(Seq(outerTable))
         val selectClause = SelectClause(queryProjection)
         (queryProjection, selectClause, fromClause, None)
-      case SubqueryClause.FROM =>
+      case SubqueryLocation.FROM =>
         // If the subquery is in the FROM clause, then it is treated as a Relation.
         val subqueryProjection = subqueryOrganization.selectClause.projection
         // Transform the subquery projection as Attributes from a Relation.
@@ -149,7 +149,7 @@ class SubquerySQLGeneratorSuite
           subqueryOrganization)
         val fromClause = FromClause(Seq(subqueryRelation))
         (subqueryOutput, selectClause, fromClause, None)
-      case SubqueryClause.WHERE =>
+      case SubqueryLocation.WHERE =>
         // If the subquery is in the FROM clause, then it is treated as a Predicate.
         val queryProjection = outerTable.output
         val selectClause = SelectClause(queryProjection)
@@ -172,9 +172,9 @@ class SubquerySQLGeneratorSuite
     val orderByClause = Some(OrderByClause(queryProjection))
 
     val comment = f"-- inner_table=$innerTable, outer_table=$outerTable," +
-      f" subqueryClause=$subqueryClause, subquery_type=$subqueryType," +
+      f" subqueryLocation=$subqueryLocation, subquery_type=$subqueryType," +
       f" is_correlated=$isCorrelated, distinct=$isDistinct, subquery_operator=$operatorInSubquery"
-    QueryOrganization(selectClause, fromClause, whereClause, groupByClause = None,
+    Query(selectClause, fromClause, whereClause, groupByClause = None,
       orderByClause, limitClause = None)(comment)
   }
 
@@ -247,8 +247,8 @@ class SubquerySQLGeneratorSuite
     }
 
     // If the subquery is in the SELECT clause of the main query, it can only be a scalar subquery.
-    def subqueryTypeChoices (subqueryClause: SubqueryClause.Value): Seq[SubqueryType.Value] = {
-      if (subqueryClause == SubqueryClause.SELECT) {
+    def subqueryTypeChoices(subqueryLocation: SubqueryLocation.Value): Seq[SubqueryType.Value] = {
+      if (subqueryLocation == SubqueryLocation.SELECT) {
         Seq(SubqueryType.SCALAR)
       } else {
         Seq(
@@ -260,23 +260,28 @@ class SubquerySQLGeneratorSuite
           SubqueryType.NOT_EXISTS)
       }
     }
+
     // If the subquery is in the FROM clause of the main query, it cannot be correlated.
-    def correlationChoices(subqueryClause: SubqueryClause.Value): Seq[Boolean] = {
-      if (subqueryClause== SubqueryClause.FROM) {
+    def correlationChoices(subqueryLocation: SubqueryLocation.Value): Seq[Boolean] = {
+      if (subqueryLocation == SubqueryLocation.FROM) {
         Seq(false)
       } else {
         Seq(true, false)
       }
     }
 
-    val generatedQueries = scala.collection.mutable.ListBuffer[QueryOrganization]()
+    case class QuerySpec(query: Query, isCorrelated: Boolean,
+        subqueryLocation: SubqueryLocation.Value, subqueryType: SubqueryType.Value)
+
+    val generatedQueries = scala.collection.mutable.Set[QuerySpec]()
 
     // Generate queries across the different axis.
     for {
       (innerTable, outerTable) <- ALL_COMBINATIONS
-      subqueryClause <- Seq(SubqueryClause.WHERE, SubqueryClause.SELECT, SubqueryClause.FROM)
-      subqueryType <- subqueryTypeChoices(subqueryClause)
-      isCorrelated <- correlationChoices(subqueryClause)
+      subqueryLocation <-
+        Seq(SubqueryLocation.WHERE, SubqueryLocation.SELECT, SubqueryLocation.FROM)
+      subqueryType <- subqueryTypeChoices(subqueryLocation)
+      isCorrelated <- correlationChoices(subqueryLocation)
       isDistinct <- Seq(true, false)
     } {
       // Hardcoded aggregation column and group by column.
@@ -291,39 +296,41 @@ class SubquerySQLGeneratorSuite
       }
       val SUBQUERY_OPERATORS = Seq(Limit(1), Limit(10)) ++ aggregates
 
-      for {
-        subqueryOperator <- SUBQUERY_OPERATORS
-        // Generate queries.
-        generatedQuery = generateQuery(innerTable, outerTable, SUBQUERY_ALIAS, subqueryClause,
+      for (subqueryOperator <- SUBQUERY_OPERATORS) {
+        val generatedQuery = generateQuery(innerTable, outerTable, SUBQUERY_ALIAS, subqueryLocation,
           subqueryType, isCorrelated, isDistinct, subqueryOperator)
-        if !generatedQueries.contains(generatedQuery)
-      } {
-        generatedQueries += generatedQuery
+        generatedQueries += QuerySpec(generatedQuery, isCorrelated, subqueryLocation, subqueryType)
       }
     }
 
-    // Number of queries we want per file. This is to reduce test duration / improve test
-    // efficiency with sharding.
-    val sizeOfSubarrays: Int = 50
-    val arrayOfGeneratedQueries = generatedQueries.grouped(sizeOfSubarrays)
-      .map(queries => queries.mkString(";\n"))
-    val fileNames = arrayOfGeneratedQueries.zipWithIndex.map {
-      case (_, index) => f"generated_subquery_$index.sql"
-    }
+    // Partition the queries by (isCorrelated, subqueryLocation, SubqueryType).
+    val partitionedQueries = generatedQueries.groupBy(query =>
+      (query.isCorrelated, query.subqueryLocation, query.subqueryType))
 
     val baseResourcePath =
       getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
     val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
     val generatedSubqueryDirPath = new File(inputFilePath, "subquery/generated")
 
-    fileNames.zip(arrayOfGeneratedQueries).foreach {
-      case (fileName, queryString) =>
-        val file = new File(generatedSubqueryDirPath, fileName)
-        val parent = file.getParentFile
-        if (!parent.exists()) {
-          assert(parent.mkdirs(), "Could not create directory: " + parent)
-        }
-        stringToFile(file, queryString)
+    partitionedQueries.foreach { case ((isCorrelated, subqueryLocation, subqueryType), querySpec) =>
+      val correlationDirName = if (isCorrelated) "correlated" else "uncorrelated"
+      val subqueryLocationDirName = subqueryLocation match {
+        case SubqueryLocation.SELECT => "select"
+        case SubqueryLocation.FROM => "from"
+        case SubqueryLocation.WHERE => "where"
+      }
+      val subqueryTypeName = subqueryType match {
+        case SubqueryType.IN | SubqueryType.NOT_IN => "in"
+        case SubqueryType.EXISTS | SubqueryType.NOT_EXISTS => "exists"
+        case _ => "scalar"
+      }
+      val resultFile = new File(generatedSubqueryDirPath,
+        f"$correlationDirName/$subqueryLocationDirName/$subqueryTypeName.sql")
+      val parent = resultFile.getParentFile
+      if (!parent.exists()) {
+        assert(parent.mkdirs(), "Could not create directory: " + parent)
+      }
+      stringToFile(resultFile, querySpec.map(_.query).mkString(";\n"))
     }
   }
 }
