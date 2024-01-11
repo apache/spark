@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType}
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
@@ -83,6 +83,8 @@ object DataTypeUtils {
       storeAssignmentPolicy: StoreAssignmentPolicy.Value,
       addError: String => Unit): Boolean = {
     (write, read) match {
+      // ability to switch between different string types (ignore collation)
+      case (_: StringType, _: StringType) => true
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
         val typesCompatible = canWrite(
