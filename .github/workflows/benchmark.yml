@@ -185,7 +185,7 @@ jobs:
         echo "Preparing the benchmark results:"
         tar -cvf benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude-standard`
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}-${{ matrix.split }}
         path: benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar

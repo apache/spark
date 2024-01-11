@@ -30,7 +30,7 @@ whichever version of Spark you currently have checked out of revision control.
 
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, R, and SQL.
 
-You need to have [Ruby][ruby] and [Python][python] installed. Make sure the `bundle` command is available. If not, install it as follows:
+You need to have [Ruby 3][ruby] and [Python 3][python] installed. Make sure the `bundle` command is available. If not, install it as follows:
 
 [ruby]: https://www.ruby-lang.org/en/documentation/installation/
 [python]: https://www.python.org/downloads/
