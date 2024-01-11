@@ -1651,7 +1651,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(1 === taskDescriptions.length)
   }
 
-  test("cancelTasks shall kill all the running tasks") {
+  test("killAllTaskAttempts shall kill all the running tasks") {
     val taskScheduler = setupScheduler()
 
     taskScheduler.initialize(new FakeSchedulerBackend {

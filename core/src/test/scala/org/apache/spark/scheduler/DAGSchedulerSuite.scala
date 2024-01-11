@@ -39,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS, Tests}
+import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, Tests}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
@@ -186,7 +186,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
 
-  /** Stages for which the DAGScheduler has called TaskScheduler.cancelTasks(). */
+  /** Stages for which the DAGScheduler has called TaskScheduler.killAllTaskAttempts(). */
   val cancelledStages = new HashSet[Int]()
 
   val tasksMarkedAsCompleted = new ArrayBuffer[Task[_]]()
@@ -5050,7 +5050,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 }
 
 class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
-  override def conf: SparkConf = super.conf.set(LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS, false)
+  override def conf: SparkConf = super.conf.set(LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, false)
 }
 
 object DAGSchedulerSuite {

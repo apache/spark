@@ -38,7 +38,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
+import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
@@ -328,8 +328,7 @@ private[spark] class DAGScheduler(
     sc.getConf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
   /** Whether to abort a stage after canceling all of its tasks. */
-  private val legacyAbortStageAfterCancelTasks =
-    sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_CANCEL_TASKS)
+  private val legacyAbortStageAfterKillTasks = sc.getConf.get(LEGACY_ABORT_STAGE_AFTER_KILL_TASKS)
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -2217,7 +2216,7 @@ private[spark] class DAGScheduler(
           val message = s"Stage failed because barrier task $task finished unsuccessfully.\n" +
             failure.toErrorString
           try {
-            // cancelTasks will fail if a SchedulerBackend does not implement killTask.
+            // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
             val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) " +
               "failed."
             val job = jobIdToActiveJob.get(failedStage.firstJobId)
@@ -2870,9 +2869,9 @@ private[spark] class DAGScheduler(
           // This stage is only used by the job, so finish the stage if it is running.
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
-            try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
+            try { // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask
               taskScheduler.killAllTaskAttempts(stageId, shouldInterruptTaskThread(job), reason)
-              if (legacyAbortStageAfterCancelTasks) {
+              if (legacyAbortStageAfterKillTasks) {
                 stageFailed(stageId, reason)
               }
               markStageAsFinished(stage, Some(reason))

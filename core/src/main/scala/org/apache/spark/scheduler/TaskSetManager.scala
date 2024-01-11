@@ -1007,7 +1007,7 @@ private[spark] class TaskSetManager(
   // Unlike `abort()`, this function intentionally to not notify DAGScheduler to avoid
   // redundant operations. So the invocation to this function should assume DAGScheduler
   // already knows about this TSM failure. For example, this function can be called from
-  // `TaskScheduler.cancelTasks` by DAGScheduler.
+  // `TaskScheduler.killAllTaskAttempts` by DAGScheduler.
   def suspend(): Unit = {
     isZombie = true
     maybeFinishTaskSet()
