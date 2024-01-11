@@ -91,9 +91,12 @@ trait QueryGeneratorHelper {
   }
 
   object SubqueryType extends Enumeration {
-    val SCALAR = Value
-    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_LESS_THAN = Value
-    val IN, NOT_IN, EXISTS, NOT_EXISTS = Value
+    // Subquery to be treated as an Attribute.
+    val ATTRIBUTE = Value
+    // Subquery to be treated as a Relation.
+    val RELATION = Value
+    // Subquery is a Predicate - types of predicate subqueries.
+    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_LESS_THAN, IN, NOT_IN, EXISTS, NOT_EXISTS = Value
   }
 
   trait SubqueryExpression extends Expression {

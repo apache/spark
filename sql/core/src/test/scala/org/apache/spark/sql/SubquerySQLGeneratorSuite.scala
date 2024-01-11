@@ -102,7 +102,7 @@ class SubquerySQLGeneratorSuite
    * @param outerTable Table outside of the subquery, in the main query.
    * @param subqueryAlias
    * @param subqueryLocation The clause of the main query where the subquery is located.
-   * @param subqueryType The type of subquery, such as SCALAR, PREDICATE (EQUALS, EXISTS, etc.)
+   * @param subqueryType The type of subquery, such as SCALAR, RELATION, PREDICATE
    * @param isCorrelated Whether the subquery is to be correlated.
    * @param isDistinct Whether subquery results is to be de-duplicated, i.e. have a DISTINCT clause.
    * @param operatorInSubquery The operator to be included in the subquery.
@@ -123,7 +123,7 @@ class SubquerySQLGeneratorSuite
     } else {
       Seq()
     }
-    val isScalarSubquery = Seq(SubqueryType.SCALAR, SubqueryType.SCALAR_PREDICATE_EQUALS,
+    val isScalarSubquery = Seq(SubqueryType.ATTRIBUTE, SubqueryType.SCALAR_PREDICATE_EQUALS,
       SubqueryType.SCALAR_PREDICATE_LESS_THAN).contains(subqueryType)
     val subqueryOrganization = generateSubquery(
       innerTable, correlationConditions, isDistinct, operatorInSubquery, isScalarSubquery)
@@ -272,6 +272,7 @@ class SubquerySQLGeneratorSuite
           // Hardcoded keys for join condition.
           condition = Equals(innerTable.output.head, JOIN_TABLE.output.head),
           joinType = joinType))
+        // Hardcoded select all for set operation.
         val leftTableQuery = Query(SelectClause(innerTable.output), FromClause(Seq(innerTable)))()
         val rightTableQuery = Query(SelectClause(JOIN_TABLE.output), FromClause(Seq(JOIN_TABLE)))()
         val setOps = SET_OPERATIONS.map(setOp =>
@@ -285,10 +286,10 @@ class SubquerySQLGeneratorSuite
 
     // If the subquery is in the SELECT clause of the main query, it can only be a scalar subquery.
     def subqueryTypeChoices(subqueryLocation: SubqueryLocation.Value): Seq[SubqueryType.Value] = {
-      if (subqueryLocation == SubqueryLocation.SELECT) {
-        Seq(SubqueryType.SCALAR)
-      } else {
-        Seq(
+      subqueryLocation match {
+        case SubqueryLocation.SELECT => Seq(SubqueryType.ATTRIBUTE)
+        case SubqueryLocation.FROM => Seq(SubqueryType.RELATION)
+        case SubqueryLocation.WHERE => Seq(
           SubqueryType.SCALAR_PREDICATE_LESS_THAN,
           SubqueryType.SCALAR_PREDICATE_EQUALS,
           SubqueryType.IN,
@@ -299,13 +300,11 @@ class SubquerySQLGeneratorSuite
     }
 
     // If the subquery is in the FROM clause of the main query, it cannot be correlated.
-    def correlationChoices(subqueryLocation: SubqueryLocation.Value): Seq[Boolean] = {
-      if (subqueryLocation == SubqueryLocation.FROM) {
-        Seq(false)
-      } else {
-        Seq(true, false)
+    def correlationChoices(subqueryLocation: SubqueryLocation.Value): Seq[Boolean] =
+      subqueryLocation match {
+        case SubqueryLocation.FROM => Seq(false)
+        case _ => Seq(true, false)
       }
-    }
 
     case class QuerySpec(query: Query, isCorrelated: Boolean,
         subqueryLocation: SubqueryLocation.Value, subqueryType: SubqueryType.Value)
