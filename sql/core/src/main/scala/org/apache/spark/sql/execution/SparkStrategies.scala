@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.CollatedStringType
+import org.apache.spark.sql.types.StringType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -208,8 +208,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def hashJoinsSupport(leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-      !(leftKeys.exists(e => e.dataType.isInstanceOf[CollatedStringType]) ||
-        rightKeys.exists(e => e.dataType.isInstanceOf[CollatedStringType]))
+      !leftKeys.map(_.dataType).exists {
+        case st: StringType => !st.isDefaultCollation
+        case _ => false
+      } || !rightKeys.map(_.dataType).exists {
+          case st: StringType => !st.isDefaultCollation
+          case _ => false
+      }
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

@@ -943,7 +943,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
-      type instanceof CollatedStringType || DecimalType.isByteArrayDecimalType(type);
+      DecimalType.isByteArrayDecimalType(type);
   }
 
   /**

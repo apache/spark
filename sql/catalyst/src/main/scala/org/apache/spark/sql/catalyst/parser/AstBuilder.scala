@@ -3214,7 +3214,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     val dataType = (collation, typedVisit[DataType](ctx.dataType)) match {
       case (None, _) => typedVisit[DataType](ctx.dataType)
-      case (Some(collation), StringType) => CollatedStringType(collation)
+      case (Some(collation), StringType) => StringType(collation)
       case (Some(collation), dataType) =>
         throw QueryParsingErrors.invalidCollationSpecified(ctx, dataType.catalogString, collation)
     }

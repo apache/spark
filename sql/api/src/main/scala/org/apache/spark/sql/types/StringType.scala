@@ -25,31 +25,28 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class StringType private() extends AtomicType {
+class StringType private(val collation: String) extends AtomicType with Serializable {
+  def isDefaultCollation: Boolean = collation == "default"
+
+  override def toString: String = if (this.isDefaultCollation) "String" else s"String($collation)"
+  override def typeName: String = if (this.isDefaultCollation) "string" else s"string($collation)"
+
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
   override def defaultSize: Int = 20
 
   private[spark] override def asNullable: StringType = this
-}
 
+  override def equals(obj: Any): Boolean =
+    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collation == collation
+
+  override def hashCode(): Int = collation.hashCode
+}
 /**
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType
-
-case class CollatedStringType(collation: String) extends AtomicType {
-  /**
-   * The default size of a value of the StringType is 20 bytes.
-   */
-  override def defaultSize: Int = 20
-
-  private[spark] override def asNullable: CollatedStringType = this
-
-  override def toString: String = s"String($collation)"
-
-  // TODO: Can this just be string with collation?
-  override def typeName: String = s"collatedstring($collation)"
+case object StringType extends StringType("default") {
+  def apply(collation: String): StringType = new StringType(collation)
 }

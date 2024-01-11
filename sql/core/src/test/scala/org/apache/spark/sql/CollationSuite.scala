@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.CollatedStringType
+import org.apache.spark.sql.types.StringType
 
 class CollationSuite extends QueryTest
   with SharedSparkSession
@@ -39,7 +39,7 @@ class CollationSuite extends QueryTest
     // Collated row is a simple string.
     checkAnswer(sql("select collate('aaa', 'sr-primary')"), Row("aaa"))
     assert(sql("select collate('aaa', 'sr-primary')").schema(0).dataType ==
-      CollatedStringType("sr-primary"))
+      StringType("sr-primary"))
 
     // Serbian case + accent insensitive ordering
     var collationName = "sr-primary"

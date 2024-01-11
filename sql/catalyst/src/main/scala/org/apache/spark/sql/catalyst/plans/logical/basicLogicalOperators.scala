@@ -1221,7 +1221,12 @@ object Aggregate {
   }
 
   def isAggregateCollationAware(groupingExpression: Seq[Expression]): Boolean = {
-    groupingExpression.exists(_.dataType.isInstanceOf[CollatedStringType])
+    groupingExpression.exists(e => {
+      e.dataType match {
+        case stringType: StringType => !stringType.isDefaultCollation
+        case _ => false
+      }
+    })
   }
 
   def supportsHashAggregate(

@@ -61,7 +61,7 @@ public class CollatorFactory {
     // TODO: Propagate more information about collation (e.g. whether it is binary collation so
     // we can still do binary comparisons.
 
-    if (collationName.isEmpty()) {
+    if (collationName.isEmpty() || collationName.equals("default")) {
       return 0;
     }
 

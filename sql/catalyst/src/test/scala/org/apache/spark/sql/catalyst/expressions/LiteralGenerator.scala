@@ -199,7 +199,7 @@ object LiteralGenerator {
       case TimestampType => timestampLiteralGen
       case TimestampNTZType => timestampNTZLiteralGen
       case BooleanType => booleanLiteralGen
-      case StringType => stringLiteralGen
+      case _: StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
       case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)

@@ -188,8 +188,10 @@ object InternalRow {
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
     case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
-    case CollatedStringType(collation) =>
-      (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy()) // TODO: Set coll
+    case st: StringType => (input, v) =>
+      val str = v.asInstanceOf[UTF8String].copy()
+      str.installCollationAwareComparator(st.collation)
+      input.update(ordinal, str)
     case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
     case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
     case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())

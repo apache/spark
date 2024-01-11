@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.types.CollatedStringType
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -209,9 +209,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   private def hasNoCollations(plan: LogicalPlan): Boolean = {
-    // TODO: Should be more selective here.
-    // Don't fully understand this code path.
-    !plan.expressions.exists(e => e.dataType.isInstanceOf[CollatedStringType])
+    // TODO: Should be more selective here. Only non-binary collations are not supported.
+    !plan.expressions.map(_.dataType).exists {
+      case st: StringType => !st.isDefaultCollation
+      case _ => false
+    }
   }
 
   /**

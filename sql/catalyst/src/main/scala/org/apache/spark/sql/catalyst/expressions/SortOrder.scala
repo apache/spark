@@ -158,7 +158,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
       DoublePrefixComparator.computePrefix(dVal)
     }
-    case StringType => (raw) =>
+    case _: StringType => (raw) =>
       StringPrefixComparator.computePrefix(raw.asInstanceOf[UTF8String])
     case BinaryType => (raw) =>
       BinaryPrefixComparator.computePrefix(raw.asInstanceOf[Array[Byte]])

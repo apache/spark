@@ -491,12 +491,8 @@ abstract class HashExpression[E] extends Expression {
     case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
-    case CollatedStringType(collation) =>
-      // TODO: Hashing for collations is tricky. We could normalize the input
-      // based on collation and then calc the hash? Naive hashing can't be used for
-      // equality check (e.g. for group by).
-      // CollatorKey seems to be doing the trick. This requires deeper understanding.
-      val hash = CollatorFactory.getCollationAwareHash(input, collation)
+    case st: StringType =>
+      val hash = CollatorFactory.getCollationAwareHash(input, st.collation)
       genHashLong(hash.toString, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>

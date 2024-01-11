@@ -124,7 +124,7 @@ object RowSetUtils {
         val values = getOrSetAsNull[java.lang.Double](rows, ordinal, nulls, 0.toDouble)
         TColumn.doubleVal(new TDoubleColumn(values, nulls))
 
-      case StringType =>
+      case _: StringType =>
         val values = getOrSetAsNull[java.lang.String](rows, ordinal, nulls, "")
         TColumn.stringVal(new TStringColumn(values, nulls))
 

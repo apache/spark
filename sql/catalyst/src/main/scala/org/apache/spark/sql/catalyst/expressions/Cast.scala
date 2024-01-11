@@ -94,9 +94,7 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, StringType) => true
-    case (_, CollatedStringType(_)) => true
-
+    case (_, _: StringType) => true
     case (StringType, _: BinaryType) => true
 
     case (StringType, BooleanType) => true
@@ -306,8 +304,6 @@ object Cast extends QueryErrorsBase {
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
     case (_: DatetimeType, _: DatetimeType) => true
-    case (_: CollatedStringType, _: StringType) => true
-    case (_: StringType, _: CollatedStringType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
@@ -576,7 +572,7 @@ case class Cast(
 
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
-    case StringType | CollatedStringType(_) => buildCast[UTF8String](_, _.getBytes)
+    case _: StringType => buildCast[UTF8String](_, _.getBytes)
     case ByteType => buildCast[Byte](_, NumberConverter.toBinary)
     case ShortType => buildCast[Short](_, NumberConverter.toBinary)
     case IntegerType => buildCast[Int](_, NumberConverter.toBinary)
@@ -1111,8 +1107,7 @@ case class Cast(
     } else {
       to match {
         case dt if dt == from => identity[Any]
-        case CollatedStringType(_) => castToString(from)
-        case StringType => castToString(from)
+        case _: StringType => castToString(from)
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
         case decimal: DecimalType => castToDecimal(from, decimal)
@@ -1201,9 +1196,8 @@ case class Cast(
 
     case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
     case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
-    case StringType => (c, evPrim, _) => castToStringCode(from, ctx, None).apply(c, evPrim)
-    case CollatedStringType(collation) => (c, evPrim, _) =>
-      castToStringCode(from, ctx, Some(collation)).apply(c, evPrim)
+    case st: StringType => (c, evPrim, _) =>
+      castToStringCode(from, ctx, Some(st.collation)).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)

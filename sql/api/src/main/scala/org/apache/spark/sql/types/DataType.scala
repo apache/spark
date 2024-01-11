@@ -117,7 +117,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
-  private val COLLATED_STRING_TYPE = """collatedstring\(\s*([\w-]+)\s*\)""".r
+  private val COLLATED_STRING_TYPE = """string\(\s*([\w-]+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -182,7 +182,7 @@ object DataType {
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
-      case COLLATED_STRING_TYPE(collation) => CollatedStringType(collation)
+      case COLLATED_STRING_TYPE(collation) => StringType(collation)
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
@@ -378,8 +378,7 @@ object DataType {
               equalsStructurally(l.dataType, r.dataType, ignoreNullability) &&
                 (ignoreNullability || l.nullable == r.nullable)
             }
-      // case (CollatedStringType(_), StringType) => true
-      // case (StringType, CollatedStringType(_)) => true
+      // case (_: StringType, _: StringType) => true
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }

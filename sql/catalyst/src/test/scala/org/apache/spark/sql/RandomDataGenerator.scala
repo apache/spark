@@ -184,8 +184,7 @@ object RandomDataGenerator {
       rand: Random = new Random,
       validJulianDatetime: Boolean = false): Option[() => Any] = {
     val valueGenerator: Option[() => Any] = dataType match {
-      case StringType => Some(() => rand.nextString(rand.nextInt(MAX_STR_LEN)))
-      case CollatedStringType(_) => Some(() => rand.nextString(rand.nextInt(MAX_STR_LEN)))
+      case _: StringType => Some(() => rand.nextString(rand.nextInt(MAX_STR_LEN)))
       case BinaryType => Some(() => {
         val arr = new Array[Byte](rand.nextInt(MAX_STR_LEN))
         rand.nextBytes(arr)

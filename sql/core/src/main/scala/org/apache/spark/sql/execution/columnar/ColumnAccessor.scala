@@ -147,7 +147,7 @@ private[sql] object ColumnAccessor {
         new LongColumnAccessor(buf)
       case FloatType => new FloatColumnAccessor(buf)
       case DoubleType => new DoubleColumnAccessor(buf)
-      case StringType => new StringColumnAccessor(buf)
+      case _: StringType => new StringColumnAccessor(buf)
       case BinaryType => new BinaryColumnAccessor(buf)
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnAccessor(buf, dt)

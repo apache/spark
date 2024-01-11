@@ -531,7 +531,7 @@ object PartitioningUtils extends SQLConfHelper {
       zoneId: ZoneId): Any = desiredType match {
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
-    case StringType => UTF8String.fromString(unescapePathName(value))
+    case _: StringType => UTF8String.fromString(unescapePathName(value))
     case ByteType => Integer.parseInt(value).toByte
     case ShortType => Integer.parseInt(value).toShort
     case IntegerType => Integer.parseInt(value)

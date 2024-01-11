@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.types.{CharType, CollatedStringType, DataType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{CharType, DataType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object PartitioningUtils {
@@ -80,12 +80,6 @@ private[sql] object PartitioningUtils {
 
       val normalizedVal =
         if (SQLConf.get.charVarcharAsString) value else normalizedFiled.dataType match {
-          case CollatedStringType(collation) if value != null && value != DEFAULT_PARTITION_NAME =>
-            val v = value match {
-              case Some(str: String) => Some(str)
-              case other => other
-            }
-            v.asInstanceOf[T]
           case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
             val v = value match {
               case Some(str: String) => Some(charTypeWriteSideCheck(str, len))

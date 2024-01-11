@@ -29,7 +29,7 @@ case class Collate(inputString: Expression, collation: Expression)
 
   @transient
   private lazy val collationEval = right.eval().asInstanceOf[UTF8String]
-  override def dataType: DataType = CollatedStringType(collationEval.toString)
+  override def dataType: DataType = StringType(collationEval.toString)
   // TODO: Can this be foldable?
   override def foldable: Boolean = false
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
@@ -52,8 +52,7 @@ case class Collation(child: Expression) extends UnaryExpression with CodegenFall
   override protected def withNewChildInternal(newChild: Expression): Expression = copy(newChild)
 
   override def eval(input: InternalRow): Any = child.dataType match {
-    case StringType => UTF8String.fromString("default")
-    case CollatedStringType(collation) => UTF8String.fromString(collation)
+    case st: StringType => UTF8String.fromString(st.collation)
     case _ => throw new IllegalArgumentException("Collation expects StringType")
   }
 }

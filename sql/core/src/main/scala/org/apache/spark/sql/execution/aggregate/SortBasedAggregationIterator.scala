@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.CollatedStringType
+import org.apache.spark.sql.types.StringType
 
 /**
  * An iterator used to evaluate
@@ -92,7 +92,10 @@ class SortBasedAggregationIterator(
 
   private[this] lazy val binaryComparisonAllowed: Boolean = {
     val dataTypes = groupingExpressions.map(_.dataType)
-    !dataTypes.exists(dt => dt.isInstanceOf[CollatedStringType])
+    !dataTypes.exists {
+      case st: StringType => !st.isDefaultCollation
+      case _ => false
+    }
   }
 
   protected def initialize(): Unit = {

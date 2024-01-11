@@ -134,7 +134,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case TimestampNTZType => tryParseTimestampNTZ(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
-        case StringType => StringType
+        case _: StringType => StringType
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
