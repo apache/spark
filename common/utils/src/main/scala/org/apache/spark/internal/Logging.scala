@@ -128,7 +128,7 @@ trait Logging {
     if (Logging.isLog4j2()) {
       val rootLogger = LogManager.getRootLogger.asInstanceOf[Log4jLogger]
       // If Log4j 2 is used but is initialized by default configuration,
-      // load a default properties fil
+      // load a default properties file
       // scalastyle:off println
       if (Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
