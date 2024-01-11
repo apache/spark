@@ -244,12 +244,13 @@ private[deploy] class Master(
       }
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
-        beginRecovery(storedApps, storedDrivers, storedWorkers)
-        recoveryCompletionTask = forwardMessageThread.schedule(new Runnable {
-          override def run(): Unit = Utils.tryLogNonFatalError {
-            self.send(CompleteRecovery)
-          }
-        }, recoveryTimeoutMs, TimeUnit.MILLISECONDS)
+        if (beginRecovery(storedApps, storedDrivers, storedWorkers)) {
+          recoveryCompletionTask = forwardMessageThread.schedule(new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              self.send(CompleteRecovery)
+            }
+          }, recoveryTimeoutMs, TimeUnit.MILLISECONDS)
+        }
       }
 
     case CompleteRecovery => completeRecovery()
@@ -590,7 +591,7 @@ private[deploy] class Master(
   private var recoveryStartTimeNs = 0L
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-      storedWorkers: Seq[WorkerInfo]): Unit = {
+      storedWorkers: Seq[WorkerInfo]): Boolean = {
     recoveryStartTimeNs = System.nanoTime()
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
@@ -618,6 +619,14 @@ private[deploy] class Master(
       } catch {
         case e: Exception => logInfo("Worker " + worker.id + " had exception on reconnect")
       }
+    }
+
+    // In case of zero workers and apps, we can complete recovery.
+    if (canCompleteRecovery) {
+      completeRecovery()
+      false
+    } else {
+      true
     }
   }
 

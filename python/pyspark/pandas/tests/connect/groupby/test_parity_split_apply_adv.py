@@ -1,3 +1,4 @@
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -12,24 +13,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+import unittest
 
-# Minimal makefile for Sphinx documentation
+from pyspark.pandas.tests.groupby.test_split_apply_adv import GroupbySplitApplyAdvMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
-# You can set these variables from the command line.
-SPHINXOPTS    ?= "-W" "-j" "auto"
-SPHINXBUILD   ?= sphinx-build
-SOURCEDIR     ?= source
-BUILDDIR      ?= build
 
-export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.9.7-src.zip)
+class GroupbySplitApplyAdvParityTests(
+    GroupbySplitApplyAdvMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
+    pass
 
-# Put it first so that "make" without argument is like "make help".
-help:
-	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-.PHONY: help Makefile
+if __name__ == "__main__":
+    from pyspark.pandas.tests.connect.groupby.test_parity_split_apply_adv import *  # noqa
 
-# Catch-all target: route all unknown targets to Sphinx using the new
-# "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
-%: Makefile
-	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

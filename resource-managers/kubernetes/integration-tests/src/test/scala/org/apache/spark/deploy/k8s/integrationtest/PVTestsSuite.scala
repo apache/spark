@@ -87,7 +87,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .withNewSpec()
         .withAccessModes("ReadWriteOnce")
         .withStorageClassName("test-local-storage")
-        .withResources(new ResourceRequirementsBuilder()
+        .withResources(new VolumeResourceRequirementsBuilder()
           .withRequests(Map("storage" -> new Quantity("1Gi")).asJava).build())
       .endSpec()
 
