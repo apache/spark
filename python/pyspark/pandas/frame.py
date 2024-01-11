@@ -9479,7 +9479,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             pdf = pdf.drop(columns=[tmp_agg_column_name])
             pdf = pdf.set_index(tmp_idx_column_name, drop=True)
             pdf = pdf.sort_index()
-            pdf = pdf.asfreq(
+            pdf = pdf.asfreq(  # type: ignore[assignment]
                 freq=freq,
                 method=method,
                 how=how,
@@ -9493,7 +9493,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         output_df = output_df.set_index(tmp_idx_column_name)
         output_df.index.names = self.index.names
 
-        return output_df  # type: ignore[return-value]
+        return output_df
 
     def astype(self, dtype: Union[str, Dtype, Dict[Name, Union[str, Dtype]]]) -> "DataFrame":
         """
