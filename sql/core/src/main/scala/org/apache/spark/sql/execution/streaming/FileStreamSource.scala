@@ -130,7 +130,7 @@ class FileStreamSource(
   private var unreadFiles: Seq[NewFileEntry] = _
 
   /**
-   *  Split files into a selected/unselected pair according to a total size threshold.
+   * Split files into a selected/unselected pair according to a total size threshold.
    */
   private def takeFilesUntilMax(files: Seq[NewFileEntry], maxSize: Long):
     (Seq[NewFileEntry], Seq[NewFileEntry]) = {

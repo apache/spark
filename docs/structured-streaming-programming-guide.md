@@ -561,7 +561,7 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
         <br/>
-        <code>maxBytesPerTrigger</code>: maximum total size of new files to be considered in every trigger (default: no max). maxBytesPerTrigger and maxFilesPerTrigger can't both be set at the same time, only one of two must be chosen.
+        <code>maxBytesPerTrigger</code>: maximum total size of new files to be considered in every trigger (default: no max). <code>maxBytesPerTrigger</code> and <code>maxFilesPerTrigger</code> can't both be set at the same time, only one of two must be chosen. Note that a stream always reads at least one file so it can make progress and not get stuck on a file larger than a given maximum.
         <br/>
         <code>latestFirst</code>: whether to process the latest new files first, useful when there is a large backlog of files (default: false)
         <br/>

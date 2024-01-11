@@ -1251,7 +1251,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     ).foreach { case (testTable, optionName) =>
       withTable(testTable) {
         withTempDir { case src =>
-          def testMaxFilePerTriggerValue(value: String): Unit = {
+          def testMaxOptionPerTriggerValue(value: String): Unit = {
             val df = spark.readStream.option(optionName, value).text(src.getCanonicalPath)
             val e = intercept[StreamingQueryException] {
               // Note: a tested option is checked in the stream thread when creating the source
@@ -1268,10 +1268,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             }
           }
 
-          testMaxFilePerTriggerValue("not-a-integer")
-          testMaxFilePerTriggerValue("-1")
-          testMaxFilePerTriggerValue("0")
-          testMaxFilePerTriggerValue("10.1")
+          testMaxOptionPerTriggerValue("not-a-integer")
+          testMaxOptionPerTriggerValue("-1")
+          testMaxOptionPerTriggerValue("0")
+          testMaxOptionPerTriggerValue("10.1")
         }
       }
     }

@@ -50,7 +50,7 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
     }
   }
 
-  val maxBytesPerTrigger: Option[Int] = parameters.get("maxBytesPerTrigger").map { str =>
+  val maxBytesPerTrigger: Option[Long] = parameters.get("maxBytesPerTrigger").map { str =>
     Try(str.toInt).toOption.filter(_ > 0).map(op =>
       if (maxFilesPerTrigger.nonEmpty) {
         throw new IllegalArgumentException(

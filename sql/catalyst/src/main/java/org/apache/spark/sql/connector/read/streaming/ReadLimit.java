@@ -39,7 +39,7 @@ public interface ReadLimit {
 
   static ReadLimit maxFiles(int files) { return new ReadMaxFiles(files); }
 
-  static ReadLimit maxBytes(int bytes) { return new ReadMaxBytes(bytes); }
+  static ReadLimit maxBytes(long bytes) { return new ReadMaxBytes(bytes); }
 
   static ReadLimit allAvailable() { return ReadAllAvailable.INSTANCE; }
 

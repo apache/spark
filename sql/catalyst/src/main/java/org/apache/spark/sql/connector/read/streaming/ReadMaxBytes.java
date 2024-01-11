@@ -22,21 +22,21 @@ import org.apache.spark.annotation.Evolving;
 /**
  * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan files which total
  * size doesn't go beyond a given maximum total size. Always reads at least one file so a stream
- * can make progress in case of a file larger than a given maximum.
+ * can make progress and not get stuck on a file larger than a given maximum.
  *
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
  * @since 4.0.0
  */
 @Evolving
 public class ReadMaxBytes implements ReadLimit {
-  private int bytes;
+  private long bytes;
 
-  ReadMaxBytes(int bytes) {
+  ReadMaxBytes(long bytes) {
     this.bytes = bytes;
   }
 
   /** Maximum total size of files to scan. */
-  public int maxBytes() { return this.bytes; }
+  public long maxBytes() { return this.bytes; }
 
   @Override
   public String toString() {
@@ -52,5 +52,5 @@ public class ReadMaxBytes implements ReadLimit {
   }
 
   @Override
-  public int hashCode() { return bytes; }
+  public int hashCode() { return Long.hashCode(bytes); }
 }
