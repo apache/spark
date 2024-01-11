@@ -2664,7 +2664,8 @@
   "MULTIPLE_XML_DATA_SOURCE" : {
     "message" : [
       "Multiple sources found for <provider> (<sourceNames>). Please specify the fully qualified class name or remove <externalSource> from the classpath."
-    ]
+    ],
+    "sqlState" : "42000"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [

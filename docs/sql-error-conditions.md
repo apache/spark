@@ -1505,6 +1505,12 @@ The query does not include a GROUP BY clause. Add GROUP BY or turn it into the w
 
 Cannot specify time travel in both the time travel clause and options.
 
+### MULTIPLE_XML_DATA_SOURCE
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Multiple sources found for `<provider>` (`<sourceNames>`). Please specify the fully qualified class name or remove `<externalSource>` from the classpath.
+
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
