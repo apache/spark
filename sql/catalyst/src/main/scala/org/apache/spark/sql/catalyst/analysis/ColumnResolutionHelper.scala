@@ -626,8 +626,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
      } else {
        resolveDataFrameStarByPlanId(u, id, p.children)
      }
-     resolved.filter(_.references.subsetOf(p.outputSet))
-     // resolved.filter(_.expressions.forall(e => p.output.exists(e.semanticEquals)))
-     // resolved.filter(_.expressions.forall(p.outputSet.contains))
+     resolved.filter { r =>
+       val outputSet = AttributeSet(p.output ++ p.metadataOutput)
+       r.expressions.forall(_.references.subsetOf(outputSet))
+     }
    }
 }
