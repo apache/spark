@@ -91,6 +91,6 @@ class HiveClientSuites extends SparkFunSuite with HiveClientVersions {
   }
 
   override def nestedSuites: IndexedSeq[Suite] = {
-    versions.map(new HiveClientSuite(_, versions))
+    versions.map(new HiveClientSuite(_))
   }
 }
