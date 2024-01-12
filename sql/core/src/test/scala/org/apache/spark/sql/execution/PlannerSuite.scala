@@ -1448,7 +1448,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("Limit and offset should not drop LocalLimitExec operator") {
-    val df = sql("SELECT * FROM (SELECT * FROM RANGE(100) LIMIT 25 OFFSET 3) WHERE id > 1000")
+    val df = sql("SELECT * FROM (SELECT * FROM RANGE(100) LIMIT 25 OFFSET 3) WHERE id > 10")
     val planned = df.queryExecution.sparkPlan
     assert(planned.exists(_.isInstanceOf[GlobalLimitExec]))
     assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
@@ -1456,7 +1456,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("Offset and limit should not drop LocalLimitExec operator") {
     val df = sql("""SELECT * FROM (SELECT * FROM
-      (SELECT * FROM RANGE(100) LIMIT 25) OFFSET 3) WHERE id > 1000""".stripMargin)
+      (SELECT * FROM RANGE(100) LIMIT 25) OFFSET 3) WHERE id > 10""".stripMargin)
     val planned = df.queryExecution.sparkPlan
     assert(planned.exists(_.isInstanceOf[GlobalLimitExec]))
     assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
