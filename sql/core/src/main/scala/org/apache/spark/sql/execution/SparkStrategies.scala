@@ -895,7 +895,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // We should match the combination of limit and offset first, to get the optimal physical
       // plan, instead of planning limit and offset separately.
       case LimitAndOffset(limit, offset, child) =>
-        GlobalLimitExec(limit, LocalLimitExec(limit, planLater(child)), offset) :: Nil
+        GlobalLimitExec(limit,
+          LocalLimitExec(limit, planLater(child)), offset) :: Nil
       case OffsetAndLimit(offset, limit, child) =>
         // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
         GlobalLimitExec(offset + limit,
