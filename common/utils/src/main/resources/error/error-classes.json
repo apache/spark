@@ -2661,6 +2661,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "MULTIPLE_XML_DATA_SOURCE" : {
+    "message" : [
+      "Detected multiple data sources with the name <provider> (<sourceNames>). Please specify the fully qualified class name or remove <externalSource> from the classpath."
+    ],
+    "sqlState" : "42710"
+  },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."

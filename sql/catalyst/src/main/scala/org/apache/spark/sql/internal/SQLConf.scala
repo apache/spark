@@ -4513,6 +4513,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES =
+    buildConf("spark.sql.optimizer.excludeSubqueryRefsFromRemoveRedundantAliases.enabled")
+      .internal()
+      .doc("When true, exclude the references from the subquery expressions (in, exists, etc.) " +
+        s"while removing redundant aliases.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TIME_TRAVEL_TIMESTAMP_KEY =
     buildConf("spark.sql.timeTravelTimestampKey")
       .doc("The option name to specify the time travel timestamp when reading a table.")
