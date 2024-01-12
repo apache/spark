@@ -704,27 +704,12 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Une
  *    df1.join(df2, "id").select(df1["*"])
  * @param planId the plan id of target node.
  */
-case class UnresolvedDataFrameStar(planId: Long) extends Star with Unevaluable {
-  override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
-    val resolved = resolveRecursively(planId, input)
-    resolved.map(_.expand(input, resolver)).getOrElse(
-      throw QueryCompilationErrors.cannotResolveStar(this)
-    )
-  }
-
-  private def resolveRecursively(
-    id: Long,
-    p: LogicalPlan): Option[ResolvedStar] = {
-    val resolved = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      Some(ResolvedStar(p.output))
-    } else {
-      p.children.iterator.map(resolveRecursively(id, _))
-        .foldLeft(Option.empty[ResolvedStar]) {
-          case (r1, r2) => if (r1.nonEmpty) r1 else r2
-        }
-    }
-    resolved.filter(_.references.subsetOf(p.outputSet))
-  }
+case class UnresolvedDataFrameStar(planId: Long)
+  extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DF_STAR)
 }
 
 /**

@@ -70,12 +70,19 @@ class DataFrameTestsMixin:
         self.assertEqual(self.spark.range(3).count(), 3)
 
     def test_dataframe_star(self):
-        df1 = self.spark.createDataFrame([{"id": 1}])
-        df2 = self.spark.createDataFrame([{"id": 1, "val": "v"}])
-        df = df1.join(df2, "id")
-        self.assertEqual(df.columns, ["id", "val"])
-        self.assertEqual(df.select(df1["*"]).columns, ["id"])
-        self.assertEqual(df.select(df2["*"]).columns, ["id", "val"])
+        df1 = self.spark.createDataFrame([{"a": 1}])
+        df2 = self.spark.createDataFrame([{"a": 1, "b": "v"}])
+
+        df = df1.join(df2, "a")
+        self.assertEqual(df.columns, ["a", "b"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+
+        df3 = df2.withColumnsRenamed({"a": "x", "b": "y"})
+        df = df2.join(df3)
+        self.assertEqual(df.columns, ["a", "b", "x", "y"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+        self.assertEqual(df.select(df3["*"]).columns, ["x", "y"])
 
     def test_self_join(self):
         df1 = self.spark.range(10).withColumn("a", lit(0))

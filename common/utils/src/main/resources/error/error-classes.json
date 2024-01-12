@@ -330,12 +330,6 @@
     ],
     "sqlState" : "42704"
   },
-  "CANNOT_RESOLVE_DATAFRAME_STAR" : {
-    "message" : [
-      "Cannot resolve dataframe star. It's probably because of illegal references like `df1.select(df2.col(\"*\"))`."
-    ],
-    "sqlState" : "42704"
-  },
   "CANNOT_RESOLVE_STAR_EXPAND" : {
     "message" : [
       "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."

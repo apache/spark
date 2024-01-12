@@ -288,12 +288,6 @@ Renaming a `<type>` across schemas is not allowed.
 
 Cannot resolve dataframe column `<name>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
 
-### CANNOT_RESOLVE_DATAFRAME_STAR
-
-[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot resolve dataframe star. It's probably because of illegal references like `df1.select(df2.col("*"))`.
-
 ### CANNOT_RESOLVE_STAR_EXPAND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
