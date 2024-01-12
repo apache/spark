@@ -2621,6 +2621,16 @@ package object config {
       .toSequence
       .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
 
+  private[spark] val LEGACY_ABORT_STAGE_AFTER_KILL_TASKS =
+    ConfigBuilder("spark.scheduler.stage.legacyAbortAfterKillTasks")
+      .doc("Whether to abort a stage after TaskScheduler.killAllTaskAttempts(). This is " +
+        "used to restore the original behavior in case there are any regressions after " +
+        "abort stage is removed")
+      .version("4.0.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION =
     ConfigBuilder("spark.scheduler.dropTaskInfoAccumulablesOnTaskCompletion.enabled")
       .internal()
