@@ -72,13 +72,18 @@ class DataFrameTestsMixin:
     def test_dataframe_star(self):
         df1 = self.spark.createDataFrame([{"a": 1}])
         df2 = self.spark.createDataFrame([{"a": 1, "b": "v"}])
+        df3 = df2.withColumnsRenamed({"a": "x", "b": "y"})
+
+        df = df1.join(df2)
+        self.assertEqual(df.columns, ["a", "a", "b"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
 
         df = df1.join(df2, "a")
         self.assertEqual(df.columns, ["a", "b"])
         self.assertEqual(df.select(df1["*"]).columns, ["a"])
         self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
 
-        df3 = df2.withColumnsRenamed({"a": "x", "b": "y"})
         df = df2.join(df3)
         self.assertEqual(df.columns, ["a", "b", "x", "y"])
         self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])

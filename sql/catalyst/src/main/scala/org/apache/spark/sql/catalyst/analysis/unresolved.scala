@@ -710,6 +710,7 @@ case class UnresolvedDataFrameStar(planId: Long)
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override lazy val resolved = false
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DF_STAR)
+  override def toString: String = "UnresolvedDataFrameStar"
 }
 
 /**
