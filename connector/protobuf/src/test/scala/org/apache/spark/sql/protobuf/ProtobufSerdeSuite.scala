@@ -114,7 +114,6 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   test("Fail to convert with missing nested Protobuf fields for serializer") {
     val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInProto")
 
-    // serialize fails whether or not 'bar' is nullable
     assertFailedConversionMessage(
       protoFile,
       Serializer,
