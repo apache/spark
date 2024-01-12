@@ -58,7 +58,6 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
   addResourceProfile(defaultProfile)
 
-
   def defaultResourceProfile: ResourceProfile = defaultProfile
 
   /**
