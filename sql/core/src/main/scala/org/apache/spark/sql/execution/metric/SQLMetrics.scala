@@ -75,8 +75,6 @@ class SQLMetric(
   // calculating min, max, etc. See SPARK-11013.
   override def isZero: Boolean = _value == initValue
 
-  def isValid: Boolean = _value >= 0
-
   override def add(v: Long): Unit = {
     if (isZero) _value = 0
     _value += v
@@ -90,9 +88,9 @@ class SQLMetric(
 
   def +=(v: Long): Unit = add(v)
 
-  // _value may be invalid, in many cases being -1. We should not expose it to the user
+  // _value may be uninitialized, in many cases being -1. We should not expose it to the user
   // and instead return 0.
-  override def value: Long = if (!isValid) 0 else _value
+  override def value: Long = if (isZero) 0 else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
