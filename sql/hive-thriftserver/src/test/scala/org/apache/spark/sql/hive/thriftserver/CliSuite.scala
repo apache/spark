@@ -651,8 +651,7 @@ class CliSuite extends SparkFunSuite {
     val sparkContext = new SparkContext(sparkConf)
     SparkSQLEnv.sparkContext = sparkContext
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
-    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf)
     val sessionState = new CliSessionState(cliConf)
     SessionState.setCurrentSessionState(sessionState)
     val cli = new SparkSQLCLIDriver
