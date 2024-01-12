@@ -28,7 +28,7 @@ import scala.util.Try
 import org.apache.hadoop.conf.Configuration
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
-import org.rocksdb.{RocksDB => NativeRocksDB, _}
+import org.rocksdb.{Env => RocksDBEnv, RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
@@ -105,6 +105,17 @@ class RocksDB(
   }
 
   columnFamilyOptions.setCompressionType(getCompressionType(conf.compression))
+  // We can easily accumulate many small L0 files if changelog is not enabled, or full snapshot
+  // interval is not large enough. Triggering compactions for those small files are expensive.
+  // We make it harder to trigger and allow more L0 files without write stalling.
+  // We increase L0->L1 compaction threshold to reduce the overhead of L0->L1 compaction.
+  // Given the nature of small L0 files, for most workloads, even the value of 16 is too low for
+  // L0->L1 write amplification. However, if the value is too large, we may risk the chance that
+  // in some workloads where batch size is very large, some data might take a very long time to
+  // be compacted.
+  columnFamilyOptions.setLevel0FileNumCompactionTrigger(16)
+  columnFamilyOptions.setLevel0SlowdownWritesTrigger(200)
+  columnFamilyOptions.setLevel0StopWritesTrigger(1000)
 
   private val dbOptions =
     new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
@@ -671,6 +682,21 @@ class RocksDB(
   override protected def logName: String = s"${super.logName} $loggingId"
 }
 
+object RocksDB {
+  // Increase background thread pool size to 2 flush threads and 2 compaction threads.
+  // Snapshot checkpoint requires a flush, so more threads will reduce the blocking time. More
+  // compaction threads will reduce the chance that compaction is backlogged, causing online
+  // traffic to slowdown.
+  if (RocksDBEnv.getDefault().getBackgroundThreads(Priority.HIGH) < 2) {
+    RocksDBEnv.getDefault().setBackgroundThreads(2, Priority.HIGH)
+  }
+  if (RocksDBEnv.getDefault().getBackgroundThreads(Priority.LOW) < 2) {
+    RocksDBEnv.getDefault().setBackgroundThreads(2, Priority.LOW)
+  }
+  // Compactions can take lower CPU priority, as it is not usually blocking online traffic, and
+  // running with lower CPU priority allows us to use more threads for that.
+  RocksDBEnv.getDefault().lowerThreadPoolCPUPriority(Priority.LOW)
+}
 
 /** Mutable and reusable pair of byte arrays */
 class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) {
