@@ -138,7 +138,8 @@ private[sql] object Dataset {
  * the following creates a new Dataset by applying a filter on the existing one:
  * {{{
  *   val names = people.map(_.name)  // in Scala; names is a Dataset[String]
- *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING));
+ *   Dataset<String> names = people.map(
+ *     (MapFunction<Person, String>) p -> p.name, Encoders.STRING()); // Java
  * }}}
  *
  * Dataset operations can also be untyped, through various domain-specific-language (DSL)
@@ -511,11 +512,9 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 3.4.0
    */
-  def to(schema: StructType): DataFrame = withOrigin {
-    withPlan {
-      val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
-      Project.matchSchema(logicalPlan, replaced, sparkSession.sessionState.conf)
-    }
+  def to(schema: StructType): DataFrame = withPlan {
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    Project.matchSchema(logicalPlan, replaced, sparkSession.sessionState.conf)
   }
 
   /**
@@ -775,13 +774,12 @@ class Dataset[T] private[sql](
    */
   // We only accept an existing column name, not a derived column here as a watermark that is
   // defined on a derived column cannot referenced elsewhere in the plan.
-  def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withOrigin {
-    withTypedPlan {
-      val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
-      require(!IntervalUtils.isNegative(parsedDelay),
-        s"delay threshold ($delayThreshold) should not be negative.")
-      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
-    }
+  def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
+    val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
+    require(!IntervalUtils.isNegative(parsedDelay),
+      s"delay threshold ($delayThreshold) should not be negative.")
+    EliminateEventTimeWatermark(
+      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
   }
 
   /**
@@ -953,10 +951,8 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_]): DataFrame = withOrigin {
-    withPlan {
-      Join(logicalPlan, right.logicalPlan, joinType = Inner, None, JoinHint.NONE)
-    }
+  def join(right: Dataset[_]): DataFrame = withPlan {
+    Join(logicalPlan, right.logicalPlan, joinType = Inner, None, JoinHint.NONE)
   }
 
   /**
@@ -1089,23 +1085,22 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame =
-    withOrigin {
-      // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
-      // by creating a new instance for one of the branch.
-      val joined = sparkSession.sessionState.executePlan(
-        Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None, JoinHint.NONE))
-        .analyzed.asInstanceOf[Join]
+  def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
+    // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
+    // by creating a new instance for one of the branch.
+    val joined = sparkSession.sessionState.executePlan(
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None, JoinHint.NONE))
+      .analyzed.asInstanceOf[Join]
 
-      withPlan {
-        Join(
-          joined.left,
-          joined.right,
-          UsingJoin(JoinType(joinType), usingColumns.toIndexedSeq),
-          None,
-          JoinHint.NONE)
-      }
+    withPlan {
+      Join(
+        joined.left,
+        joined.right,
+        UsingJoin(JoinType(joinType), usingColumns.toIndexedSeq),
+        None,
+        JoinHint.NONE)
     }
+  }
 
   /**
    * Inner join with another `DataFrame`, using the given join expression.
@@ -1186,7 +1181,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = withOrigin {
+  def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
     withPlan {
       resolveSelfJoinCondition(right, Some(joinExprs), joinType)
     }
@@ -1202,10 +1197,8 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.1.0
    */
-  def crossJoin(right: Dataset[_]): DataFrame = withOrigin {
-    withPlan {
-      Join(logicalPlan, right.logicalPlan, joinType = Cross, None, JoinHint.NONE)
-    }
+  def crossJoin(right: Dataset[_]): DataFrame = withPlan {
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None, JoinHint.NONE)
   }
 
   /**
@@ -1229,28 +1222,27 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] =
-    withOrigin {
-      // Creates a Join node and resolve it first, to get join condition resolved, self-join
-      // resolved, etc.
-      val joined = sparkSession.sessionState.executePlan(
-        Join(
-          this.logicalPlan,
-          other.logicalPlan,
-          JoinType(joinType),
-          Some(condition.expr),
-          JoinHint.NONE)).analyzed.asInstanceOf[Join]
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+    // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
+    // etc.
+    val joined = sparkSession.sessionState.executePlan(
+      Join(
+        this.logicalPlan,
+        other.logicalPlan,
+        JoinType(joinType),
+        Some(condition.expr),
+        JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
-      implicit val tuple2Encoder: Encoder[(T, U)] =
-        ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
+    implicit val tuple2Encoder: Encoder[(T, U)] =
+      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
 
-      withTypedPlan(JoinWith.typedJoinWith(
-        joined,
-        sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
-        sparkSession.sessionState.analyzer.resolver,
-        this.exprEnc.isSerializedAsStructForTopLevel,
-        other.exprEnc.isSerializedAsStructForTopLevel))
-    }
+    withTypedPlan(JoinWith.typedJoinWith(
+      joined,
+      sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity,
+      sparkSession.sessionState.analyzer.resolver,
+      this.exprEnc.isSerializedAsStructForTopLevel,
+      other.exprEnc.isSerializedAsStructForTopLevel))
+  }
 
   /**
    * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair
@@ -1428,16 +1420,14 @@ class Dataset[T] private[sql](
    * @since 2.2.0
    */
   @scala.annotation.varargs
-  def hint(name: String, parameters: Any*): Dataset[T] = withOrigin {
-    withTypedPlan {
-      val exprs = parameters.map {
-        case c: Column => c.expr
-        case s: Symbol => Column(s.name).expr
-        case e: Expression => e
-        case literal => Literal(literal)
-      }
-      UnresolvedHint(name, exprs, logicalPlan)
-    }
+  def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
+    val exprs = parameters.map {
+      case c: Column => c.expr
+      case s: Symbol => Column(s.name).expr
+      case e: Expression => e
+      case literal => Literal(literal)
+    }.toSeq
+    UnresolvedHint(name, exprs, logicalPlan)
   }
 
   /**
@@ -1513,10 +1503,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def as(alias: String): Dataset[T] = withOrigin {
-    withTypedPlan {
-      SubqueryAlias(alias, logicalPlan)
-    }
+  def as(alias: String): Dataset[T] = withTypedPlan {
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**
@@ -1553,28 +1541,25 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = withOrigin {
-    withPlan {
-      val untypedCols = cols.map {
-        case typedCol: TypedColumn[_, _] =>
-          // Checks if a `TypedColumn` has been inserted with
-          // specific input type and schema by `withInputType`.
-          val needInputType = typedCol.expr.exists {
-            case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
-            case _ => false
-          }
+  def select(cols: Column*): DataFrame = withPlan {
+    val untypedCols = cols.map {
+      case typedCol: TypedColumn[_, _] =>
+        // Checks if a `TypedColumn` has been inserted with
+        // specific input type and schema by `withInputType`.
+        val needInputType = typedCol.expr.exists {
+          case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
+          case _ => false
+        }
 
-          if (!needInputType) {
-            typedCol
-          } else {
-            throw
-              QueryCompilationErrors.cannotPassTypedColumnInUntypedSelectError(typedCol.toString)
-          }
+        if (!needInputType) {
+          typedCol
+        } else {
+          throw QueryCompilationErrors.cannotPassTypedColumnInUntypedSelectError(typedCol.toString)
+        }
 
-        case other => other
-      }
-      Project(untypedCols.map(_.named), logicalPlan)
+      case other => other
     }
+    Project(untypedCols.map(_.named), logicalPlan)
   }
 
   /**
@@ -1591,9 +1576,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): DataFrame = withOrigin {
-    select((col +: cols).map(Column(_)) : _*)
-  }
+  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
@@ -1609,12 +1592,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def selectExpr(exprs: String*): DataFrame = withOrigin {
-    sparkSession.withActive {
-      select(exprs.map { expr =>
-        Column(sparkSession.sessionState.sqlParser.parseExpression(expr))
-      }: _*)
-    }
+  def selectExpr(exprs: String*): DataFrame = sparkSession.withActive {
+    select(exprs.map { expr =>
+      Column(sparkSession.sessionState.sqlParser.parseExpression(expr))
+    }: _*)
   }
 
   /**
@@ -1628,7 +1609,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = withOrigin {
+  def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
     implicit val encoder: ExpressionEncoder[U1] = c1.encoder
     val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
 
@@ -1712,10 +1693,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(condition: Column): Dataset[T] = withOrigin {
-    withTypedPlan {
-      Filter(condition.expr, logicalPlan)
-    }
+  def filter(condition: Column): Dataset[T] = withTypedPlan {
+    Filter(condition.expr, logicalPlan)
   }
 
   /**
@@ -2101,17 +2080,15 @@ class Dataset[T] private[sql](
       ids: Array[Column],
       values: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): DataFrame = withOrigin {
-    withPlan {
-      Unpivot(
-        Some(ids.map(_.named).toImmutableArraySeq),
-        Some(values.map(v => Seq(v.named)).toImmutableArraySeq),
-        None,
-        variableColumnName,
-        Seq(valueColumnName),
-        logicalPlan
-      )
-    }
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      Some(ids.map(_.named).toImmutableArraySeq),
+      Some(values.map(v => Seq(v.named)).toImmutableArraySeq),
+      None,
+      variableColumnName,
+      Seq(valueColumnName),
+      logicalPlan
+    )
   }
 
   /**
@@ -2134,17 +2111,15 @@ class Dataset[T] private[sql](
   def unpivot(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): DataFrame = withOrigin {
-    withPlan {
-      Unpivot(
-        Some(ids.map(_.named).toImmutableArraySeq),
-        None,
-        None,
-        variableColumnName,
-        Seq(valueColumnName),
-        logicalPlan
-      )
-    }
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      Some(ids.map(_.named).toImmutableArraySeq),
+      None,
+      None,
+      variableColumnName,
+      Seq(valueColumnName),
+      logicalPlan
+    )
   }
 
   /**
@@ -2261,10 +2236,8 @@ class Dataset[T] private[sql](
   * @since 3.0.0
   */
   @varargs
-  def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withOrigin {
-    withTypedPlan {
-      CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
-    }
+  def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
+    CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
   }
 
   /**
@@ -2301,10 +2274,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def limit(n: Int): Dataset[T] = withOrigin {
-    withTypedPlan {
-      Limit(Literal(n), logicalPlan)
-    }
+  def limit(n: Int): Dataset[T] = withTypedPlan {
+    Limit(Literal(n), logicalPlan)
   }
 
   /**
@@ -2313,10 +2284,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.4.0
    */
-  def offset(n: Int): Dataset[T] = withOrigin {
-    withTypedPlan {
-      Offset(Literal(n), logicalPlan)
-    }
+  def offset(n: Int): Dataset[T] = withTypedPlan {
+    Offset(Literal(n), logicalPlan)
   }
 
   // This breaks caching, but it's usually ok because it addresses a very specific use case:
@@ -2726,20 +2695,20 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
-  def explode[A <: Product : TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame =
-    withOrigin {
-      val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-      val convert = CatalystTypeConverters.createToCatalystConverter(elementSchema)
+  def explode[A <: Product : TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
+    val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
-      val rowFunction =
-        f.andThen(_.map(convert(_).asInstanceOf[InternalRow]))
-      val generator = UserDefinedGenerator(elementSchema, rowFunction, input.map(_.expr))
+    val convert = CatalystTypeConverters.createToCatalystConverter(elementSchema)
 
-      withPlan {
-        Generate(generator, unrequiredChildIndex = Nil, outer = false,
-          qualifier = None, generatorOutput = Nil, logicalPlan)
-      }
+    val rowFunction =
+      f.andThen(_.map(convert(_).asInstanceOf[InternalRow]))
+    val generator = UserDefinedGenerator(elementSchema, rowFunction, input.map(_.expr))
+
+    withPlan {
+      Generate(generator, unrequiredChildIndex = Nil, outer = false,
+        qualifier = None, generatorOutput = Nil, logicalPlan)
     }
+  }
 
   /**
    * (Scala-specific) Returns a new Dataset where a single column has been expanded to zero
@@ -2764,7 +2733,7 @@ class Dataset[T] private[sql](
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => IterableOnce[B])
-    : DataFrame = withOrigin {
+    : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     // TODO handle the metadata?
@@ -2921,14 +2890,14 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   @throws[AnalysisException]
-  def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = withOrigin {
+  def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
     val (colNames, newColNames) = colsMap.toSeq.unzip
     withColumnsRenamed(colNames, newColNames)
   }
 
   private[spark] def withColumnsRenamed(
     colNames: Seq[String],
-    newColNames: Seq[String]): DataFrame = withOrigin {
+    newColNames: Seq[String]): DataFrame = {
     require(colNames.size == newColNames.size,
       s"The size of existing column names: ${colNames.size} isn't equal to " +
         s"the size of new column names: ${newColNames.size}")
@@ -3103,10 +3072,8 @@ class Dataset[T] private[sql](
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(col: Column, cols: Column*): DataFrame = withOrigin {
-    withPlan {
-      DataFrameDropColumns((col +: cols).map(_.expr), logicalPlan)
-    }
+  def drop(col: Column, cols: Column*): DataFrame = withPlan {
+    DataFrameDropColumns((col +: cols).map(_.expr), logicalPlan)
   }
 
   /**
@@ -3137,11 +3104,9 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withOrigin {
-    withTypedPlan {
-      val groupCols = groupColsFromDropDuplicates(colNames)
-      Deduplicate(groupCols, logicalPlan)
-    }
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+    val groupCols = groupColsFromDropDuplicates(colNames)
+    Deduplicate(groupCols, logicalPlan)
   }
 
   /**
@@ -3218,12 +3183,10 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.5.0
    */
-  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withOrigin {
-    withTypedPlan {
-      val groupCols = groupColsFromDropDuplicates(colNames)
-      // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
-      DeduplicateWithinWatermark(groupCols, logicalPlan)
-    }
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+    val groupCols = groupColsFromDropDuplicates(colNames)
+    // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
+    DeduplicateWithinWatermark(groupCols, logicalPlan)
   }
 
   /**
@@ -3447,7 +3410,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(func: T => Boolean): Dataset[T] = withOrigin {
+  def filter(func: T => Boolean): Dataset[T] = {
     withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
@@ -3458,7 +3421,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def filter(func: FilterFunction[T]): Dataset[T] = withOrigin {
+  def filter(func: FilterFunction[T]): Dataset[T] = {
     withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
@@ -3469,7 +3432,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def map[U : Encoder](func: T => U): Dataset[U] = withOrigin {
+  def map[U : Encoder](func: T => U): Dataset[U] = {
     withTypedPlan {
       MapElements[T, U](func, logicalPlan)
     }
@@ -3482,7 +3445,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = withOrigin {
+  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     implicit val uEnc: Encoder[U] = encoder
     withTypedPlan(MapElements[T, U](func, logicalPlan))
   }
@@ -3645,9 +3608,8 @@ class Dataset[T] private[sql](
    * @group action
    * @since 3.0.0
    */
-  def tail(n: Int): Array[T] = withOrigin {
-    withAction("tail", withTypedPlan(Tail(Literal(n), logicalPlan)).queryExecution)(collectFromPlan)
-  }
+  def tail(n: Int): Array[T] = withAction(
+    "tail", withTypedPlan(Tail(Literal(n), logicalPlan)).queryExecution)(collectFromPlan)
 
   /**
    * Returns the first `n` rows in the Dataset as a list.
@@ -3711,10 +3673,8 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def count(): Long = withOrigin {
-    withAction("count", groupBy().count().queryExecution) { plan =>
-      plan.executeCollect().head.getLong(0)
-    }
+  def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
+    plan.executeCollect().head.getLong(0)
   }
 
   /**
@@ -3723,15 +3683,13 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def repartition(numPartitions: Int): Dataset[T] = withOrigin {
-    withTypedPlan {
-      Repartition(numPartitions, shuffle = true, logicalPlan)
-    }
+  def repartition(numPartitions: Int): Dataset[T] = withTypedPlan {
+    Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
   private def repartitionByExpression(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = withOrigin {
+      partitionExprs: Seq[Column]): Dataset[T] = {
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
     // However, we don't want to complicate the semantics of this API method.
     // Instead, let's give users a friendly error message, pointing them to the new method.
@@ -3776,7 +3734,7 @@ class Dataset[T] private[sql](
 
   private def repartitionByRange(
       numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = withOrigin {
+      partitionExprs: Seq[Column]): Dataset[T] = {
     require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
     val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
       case expr: SortOrder => expr
@@ -3848,10 +3806,8 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def coalesce(numPartitions: Int): Dataset[T] = withOrigin {
-    withTypedPlan {
-      Repartition(numPartitions, shuffle = false, logicalPlan)
-    }
+  def coalesce(numPartitions: Int): Dataset[T] = withTypedPlan {
+    Repartition(numPartitions, shuffle = false, logicalPlan)
   }
 
   /**
@@ -3995,10 +3951,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @throws[AnalysisException]
-  def createTempView(viewName: String): Unit = withOrigin {
-    withPlan {
-      createTempViewCommand(viewName, replace = false, global = false)
-    }
+  def createTempView(viewName: String): Unit = withPlan {
+    createTempViewCommand(viewName, replace = false, global = false)
   }
 
 
@@ -4010,10 +3964,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.0.0
    */
-  def createOrReplaceTempView(viewName: String): Unit = withOrigin {
-    withPlan {
-      createTempViewCommand(viewName, replace = true, global = false)
-    }
+  def createOrReplaceTempView(viewName: String): Unit = withPlan {
+    createTempViewCommand(viewName, replace = true, global = false)
   }
 
   /**
@@ -4031,10 +3983,8 @@ class Dataset[T] private[sql](
    * @since 2.1.0
    */
   @throws[AnalysisException]
-  def createGlobalTempView(viewName: String): Unit = withOrigin {
-    withPlan {
-      createTempViewCommand(viewName, replace = false, global = true)
-    }
+  def createGlobalTempView(viewName: String): Unit = withPlan {
+    createTempViewCommand(viewName, replace = false, global = true)
   }
 
   /**
@@ -4474,7 +4424,7 @@ class Dataset[T] private[sql](
     plan.executeCollect().map(fromRow)
   }
 
-  private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = withOrigin {
+  private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>

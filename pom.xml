@@ -32,7 +32,7 @@
   <url>https://spark.apache.org/</url>
   <licenses>
     <license>
-      <name>Apache 2.0 License</name>
+      <name>Apache-2.0</name>
       <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
       <distribution>repo</distribution>
     </license>
@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.6</asm.version>
     <slf4j.version>2.0.10</slf4j.version>
-    <log4j.version>2.22.0</log4j.version>
+    <log4j.version>2.22.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -128,7 +128,7 @@
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.9.1</zookeeper.version>
-    <curator.version>5.2.0</curator.version>
+    <curator.version>5.6.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
@@ -199,7 +199,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.14.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.11.1</commons-pool2.version>
+    <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
@@ -208,7 +208,7 @@
       Because it transitions Jakarta REST API from javax to jakarta package.
     -->
     <jersey.version>2.41</jersey.version>
-    <joda.version>2.12.5</joda.version>
+    <joda.version>2.12.6</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -235,7 +235,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.9.1</kubernetes-client.version>
+    <kubernetes-client.version>6.10.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 

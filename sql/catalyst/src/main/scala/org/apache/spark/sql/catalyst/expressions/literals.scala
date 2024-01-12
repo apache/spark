@@ -243,7 +243,9 @@ object Literal {
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]
             st.fields.map(_.dataType).zipWithIndex.forall {
-              case (fieldDataType, i) => doValidate(row.get(i, fieldDataType), fieldDataType)
+              case (fieldDataType, i) =>
+                // Do not need to validate null values.
+                row.isNullAt(i) || doValidate(row.get(i, fieldDataType), fieldDataType)
             }
           }
         case _ => false

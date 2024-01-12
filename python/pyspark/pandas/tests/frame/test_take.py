@@ -19,7 +19,7 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -72,61 +72,12 @@ class FrameTakeMixin:
             pdf.take([-1, -2], axis=1).sort_index(),
         )
 
-        # MultiIndex columns
-        columns = pd.MultiIndex.from_tuples([("A", "Z"), ("B", "X"), ("C", "C")])
-        psdf.columns = columns
-        pdf.columns = columns
 
-        # MultiIndex columns with axis=0 (default)
-        self.assert_eq(psdf.take([1, 2]).sort_index(), pdf.take([1, 2]).sort_index())
-        self.assert_eq(psdf.take([-1, -2]).sort_index(), pdf.take([-1, -2]).sort_index())
-        self.assert_eq(
-            psdf.take(range(100, 110)).sort_index(), pdf.take(range(100, 110)).sort_index()
-        )
-        self.assert_eq(
-            psdf.take(range(-110, -100)).sort_index(), pdf.take(range(-110, -100)).sort_index()
-        )
-        self.assert_eq(
-            psdf.take([10, 100, 1000, 10000]).sort_index(),
-            pdf.take([10, 100, 1000, 10000]).sort_index(),
-        )
-        self.assert_eq(
-            psdf.take([-10, -100, -1000, -10000]).sort_index(),
-            pdf.take([-10, -100, -1000, -10000]).sort_index(),
-        )
-
-        # axis=1
-        self.assert_eq(
-            psdf.take([1, 2], axis=1).sort_index(), pdf.take([1, 2], axis=1).sort_index()
-        )
-        self.assert_eq(
-            psdf.take([-1, -2], axis=1).sort_index(), pdf.take([-1, -2], axis=1).sort_index()
-        )
-        self.assert_eq(
-            psdf.take(range(1, 3), axis=1).sort_index(),
-            pdf.take(range(1, 3), axis=1).sort_index(),
-        )
-        self.assert_eq(
-            psdf.take(range(-1, -3), axis=1).sort_index(),
-            pdf.take(range(-1, -3), axis=1).sort_index(),
-        )
-        self.assert_eq(
-            psdf.take([2, 1], axis=1).sort_index(),
-            pdf.take([2, 1], axis=1).sort_index(),
-        )
-        self.assert_eq(
-            psdf.take([-1, -2], axis=1).sort_index(),
-            pdf.take([-1, -2], axis=1).sort_index(),
-        )
-
-        # Checking the type of indices.
-        self.assertRaises(TypeError, lambda: psdf.take(1))
-        self.assertRaises(TypeError, lambda: psdf.take("1"))
-        self.assertRaises(TypeError, lambda: psdf.take({1, 2}))
-        self.assertRaises(TypeError, lambda: psdf.take({1: None, 2: None}))
-
-
-class FrameTakeTests(FrameTakeMixin, ComparisonTestBase, SQLTestUtils):
+class FrameTakeTests(
+    FrameTakeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -16,12 +16,13 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.EOFException
+import java.io.{EOFException, File}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
+import javax.xml.stream.XMLStreamException
 
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
@@ -761,7 +762,7 @@ class XmlSuite
       .collect()
 
     assert(results(0) === Row("alice", "35"))
-    assert(results(1) === Row("bob", "    "))
+    assert(results(1) === Row("bob", ""))
     assert(results(2) === Row("coc", "24"))
   }
 
@@ -847,7 +848,7 @@ class XmlSuite
     assert(result(0) === Row(Row(null)))
     assert(result(1) === Row(Row(Row(null, null))))
     assert(result(2) === Row(Row(Row("E", null))))
-    assert(result(3) === Row(Row(Row("E", " "))))
+    assert(result(3) === Row(Row(Row("E", ""))))
     assert(result(4) === Row(Row(Row("E", ""))))
   }
 
@@ -1177,8 +1178,8 @@ class XmlSuite
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children.xml"))
     val mixedRow = mixedDF.head()
-    assert(mixedRow.getAs[Row](0) === Row(List(" issue ", " text ignored "), " lorem "))
-    assert(mixedRow.getString(1) === " ipsum ")
+    assert(mixedRow.getAs[Row](0) === Row(List("issue", "text ignored"), "lorem"))
+    assert(mixedRow.getString(1) === "ipsum")
   }
 
   test("test mixed text and complex element children") {
@@ -1186,9 +1187,9 @@ class XmlSuite
       .option("rowTag", "root")
       .option("inferSchema", true)
       .xml(getTestResourcePath(resDir + "mixed_children_2.xml"))
-    assert(mixedDF.select("foo.bar").head().getString(0) === " lorem ")
+    assert(mixedDF.select("foo.bar").head().getString(0) === "lorem")
     assert(mixedDF.select("foo.baz.bing").head().getLong(0) === 2)
-    assert(mixedDF.select("missing").head().getString(0) === " ipsum ")
+    assert(mixedDF.select("missing").head().getString(0) === "ipsum")
   }
 
   test("test XSD validation") {
@@ -1752,7 +1753,7 @@ class XmlSuite
       assert(result(1).getAs[String]("_attr") == "attr1"
         && result(1).getAs[String]("_VALUE") == "value2")
       // comments aren't included in valueTag
-      assert(result(2).getAs[String]("_VALUE") == "\n        value3\n        ")
+      assert(result(2).getAs[String]("_VALUE") == "value3")
     }
   }
 
@@ -2827,5 +2828,56 @@ class XmlSuite
         }
       }
     }
+  }
+
+  test("XML Validate Name") {
+    val data = Seq(Row("Random String"))
+
+    def checkValidation(fieldName: String,
+                        errorMsg: String,
+                        validateName: Boolean = true): Unit = {
+      val schema = StructType(Seq(StructField(fieldName, StringType)))
+      val df = spark.createDataFrame(data.asJava, schema)
+
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        validateName match {
+          case false =>
+            df.write
+              .option("rowTag", "ROW")
+              .option("validateName", false)
+              .option("declaration", "")
+              .option("indent", "")
+              .mode(SaveMode.Overwrite)
+              .xml(path)
+            // read file back and check its content
+            val xmlFile = new File(path).listFiles()
+              .filter(_.isFile)
+              .filter(_.getName.endsWith("xml")).head
+            val actualContent = Files.readString(xmlFile.toPath).replaceAll("\\n", "")
+            assert(actualContent ===
+              s"<${XmlOptions.DEFAULT_ROOT_TAG}><ROW>" +
+                s"<$fieldName>${data.head.getString(0)}</$fieldName>" +
+                s"</ROW></${XmlOptions.DEFAULT_ROOT_TAG}>")
+
+          case true =>
+            val e = intercept[SparkException] {
+              df.write
+                .option("rowTag", "ROW")
+                .mode(SaveMode.Overwrite)
+                .xml(path)
+            }
+
+            assert(e.getCause.getCause.isInstanceOf[XMLStreamException])
+            assert(e.getMessage.contains(errorMsg))
+        }
+      }
+    }
+
+    checkValidation("", "Illegal to pass empty name")
+    checkValidation(" ", "Illegal first name character ' '")
+    checkValidation("1field", "Illegal first name character '1'")
+    checkValidation("field name with space", "Illegal name character ' '")
+    checkValidation("field", "", false)
   }
 }
