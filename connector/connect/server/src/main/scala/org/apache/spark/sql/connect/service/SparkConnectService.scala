@@ -31,7 +31,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkEnv, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
@@ -376,8 +376,13 @@ object SparkConnectService extends Logging {
     uiTab.foreach(_.detach())
   }
 
-  def extractErrorMessage(st: Throwable): String = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
+  def extractErrorMessage(st: Throwable, format: ErrorMessageFormat.Value): String = {
+    val message = st match {
+      case e: SparkThrowable =>
+        SparkThrowableHelper.getMessage(e, format)
+      case _ =>
+        StringUtils.abbreviate(st.getMessage, 2048)
+    }
     convertNullString(message)
   }
 

@@ -33,7 +33,7 @@ import org.mockito.Mockito.when
 import org.scalatest.Tag
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkException, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.CreateDataFrameViewCommand
 import org.apache.spark.internal.Logging
@@ -64,6 +64,14 @@ class SparkConnectServiceSuite
 
   private def sparkSessionHolder = SessionHolder.forTesting(spark)
   private def DEFAULT_UUID = UUID.fromString("89ea6117-1f45-4c03-ae27-f47c6aded093")
+
+  test("extractErrorMessage works with SparkThrowable") {
+    val e = new SparkException("test")
+    val message = SparkConnectService.extractErrorMessage(e, ErrorMessageFormat.STANDARD)
+    assert(message.startsWith("{"))
+    assert(message.endsWith("}"))
+    assert(message.contains(""""messageTemplate" : "test""""))
+  }
 
   test("Test schema in analyze response") {
     withTable("test") {

@@ -35,7 +35,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
+import org.apache.spark.{ErrorMessageFormat, SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
@@ -218,7 +218,9 @@ private[connect] object ErrorUtils extends Logging {
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
       .addDetails(ProtoAny.pack(withStackTrace.build()))
-      .setMessage(SparkConnectService.extractErrorMessage(st))
+      .setMessage(SparkConnectService.extractErrorMessage(st, sessionHolderOpt.map(_.session.sessionState.conf.errorMessageFormat).getOrElse(
+        ErrorMessageFormat.withName(SparkEnv.get.conf.get(SQLConf.ERROR_MESSAGE_FORMAT))
+      )))
       .build()
   }
 
