@@ -4352,6 +4352,15 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
 
+  val EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES =
+    buildConf("spark.sql.optimizer.excludeSubqueryRefsFromRemoveRedundantAliases.enabled")
+      .internal()
+      .doc("When true, exclude the references from the subquery expressions (in, exists, etc.) " +
+        s"while removing redundant aliases.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
