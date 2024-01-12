@@ -5655,14 +5655,21 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     settings.synchronized { settings.asScala.toMap }
 
   /**
-   * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
-   * definition contains key, defaultValue and doc.
+   * Return all the public configuration definitions that have been defined in [[SQLConf]].
    */
-  def getAllDefinedConfs: Seq[(String, String, String, String)] = {
+  def getAllDefinedConfs: Seq[(String, String, String, String, Set[String])] = {
     loadDefinedConfs()
     getConfigEntries().asScala.filter(_.isPublic).map { entry =>
-      val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
-      (entry.key, displayValue, entry.doc, entry.version)
+      val displayValue =
+        // We get the display value in this way rather than call getConfString(entry.key)
+        // because we want the default _definition_ and not the computed value.
+        //   e.g. `<undefined>` instead of `null`
+        //   e.g. `<value of spark.buffer.size>` instead of `65536`
+        Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
+      val staticOrRuntime =
+        if (SQLConf.isStaticConfigKey(entry.key)) "__sql_static" else "__sql_runtime"
+      val documentationGroups = entry.documentationGroups + staticOrRuntime
+      (entry.key, displayValue, entry.doc, entry.version, documentationGroups)
     }.toSeq
   }
 
