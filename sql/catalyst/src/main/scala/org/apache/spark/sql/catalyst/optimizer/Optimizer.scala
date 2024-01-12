@@ -584,10 +584,20 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         }
 
       case _ =>
+        val subQueryAttributes = if (conf.getConf(SQLConf
+          .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
+          // Collect the references for all the subquery expressions in the plan.
+          AttributeSet.fromAttributeSets(plan.expressions.collect {
+            case e: SubqueryExpression => e.references
+          })
+        } else {
+          AttributeSet.empty
+        }
+
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
         val newNode = plan.mapChildren { child =>
-          val newChild = removeRedundantAliases(child, excluded)
+          val newChild = removeRedundantAliases(child, excluded ++ subQueryAttributes)
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
