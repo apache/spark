@@ -45,11 +45,6 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     (lock.readLock(), lock.writeLock())
   }
 
-  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-  addResourceProfile(defaultProfile)
-
-  def defaultResourceProfile: ResourceProfile = defaultProfile
-
   private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
   private val isYarn = master.isDefined && master.get.equals("yarn")
@@ -59,6 +54,11 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     )
   private val notRunningUnitTests = !isTesting
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
+
+  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  addResourceProfile(defaultProfile)
+
+  def defaultResourceProfile: ResourceProfile = defaultProfile
 
   /**
    * If we use anything except the default profile, it's supported on YARN, Kubernetes and
