@@ -190,7 +190,7 @@ class FileStreamSource(
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = takeFilesUntilMax(newFiles, files.maxBytes())
         val usFilesSize = usFiles
-          .foldLeft(0L) { case (x, NewFileEntry(_, size, _)) => Math.addExact(x, size) }
+          .foldLeft(0L) { case (sum, NewFileEntry(_, size, _)) => Math.addExact(sum, size) }
         if (usFilesSize < files.maxBytes() * DISCARD_UNSEEN_FILES_RATIO) {
           // Discard unselected files if the total size of files is smaller than threshold.
           // This is to avoid the case when the next batch would have too small of a size of
