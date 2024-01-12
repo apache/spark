@@ -138,7 +138,7 @@ class FileStreamSource(
     var totalSize = 0L
     val (bFiles, usFiles) = files.span { case NewFileEntry(_, size, _) =>
       idx += 1
-      totalSize += size
+      totalSize = Math.addExact(totalSize, size)
       idx == 1 || totalSize <= maxSize
     }
     (bFiles, usFiles)
@@ -189,7 +189,9 @@ class FileStreamSource(
       case files: ReadMaxBytes if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = takeFilesUntilMax(newFiles, files.maxBytes())
-        if (usFiles.map(_.size).sum < files.maxBytes() * DISCARD_UNSEEN_FILES_RATIO) {
+        val usFilesSize = usFiles
+          .foldLeft(0L) { case (x, NewFileEntry(_, size, _)) => Math.addExact(x, size) }
+        if (usFilesSize < files.maxBytes() * DISCARD_UNSEEN_FILES_RATIO) {
           // Discard unselected files if the total size of files is smaller than threshold.
           // This is to avoid the case when the next batch would have too small of a size of
           // files to read whereas there're new files available.

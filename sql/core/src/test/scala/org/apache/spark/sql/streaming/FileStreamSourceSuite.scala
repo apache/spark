@@ -1210,7 +1210,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
       /** Check how many batches have executed since the last time this check was made */
       var lastBatchId = -1L
-
       def checkNumBatchesSinceLastCheck(numBatches: Int): Unit = {
         require(lastBatchId >= 0)
         assert(memorySink.latestBatchId.get === lastBatchId + numBatches)
@@ -1350,7 +1349,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           .option("checkpointLocation", checkpoint)
           .start(targetDir)
       }
-
       val q = startQuery()
 
       try {
@@ -1374,7 +1372,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         q2.stop()
       }
     }
-
   }
 
   test("SPARK-36533: Trigger.AvailableNow - multiple queries with checkpoint") {
