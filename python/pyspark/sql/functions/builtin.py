@@ -18513,46 +18513,75 @@ def aes_encrypt(
 
     Examples
     --------
+
+    Example 1:
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(
     ...     "Spark", "abcdefghijklmnop12345678ABCDEFGH", "GCM", "DEFAULT",
     ...     "000000000000000000000000", "This is an AAD mixed into the input",)],
     ...     ["input", "key", "mode", "padding", "iv", "aad"]
     ... )
-    >>> df.select(base64(aes_encrypt(
-    ...     df.input, df.key, df.mode, df.padding, to_binary(df.iv, lit("hex")), df.aad)
-    ... ).alias('r')).collect()
-    [Row(r='AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4')]
+    >>> df.select(sf.base64(sf.aes_encrypt(
+    ...     df.input, df.key, df.mode, df.padding, sf.to_binary(df.iv, sf.lit("hex")), df.aad)
+    ... )).show(truncate=False)
+    +-----------------------------------------------------------------------+
+    |base64(aes_encrypt(input, key, mode, padding, to_binary(iv, hex), aad))|
+    +-----------------------------------------------------------------------+
+    |AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4                           |
+    +-----------------------------------------------------------------------+
 
-    >>> df.select(base64(aes_encrypt(
-    ...     df.input, df.key, df.mode, df.padding, to_binary(df.iv, lit("hex")))
-    ... ).alias('r')).collect()
-    [Row(r='AAAAAAAAAAAAAAAAQiYi+sRNYDAOTjdSEcYBFsAWPL1f')]
+    Example 2:
 
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(
+    ...     "Spark", "abcdefghijklmnop12345678ABCDEFGH", "GCM", "DEFAULT",
+    ...     "000000000000000000000000", "This is an AAD mixed into the input",)],
+    ...     ["input", "key", "mode", "padding", "iv", "aad"]
+    ... )
+    >>> df.select(sf.base64(sf.aes_encrypt(
+    ...     df.input, df.key, df.mode, df.padding, sf.to_binary(df.iv, sf.lit("hex")))
+    ... )).show(truncate=False)
+    +--------------------------------------------------------------------+
+    |base64(aes_encrypt(input, key, mode, padding, to_binary(iv, hex), ))|
+    +--------------------------------------------------------------------+
+    |AAAAAAAAAAAAAAAAQiYi+sRNYDAOTjdSEcYBFsAWPL1f                        |
+    +--------------------------------------------------------------------+
+
+    Example 3:
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(
     ...     "Spark SQL", "1234567890abcdef", "ECB", "PKCS",)],
     ...     ["input", "key", "mode", "padding"]
     ... )
-    >>> df.select(aes_decrypt(aes_encrypt(df.input, df.key, df.mode, df.padding),
-    ...     df.key, df.mode, df.padding).alias('r')
-    ... ).collect()
+    >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode, df.padding),
+    ...     df.key, df.mode, df.padding)
+    ... ).show(truncate=False)
     [Row(r=bytearray(b'Spark SQL'))]
 
+    Example 4:
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(
     ...     "Spark SQL", "0000111122223333", "ECB",)],
     ...     ["input", "key", "mode"]
     ... )
-    >>> df.select(aes_decrypt(aes_encrypt(df.input, df.key, df.mode),
-    ...     df.key, df.mode).alias('r')
-    ... ).collect()
+    >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode),
+    ...     df.key, df.mode)
+    ... ).show(truncate=False)
     [Row(r=bytearray(b'Spark SQL'))]
 
+    Example 5:
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(
     ...     "Spark SQL", "abcdefghijklmnop",)],
     ...     ["input", "key"]
     ... )
-    >>> df.select(aes_decrypt(
-    ...     unbase64(base64(aes_encrypt(df.input, df.key))), df.key
-    ... ).cast("STRING").alias('r')).collect()
+    >>> df.select(sf.aes_decrypt(
+    ...     sf.unbase64(sf.base64(sf.aes_encrypt(df.input, df.key))), df.key
+    ... ).cast("STRING")).show(truncate=False)
     [Row(r='Spark SQL')]
     """
     _mode = lit("GCM") if mode is None else mode
