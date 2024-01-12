@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.util.{Collections, IdentityHashMap}
 import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
@@ -287,6 +288,19 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.numTasks should be {2}
     stageInfo.rddInfos.size should be {2}
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+  }
+
+  test("SPARK-46383: Track TaskInfo objects") {
+    // Test that the same TaskInfo object is sent to the `DAGScheduler` in the `onTaskStart` and
+    // `onTaskEnd` events.
+    val conf = new SparkConf().set(DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
+    sc = new SparkContext("local", "SparkListenerSuite", conf)
+    val listener = new SaveActiveTaskInfos
+    sc.addSparkListener(listener)
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    sc.runJob(rdd1, (items: Iterator[Int]) => items.size, Seq(0, 1))
+    sc.listenerBus.waitUntilEmpty()
+    listener.taskInfos.size should be { 0 }
   }
 
   test("local metrics") {
@@ -640,6 +654,27 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     override def onStageCompleted(stage: SparkListenerStageCompleted): Unit = {
       stageInfos(stage.stageInfo) = taskInfoMetrics.toSeq
       taskInfoMetrics = mutable.Buffer.empty
+    }
+  }
+
+  /**
+   * A simple listener that tracks task infos for all active tasks.
+   */
+  private class SaveActiveTaskInfos extends SparkListener {
+    // Use a set based on IdentityHashMap instead of a HashSet to track unique references of
+    // TaskInfo objects.
+    val taskInfos = Collections.newSetFromMap[TaskInfo](new IdentityHashMap)
+
+    override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+      val info = taskStart.taskInfo
+      if (info != null) {
+        taskInfos.add(info)
+      }
+    }
+
+    override def onTaskEnd(task: SparkListenerTaskEnd): Unit = {
+      val info = task.taskInfo
+      taskInfos.remove(info)
     }
   }
 
