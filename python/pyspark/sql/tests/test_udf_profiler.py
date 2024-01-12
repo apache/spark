@@ -153,6 +153,10 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_perf_profiler_udf_with_arrow(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             _do_computation(self.spark, use_arrow=True)
