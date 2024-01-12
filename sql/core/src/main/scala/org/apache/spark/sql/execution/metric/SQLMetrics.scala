@@ -90,7 +90,7 @@ class SQLMetric(
 
   // _value may be uninitialized, in many cases being -1. We should not expose it to the user
   // and instead return 0.
-  override def value: Long = if (isZero) 0 else _value
+  override def value: Long = if (_value < 0) 0 else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
