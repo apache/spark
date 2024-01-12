@@ -30,21 +30,36 @@ class AlterTableDropPartitionSuite
 
   test("hive client calls") {
     Seq(false, true).foreach { statsOn =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> statsOn.toString) {
-        withNamespaceAndTable("ns", "tbl") { t =>
-          sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
-          sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
-          sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
-          sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
-          checkHiveClientCalls(expected = if (statsOn) 26 else 18) {
-            sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
-          }
-          checkHiveClientCalls(expected = if (statsOn) 31 else 18) {
-            sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
-          }
-          sql(s"CACHE TABLE $t")
-          checkHiveClientCalls(expected = if (statsOn) 31 else 18) {
-            sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+      Seq(false, true).foreach { dropPartitionsInBatch =>
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> statsOn.toString,
+          SQLConf.DROP_PARTITION_IN_BATCH_ENABLED.key -> dropPartitionsInBatch.toString) {
+          withNamespaceAndTable("ns", "tbl") { t =>
+            sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+            sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+            sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+            sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
+            checkHiveClientCalls(expected =
+              if (statsOn) {
+                if (dropPartitionsInBatch) 25 else 26
+              } else {
+                if (dropPartitionsInBatch) 17 else 18}) {
+              sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
+            }
+            checkHiveClientCalls(expected =
+              if (statsOn) {
+                if (dropPartitionsInBatch) 30 else 31
+              } else {
+                if (dropPartitionsInBatch) 17 else 18}) {
+              sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+            }
+            sql(s"CACHE TABLE $t")
+            checkHiveClientCalls(expected =
+              if (statsOn) {
+                if (dropPartitionsInBatch) 30 else 31
+              } else {
+                if (dropPartitionsInBatch) 17 else 18}) {
+              sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+            }
           }
         }
       }
