@@ -218,9 +218,12 @@ private[connect] object ErrorUtils extends Logging {
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
       .addDetails(ProtoAny.pack(withStackTrace.build()))
-      .setMessage(SparkConnectService.extractErrorMessage(st, sessionHolderOpt.map(_.session.sessionState.conf.errorMessageFormat).getOrElse(
-        ErrorMessageFormat.withName(SparkEnv.get.conf.get(SQLConf.ERROR_MESSAGE_FORMAT))
-      )))
+      .setMessage(SparkConnectService.extractErrorMessage(
+        st,
+        sessionHolderOpt
+          .map(_.session.sessionState.conf.errorMessageFormat)
+          .getOrElse(
+            ErrorMessageFormat.withName(SparkEnv.get.conf.get(SQLConf.ERROR_MESSAGE_FORMAT)))))
       .build()
   }
 
