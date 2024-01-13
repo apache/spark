@@ -687,7 +687,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     }
   }
 
-  test("metadata column") {
+  test("partition_id column") {
     withTempDir { tempDir =>
       import testImplicits._
       val stream = MemoryStream[Int]
@@ -735,7 +735,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     }
   }
 
-  test("metadata column with stream-stream join") {
+  test("partition_id column with stream-stream join") {
     val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
 
     withTempDir { tempDir =>
