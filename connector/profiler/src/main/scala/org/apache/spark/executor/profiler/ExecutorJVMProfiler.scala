@@ -67,10 +67,9 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
           logInfo("Executor JVM profiling started.")
           running = true
           startWriting()
-        }
-        )
+        })
       } catch {
-        case e@(_: IllegalArgumentException | _: IllegalStateException | _: IOException) =>
+        case e @ (_: IllegalArgumentException | _: IllegalStateException | _: IOException) =>
           logError("JVM profiling aborted. Exception occurred in profiler native code: ", e)
         case e: Exception => logWarning("Executor JVM profiling aborted due to exception: ", e)
       }
@@ -112,9 +111,12 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
         logInfo(s"Copying executor profiling file to $profileOutputFile")
         inputStream = new BufferedInputStream(new FileInputStream(s"$profilerLocalDir/profile.jfr"))
         threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("profilerOutputThread")
-        threadpool.scheduleWithFixedDelay(new Runnable() {
-          override def run(): Unit = writeChunk(false)
-        }, writeInterval, writeInterval,
+        threadpool.scheduleWithFixedDelay(
+          new Runnable() {
+            override def run(): Unit = writeChunk(false)
+          },
+          writeInterval,
+          writeInterval,
           TimeUnit.SECONDS)
         writing = true
       } catch {
@@ -154,7 +156,7 @@ private[spark] class ExecutorJVMProfiler(conf: SparkConf, executorId: String) ex
       }
     } catch {
       case e: IOException => logError("Exception occurred while writing some profiler output: ", e)
-      case e@(_: IllegalArgumentException | _: IllegalStateException) =>
+      case e @ (_: IllegalArgumentException | _: IllegalStateException) =>
         logError("Some profiler output not written." +
           " Exception occurred in profiler native code: ", e)
       case e: Exception => logError("Some profiler output not written. Unexpected exception: ", e)
