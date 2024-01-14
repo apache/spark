@@ -48,7 +48,7 @@ private[spark] class BroadcastManager(
       if (!initialized) {
         broadcastFactory = new TorrentBroadcastFactory
         broadcastFactory.initialize(isDriver, conf)
-        cleanAfterExecutionEnabled = conf.get(config.CLEAN_BROADCAST_AFTER_EXECUTION_ENABLED)
+        cleanAfterExecutionEnabled = conf.get(config.CLEAN_BROADCAST_AFTER_EXECUTION_END_ENABLED)
         initialized = true
       }
     }
