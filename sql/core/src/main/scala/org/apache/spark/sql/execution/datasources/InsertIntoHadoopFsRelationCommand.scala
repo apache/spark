@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
@@ -94,6 +94,7 @@ case class InsertIntoHadoopFsRelationCommand(
       catalogTable.get.tracksPartitionsInCatalog
 
     var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
+    var existingCustomPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
     var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
     var matchingPartitions: Seq[CatalogTablePartition] = Seq.empty
 
@@ -103,8 +104,15 @@ case class InsertIntoHadoopFsRelationCommand(
       matchingPartitions = sparkSession.sessionState.catalog.listPartitions(
         catalogTable.get.identifier, Some(staticPartitions))
       initialMatchingPartitions = matchingPartitions.map(_.spec)
-      customPartitionLocations = getCustomPartitionLocations(
+      existingCustomPartitionLocations = getCustomPartitionLocations(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
+      customPartitionLocations = if (mode == SaveMode.Overwrite) {
+        // dynamic partition overwrite should create new partitions under table loc and
+        // drop old partition from custom location
+        customPartitionLocations
+      } else {
+        existingCustomPartitionLocations
+      }
     }
 
     val jobId = java.util.UUID.randomUUID().toString
@@ -128,7 +136,8 @@ case class InsertIntoHadoopFsRelationCommand(
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
-            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+            deleteMatchingPartitions(
+              sparkSession, fs, qualifiedOutputPath, existingCustomPartitionLocations, committer)
             true
           }
         case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -160,6 +169,29 @@ case class InsertIntoHadoopFsRelationCommand(
                 catalogTable.get.identifier, deletedPartitions.toSeq,
                 ifExists = true, purge = false,
                 retainData = true /* already deleted */).run(sparkSession)
+            }
+          }
+          if (mode == SaveMode.Overwrite) {
+            val movedPartitions = initialMatchingPartitions.toSet & updatedPartitions &
+                existingCustomPartitionLocations.keySet
+            if (dynamicPartitionOverwrite) {
+              // drop and add partitions because old data should be deleted
+              AlterTableDropPartitionCommand(
+                catalogTable.get.identifier, movedPartitions.toSeq,
+                ifExists = true, purge = true,
+                retainData = false).run(sparkSession)
+              AlterTableAddPartitionCommand(
+                catalogTable.get.identifier, movedPartitions.toSeq.map(p => (p, None)),
+                ifNotExists = true).run(sparkSession)
+            } else {
+              // for other overwrite, old data has already deleted, so just set location
+              movedPartitions.foreach(mp => {
+                val tableLoc = catalogTable.get.location
+                val partDir = ExternalCatalogUtils.generatePartitionPath(
+                  mp, catalogTable.get.partitionColumnNames, new Path(tableLoc))
+                AlterTableSetLocationCommand(
+                  catalogTable.get.identifier, Some(mp), partDir.toString).run(sparkSession)
+              })
             }
           }
         }
@@ -222,6 +254,7 @@ case class InsertIntoHadoopFsRelationCommand(
    * locations are also cleared based on the custom locations map given to this class.
    */
   private def deleteMatchingPartitions(
+      sparkSession: SparkSession,
       fs: FileSystem,
       qualifiedOutputPath: Path,
       customPartitionLocations: Map[TablePartitionSpec, String],
@@ -244,7 +277,12 @@ case class InsertIntoHadoopFsRelationCommand(
         (staticPartitions.toSet -- spec).isEmpty,
         "Custom partition location did not match static partitioning keys")
       val path = new Path(customLoc)
-      if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
+      val customFs = if (customLoc.startsWith(fs.getUri.toString + "/")) {
+        fs
+      } else {
+        path.getFileSystem(sparkSession.sessionState.newHadoopConfWithOptions(options))
+      }
+      if (customFs.exists(path) && !committer.deleteWithJob(customFs, path, true)) {
         throw QueryExecutionErrors.cannotClearPartitionDirectoryError(path)
       }
     }
@@ -261,7 +299,7 @@ case class InsertIntoHadoopFsRelationCommand(
       fs: FileSystem,
       table: CatalogTable,
       qualifiedOutputPath: Path,
-      partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
+      partitions: Seq[CatalogTablePartition]) = {
     partitions.flatMap { p =>
       val defaultLocation = qualifiedOutputPath.suffix(
         "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
