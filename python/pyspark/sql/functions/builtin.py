@@ -15985,7 +15985,8 @@ def map_entries(col: "ColumnOrName") -> Column:
     Example 2: Extracting entries from a map with complex keys and values
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.sql("SELECT map(array(1, 2), array('a', 'b'), array(3, 4), array('c', 'd')) as data")
+    >>> df = spark.sql("SELECT map(array(1, 2), array('a', 'b'), "
+    ...   "array(3, 4), array('c', 'd')) as data")
     >>> df.select(sf.sort_array(sf.map_entries("data"))).show(truncate=False)
     +------------------------------------+
     |sort_array(map_entries(data), true) |
