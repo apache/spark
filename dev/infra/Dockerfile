@@ -33,7 +33,7 @@ RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | 
 
 RUN apt -y install /tmp/apache-arrow.deb
 RUN apt -y update
-RUN apt -y install libarrow-dev libarrow-python-dev
+RUN apt-get install -y libarrow-dev libparquet-dev
 
 RUN apt-get update && apt-get install -y \
     build-essential \
