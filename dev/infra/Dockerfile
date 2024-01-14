@@ -24,7 +24,17 @@ ENV FULL_REFRESH_DATE 20231117
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
 
+RUN apt-get update && apt-get install -y -V \
+    ca-certificates \
+    lsb-release \
+    wget
+
+RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb -O /tmp/apache-arrow.deb
+
 RUN apt-get update && apt-get install -y \
+    /tmp/apache-arrow.deb \
+    libarrow-dev \
+    libarrow-python-dev \
     build-essential \
     ca-certificates \
     curl \
