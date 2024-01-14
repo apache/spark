@@ -330,15 +330,16 @@ class PandasUDFTestsMixin:
             assert s.iloc[0] == datetime.timedelta(microseconds=123)
             return s
 
-        df = self.spark.createDataFrame(
-            [(datetime.timedelta(microseconds=123),)], schema="td interval day to second"
-        ).select(noop("td").alias("td"))
-
-        df.select(
-            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.td.cast("string"))
-        ).collect()
-        self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
-        self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": "true"}):
+            df = self.spark.createDataFrame(
+                [(datetime.timedelta(microseconds=123),)], schema="td interval day to second"
+            ).select(noop("td").alias("td"))
+            df.select(
+                assert_true(
+                    lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.td.cast("string"))
+            ).collect()
+            self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
+            self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
