@@ -2032,7 +2032,7 @@ package object config {
           " the sql execution will be destroyed. This can reclaim memory as quickly as possible.")
         .version("4.0.0")
         .booleanConf
-        .createWithDefault(false);
+        .createWithDefault(true);
 
   private[spark] val RDD_COMPRESS = ConfigBuilder("spark.rdd.compress")
     .doc("Whether to compress serialized RDD partitions " +
