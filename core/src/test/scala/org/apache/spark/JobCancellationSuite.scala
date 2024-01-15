@@ -547,7 +547,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     sc.addSparkListener(new SparkListener {
       override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
-        // release taskCancelledSemaphore when cancelTasks event has been posted
+        // release taskCancelledSemaphore when killAllTaskAttempts event has been posted
         if (stageCompleted.stageInfo.stageId == 1) {
           taskCancelledSemaphore.release(numElements)
         }

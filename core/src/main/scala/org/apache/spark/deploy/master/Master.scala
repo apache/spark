@@ -509,6 +509,9 @@ private[deploy] class Master(
         workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state))
 
+    case RequestReadyz =>
+      context.reply(state != RecoveryState.STANDBY)
+
     case BoundPortsRequest =>
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
 
