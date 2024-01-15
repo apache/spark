@@ -460,9 +460,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .connectionString(s"sc://localhost:${server.getPort}")
       .interceptor(new ClientInterceptor {
         override def interceptCall[ReqT, RespT](
-                                                 methodDescriptor: MethodDescriptor[ReqT, RespT],
-                                                 callOptions: CallOptions,
-                                                 channel: Channel): ClientCall[ReqT, RespT] = {
+            methodDescriptor: MethodDescriptor[ReqT, RespT],
+            callOptions: CallOptions,
+            channel: Channel): ClientCall[ReqT, RespT] = {
           attempt += 1;
           if (attempt <= 3) {
             throw Status.UNAVAILABLE.withDescription("").asRuntimeException()
