@@ -299,7 +299,7 @@ case class InsertIntoHadoopFsRelationCommand(
       fs: FileSystem,
       table: CatalogTable,
       qualifiedOutputPath: Path,
-      partitions: Seq[CatalogTablePartition]) = {
+      partitions: Seq[CatalogTablePartition]): Map[TablePartitionSpec, String] = {
     partitions.flatMap { p =>
       val defaultLocation = qualifiedOutputPath.suffix(
         "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
