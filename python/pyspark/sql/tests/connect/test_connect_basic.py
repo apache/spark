@@ -573,6 +573,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1["*"]).schema
 
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            # column 'a has been replaced
+            cdf3 = cdf1.withColumn("a", CF.lit(0))
+            cdf3.select(cdf1["*"]).schema
+
         # Can not find the target plan node by plan id
         with self.assertRaisesRegex(
             AnalysisException,

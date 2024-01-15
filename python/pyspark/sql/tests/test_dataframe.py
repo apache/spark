@@ -79,13 +79,28 @@ class DataFrameTestsMixin:
         self.assertEqual(df.select(df1["*"]).columns, ["a"])
         self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
 
+        df = df1.join(df2).withColumn("c", lit(0))
+        self.assertEqual(df.columns, ["a", "a", "b", "c"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+
         df = df1.join(df2, "a")
         self.assertEqual(df.columns, ["a", "b"])
         self.assertEqual(df.select(df1["*"]).columns, ["a"])
         self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
 
+        df = df1.join(df2, "a").withColumn("c", lit(0))
+        self.assertEqual(df.columns, ["a", "b", "c"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+
         df = df2.join(df3)
         self.assertEqual(df.columns, ["a", "b", "x", "y"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+        self.assertEqual(df.select(df3["*"]).columns, ["x", "y"])
+
+        df = df2.join(df3).withColumn("c", lit(0))
+        self.assertEqual(df.columns, ["a", "b", "x", "y", "c"])
         self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
         self.assertEqual(df.select(df3["*"]).columns, ["x", "y"])
 
