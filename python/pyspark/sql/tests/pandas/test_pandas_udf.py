@@ -19,6 +19,9 @@ import unittest
 import datetime
 from typing import cast
 
+import pandas as pd
+
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
@@ -321,6 +324,8 @@ class PandasUDFTestsMixin:
             self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
             self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) < LooseVersion("2.1.4"), "Pandas version must >= 2.1.4")
     def test_pandas_udf_day_time_interval_type(self):
         # SPARK-37277: Test DayTimeIntervalType in pandas UDF
         import pandas as pd
@@ -330,16 +335,15 @@ class PandasUDFTestsMixin:
             assert s.iloc[0] == datetime.timedelta(microseconds=123)
             return s
 
-        with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": "true"}):
-            df = self.spark.createDataFrame(
-                [(datetime.timedelta(microseconds=123),)], schema="td interval day to second"
-            ).select(noop("td").alias("td"))
-            df.select(
-                assert_true(
-                    lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.td.cast("string"))
-            ).collect()
-            self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
-            self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
+        df = self.spark.createDataFrame(
+            [(datetime.timedelta(microseconds=123),)], schema="td interval day to second"
+        ).select(noop("td").alias("td"))
+
+        df.select(
+            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.td.cast("string"))
+        ).collect()
+        self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
+        self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
