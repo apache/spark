@@ -734,7 +734,7 @@ object DataSource extends Logging {
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         t match {
-          case p: PythonTableProvider => p.setShortName(provider)
+          case p: PythonDataSourceV2 => p.setShortName(provider)
           case _ =>
         }
         Some(t)

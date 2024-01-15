@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
