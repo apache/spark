@@ -66,6 +66,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
    * disabled on Standalone. Throw an exception if not supported.
    */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
+    assert(master != null)
     if (rp.isInstanceOf[TaskResourceProfile] && !dynamicEnabled) {
       if ((notRunningUnitTests || testExceptionThrown) &&
         !(isStandaloneOrLocalCluster || isYarn || isK8s)) {
