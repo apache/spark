@@ -34,14 +34,15 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType}
 
 private[sql] object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
   private val distinctUnsupportedAggregateFunctions =
-    Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
+    Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY",
+      "MODE", "PERCENTILE_CONT", "PERCENTILE_DISC")
 
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
@@ -55,6 +56,20 @@ private[sql] object H2Dialect extends JdbcDialect {
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
+
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    sqlType match {
+      case Types.NUMERIC if size > 38 =>
+        // H2 supports very large decimal precision like 100000. The max precision in Spark is only
+        // 38. Here we shrink both the precision and scale of H2 decimal to fit Spark, and still
+        // keep the ratio between them.
+        val scale = if (null != md) md.build().getLong("scale") else 0L
+        val selectedScale = (DecimalType.MAX_PRECISION * (scale.toDouble / size.toDouble)).toInt
+        Option(DecimalType(DecimalType.MAX_PRECISION, selectedScale))
+      case _ => None
+    }
+  }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Option(JdbcType("CLOB", Types.CLOB))
