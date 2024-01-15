@@ -43,8 +43,8 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
-import org.apache.spark.sql.execution.python.PythonTableProvider
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -661,7 +661,7 @@ object DataSource extends Logging {
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else if (isUserDefinedDataSource) {
-                  classOf[PythonTableProvider]
+                  classOf[PythonDataSourceV2]
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
