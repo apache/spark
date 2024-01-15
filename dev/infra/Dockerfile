@@ -99,7 +99,6 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=14.0.0 six==1.16.0 pandas<=2.1.4 scipy plotly
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.59.3 grpcio-status==1.59.3 protobuf==4.25.1 googleapis-common-protos==1.56.4"
 
-RUN pypy3 -m pip install $CONNECT_PIP_PKGS
 
 RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS
 # Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
