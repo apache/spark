@@ -691,8 +691,8 @@ class Dataset[T] private[sql](
    * @param eager Whether to checkpoint this dataframe immediately
    *
    * @note When checkpoint is used with eager = false, the final data that is checkpointed after
-   *       the first action may be different from the data that was used during the job due to non
-   *       deteminism of the underlying operation and retries. If checkpoint is used to achieve
+   *       the first action may be different from the data that was used during the job due to
+   *       non-determinism of the underlying operation and retries. If checkpoint is used to achieve
    *       saving a deterministic snapshot of the data, eager = true should be used. Otherwise,
    *       it is only deterministic after the first execution, after the checkpoint was finalized.
    *
@@ -721,8 +721,8 @@ class Dataset[T] private[sql](
    * @param eager Whether to checkpoint this dataframe immediately
    *
    * @note When checkpoint is used with eager = false, the final data that is checkpointed after
-   *       the first action may be different from the data that was used during the job due to non
-   *       deteminism of the underlying operation and retries. If checkpoint is used to achieve
+   *       the first action may be different from the data that was used during the job due to
+   *       non-determinism of the underlying operation and retries. If checkpoint is used to achieve
    *       saving a deterministic snapshot of the data, eager = true should be used. Otherwise,
    *       it is only deterministic after the first execution, after the checkpoint was finalized.
    *
