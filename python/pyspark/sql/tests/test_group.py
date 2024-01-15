@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
 from pyspark.testing.sqlutils import (

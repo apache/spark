@@ -1322,7 +1322,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected_multi, df_multi_1.collect())
             self.assertEqual(expected_multi, df_multi_2.collect())
 
-    @unittest.skipIf(not have_grpcio, grpcio_requirement_message) # type: ignore
+    @unittest.skipIf(not have_grpcio, grpcio_requirement_message)  # type: ignore
     def test_mixed_udf_and_sql(self):
         from pyspark.sql.connect.column import Column as ConnectColumn
 
