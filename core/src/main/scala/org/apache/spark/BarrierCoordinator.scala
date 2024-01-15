@@ -79,6 +79,7 @@ private[spark] class BarrierCoordinator(
       states.forEachValue(1, clearStateConsumer)
       states.clear()
       listenerBus.removeListener(listener)
+      ThreadUtils.shutdown(timer)
     } finally {
       super.onStop()
     }
@@ -170,7 +171,7 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          timer.schedule(timerTask, timeoutInSecs * 1000, TimeUnit.MILLISECONDS)
+          timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS)
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester

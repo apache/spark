@@ -71,8 +71,8 @@ class BarrierTaskContext private[spark] (
           s"current barrier epoch is $barrierEpoch.")
       }
     }
-    // Log the update of global sync every 60 seconds.
-    timer.scheduleAtFixedRate(timerTask, 60000, 60000, TimeUnit.MILLISECONDS)
+    // Log the update of global sync every 1 minute.
+    timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[String]](
@@ -118,6 +118,7 @@ class BarrierTaskContext private[spark] (
         throw e
     } finally {
       timerTask.cancel()
+      timer.purge()
     }
   }
 

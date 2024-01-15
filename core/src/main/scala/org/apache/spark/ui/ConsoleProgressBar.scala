@@ -121,5 +121,5 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
    * SparkContext if it's not terminated.
    */
-  def stop(): Unit = timer.shutdown()
+  def stop(): Unit = ThreadUtils.shutdown(timer)
 }

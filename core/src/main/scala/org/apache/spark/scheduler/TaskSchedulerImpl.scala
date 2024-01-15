@@ -964,8 +964,8 @@ private[spark] class TaskSchedulerImpl(
         barrierCoordinator.stop()
       }
     }
-    starvationTimer.shutdown()
-    abortTimer.shutdown()
+    ThreadUtils.shutdown(starvationTimer)
+    ThreadUtils.shutdown(abortTimer)
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
