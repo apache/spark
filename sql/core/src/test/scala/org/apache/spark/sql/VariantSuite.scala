@@ -138,4 +138,35 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("write partitioned file") {
+    def verifyResult(df: DataFrame): Unit = {
+      val result = df.selectExpr("v").collect()
+        .map(_.get(0).asInstanceOf[VariantVal].toString)
+        .sorted
+        .toSeq
+      val expected = (1 until 10).map(id => "1" * id)
+      assert(result == expected)
+    }
+
+    // At this point, JSON parsing logic is not really implemented. We just construct some number
+    // inputs that are also valid JSON. This exercises passing VariantVal throughout the system.
+    val query = spark.sql("select id, parse_json(repeat('1', id)) as v from range(1, 10)")
+    verifyResult(query)
+
+    // Partition by another column should work.
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      query.write.partitionBy("id").parquet(tempDir)
+      verifyResult(spark.read.parquet(tempDir))
+    }
+
+    // Partitioning by Variant column is not allowed.
+    withTempDir { dir =>
+      val tempDir = new File(dir, "files").getCanonicalPath
+      intercept[AnalysisException] {
+        query.write.partitionBy("v").parquet(tempDir)
+      }
+    }
+  }
 }
