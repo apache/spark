@@ -17,10 +17,18 @@
 
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pyarrow,
+    pyarrow_requirement_message,
+)
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 
 
+@unittest.skipIf(
+    not have_pyarrow,
+    cast(str, pyarrow_requirement_message),
+)
 class GroupTestsMixin:
     def test_agg_func(self):
         data = [Row(key=1, value=10), Row(key=1, value=20), Row(key=1, value=30)]
