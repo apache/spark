@@ -211,10 +211,8 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
 
       testStream(dedupe, Append)(
         StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-
         AddData(dedupeInputData, "a" -> 1),
         CheckNewAnswer("a" -> 1),
-
         Execute { q =>
           // This threw out error before SPARK-46676.
           q.lastExecution.executedPlan.canonicalized
