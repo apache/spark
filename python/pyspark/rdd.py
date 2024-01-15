@@ -733,6 +733,7 @@ class RDD(Generic[T_co]):
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
+            function doesn't modify the keys
 
         Returns
         -------
@@ -774,6 +775,7 @@ class RDD(Generic[T_co]):
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
+            function doesn't modify the keys
 
         Returns
         -------
@@ -816,6 +818,7 @@ class RDD(Generic[T_co]):
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
+            function doesn't modify the keys
 
         Returns
         -------
@@ -862,6 +865,7 @@ class RDD(Generic[T_co]):
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
+            function doesn't modify the keys
 
         Returns
         -------
@@ -907,6 +911,7 @@ class RDD(Generic[T_co]):
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
+            function doesn't modify the keys
 
         Returns
         -------
@@ -5314,6 +5319,7 @@ class RDDBarrier(Generic[T]):
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
+            function doesn't modify the keys
 
         Returns
         -------
@@ -5366,6 +5372,7 @@ class RDDBarrier(Generic[T]):
         preservesPartitioning : bool, optional, default False
             indicates whether the input function preserves the partitioner,
             which should be False unless this is a pair RDD and the input
+            function doesn't modify the keys
 
         Returns
         -------
