@@ -382,7 +382,11 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       }
     } finally {
       q.stop()
-      assert(!spark.table(s"listener_terminated_events$tablePostfix").toDF().isEmpty)
+
+      eventually(timeout(30.seconds)) {
+        assert(!q.isActive)
+        assert(!spark.table(s"listener_terminated_events$tablePostfix").toDF().isEmpty)
+      }
 
       spark.sql(s"DROP TABLE IF EXISTS listener_start_events$tablePostfix")
       spark.sql(s"DROP TABLE IF EXISTS listener_progress_events$tablePostfix")
