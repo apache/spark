@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.io.{File, FileWriter}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually.eventually
@@ -360,7 +359,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
   private def testStreamingQueryListener(
       listener: StreamingQueryListener,
-      tablePostfix: String) {
+      tablePostfix: String): Unit = {
     assert(spark.streams.listListeners().length == 0)
 
     spark.streams.addListener(listener)
