@@ -15800,7 +15800,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
 @_try_remote_functions
 def map_keys(col: "ColumnOrName") -> Column:
     """
-    Collection function: Returns an unordered array containing the keys of the map.
+    Map function: Returns an unordered array containing the keys of the map.
 
     .. versionadded:: 2.3.0
 
@@ -15810,23 +15810,61 @@ def map_keys(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        Name of column or expression
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        keys of the map as an array.
+        Keys of the map as an array.
 
     Examples
     --------
-    >>> from pyspark.sql.functions import map_keys
+    Example 1: Extracting keys from a simple map
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
-    >>> df.select(map_keys("data").alias("keys")).show()
-    +------+
-    |  keys|
-    +------+
-    |[1, 2]|
-    +------+
+    >>> df.select(sf.sort_array(sf.map_keys("data"))).show()
+    +--------------------------------+
+    |sort_array(map_keys(data), true)|
+    +--------------------------------+
+    |                          [1, 2]|
+    +--------------------------------+
+
+    Example 2: Extracting keys from a map with complex keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(array(1, 2), 'a', array(3, 4), 'b') as data")
+    >>> df.select(sf.sort_array(sf.map_keys("data"))).show()
+    +--------------------------------+
+    |sort_array(map_keys(data), true)|
+    +--------------------------------+
+    |                [[1, 2], [3, 4]]|
+    +--------------------------------+
+
+    Example 3: Extracting keys from a map with duplicate keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> originalmapKeyDedupPolicy = spark.conf.get("spark.sql.mapKeyDedupPolicy")
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", "LAST_WIN")
+    >>> df = spark.sql("SELECT map(1, 'a', 1, 'b') as data")
+    >>> df.select(sf.map_keys("data")).show()
+    +--------------+
+    |map_keys(data)|
+    +--------------+
+    |           [1]|
+    +--------------+
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", originalmapKeyDedupPolicy)
+
+    Example 4: Extracting keys from an empty map
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map() as data")
+    >>> df.select(sf.map_keys("data")).show()
+    +--------------+
+    |map_keys(data)|
+    +--------------+
+    |            []|
+    +--------------+
     """
     return _invoke_function_over_columns("map_keys", col)
 
@@ -15834,7 +15872,7 @@ def map_keys(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def map_values(col: "ColumnOrName") -> Column:
     """
-    Collection function: Returns an unordered array containing the values of the map.
+    Map function: Returns an unordered array containing the values of the map.
 
     .. versionadded:: 2.3.0
 
@@ -15844,23 +15882,69 @@ def map_values(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        Name of column or expression
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        values of the map as an array.
+        Values of the map as an array.
 
     Examples
     --------
-    >>> from pyspark.sql.functions import map_values
+    Example 1: Extracting values from a simple map
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
-    >>> df.select(map_values("data").alias("values")).show()
-    +------+
-    |values|
-    +------+
-    |[a, b]|
-    +------+
+    >>> df.select(sf.sort_array(sf.map_values("data"))).show()
+    +----------------------------------+
+    |sort_array(map_values(data), true)|
+    +----------------------------------+
+    |                            [a, b]|
+    +----------------------------------+
+
+    Example 2: Extracting values from a map with complex values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, array('a', 'b'), 2, array('c', 'd')) as data")
+    >>> df.select(sf.sort_array(sf.map_values("data"))).show()
+    +----------------------------------+
+    |sort_array(map_values(data), true)|
+    +----------------------------------+
+    |                  [[a, b], [c, d]]|
+    +----------------------------------+
+
+    Example 3: Extracting values from a map with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, null, 2, 'b') as data")
+    >>> df.select(sf.sort_array(sf.map_values("data"))).show()
+    +----------------------------------+
+    |sort_array(map_values(data), true)|
+    +----------------------------------+
+    |                         [NULL, b]|
+    +----------------------------------+
+
+    Example 4: Extracting values from a map with duplicate values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'a') as data")
+    >>> df.select(sf.map_values("data")).show()
+    +----------------+
+    |map_values(data)|
+    +----------------+
+    |          [a, a]|
+    +----------------+
+
+    Example 5: Extracting values from an empty map
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map() as data")
+    >>> df.select(sf.map_values("data")).show()
+    +----------------+
+    |map_values(data)|
+    +----------------+
+    |              []|
+    +----------------+
     """
     return _invoke_function_over_columns("map_values", col)
 
@@ -15868,40 +15952,72 @@ def map_values(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def map_entries(col: "ColumnOrName") -> Column:
     """
-    Collection function: Returns an unordered array of all entries in the given map.
+    Map function: Returns an unordered array of all entries in the given map.
 
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+        Spark Connect.
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        Name of column or expression
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of key value pairs as a struct type
+        An array of key value pairs as a struct type
 
     Examples
     --------
-    >>> from pyspark.sql.functions import map_entries
+    Example 1: Extracting entries from a simple map
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
-    >>> df = df.select(map_entries("data").alias("entries"))
-    >>> df.show()
-    +----------------+
-    |         entries|
-    +----------------+
-    |[{1, a}, {2, b}]|
-    +----------------+
-    >>> df.printSchema()
-    root
-     |-- entries: array (nullable = false)
-     |    |-- element: struct (containsNull = false)
-     |    |    |-- key: integer (nullable = false)
-     |    |    |-- value: string (nullable = false)
+    >>> df.select(sf.sort_array(sf.map_entries("data"))).show()
+    +-----------------------------------+
+    |sort_array(map_entries(data), true)|
+    +-----------------------------------+
+    |                   [{1, a}, {2, b}]|
+    +-----------------------------------+
+
+    Example 2: Extracting entries from a map with complex keys and values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(array(1, 2), array('a', 'b'), "
+    ...   "array(3, 4), array('c', 'd')) as data")
+    >>> df.select(sf.sort_array(sf.map_entries("data"))).show(truncate=False)
+    +------------------------------------+
+    |sort_array(map_entries(data), true) |
+    +------------------------------------+
+    |[{[1, 2], [a, b]}, {[3, 4], [c, d]}]|
+    +------------------------------------+
+
+    Example 3: Extracting entries from a map with duplicate keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> originalmapKeyDedupPolicy = spark.conf.get("spark.sql.mapKeyDedupPolicy")
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", "LAST_WIN")
+    >>> df = spark.sql("SELECT map(1, 'a', 1, 'b') as data")
+    >>> df.select(sf.map_entries("data")).show()
+    +-----------------+
+    |map_entries(data)|
+    +-----------------+
+    |         [{1, b}]|
+    +-----------------+
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", originalmapKeyDedupPolicy)
+
+    Example 4: Extracting entries from an empty map
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map() as data")
+    >>> df.select(sf.map_entries("data")).show()
+    +-----------------+
+    |map_entries(data)|
+    +-----------------+
+    |               []|
+    +-----------------+
     """
     return _invoke_function_over_columns("map_entries", col)
 
