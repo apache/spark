@@ -14,22 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
-from pyspark.sql.tests.streaming.test_streaming import StreamingTestsMixin
+from pyspark.pandas.tests.data_type_ops.test_num_mul_div import NumMulDivTestsMixin
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
-    def _assert_exception_tree_contains_msg(self, exception, msg):
-        self.assertTrue(
-            msg in exception._message,
-            "Exception tree doesn't contain the expected message: %s" % msg,
-        )
+class NumMulDivParityTests(
+    NumMulDivTestsMixin,
+    PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.streaming.test_parity_streaming import *  # noqa: F401
+    from pyspark.pandas.tests.connect.data_type_ops.test_parity_num_mul_div import *  # noqa
 
     try:
         import xmlrunner  # type: ignore[import]

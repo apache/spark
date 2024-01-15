@@ -686,9 +686,15 @@ object DataSource extends Logging {
           // There are multiple registered aliases for the input. If there is single datasource
           // that has "org.apache.spark" package in the prefix, we use it considering it is an
           // internal datasource within Spark.
-          val sourceNames = sources.map(_.getClass.getName)
+          val sourceNames = sources.map(_.getClass.getName).sortBy(_.toString)
           val internalSources = sources.filter(_.getClass.getName.startsWith("org.apache.spark"))
-          if (internalSources.size == 1) {
+          if (provider.equalsIgnoreCase("xml") && sources.size == 2) {
+            val externalSource = sources.filterNot(_.getClass.getName
+              .startsWith("org.apache.spark.sql.execution.datasources.xml.XmlFileFormat")
+            ).head.getClass
+            throw QueryCompilationErrors
+              .foundMultipleXMLDataSourceError(provider1, sourceNames, externalSource.getName)
+          } else if (internalSources.size == 1) {
             logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
               s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")
             internalSources.head.getClass

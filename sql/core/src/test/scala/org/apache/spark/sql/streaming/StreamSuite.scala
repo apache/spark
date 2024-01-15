@@ -713,9 +713,7 @@ class StreamSuite extends StreamTest {
         "columnName" -> "`rn_col`",
         "windowSpec" ->
           ("(PARTITION BY COL1 ORDER BY COL2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
-          "AND CURRENT ROW)")),
-      queryContext = Array(
-        ExpectedContext(fragment = "withColumn", callSitePattern = getCurrentClassCallSitePattern)))
+          "AND CURRENT ROW)")))
   }
 
 

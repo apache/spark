@@ -256,6 +256,18 @@ class MasterSuite extends SparkFunSuite
     conf.set(RECOVERY_MODE_FACTORY, classOf[FakeRecoveryModeFactory].getCanonicalName)
     conf.set(MASTER_REST_SERVER_ENABLED, false)
 
+    val fakeDriverInfo = new DriverInfo(
+      startTime = 0,
+      id = "test_driver",
+      desc = new DriverDescription(
+        jarUrl = "",
+        mem = 1024,
+        cores = 1,
+        supervise = false,
+        command = new Command("", Nil, Map.empty, Nil, Nil, Nil)),
+      submitDate = new Date())
+    FakeRecoveryModeFactory.persistentData.put(s"driver_${fakeDriverInfo.id}", fakeDriverInfo)
+
     var master: Master = null
     try {
       master = makeMaster(conf)

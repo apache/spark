@@ -22,7 +22,7 @@ import java.util.concurrent.{CountDownLatch, Delayed, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.jdk.CollectionConverters._
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -39,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests
+import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, Tests}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
@@ -54,12 +54,30 @@ import org.apache.spark.util.ArrayImplicits._
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
 
+  dagScheduler.setEventProcessLoop(this)
+
+  private var isProcessing = false
+  private val eventQueue = new ListBuffer[DAGSchedulerEvent]()
+
+
   override def post(event: DAGSchedulerEvent): Unit = {
-    try {
-      // Forward event to `onReceive` directly to avoid processing event asynchronously.
-      onReceive(event)
-    } catch {
-      case NonFatal(e) => onError(e)
+    if (isProcessing) {
+      // `DAGSchedulerEventProcessLoop` is guaranteed to process events sequentially. So we should
+      // buffer events for sequent processing later instead of processing them recursively.
+      eventQueue += event
+    } else {
+      try {
+        isProcessing = true
+        // Forward event to `onReceive` directly to avoid processing event asynchronously.
+        onReceive(event)
+      } catch {
+        case NonFatal(e) => onError(e)
+      } finally {
+        isProcessing = false
+      }
+      if (eventQueue.nonEmpty) {
+        post(eventQueue.remove(0))
+      }
     }
   }
 
@@ -168,7 +186,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
 
-  /** Stages for which the DAGScheduler has called TaskScheduler.cancelTasks(). */
+  /** Stages for which the DAGScheduler has called TaskScheduler.killAllTaskAttempts(). */
   val cancelledStages = new HashSet[Int]()
 
   val tasksMarkedAsCompleted = new ArrayBuffer[Task[_]]()
@@ -189,13 +207,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
     }
-    override def cancelTasks(stageId: Int, interruptThread: Boolean, reason: String): Unit = {
-      cancelledStages += stageId
-    }
     override def killTaskAttempt(
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
     override def killAllTaskAttempts(
-      stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
+      stageId: Int, interruptThread: Boolean, reason: String): Unit = {
+      cancelledStages += stageId
+    }
     override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
       taskSets.filter(_.stageId == stageId).lastOption.foreach { ts =>
         val tasks = ts.tasks.filter(_.partitionId == partitionId)
@@ -867,15 +884,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def submitTasks(taskSet: TaskSet): Unit = {
         taskSets += taskSet
       }
-      override def cancelTasks(stageId: Int, interruptThread: Boolean, reason: String): Unit = {
-        throw new UnsupportedOperationException
-      }
       override def killTaskAttempt(
           taskId: Long, interruptThread: Boolean, reason: String): Boolean = {
         throw new UnsupportedOperationException
       }
       override def killAllTaskAttempts(
-          stageId: Int, interruptThread: Boolean, reason: String): Unit = {
+        stageId: Int, interruptThread: Boolean, reason: String): Unit = {
         throw new UnsupportedOperationException
       }
       override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
@@ -5033,6 +5047,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, metricPeaks, taskInfo)
   }
+}
+
+class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
+  override def conf: SparkConf = super.conf.set(LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, false)
 }
 
 object DAGSchedulerSuite {
