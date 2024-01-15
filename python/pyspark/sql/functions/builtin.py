@@ -17250,8 +17250,8 @@ def str_to_map(
     keyValueDelim: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Creates a map after splitting the text into key/value pairs using delimiters.
-    Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
+    Map function: Converts a string into a map after splitting the text into key/value pairs
+    using delimiters. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
 
     .. versionadded:: 3.5.0
 
@@ -17260,23 +17260,77 @@ def str_to_map(
     text : :class:`~pyspark.sql.Column` or str
         Input column or strings.
     pairDelim : :class:`~pyspark.sql.Column` or str, optional
-        delimiter to use to split pair.
+        Delimiter to use to split pairs. Default is comma (,).
     keyValueDelim : :class:`~pyspark.sql.Column` or str, optional
-        delimiter to use to split key/value.
+        Delimiter to use to split key/value. Default is colon (:).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of map type where each string in the original column is converted into a map.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
-    >>> df.select(str_to_map(df.e, lit(","), lit(":")).alias('r')).collect()
-    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+    Example 1: Using default delimiters
 
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
-    >>> df.select(str_to_map(df.e, lit(",")).alias('r')).collect()
-    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+    >>> df.select(sf.str_to_map(df.e)).show(truncate=False)
+    +------------------------+
+    |str_to_map(e, ,, :)     |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    +------------------------+
 
-    >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
-    >>> df.select(str_to_map(df.e).alias('r')).collect()
-    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+    Example 2: Using custom delimiters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a=1;b=2;c=3",)], ["e"])
+    >>> df.select(sf.str_to_map(df.e, sf.lit(";"), sf.lit("="))).show(truncate=False)
+    +------------------------+
+    |str_to_map(e, ;, =)     |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    +------------------------+
+
+    Example 3: Using different delimiters for different rows
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3",), ("d=4;e=5;f=6",)], ["e"])
+    >>> df.select(sf.str_to_map(df.e,
+    ...   sf.when(df.e.contains(";"), sf.lit(";")).otherwise(sf.lit(",")),
+    ...   sf.when(df.e.contains("="), sf.lit("=")).otherwise(sf.lit(":"))).alias("str_to_map")
+    ... ).show(truncate=False)
+    +------------------------+
+    |str_to_map              |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    |{d -> 4, e -> 5, f -> 6}|
+    +------------------------+
+
+    Example 4: Using a column of delimiters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3", ","), ("d=4;e=5;f=6", ";")], ["e", "delim"])
+    >>> df.select(sf.str_to_map(df.e, df.delim, sf.lit(":"))).show(truncate=False)
+    +---------------------------------------+
+    |str_to_map(e, delim, :)                |
+    +---------------------------------------+
+    |{a -> 1, b -> 2, c -> 3}               |
+    |{d=4 -> NULL, e=5 -> NULL, f=6 -> NULL}|
+    +---------------------------------------+
+
+    Example 5: Using a column of key/value delimiters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3", ":"), ("d=4;e=5;f=6", "=")], ["e", "delim"])
+    >>> df.select(sf.str_to_map(df.e, sf.lit(","), df.delim)).show(truncate=False)
+    +------------------------+
+    |str_to_map(e, ,, delim) |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    |{d -> 4;e=5;f=6}        |
+    +------------------------+
     """
     if pairDelim is None:
         pairDelim = lit(",")
