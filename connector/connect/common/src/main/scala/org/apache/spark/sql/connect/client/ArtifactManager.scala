@@ -65,7 +65,7 @@ class ArtifactManager(
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
-  private[this] val stubState = new SparkConnectStubState(bstub.channel, clientConfig.retryPolicies)
+  private[this] val stubState = stub.stubState
 
   /**
    * Register a [[ClassFinder]] for dynamically generated classes.
