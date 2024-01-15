@@ -394,4 +394,23 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       assertEventuallyNoActiveExecutions()
     }
   }
+
+  test("SPARK-46660: reattach updates aliveness of session holder") {
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      iter.next() // open the iterator, guarantees that the RPC reached the server
+
+      val executionHolder = getExecutionHolder
+      val lastAccessTime = executionHolder.sessionHolder.getSessionHolderInfo.lastAccessTimeMs
+
+      // send reattach
+      val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
+      iter2.next() // open the iterator, guarantees that the RPC reached the server
+      val newAccessTime = executionHolder.sessionHolder.getSessionHolderInfo.lastAccessTimeMs
+
+      assert(newAccessTime > lastAccessTime, "reattach should update session holder access time")
+    }
+  }
 }
