@@ -97,17 +97,19 @@ ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=14.0.0 six==1.16.0 pandas<=2.1.4 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
-# Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.59.3 grpcio-status==1.59.3 protobuf==4.25.1 googleapis-common-protos==1.56.4"
-
 RUN add-apt-repository ppa:pypy/ppa
 RUN mkdir -p /usr/local/pypy/pypy3.8 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy pyarrow 'six==1.16.0' 'pandas<=2.1.4' scipy coverage matplotlib lxml $CONNECT_PIP_PKGS
+RUN pypy3 -m pip install numpy pyarrow 'six==1.16.0' 'pandas<=2.1.4' scipy coverage matplotlib lxml
+
+
+ARG BASIC_PIP_PKGS="numpy pyarrow>=14.0.0 six==1.16.0 pandas<=2.1.4 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+# Python deps for Spark Connect
+ARG CONNECT_PIP_PKGS="grpcio==1.59.3 grpcio-status==1.59.3 protobuf==4.25.1 googleapis-common-protos==1.56.4"
+
 
 RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS
 # Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
