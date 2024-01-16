@@ -17,7 +17,7 @@
 import os
 import tempfile
 import unittest
-from typing import Callable, Union
+from typing import Callable, Union, cast
 
 from pyspark.errors import PythonException
 from pyspark.sql.datasource import (
@@ -30,7 +30,11 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.types import Row, StructType
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pyarrow,
+    pyarrow_requirement_message,
+)
 from pyspark.testing.utils import SPARK_HOME
 
 
@@ -368,6 +372,10 @@ class BasePythonDataSourceTestsMixin:
         self.assertEqual(d2["baz"], 3)
 
 
+@unittest.skipIf(
+    not have_pyarrow,
+    cast(str, pyarrow_requirement_message),
+)
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
     ...
 
