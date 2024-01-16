@@ -218,6 +218,10 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             if sc is not None:
                 sc.stop()
 
+    @unittest.skipIf(
+        not have_pyarrow,
+        cast(str, pyarrow_requirement_message),
+    )
     def test_session_with_spark_connect_mode_enabled(self):
         with unittest.mock.patch.dict(os.environ, {"SPARK_CONNECT_MODE_ENABLED": "1"}):
             with self.assertRaisesRegex(RuntimeError, "Cannot create a Spark Connect session"):
