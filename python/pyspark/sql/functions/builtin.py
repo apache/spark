@@ -7325,9 +7325,9 @@ def dayname(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
     >>> df.select(dayname('dt').alias('day')).show()
     +-----+
-    |month|
+    |day|
     +-----+
-    |  Wed|
+    |Wed|
     +-----+
     """
     return _invoke_function_over_columns("dayname", col)
