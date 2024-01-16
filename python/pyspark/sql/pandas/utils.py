@@ -27,6 +27,8 @@ def require_minimum_pandas_version() -> None:
     try:
         import pandas
 
+        # ImportError may not occur even if Pandas is deleted when an empty package path remains
+        # for some reason. So we need extra check to make sure if Pandas is actually installed.
         if hasattr(pandas, "__version__"):
             have_pandas = True
         else:
