@@ -21,6 +21,7 @@ import shutil
 import tempfile
 import unittest
 import datetime
+from typing import cast
 
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
@@ -39,7 +40,13 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pyarrow,
+    test_compiled,
+    pyarrow_requirement_message,
+    test_not_compiled_message,
+)
 from pyspark.testing.utils import QuietTest, assertDataFrameEqual
 
 
@@ -991,6 +998,10 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
             self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
+    @unittest.skipIf(
+        not have_pyarrow,
+        cast(str, pyarrow_requirement_message),
+    )
     def test_named_arguments_and_defaults(self):
         @udf("int")
         def test_udf(a, b=0):
