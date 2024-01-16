@@ -93,21 +93,23 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 q.stop()
                 self.assertFalse(q.isActive)
 
-                time.sleep(60)  # Sleep to make sure listener_terminated_events is written successfully
+                # Sleep to make sure listener_terminated_events is written successfully
+                time.sleep(60)
+
+                start_table_name = "listener_start_events" + table_postfix
+                progress_tbl_name = "listener_progress_events" + table_postfix
+                terminated_tbl_name = "listener_terminated_events" + table_postfix
 
                 start_event = pyspark.cloudpickle.loads(
-                    self.spark.read.table("listener_start_events" + table_postfix)
-                        .collect()[0][0]
+                    self.spark.read.table(start_table_name).collect()[0][0]
                 )
 
                 progress_event = pyspark.cloudpickle.loads(
-                    self.spark.read.table("listener_progress_events" + table_postfix)
-                        .collect()[0][0]
+                    self.spark.read.table(progress_tbl_name).collect()[0][0]
                 )
 
                 terminated_event = pyspark.cloudpickle.loads(
-                    self.spark.read.table("listener_terminated_events" + table_postfix)
-                        .collect()[0][0]
+                    self.spark.read.table(terminated_tbl_name).collect()[0][0]
                 )
 
                 self.check_start_event(start_event)
