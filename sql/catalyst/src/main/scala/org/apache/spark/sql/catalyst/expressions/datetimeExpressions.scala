@@ -911,6 +911,24 @@ case class MonthName(child: Expression) extends GetDateField {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the three-letter abbreviated day name from the given date.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2008-02-20');
+       Wed
+  """,
+  group = "datetime_funcs",
+  since = "4.0.0")
+case class DayName(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getDayName
+  override val funcName = "getDayName"
+  override def dataType: DataType = StringType
+  override protected def withNewChildInternal(newChild: Expression): DayName =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
   arguments = """
     Arguments:

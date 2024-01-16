@@ -269,6 +269,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(MonthName, DateType)
   }
 
+  test("DayName") {
+    checkEvaluation(DayName(Literal.create(null, DateType)), null)
+    checkEvaluation(DayName(Literal(d)), "Wed")
+    checkEvaluation(DayName(Cast(Literal(date), DateType, UTC_OPT)), "Wed")
+    checkEvaluation(DayName(Cast(Literal(ts), DateType, UTC_OPT)), "Fri")
+    checkEvaluation(DayName(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), "Fri")
+    checkEvaluation(DayName(Literal(new Date(toMillis("2017-05-27 13:10:15")))), "Sat")
+    checkEvaluation(DayName(Literal(new Date(toMillis("1582-10-15 13:10:15")))), "Fri")
+    checkConsistencyBetweenInterpretedAndCodegen(DayName, DateType)
+  }
+
   test("DateFormat") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {

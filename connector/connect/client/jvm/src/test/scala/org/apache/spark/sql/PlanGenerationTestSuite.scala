@@ -2129,6 +2129,10 @@ class PlanGenerationTestSuite
     fn.monthname(fn.col("d"))
   }
 
+  temporalFunctionTest("dayname") {
+    fn.dayname(fn.col("d"))
+  }
+
   temporalFunctionTest("next_day") {
     fn.next_day(fn.col("d"), "Mon")
   }
