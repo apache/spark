@@ -16,6 +16,7 @@
 #
 
 import unittest
+from typing import cast
 
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
