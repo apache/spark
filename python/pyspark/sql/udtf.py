@@ -134,17 +134,17 @@ class AnalyzeResult:
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
     acquireExecutionMemoryMbRequested: long
-        If this is not None, this represents the amount of memory in megabytes that the UDTF should
-        request from each Spark executor that it runs on. Then the UDTF takes responsibility to use
-        at most this much memory, including all allocated objects. The purpose of this functionality
-        is to prevent executors from crashing by running out of memory due to the extra memory
-        consumption invoked by the UDTF's 'eval' and 'terminate' and 'cleanup' methods. Spark will
-        then call 'TaskMemoryManager.acquireExecutionMemory' with the requested number of megabytes.
+        If this is not None, this represents the amount of memory in MB that the UDTF should request
+        from each Spark executor that it runs on. Then the UDTF takes responsibility to use at most
+        this much memory, including all allocated objects. The purpose of this functionality is to
+        prevent executors from crashing by running out of memory due to the extra memory consumption
+        invoked by the UDTF's 'eval' and 'terminate' and 'cleanup' methods. Spark will then call
+        'TaskMemoryManager.acquireExecutionMemory' with the requested number of MB.
     acquireExecutionMemoryMbActual: long
-        If there is a task context available, Spark will assign this field to the number of
-        megabytes returned from the call to the TaskMemoryManager.acquireExecutionMemory' method, as
-        consumed by the UDTF's'__init__' method. Therefore, its 'eval' and 'terminate' and 'cleanup'
-        methods will know it thereafter and can ensure to bound memory usage to at most this number.
+        If there is a task context available, Spark will assign this field to the number of MB
+        returned from the call to the TaskMemoryManager.acquireExecutionMemory' method, as consumed
+        by the UDTF's'__init__' method. Therefore, its 'eval' and 'terminate' and 'cleanup' methods
+        will know it thereafter and can ensure to bound memory usage to at most this number.
         Note that there is no effect if the UDTF's 'analyze' method assigns a value to this; it will
         be overwritten.
     """
@@ -153,7 +153,7 @@ class AnalyzeResult:
     withSinglePartition: bool = False
     partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
     orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
-    acquireExecutionMemoryMbRequested: Optional[int] = None
+    acquireExecutionMemoryMbRequested: Optional[int] = 100
     acquireExecutionMemoryMbActual: Optional[int] = None
 
 

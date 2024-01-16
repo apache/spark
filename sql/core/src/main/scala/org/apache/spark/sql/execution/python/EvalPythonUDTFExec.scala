@@ -165,29 +165,29 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
  * and free the memory after the evaluation is over.
  *
  * Background: If the UDTF's 'analyze' method returns an 'AnalyzeResult' with a non-empty
- * 'acquireExecutionMemoryMb' value, this value represents the amount of memory in megabytes that
+ * 'acquireExecutionMemoryMb' value, this value represents the amount of memory in MB that
  * the UDTF should request from each Spark executor that it runs on. Then the UDTF takes
  * responsibility to use at most this much memory, including all allocated objects. The purpose of
  * this functionality is to prevent executors from crashing by running out of memory due to the
  * extra memory consumption invoked by the UDTF's 'eval' and 'terminate' and 'cleanup' methods.
  *
  * In this class, Spark calls 'TaskMemoryManager.acquireExecutionMemory' with the requested number
- * of megabytes, and when Spark calls __init__  of the UDTF later, it updates the
- * acquiredExecutionMemory integer passed into the UDTF constructor to the actual number returned
- * from 'TaskMemoryManager.acquireExecutionMemory', so the 'eval' and 'terminate' and 'cleanup'
- * methods know it and can ensure to bound memory usage to at most this number.
+ * of MB, and when Spark calls __init__  of the UDTF later, it updates the acquiredExecutionMemory
+ * integer passed into the UDTF constructor to the actual number returned from
+ * 'TaskMemoryManager.acquireExecutionMemory', so the 'eval' and 'terminate' and 'cleanup' methods
+ * know it and can ensure to bound memory usage to at most this number.
  */
 case class PythonUDTFMemoryConsumer(udtf: PythonUDTF)
   extends MemoryConsumer(TaskContext.get().taskMemoryManager(), MemoryMode.ON_HEAP) {
-  private val BYTES_PER_MEGABYTE = 1024 * 1024
+  private val BYTES_PER_MB = 1024 * 1024
   def acquireMemory(): Long = {
     udtf.acquireMemoryMbRequested.map { megabytes: Long =>
-      acquireMemory(megabytes * BYTES_PER_MEGABYTE) / BYTES_PER_MEGABYTE
+      acquireMemory(megabytes * BYTES_PER_MB) / BYTES_PER_MB
     }.getOrElse(0)
   }
   def freeMemory(): Unit = {
     udtf.acquireMemoryMbRequested.foreach { megabytes: Long =>
-      freeMemory(megabytes * BYTES_PER_MEGABYTE)
+      freeMemory(megabytes * BYTES_PER_MB)
     }
   }
   /** Return zero to indicate that we are not capable of spilling acquired memory to disk. */

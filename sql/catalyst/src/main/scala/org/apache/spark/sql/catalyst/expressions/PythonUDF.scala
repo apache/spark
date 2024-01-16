@@ -174,8 +174,8 @@ abstract class UnevaluableGenerator extends Generator {
  * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
  *                                         all PARTITION BY expressions within the TABLE argument of
  *                                         the Python UDTF call, if applicable
- * @param acquireMemoryMbRequested If this is not None, this represents the amount of memory in
- *                                 megabytes that the UDTF should request from each Spark executor
+ * @param acquireMemoryMbRequested If this is not None, this represents the amount of memory in MB
+ *                                 that the UDTF should request from each Spark executor
  *                                 that it runs on. Then the UDTF takes responsibility to use at
  *                                 most this much memory, including all allocated objects. The
  *                                 purpose of this functionality is to prevent executors from
@@ -183,7 +183,7 @@ abstract class UnevaluableGenerator extends Generator {
  *                                 consumption invoked by the UDTF's 'eval' and 'terminate' and
  *                                 'cleanup' methods. Spark will then call
  *                                 'TaskMemoryManager.acquireExecutionMemory' with the requested
- *                                 number of megabytes
+ *                                 number of MB
  */
 case class PythonUDTF(
     name: String,
@@ -211,7 +211,7 @@ case class PythonUDTF(
    * This eventually holds the result of 'TaskMemoryManager.acquireExecutionMemory' if and when we
    * call it with the argument of [[acquireMemoryMbRequested]]. That method returns an integer
    * indicating the number of bytes of memory actually acquired, which may range from zero to the
-   * number of bytes requested. We store this result here in order to propagate it back to the UDTF
+   * number of MB requested. We store this result here in order to propagate it back to the UDTF
    * execution and assign it to the 'acquireExecutionMemoryMb' field of the 'AnalyzeResult', so that
    * subsequent invocations of the 'eval' and 'terminate' and 'cleanup' methods can see it.
    */
@@ -267,12 +267,12 @@ case class UnresolvedPolymorphicPythonUDTF(
  * @param orderByExpressions if non-empty, this contains the list of ordering items that the
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
- * @param acquireMemoryMbRequested If this is not None, this represents the amount of memory in
- *                                 megabytes that the UDTF should request from each Spark executor
- *                                 that it runs on (see this field in the 'PythonUDTF' class for
- *                                 more background)
+ * @param acquireMemoryMbRequested If this is not None, this represents the amount of memory in MB
+ *                                 that the UDTF should request from each Spark executor that it
+ *                                 runs on (see this field in the 'PythonUDTF' class for more
+ *                                 background)
  * @param acquireMemoryMbActual If this is not None, the UDTF's 'analyze' method assigned a positive
- *                              integer to this field as a minmium memory requirement signal wherein
+ *                              integer to this field as a minimum memory requirement signal wherein
  *                              Spark will return an error if the
  *                              'TaskMemoryManager.acquireExecutionMemory' method returns a smaller
  *                              value
