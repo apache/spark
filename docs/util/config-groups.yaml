@@ -1,0 +1,50 @@
+# HTML tables will be generated for each of the config groups defined here.
+#
+# NOTE:
+#   PyYAML@6.0.1 will silently overwrite the value of a key if it is defined
+#   multiple times. Be sure not to accidentally define a group more than once.
+#   See: https://github.com/yaml/pyyaml/issues/165
+sql-tuning-caching-data:
+  - spark.sql.inMemoryColumnarStorage.compressed
+  - spark.sql.inMemoryColumnarStorage.batchSize
+sql-tuning-broadcast:
+  - spark.sql.autoBroadcastJoinThreshold
+  - spark.sql.broadcastTimeout
+sql-tuning-partitions:
+  - spark.sql.shuffle.partitions
+  - spark.sql.sources.parallelPartitionDiscovery.threshold
+  - spark.sql.files.maxPartitionBytes
+  - spark.sql.files.minPartitionNum
+  - spark.sql.files.maxPartitionNum
+sql-tuning-cbo:
+  - spark.sql.cbo.enabled
+  - spark.sql.cbo.planStats.enabled
+  - spark.sql.cbo.joinReorder.enabled
+  - spark.sql.cbo.joinReorder.dp.threshold
+  # - spark.sql.cbo.joinReorder.card.weight
+  - spark.sql.cbo.joinReorder.dp.star.filter
+  - spark.sql.cbo.starSchemaDetection
+sql-tuning-aqe:
+  - spark.sql.adaptive.enabled
+sql-tuning-aqe-coalesce-partitions:
+  - spark.sql.adaptive.advisoryPartitionSizeInBytes
+  - spark.sql.adaptive.coalescePartitions.enabled
+  - spark.sql.adaptive.coalescePartitions.parallelismFirst
+  - spark.sql.adaptive.coalescePartitions.minPartitionSize
+  - spark.sql.adaptive.coalescePartitions.initialPartitionNum
+sql-tuning-aqe-broadcast-join:
+  - spark.sql.adaptive.localShuffleReader.enabled
+  - spark.sql.adaptive.autoBroadcastJoinThreshold
+sql-tuning-aqe-skew-join:
+  - spark.sql.adaptive.skewJoin.enabled
+  - spark.sql.adaptive.skewJoin.skewedPartitionFactor
+  - spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes
+  - spark.sql.adaptive.forceOptimizeSkewedJoin
+sql-tuning-aqe-advanced:
+  - spark.sql.adaptive.optimizer.excludedRules
+  - spark.sql.adaptive.customCostEvaluatorClass
+sql-tuning-aqe-shuffled-hash-join:
+  - spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold
+sql-tuning-aqe-skewed-shuffle-partitions:
+  - spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled
+  - spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor
