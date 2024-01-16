@@ -27,7 +27,11 @@ def require_minimum_pandas_version() -> None:
     try:
         import pandas
 
-        have_pandas = True
+        if hasattr(pandas, "__version__"):
+            have_pandas = True
+        else:
+            have_pandas = False
+            raised_error = None
     except ImportError as error:
         have_pandas = False
         raised_error = error
