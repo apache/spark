@@ -407,7 +407,10 @@ class DataSourceRegistration:
         # Serialize the data source class.
         wrapped = _wrap_function(sc, dataSource)
         assert sc._jvm is not None
-        ds = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonDataSource(wrapped)
+        jvm = sc._jvm
+        ds = jvm.org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource(
+            wrapped
+        )
         self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)
 
 
