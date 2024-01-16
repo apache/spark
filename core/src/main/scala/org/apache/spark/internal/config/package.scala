@@ -2025,6 +2025,15 @@ package object config {
       .checkValue(v => v >= 0, "The threshold should be non-negative.")
       .createWithDefault(1L * 1024 * 1024)
 
+    private[spark] val CLEAN_BROADCAST_AFTER_EXECUTION_END_ENABLED =
+      ConfigBuilder("spark.broadcast.cleanAfterExecutionEnd.enabled")
+        .doc("Whether to enable clean broadcast data after sql execution. If enabled, " +
+          "after the sql execution is completed, the broadcast data generated during " +
+          " the sql execution will be destroyed. This can reclaim memory as quickly as possible.")
+        .version("4.0.0")
+        .booleanConf
+        .createWithDefault(true);
+
   private[spark] val RDD_COMPRESS = ConfigBuilder("spark.rdd.compress")
     .doc("Whether to compress serialized RDD partitions " +
       "(e.g. for StorageLevel.MEMORY_ONLY_SER in Scala " +

@@ -18,22 +18,27 @@
 package org.apache.spark.broadcast
 
 import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
 
 import org.apache.commons.collections4.map.AbstractReferenceMap.ReferenceStrength
 import org.apache.commons.collections4.map.ReferenceMap
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonBroadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean, conf: SparkConf) extends Logging {
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
+  private var cleanAfterExecutionEnabled = false
+  private val executionBroadcastIds = new ConcurrentHashMap[String, ListBuffer[Long]]()
 
   initialize()
 
@@ -43,6 +48,7 @@ private[spark] class BroadcastManager(
       if (!initialized) {
         broadcastFactory = new TorrentBroadcastFactory
         broadcastFactory.initialize(isDriver, conf)
+        cleanAfterExecutionEnabled = conf.get(config.CLEAN_BROADCAST_AFTER_EXECUTION_END_ENABLED)
         initialized = true
       }
     }
@@ -63,7 +69,8 @@ private[spark] class BroadcastManager(
   def newBroadcast[T: ClassTag](
       value_ : T,
       isLocal: Boolean,
-      serializedOnly: Boolean = false): Broadcast[T] = {
+      serializedOnly: Boolean = false,
+      sqlExecutionId: String = null): Broadcast[T] = {
     val bid = nextBroadcastId.getAndIncrement()
     value_ match {
       case pb: PythonBroadcast =>
@@ -75,10 +82,26 @@ private[spark] class BroadcastManager(
 
       case _ => // do nothing
     }
-    broadcastFactory.newBroadcast[T](value_, isLocal, bid, serializedOnly)
+    val broadcast = broadcastFactory.newBroadcast[T](value_, isLocal, bid, serializedOnly)
+    if(cleanAfterExecutionEnabled && StringUtils.isNotBlank(sqlExecutionId)) {
+      val broadcastIds = executionBroadcastIds.getOrDefault(sqlExecutionId, ListBuffer())
+      broadcastIds += bid
+      executionBroadcastIds.put(sqlExecutionId, broadcastIds)
+    }
+    broadcast
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = {
     broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
+  }
+
+  def unbroadcastByExecution(executionId: String,
+    removeFromDriver: Boolean, blocking: Boolean): Unit = {
+    if (executionBroadcastIds.containsKey(executionId)) {
+      executionBroadcastIds.get(executionId).foreach(broadcastId => {
+        unbroadcast(broadcastId, removeFromDriver, blocking)
+      })
+      executionBroadcastIds.remove(executionId)
+    }
   }
 }
