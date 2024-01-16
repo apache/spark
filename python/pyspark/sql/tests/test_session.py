@@ -19,12 +19,17 @@ import os
 import unittest
 import unittest.mock
 from io import StringIO
+from typing import cast
 
 from pyspark import SparkConf, SparkContext
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pyarrow,
+    pyarrow_requirement_message,
+)
 from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
 
@@ -454,6 +459,10 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
             del os.environ["SPARK_REMOTE"]
             del os.environ["SPARK_LOCAL_REMOTE"]
 
+    @unittest.skipIf(
+        not have_pyarrow,
+        cast(str, pyarrow_requirement_message),
+    )
     def test_invalid_create(self):
         with self.assertRaises(PySparkRuntimeError) as pe2:
             SparkSession.builder.config("spark.remote", "local").create()
