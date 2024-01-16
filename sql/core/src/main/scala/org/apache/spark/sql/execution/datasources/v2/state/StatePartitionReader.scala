@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -53,15 +53,13 @@ class StatePartitionReader(
   private val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
   private val valueSchema = SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
 
-  private lazy val store: ReadStateStore = {
+  private lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-
     val allStateStoreMetadata = new StateMetadataPartitionReader(
       partition.sourceOptions.stateCheckpointLocation.getParent.toString, hadoopConf)
       .stateMetadata.toArray
-
     val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
       entry.operatorId == partition.sourceOptions.operatorId &&
         entry.stateStoreName == partition.sourceOptions.storeName
@@ -78,9 +76,12 @@ class StatePartitionReader(
       stateStoreMetadata.head.numColsPrefixKey
     }
 
-    StateStore.getReadOnly(stateStoreProviderId, keySchema, valueSchema,
-      numColsPrefixKey = numColsPrefixKey, version = partition.sourceOptions.batchId + 1,
-      storeConf = storeConf, hadoopConf = hadoopConf.value)
+    StateStoreProvider.createAndInit(
+      stateStoreProviderId, keySchema, valueSchema, numColsPrefixKey, storeConf, hadoopConf.value)
+  }
+
+  private lazy val store: ReadStateStore = {
+    provider.getReadStore(partition.sourceOptions.batchId + 1)
   }
 
   private lazy val iter: Iterator[InternalRow] = {
@@ -104,6 +105,7 @@ class StatePartitionReader(
   override def close(): Unit = {
     current = null
     store.abort()
+    provider.close()
   }
 
   private def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow)): InternalRow = {
