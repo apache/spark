@@ -104,6 +104,21 @@ class DataFrameTestsMixin:
         self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
         self.assertEqual(df.select(df3["*"]).columns, ["x", "y"])
 
+    def test_count_star(self):
+        df1 = self.spark.createDataFrame([{"a": 1}])
+        df2 = self.spark.createDataFrame([{"a": 1, "b": "v"}])
+        df3 = df2.select(struct("a", "b").alias("s"))
+
+        self.assertEqual(df1.select(count(df1["*"])).columns, ["count(1)"])
+        self.assertEqual(df1.select(count(col("*"))).columns, ["count(1)"])
+
+        self.assertEqual(df2.select(count(df2["*"])).columns, ["count(1)"])
+        self.assertEqual(df2.select(count(col("*"))).columns, ["count(1)"])
+
+        self.assertEqual(df3.select(count(df3["*"])).columns, ["count(1)"])
+        self.assertEqual(df3.select(count(col("*"))).columns, ["count(1)"])
+        self.assertEqual(df3.select(count(col("s.*"))).columns, ["count(1)"])
+
     def test_self_join(self):
         df1 = self.spark.range(10).withColumn("a", lit(0))
         df2 = df1.withColumnRenamed("a", "b")
