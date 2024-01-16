@@ -16,9 +16,13 @@
  */
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, ResultSet, Statement}
 
-import org.apache.spark.sql.QueryGeneratorHelper
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.{QueryGeneratorHelper, QueryTest}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -77,6 +81,8 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     Attribute(FIRST_COLUMN, Some(NULL_TABLE_NAME)),
     Attribute(SECOND_COLUMN, Some(NULL_TABLE_NAME)))
   private val NULL_TABLE = TableRelation(NULL_TABLE_NAME, NULL_TABLE_SCHEMA)
+
+  override def dataPreparation(conn: Connection): Unit = {}
 
   /**
    * Function to generate a subquery given the following parameters:
@@ -232,52 +238,20 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       orderByClause, limitClause = None)(comment)
   }
 
-  override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement(
-      f"""
-        |CREATE TEMPORARY VIEW ${INNER_TABLE.name}
-        |(${INNER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
-        |    (1, 1),
-        |    (2, 2),
-        |    (3, 3),
-        |    (4, 4),
-        |    (5, 5),
-        |    (8, 8),
-        |    (9, 9);
-        |""".stripMargin).executeUpdate()
-    conn.prepareStatement(
-      f"""
-         |CREATE TEMPORARY VIEW ${OUTER_TABLE.name}
-         |(${OUTER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
-         |    (1, 1),
-         |    (2, 1),
-         |    (3, 3),
-         |    (6, 6),
-         |    (7, 7),
-         |    (9, 9);
-        |""".stripMargin).executeUpdate()
-    conn.prepareStatement(
-      f"""
-        |CREATE TEMPORARY VIEW ${NO_MATCH_TABLE.name}
-        |(${NO_MATCH_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
-        |    (1000, 1000);
-        |""".stripMargin).executeUpdate()
-    conn.prepareStatement(
-      f"""
-        |CREATE TEMPORARY VIEW ${JOIN_TABLE.name}
-        |(${JOIN_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
-        |    (1, 1),
-        |    (2, 1),
-        |    (3, 3),
-        |    (7, 8),
-        |    (5, 6);
-        |""".stripMargin).executeUpdate()
-    conn.prepareStatement(
-      f"""
-        |CREATE TEMPORARY VIEW ${NULL_TABLE.name}
-        |(${NULL_TABLE.output.map(_.name).mkString(", ")}) AS
-        | SELECT CAST(null AS int), CAST(null as int);
-        |""".stripMargin).executeUpdate()
+  private def getPostgresResult(stmt: Statement, sql: String): Array[Row] = {
+    val isResultSet = stmt.execute(sql)
+    val rows = ArrayBuffer[Row]()
+    if (isResultSet) {
+      val rs = stmt.getResultSet
+      val metadata = rs.getMetaData
+      while (rs.next()) {
+        val row = Row.fromSeq((1 to metadata.getColumnCount).map(i => rs.getObject(i)))
+        rows.append(row)
+      }
+      rows.toArray
+    } else {
+      Array.empty
+    }
   }
 
   test("Generate subquery queries and run against Postgres") {
@@ -347,9 +321,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       }
     }
 
-    case class SubquerySpec(query: Query, isCorrelated: Boolean, subqueryType: SubqueryType.Value)
-
-    val generatedQuerySpecs = scala.collection.mutable.Set[SubquerySpec]()
+    val generatedQueries = scala.collection.mutable.Set[String]()
 
     // Generate queries across the different axis.
     for {
@@ -375,14 +347,73 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         subqueryOperator <- subqueryOperators
         isDistinct <- distinctChoices(subqueryOperator)
       } {
-        generatedQuerySpecs += SubquerySpec(
-          query = generateQuery(innerTable, outerTable, subqueryAlias,
-            subqueryLocation, subqueryType, isCorrelated, isDistinct, subqueryOperator),
-          isCorrelated = isCorrelated,
-          subqueryType = subqueryType)
+        generatedQueries += generateQuery(innerTable, outerTable, subqueryAlias,
+          subqueryLocation, subqueryType, isCorrelated, isDistinct, subqueryOperator).toString + ";"
       }
     }
 
+    val conn = getConnection()
+    val innerTableCreationSql = f"""
+        |CREATE TEMPORARY VIEW ${INNER_TABLE.name}
+        |(${INNER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1, 1),
+        |    (2, 2),
+        |    (3, 3),
+        |    (4, 4),
+        |    (5, 5),
+        |    (8, 8),
+        |    (9, 9);
+        |""".stripMargin
+    val outerTableCreationSql = f"""
+        |CREATE TEMPORARY VIEW ${OUTER_TABLE.name}
+        |(${OUTER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1, 1),
+        |    (2, 1),
+        |    (3, 3),
+        |    (6, 6),
+        |    (7, 7),
+        |    (9, 9);
+        |""".stripMargin
+    val noMatchTableCreationSql = f"""
+        |CREATE TEMPORARY VIEW ${NO_MATCH_TABLE.name}
+        |(${NO_MATCH_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1000, 1000);
+        |""".stripMargin
+    val joinTableCreationSql = f"""
+        |CREATE TEMPORARY VIEW ${JOIN_TABLE.name}
+        |(${JOIN_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |    (1, 1),
+        |    (2, 1),
+        |    (3, 3),
+        |    (7, 8),
+        |    (5, 6);
+        |""".stripMargin
+    val nullTableCreationSql = f"""
+        |CREATE TEMPORARY VIEW ${NULL_TABLE.name}
+        |(${NULL_TABLE.output.map(_.name).mkString(", ")}) AS
+        | SELECT CAST(null AS int), CAST(null as int);
+        |""".stripMargin
+    conn.prepareStatement(innerTableCreationSql).executeUpdate()
+    conn.prepareStatement(outerTableCreationSql).executeUpdate()
+    conn.prepareStatement(nullTableCreationSql).executeUpdate()
+    conn.prepareStatement(joinTableCreationSql).executeUpdate()
+    conn.prepareStatement(noMatchTableCreationSql).executeUpdate()
+    val localSparkSession = spark.newSession()
+    localSparkSession.sql(innerTableCreationSql)
+    localSparkSession.sql(outerTableCreationSql)
+    localSparkSession.sql(nullTableCreationSql)
+    localSparkSession.sql(joinTableCreationSql)
+    localSparkSession.sql(noMatchTableCreationSql)
+    // Enable ANSI so that { NULL IN { <empty> } } behavior is correct in Spark.
+    localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
 
+    // Run generated queries on both Spark and Postgres, and test against each other.
+    generatedQueries.toSeq.foreach { sqlStr =>
+      val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+      val sparkDf = localSparkSession.sql(sqlStr)
+      val postgresResult = getPostgresResult(stmt, sqlStr)
+      QueryTest.checkAnswer(sparkDf, postgresResult.toSeq)
+    }
+    conn.close()
   }
 }
