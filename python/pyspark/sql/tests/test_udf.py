@@ -924,6 +924,10 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row[1], {"a": "b"})
         self.assertEqual(row[2], Row(col1=1, col2=2))
 
+    @unittest.skipIf(
+        not have_pyarrow,
+        cast(str, pyarrow_requirement_message),
+    )
     def test_named_arguments(self):
         @udf("int")
         def test_udf(a, b):
@@ -970,6 +974,10 @@ class BaseUDFTestsMixin(object):
         ):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
+    @unittest.skipIf(
+        not have_pyarrow,
+        cast(str, pyarrow_requirement_message),
+    )
     def test_kwargs(self):
         @udf("int")
         def test_udf(**kwargs):
@@ -1035,6 +1043,10 @@ class BaseUDFTestsMixin(object):
             with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
 
+    @unittest.skipIf(
+        not have_pyarrow,
+        cast(str, pyarrow_requirement_message),
+    )
     def test_raise_stop_iteration(self):
         @udf("int")
         def test_udf(a):
