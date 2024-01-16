@@ -2027,7 +2027,7 @@ package object config {
 
     private[spark] val CLEAN_BROADCAST_AFTER_EXECUTION_END_ENABLED =
       ConfigBuilder("spark.broadcast.cleanAfterExecutionEnd.enabled")
-        .doc("Whether to enable clean broadcast data after sql execution. If enabled, " +
+        .doc("Whether to enable clean broadcast data after SQL execution. If enabled, " +
           "after the sql execution is completed, the broadcast data generated during " +
           " the sql execution will be destroyed. This can reclaim memory as quickly as possible.")
         .version("4.0.0")
