@@ -43,7 +43,7 @@ class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
     @staticmethod
     def addInPlace(
         value1: Optional["ProfileResults"], value2: Optional["ProfileResults"]
-    ) -> Optional[ProfileResults]:
+    ) -> Optional["ProfileResults"]:
         if value1 is None or len(value1) == 0:
             value1 = {}
         if value2 is None or len(value2) == 0:
