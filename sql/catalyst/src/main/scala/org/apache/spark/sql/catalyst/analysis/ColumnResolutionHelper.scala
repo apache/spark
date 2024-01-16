@@ -598,7 +598,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // Can not find the target plan node with plan id, e.g.
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
       //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
-      //  df1.select(df2["*"])   <-   illegal reference df2.a
+      //  df1.select(df2["*"])   <-   illegal reference df2["*"]
       throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     )
   }
