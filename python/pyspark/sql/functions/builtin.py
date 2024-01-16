@@ -17191,40 +17191,31 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-    >>> df.select(
+    >>> row = df.select(
     ...   sf.map_filter("data", lambda k, v: v > 30.0).alias("data_filtered")
-    ... ).show(truncate=False)
-    +--------------------------+
-    |data_filtered             |
-    +--------------------------+
-    |{baz -> 32.0, foo -> 42.0}|
-    +--------------------------+
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('baz', 32.0), ('foo', 42.0)]
 
     Example 2: Filtering a map with a condition on keys
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-    >>> df.select(
+    >>> row = df.select(
     ...   sf.map_filter("data", lambda k, v: k.startswith("b")).alias("data_filtered")
-    ... ).show(truncate=False)
-    +-------------------------+
-    |data_filtered            |
-    +-------------------------+
-    |{bar -> 1.0, baz -> 32.0}|
-    +-------------------------+
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('bar', 1.0), ('baz', 32.0)]
 
     Example 3: Filtering a map with a complex condition
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-    >>> df.select(
+    >>> row = df.select(
     ...   sf.map_filter("data", lambda k, v: k.startswith("b") & (v > 1.0)).alias("data_filtered")
-    ... ).show()
-    +-------------+
-    |data_filtered|
-    +-------------+
-    |{baz -> 32.0}|
-    +-------------+
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('baz', 32.0)]
     """
     return _invoke_higher_order_function("MapFilter", [col], [f])
 
@@ -17273,14 +17264,11 @@ def map_zip_with(
     >>> df = spark.createDataFrame([
     ...   (1, {"A": 1, "B": 2}, {"A": 3, "B": 4})],
     ...   ("id", "map1", "map2"))
-    >>> df.select(
+    >>> row = df.select(
     ...   sf.map_zip_with("map1", "map2", lambda k, v1, v2: v1 + v2).alias("updated_data")
-    ... ).show()
-    +----------------+
-    |    updated_data|
-    +----------------+
-    |{A -> 4, B -> 6}|
-    +----------------+
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('A', 4), ('B', 6)]
 
     Example 2: Merging two maps with a complex function
 
@@ -17288,16 +17276,13 @@ def map_zip_with(
     >>> df = spark.createDataFrame([
     ...   (1, {"A": 1, "B": 2}, {"A": 3, "B": 4})],
     ...   ("id", "map1", "map2"))
-    >>> df.select(
+    >>> row = df.select(
     ...   sf.map_zip_with("map1", "map2",
     ...     lambda k, v1, v2: sf.when(k == "A", v1 + v2).otherwise(v1 - v2)
     ...   ).alias("updated_data")
-    ... ).show()
-    +-----------------+
-    |     updated_data|
-    +-----------------+
-    |{A -> 4, B -> -2}|
-    +-----------------+
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('A', 4), ('B', -2)]
 
     Example 3: Merging two maps with mismatched keys
 
@@ -17305,16 +17290,13 @@ def map_zip_with(
     >>> df = spark.createDataFrame([
     ...   (1, {"A": 1, "B": 2}, {"B": 3, "C": 4})],
     ...   ("id", "map1", "map2"))
-    >>> df.select(
+    >>> row = df.select(
     ...   sf.map_zip_with("map1", "map2",
     ...     lambda k, v1, v2: sf.when(v2.isNull(), v1).otherwise(v1 + v2)
     ...   ).alias("updated_data")
-    ... ).show(truncate=False)
-    +---------------------------+
-    |updated_data               |
-    +---------------------------+
-    |{A -> 1, B -> 5, C -> NULL}|
-    +---------------------------+
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('A', 1), ('B', 5), ('C', None)]
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
