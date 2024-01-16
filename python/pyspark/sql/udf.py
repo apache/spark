@@ -29,7 +29,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
-from pyspark.sql.column import Column, _to_java_expr, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
     DataType,
     StringType,
