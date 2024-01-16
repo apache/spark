@@ -18600,7 +18600,7 @@ def aes_encrypt(
     +-------------------------------------------------------------------------------------------------------------+
     |Spark SQL                                                                                                    |
     +-------------------------------------------------------------------------------------------------------------+
-    """
+    """  # noqa: E501
     _mode = lit("GCM") if mode is None else mode
     _padding = lit("DEFAULT") if padding is None else padding
     _iv = lit("") if iv is None else iv
