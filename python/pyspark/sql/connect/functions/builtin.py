@@ -1010,6 +1010,8 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
+    if isinstance(col, Column) and isinstance(col._expr, UnresolvedStar):
+        col = lit(1)
     return _invoke_function_over_columns("count", col)
 
 
