@@ -199,7 +199,7 @@ trait QueryGeneratorHelper {
   }
 
   /**
-   * Case that encapsulates a Query, built with its different clauses.
+   * Case class that encapsulates a Query, built with its different clauses.
    * @param comment A string that will be printed as a comment a line before the query string.
    */
   case class Query(

@@ -14,22 +14,69 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.jdbc
 
-package org.apache.spark.sql
+import java.sql.Connection
 
-import java.io.File
-import java.util.Locale
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.QueryGeneratorHelper
+import org.apache.spark.tags.DockerTest
 
 /**
- * This suite is used to generate subqueries. This suite generates SQL files in sql-tests. Golden
- * files are generated for this with Spark, which introduces a form of regression testing in
- * SQLQueryTestSuite. Then, these are also run against Postgres, in PostgreSQLQueryTestSuite.
+ * This suite is used to generate subqueries, and test Spark against Postgres.
+ * To run this test suite for a specific version (e.g., postgres:15.1):
+ * {{{
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.GeneratedSubquerySuite"
+ * }}}
  */
-class SubquerySQLGeneratorSuite
-  extends SparkFunSuite with QueryGeneratorHelper {
+@DockerTest
+class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGeneratorHelper {
+
+  override val db = new DatabaseOnDocker {
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1-alpine")
+    override val env = Map(
+      "POSTGRES_PASSWORD" -> "rootpass"
+    )
+    override val usesIpc = false
+    override val jdbcPort = 5432
+    override def getJdbcUrl(ip: String, port: Int): String =
+      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
+  }
+
+  private val FIRST_COLUMN = "a"
+  private val SECOND_COLUMN = "b"
+
+  // Table definitions
+  private val INNER_TABLE_NAME = "inner_table"
+  private val INNER_TABLE_SCHEMA = Seq(
+  Attribute(FIRST_COLUMN, Some(INNER_TABLE_NAME)),
+  Attribute(SECOND_COLUMN, Some(INNER_TABLE_NAME)))
+  private val INNER_TABLE = TableRelation(INNER_TABLE_NAME, INNER_TABLE_SCHEMA)
+
+  private val OUTER_TABLE_NAME = "outer_table"
+  private val OUTER_TABLE_SCHEMA = Seq(
+    Attribute(FIRST_COLUMN, Some(OUTER_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(OUTER_TABLE_NAME)))
+  private val OUTER_TABLE = TableRelation(OUTER_TABLE_NAME, OUTER_TABLE_SCHEMA)
+
+  private val NO_MATCH_TABLE_NAME = "no_match_table"
+  private val NO_MATCH_TABLE_SCHEMA = Seq(
+    Attribute(FIRST_COLUMN, Some(NO_MATCH_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(NO_MATCH_TABLE_NAME)))
+  private val NO_MATCH_TABLE = TableRelation(NO_MATCH_TABLE_NAME, NO_MATCH_TABLE_SCHEMA)
+
+  private val JOIN_TABLE_NAME = "join_table"
+  private val JOIN_TABLE_SCHEMA = Seq(
+    Attribute(FIRST_COLUMN, Some(JOIN_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(JOIN_TABLE_NAME)))
+  private val JOIN_TABLE = TableRelation(JOIN_TABLE_NAME, JOIN_TABLE_SCHEMA)
+
+  private val NULL_TABLE_NAME = "null_table"
+  private val NULL_TABLE_SCHEMA = Seq(
+    Attribute(FIRST_COLUMN, Some(NULL_TABLE_NAME)),
+    Attribute(SECOND_COLUMN, Some(NULL_TABLE_NAME)))
+  private val NULL_TABLE = TableRelation(NULL_TABLE_NAME, NULL_TABLE_SCHEMA)
 
   /**
    * Function to generate a subquery given the following parameters:
@@ -185,52 +232,11 @@ class SubquerySQLGeneratorSuite
       orderByClause, limitClause = None)(comment)
   }
 
-  test("Generate subquery SQL") {
-    val FIRST_COLUMN = "a"
-    val SECOND_COLUMN = "b"
-
-    // Table definitions
-    val INNER_TABLE_NAME = "inner_table"
-    val INNER_TABLE_SCHEMA = Seq(
-      Attribute(FIRST_COLUMN, Some(INNER_TABLE_NAME)),
-      Attribute(SECOND_COLUMN, Some(INNER_TABLE_NAME)))
-    val INNER_TABLE = TableRelation(INNER_TABLE_NAME, INNER_TABLE_SCHEMA)
-
-    val OUTER_TABLE_NAME = "outer_table"
-    val OUTER_TABLE_SCHEMA = Seq(
-      Attribute(FIRST_COLUMN, Some(OUTER_TABLE_NAME)),
-      Attribute(SECOND_COLUMN, Some(OUTER_TABLE_NAME)))
-    val OUTER_TABLE = TableRelation(OUTER_TABLE_NAME, OUTER_TABLE_SCHEMA)
-
-    val NO_MATCH_TABLE_NAME = "no_match_table"
-    val NO_MATCH_TABLE_SCHEMA = Seq(
-      Attribute(FIRST_COLUMN, Some(NO_MATCH_TABLE_NAME)),
-      Attribute(SECOND_COLUMN, Some(NO_MATCH_TABLE_NAME)))
-    val NO_MATCH_TABLE = TableRelation(NO_MATCH_TABLE_NAME, NO_MATCH_TABLE_SCHEMA)
-
-    val JOIN_TABLE_NAME = "join_table"
-    val JOIN_TABLE_SCHEMA = Seq(
-      Attribute(FIRST_COLUMN, Some(JOIN_TABLE_NAME)),
-      Attribute(SECOND_COLUMN, Some(JOIN_TABLE_NAME)))
-    val JOIN_TABLE = TableRelation(JOIN_TABLE_NAME, JOIN_TABLE_SCHEMA)
-
-    val NULL_TABLE_NAME = "null_table"
-    val NULL_TABLE_SCHEMA = Seq(
-      Attribute(FIRST_COLUMN, Some(NULL_TABLE_NAME)),
-      Attribute(SECOND_COLUMN, Some(NULL_TABLE_NAME)))
-    val NULL_TABLE = TableRelation(NULL_TABLE_NAME, NULL_TABLE_SCHEMA)
-
-    val tableCombinations = Seq(
-      (INNER_TABLE, OUTER_TABLE),
-      (INNER_TABLE, NULL_TABLE),
-      (NULL_TABLE, OUTER_TABLE),
-      (NO_MATCH_TABLE, OUTER_TABLE),
-      (INNER_TABLE, NO_MATCH_TABLE)
-    )
-
-    // scalastyle:off line.size.limit
-    val createTableSql = f"""
-        |CREATE TEMPORARY VIEW ${INNER_TABLE.name}(${INNER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+  override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement(
+      f"""
+        |CREATE TEMPORARY VIEW ${INNER_TABLE.name}
+        |(${INNER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
         |    (1, 1),
         |    (2, 2),
         |    (3, 3),
@@ -238,28 +244,50 @@ class SubquerySQLGeneratorSuite
         |    (5, 5),
         |    (8, 8),
         |    (9, 9);
-        |
-        |CREATE TEMPORARY VIEW ${OUTER_TABLE.name}(${OUTER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
-        |    (1, 1),
-        |    (2, 1),
-        |    (3, 3),
-        |    (6, 6),
-        |    (7, 7),
-        |    (9, 9);
-        |
-        |CREATE TEMPORARY VIEW ${NO_MATCH_TABLE.name}(${NO_MATCH_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |""".stripMargin).executeUpdate()
+    conn.prepareStatement(
+      f"""
+         |CREATE TEMPORARY VIEW ${OUTER_TABLE.name}
+         |(${OUTER_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+         |    (1, 1),
+         |    (2, 1),
+         |    (3, 3),
+         |    (6, 6),
+         |    (7, 7),
+         |    (9, 9);
+        |""".stripMargin).executeUpdate()
+    conn.prepareStatement(
+      f"""
+        |CREATE TEMPORARY VIEW ${NO_MATCH_TABLE.name}
+        |(${NO_MATCH_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
         |    (1000, 1000);
-        |
-        |CREATE TEMPORARY VIEW ${JOIN_TABLE.name}(${JOIN_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
+        |""".stripMargin).executeUpdate()
+    conn.prepareStatement(
+      f"""
+        |CREATE TEMPORARY VIEW ${JOIN_TABLE.name}
+        |(${JOIN_TABLE.output.map(_.name).mkString(", ")}) AS VALUES
         |    (1, 1),
         |    (2, 1),
         |    (3, 3),
         |    (7, 8),
         |    (5, 6);
-        |
-        |CREATE TEMPORARY VIEW ${NULL_TABLE.name}(${NULL_TABLE.output.map(_.name).mkString(", ")}) AS SELECT CAST(null AS int), CAST(null as int);
-        |""".stripMargin.strip()
-    // scalastyle:off line.size.limit
+        |""".stripMargin).executeUpdate()
+    conn.prepareStatement(
+      f"""
+        |CREATE TEMPORARY VIEW ${NULL_TABLE.name}
+        |(${NULL_TABLE.output.map(_.name).mkString(", ")}) AS
+        | SELECT CAST(null AS int), CAST(null as int);
+        |""".stripMargin).executeUpdate()
+  }
+
+  test("Generate subquery queries and run against Postgres") {
+    val tableCombinations = Seq(
+      (INNER_TABLE, OUTER_TABLE),
+      (INNER_TABLE, NULL_TABLE),
+      (NULL_TABLE, OUTER_TABLE),
+      (NO_MATCH_TABLE, OUTER_TABLE),
+      (INNER_TABLE, NO_MATCH_TABLE)
+    )
 
     val innerSubqueryAlias = "innerSubqueryAlias"
     val subqueryAlias = "subqueryAlias"
@@ -355,61 +383,6 @@ class SubquerySQLGeneratorSuite
       }
     }
 
-    // Partition the queries by (isCorrelated, subqueryLocation, SubqueryType).
-    val partitionedQueries = generatedQuerySpecs.groupBy(query =>
-      (query.isCorrelated, query.subqueryType))
 
-    val baseResourcePath =
-      getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
-    val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
-    val generatedSubqueryDirPath = new File(inputFilePath,
-      SubquerySQLGeneratorSuite.GENERATED_SUBQUERY_DIR_NAME)
-
-    // Create files for each partition.
-    partitionedQueries.foreach { case ((isCorrelated, subqueryType), querySpec) =>
-      val correlationFilePrefix = if (isCorrelated) {
-        SubquerySQLGeneratorSuite.CORRELATED_FILE_PREFIX
-      } else {
-        SubquerySQLGeneratorSuite.UNCORRELATED_FILE_PREFIX
-      }
-      val resultFile = new File(generatedSubqueryDirPath, f"${correlationFilePrefix}_" +
-        f"${subqueryType.toString.toLowerCase(Locale.ROOT)}.sql")
-      val parent = resultFile.getParentFile
-      if (!parent.exists()) {
-        assert(parent.mkdirs(), "Could not create directory: " + parent)
-      }
-      var queryString = createTableSql + "\n\n" + querySpec.map(_.query).mkString(";\n\n") + ";\n"
-      if (SubquerySQLGeneratorSuite.FILES_WITH_KNOWN_FAILURES.exists(
-        f => resultFile.getAbsolutePath.toLowerCase(Locale.ROOT).contains(f))) {
-        queryString = "-- This test is excluded from PostgreSQLQueryTestSuite because " +
-          "there is an existing query returns different results in Spark and Postgres.\n" +
-          "--ONLY_IF spark\n" + queryString
-      }
-      queryString = "-- This file was automatically generated by SubquerySQLGeneratorSuite.\n" +
-        queryString
-
-      val generateSqlFiles = System.getenv(SubquerySQLGeneratorSuite.GENERATE_SQL_FILES_ENV) == "1"
-      if (generateSqlFiles) {
-        stringToFile(resultFile, queryString)
-      } else {
-        assert(fileToString(resultFile) == queryString, "The generated query string is " +
-          s"different from the string in $resultFile. Please generate the queries and write to" +
-          s"file using ${SubquerySQLGeneratorSuite.GENERATE_SQL_FILES_ENV}=1.")
-      }
-    }
   }
-}
-
-object SubquerySQLGeneratorSuite {
-
-  private val GENERATE_SQL_FILES_ENV = "GENERATE_SQL_FILES"
-
-  private val GENERATED_SUBQUERY_DIR_NAME = "subquery/generated"
-  private val CORRELATED_FILE_PREFIX = "correlated"
-  private val UNCORRELATED_FILE_PREFIX = "uncorrelated"
-
-  private val FILES_WITH_KNOWN_FAILURES = Seq(
-    "correlated_attribute.sql",
-    "correlated_not_in.sql"
-  ).map(_.toLowerCase(Locale.ROOT))
 }
