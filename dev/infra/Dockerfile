@@ -137,3 +137,5 @@ RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml
 RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 RUN python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.12 -m pip install torcheval
+
+RUN df -h
