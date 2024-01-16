@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.execution.datasources.v2.python
 
 import java.io.{DataInputStream, DataOutputStream}
 
@@ -24,272 +24,19 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{JobArtifactSet, SparkException}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonFunction, PythonUtils, PythonWorkerUtils, SimplePythonFunction, SpecialLengths}
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, TRUNCATE}
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
-import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, Write, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.{ArrowPythonRunner, MapInBatchEvaluatorFactory, PythonPlannerRunner, PythonSQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
-
-/**
- * Data Source V2 wrapper for Python Data Source.
- */
-class PythonTableProvider extends TableProvider {
-  private var name: String = _
-  def setShortName(str: String): Unit = {
-    assert(name == null)
-    name = str
-  }
-  private def shortName: String = {
-    assert(name != null)
-    name
-  }
-  private var dataSourceInPython: PythonDataSourceCreationResult = _
-  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
-  private lazy val source: UserDefinedPythonDataSource =
-    SparkSession.active.sessionState.dataSourceManager.lookupDataSource(shortName)
-  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    if (dataSourceInPython == null) {
-      dataSourceInPython = source.createDataSourceInPython(shortName, options, None)
-    }
-    dataSourceInPython.schema
-  }
-
-  override def getTable(
-      schema: StructType,
-      partitioning: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
-    val outputSchema = schema
-    new Table with SupportsRead with SupportsWrite {
-      override def name(): String = shortName
-
-      override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(
-        BATCH_READ, BATCH_WRITE, TRUNCATE)
-
-      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-        new ScanBuilder with Batch with Scan {
-
-          private lazy val infoInPython: PythonDataSourceReadInfo = {
-            if (dataSourceInPython == null) {
-              dataSourceInPython = source
-                .createDataSourceInPython(shortName, options, Some(outputSchema))
-            }
-            source.createReadInfoInPython(dataSourceInPython, outputSchema)
-          }
-
-          override def build(): Scan = this
-
-          override def toBatch: Batch = this
-
-          override def readSchema(): StructType = outputSchema
-
-          override def planInputPartitions(): Array[InputPartition] =
-            infoInPython.partitions.zipWithIndex.map(p => PythonInputPartition(p._2, p._1)).toArray
-
-          override def createReaderFactory(): PartitionReaderFactory = {
-            val readerFunc = infoInPython.func
-            new PythonPartitionReaderFactory(
-              source, readerFunc, outputSchema, jobArtifactUUID)
-          }
-
-          override def description: String = "(Python)"
-
-          override def supportedCustomMetrics(): Array[CustomMetric] =
-            source.createPythonMetrics()
-        }
-      }
-
-      override def schema(): StructType = outputSchema
-
-      override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-        new WriteBuilder with SupportsTruncate {
-
-          private var isTruncate = false
-
-          override def truncate(): WriteBuilder = {
-            isTruncate = true
-            this
-          }
-
-          override def build(): Write = new Write {
-
-            override def toBatch: BatchWrite = new BatchWrite {
-
-              // Store the pickled data source writer instance.
-              private var pythonDataSourceWriter: Array[Byte] = _
-
-              override def createBatchWriterFactory(
-                physicalInfo: PhysicalWriteInfo): DataWriterFactory = {
-
-                val writeInfo = source.createWriteInfoInPython(
-                  shortName,
-                  info.schema(),
-                  info.options(),
-                  isTruncate)
-
-                pythonDataSourceWriter = writeInfo.writer
-
-                PythonBatchWriterFactory(source, writeInfo.func, info.schema(), jobArtifactUUID)
-              }
-
-              override def commit(messages: Array[WriterCommitMessage]): Unit = {
-                source.commitWriteInPython(pythonDataSourceWriter, messages)
-              }
-
-              override def abort(messages: Array[WriterCommitMessage]): Unit = {
-                source.commitWriteInPython(pythonDataSourceWriter, messages, abort = true)
-              }
-
-              override def toString: String = shortName
-            }
-
-            override def description: String = "(Python)"
-
-            override def supportedCustomMetrics(): Array[CustomMetric] =
-              source.createPythonMetrics()
-          }
-        }
-      }
-    }
-  }
-
-  override def supportsExternalMetadata(): Boolean = true
-}
-
-case class PythonInputPartition(index: Int, pickedPartition: Array[Byte]) extends InputPartition
-
-class PythonPartitionReaderFactory(
-    source: UserDefinedPythonDataSource,
-    pickledReadFunc: Array[Byte],
-    outputSchema: StructType,
-    jobArtifactUUID: Option[String])
-  extends PartitionReaderFactory with PythonDataSourceSQLMetrics {
-
-  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    new PartitionReader[InternalRow] {
-
-      private[this] val metrics: Map[String, SQLMetric] = pythonMetrics
-
-      private val outputIter = {
-        val evaluatorFactory = source.createMapInBatchEvaluatorFactory(
-          pickledReadFunc,
-          "read_from_data_source",
-          UserDefinedPythonDataSource.readInputSchema,
-          outputSchema,
-          metrics,
-          jobArtifactUUID)
-
-        val part = partition.asInstanceOf[PythonInputPartition]
-        evaluatorFactory.createEvaluator().eval(
-          part.index, Iterator.single(InternalRow(part.pickedPartition)))
-      }
-
-      override def next(): Boolean = outputIter.hasNext
-
-      override def get(): InternalRow = outputIter.next()
-
-      override def close(): Unit = {}
-
-      override def currentMetricsValues(): Array[CustomTaskMetric] = {
-        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value})
-      }
-    }
-  }
-}
-
-case class PythonWriterCommitMessage(pickledMessage: Array[Byte]) extends WriterCommitMessage
-
-private case class PythonBatchWriterFactory(
-    source: UserDefinedPythonDataSource,
-    pickledWriteFunc: Array[Byte],
-    inputSchema: StructType,
-    jobArtifactUUID: Option[String]) extends DataWriterFactory with PythonDataSourceSQLMetrics {
-  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new DataWriter[InternalRow] {
-
-      private[this] val metrics: Map[String, SQLMetric] = pythonMetrics
-
-      private var commitMessage: PythonWriterCommitMessage = _
-
-      override def writeAll(records: java.util.Iterator[InternalRow]): Unit = {
-        val evaluatorFactory = source.createMapInBatchEvaluatorFactory(
-          pickledWriteFunc,
-          "write_to_data_source",
-          inputSchema,
-          UserDefinedPythonDataSource.writeOutputSchema,
-          metrics,
-          jobArtifactUUID)
-        val outputIter = evaluatorFactory.createEvaluator().eval(partitionId, records.asScala)
-        outputIter.foreach { row =>
-          if (commitMessage == null) {
-            commitMessage = PythonWriterCommitMessage(row.getBinary(0))
-          } else {
-            throw QueryExecutionErrors.invalidWriterCommitMessageError(details = "more than one")
-          }
-        }
-        if (commitMessage == null) {
-          throw QueryExecutionErrors.invalidWriterCommitMessageError(details = "zero")
-        }
-      }
-
-      override def write(record: InternalRow): Unit =
-        SparkException.internalError("write method for Python data source should not be called.")
-
-      override def commit(): WriterCommitMessage = {
-        commitMessage.asInstanceOf[WriterCommitMessage]
-      }
-
-      override def abort(): Unit = {}
-
-      override def close(): Unit = {}
-
-      override def currentMetricsValues(): Array[CustomTaskMetric] = {
-        source.createPythonTaskMetrics(metrics.map { case (k, v) => k -> v.value })
-      }
-    }
-  }
-}
-
-trait PythonDataSourceSQLMetrics {
-  // Dummy SQLMetrics. The result is manually reported via DSv2 interface
-  // via passing the value to `CustomTaskMetric`. Note that `pythonOtherMetricsDesc`
-  // is not used when it is reported. It is to reuse existing Python runner.
-  // See also `UserDefinedPythonDataSource.createPythonMetrics`.
-  protected lazy val pythonMetrics: Map[String, SQLMetric] = {
-    PythonSQLMetrics.pythonSizeMetricsDesc.keys
-      .map(_ -> new SQLMetric("size", -1)).toMap ++
-      PythonSQLMetrics.pythonOtherMetricsDesc.keys
-        .map(_ -> new SQLMetric("sum", -1)).toMap
-  }
-}
-
-class PythonCustomMetric(
-  override val name: String,
-  override val description: String) extends CustomMetric {
-  // To allow the aggregation can be called. See `SQLAppStatusListener.aggregateMetrics`
-  def this() = this(null, null)
-
-  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
-    SQLMetrics.stringValue("size", taskMetrics, Array.empty[Long])
-  }
-}
-
-class PythonCustomTaskMetric(
-    override val name: String,
-    override val value: Long) extends CustomTaskMetric
 
 /**
  * A user-defined Python data source. This is used by the Python API.
@@ -444,7 +191,7 @@ case class PythonLookupAllDataSourcesResult(
 /**
  * A runner used to look up Python Data Sources available in Python path.
  */
-class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
+private class UserDefinedPythonDataSourceLookupRunner(lookupSources: PythonFunction)
     extends PythonPlannerRunner[PythonLookupAllDataSourcesResult](lookupSources) {
 
   override val workerModule = "pyspark.sql.worker.lookup_data_sources"
@@ -490,7 +237,7 @@ case class PythonDataSourceCreationResult(
 /**
  * A runner used to create a Python data source in a Python process and return the result.
  */
-class UserDefinedPythonDataSourceRunner(
+private class UserDefinedPythonDataSourceRunner(
     dataSourceCls: PythonFunction,
     provider: String,
     userSpecifiedSchema: Option[StructType],
@@ -560,7 +307,7 @@ case class PythonDataSourceReadInfo(
  * @param inputSchema input schema to the data source read from its child plan
  * @param outputSchema output schema of the Python data source
  */
-class UserDefinedPythonDataSourceReadRunner(
+private class UserDefinedPythonDataSourceReadRunner(
     func: PythonFunction,
     inputSchema: StructType,
     outputSchema: StructType) extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
@@ -617,7 +364,7 @@ case class PythonDataSourceWriteInfo(func: Array[Byte], writer: Array[Byte])
  * A runner that creates a Python data source writer instance and returns a Python function
  * to be used to write data into the data source.
  */
-class UserDefinedPythonDataSourceWriteRunner(
+private class UserDefinedPythonDataSourceWriteRunner(
     dataSourceCls: PythonFunction,
     provider: String,
     inputSchema: StructType,
@@ -675,7 +422,7 @@ class UserDefinedPythonDataSourceWriteRunner(
  * A runner that takes a Python data source writer and a list of commit messages,
  * and invokes the `commit` or `abort` method of the writer in Python.
  */
-class UserDefinedPythonDataSourceCommitRunner(
+private class UserDefinedPythonDataSourceCommitRunner(
     dataSourceCls: PythonFunction,
     writer: Array[Byte],
     messages: Array[WriterCommitMessage],

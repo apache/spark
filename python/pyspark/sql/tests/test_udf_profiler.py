@@ -21,6 +21,7 @@ import tempfile
 import unittest
 import os
 import sys
+import warnings
 from io import StringIO
 from typing import Iterator, cast
 
@@ -111,6 +112,47 @@ class UDFProfilerTests(unittest.TestCase):
 
         self.sc.show_profiles()
         self.assertEqual("Custom formatting", profiler.result)
+
+    # Unsupported
+    def exec_pandas_udf_iter_to_iter(self):
+        import pandas as pd
+
+        @pandas_udf("int")
+        def iter_to_iter(batch_ser: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for ser in batch_ser:
+                yield ser + 1
+
+        self.spark.range(10).select(iter_to_iter("id")).collect()
+
+    # Unsupported
+    def exec_map(self):
+        import pandas as pd
+
+        def map(pdfs: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+            for pdf in pdfs:
+                yield pdf[pdf.id == 1]
+
+        df = self.spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0)], ("id", "v"))
+        df.mapInPandas(map, schema=df.schema).collect()
+
+    def test_unsupported(self):
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter("always")
+            self.exec_pandas_udf_iter_to_iter()
+            user_warns = [warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+            self.assertTrue(len(user_warns) > 0)
+            self.assertTrue(
+                "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
+            )
+
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter("always")
+            self.exec_map()
+            user_warns = [warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+            self.assertTrue(len(user_warns) > 0)
+            self.assertTrue(
+                "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
+            )
 
 
 class UDFProfiler2TestsMixin:

@@ -840,7 +840,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     Row(ArrayBuffer(100)))
 
      val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
-      immutable.ArraySeq.unsafeWrapArray[Int](a.appended(5).appended(6).toArray))
+      immutable.ArraySeq.unsafeWrapArray[Int]((a :+ 5 :+ 6).toArray))
     checkAnswer(Seq(Array(1, 2, 3))
       .toDF("col")
       .select(myUdf2(Column("col"))),
