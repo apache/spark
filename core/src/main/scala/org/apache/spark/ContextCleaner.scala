@@ -116,6 +116,8 @@ private[spark] class ContextCleaner(
   private val blockOnShuffleCleanupTasks =
     sc.conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE)
 
+  @volatile private var stopped = false
+
   /** Attach a listener object to get information of when objects are cleaned. */
   def attachListener(listener: CleanerListener): Unit = {
     listeners.add(listener)
@@ -134,6 +136,7 @@ private[spark] class ContextCleaner(
    * Stop the cleaning thread and wait until the thread has finished running its current task.
    */
   def stop(): Unit = {
+    stopped = true
     // Interrupt the cleaning thread, but wait until the current task has finished before
     // doing so. This guards against the race condition where a cleaning thread may
     // potentially clean similarly named variables created by a different SparkContext,
@@ -183,8 +186,7 @@ private[spark] class ContextCleaner(
 
   /** Keep cleaning RDD, shuffle, and broadcast state. */
   private def keepCleaning(): Unit = Utils.tryOrStopSparkContext(sc) {
-    var running = true
-    while (running) {
+    while (!stopped) {
       try {
         val reference = Option(referenceQueue.remove(ContextCleaner.REF_QUEUE_POLL_TIMEOUT))
           .map(_.asInstanceOf[CleanupTaskWeakReference])
@@ -210,8 +212,7 @@ private[spark] class ContextCleaner(
           }
         }
       } catch {
-        case ie: InterruptedException =>
-          running = false
+        case ie: InterruptedException if stopped => // ignore
         case e: Exception => logError("Error in cleaning thread", e)
       }
     }
