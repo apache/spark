@@ -17192,7 +17192,7 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
     >>> row = df.select(
-    ...   sf.map_filter("data", lambda k, v: v > 30.0).alias("data_filtered")
+    ...   sf.map_filter("data", lambda _, v: v > 30.0).alias("data_filtered")
     ... ).head()
     >>> sorted(row["data_filtered"].items())
     [('baz', 32.0), ('foo', 42.0)]
@@ -17202,7 +17202,7 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
     >>> row = df.select(
-    ...   sf.map_filter("data", lambda k, v: k.startswith("b")).alias("data_filtered")
+    ...   sf.map_filter("data", lambda k, _: k.startswith("b")).alias("data_filtered")
     ... ).head()
     >>> sorted(row["data_filtered"].items())
     [('bar', 1.0), ('baz', 32.0)]
@@ -17265,7 +17265,7 @@ def map_zip_with(
     ...   (1, {"A": 1, "B": 2}, {"A": 3, "B": 4})],
     ...   ("id", "map1", "map2"))
     >>> row = df.select(
-    ...   sf.map_zip_with("map1", "map2", lambda k, v1, v2: v1 + v2).alias("updated_data")
+    ...   sf.map_zip_with("map1", "map2", lambda _, v1, v2: v1 + v2).alias("updated_data")
     ... ).head()
     >>> sorted(row["updated_data"].items())
     [('A', 4), ('B', 6)]
@@ -17292,7 +17292,7 @@ def map_zip_with(
     ...   ("id", "map1", "map2"))
     >>> row = df.select(
     ...   sf.map_zip_with("map1", "map2",
-    ...     lambda k, v1, v2: sf.when(v2.isNull(), v1).otherwise(v1 + v2)
+    ...     lambda _, v1, v2: sf.when(v2.isNull(), v1).otherwise(v1 + v2)
     ...   ).alias("updated_data")
     ... ).head()
     >>> sorted(row["updated_data"].items())
