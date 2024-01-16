@@ -114,6 +114,10 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   test("Fail to convert with missing nested Protobuf fields for serializer") {
     val protoFile = ProtobufUtils.buildDescriptor(testFileDesc, "FieldMissingInProto")
 
+    val nonnullCatalyst = new StructType()
+      .add("foo", new StructType().add("bar", IntegerType, nullable = false))
+
+    // serialize fails whether or not 'bar' is nullable
     assertFailedConversionMessage(
       protoFile,
       Serializer,
@@ -122,6 +126,15 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
       params = Map(
         "protobufType" -> "FieldMissingInProto",
         "toType" -> toSQLType(CATALYST_STRUCT)))
+
+    assertFailedConversionMessage(protoFile,
+      Serializer,
+      BY_NAME,
+      nonnullCatalyst,
+      errorClass = "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE",
+      params = Map(
+        "protobufType" -> "FieldMissingInProto",
+        "toType" -> toSQLType(nonnullCatalyst)))
   }
 
   test("Fail to convert with deeply nested field type mismatch") {
