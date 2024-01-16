@@ -81,6 +81,16 @@ def get_config_groups(jvm, config_groups_path):
         for k, v in _config_groups.items()
     })
 
+    bad_group_names = {
+        group for group in config_groups
+        if not re.fullmatch(r"[a-z0-9-]+", group)
+    }
+    if bad_group_names:
+        raise ValueError(
+            "Only lower case letters, digits, and dashes are allowed in group names. "
+            f"The following group names are invalid: {', '.join(bad_group_names)}"
+        )
+
     reserved_groups_used = config_groups.keys() & RESERVED_CONFIG_GROUPS
     if reserved_groups_used:
         raise ValueError(
