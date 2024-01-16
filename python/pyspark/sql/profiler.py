@@ -17,7 +17,7 @@
 from abc import ABC, abstractmethod
 import pstats
 from threading import RLock
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, TYPE_CHECKING
 
 from pyspark.accumulators import (
     Accumulator,
@@ -27,22 +27,22 @@ from pyspark.accumulators import (
 )
 from pyspark.profiler import CodeMapDict, MemoryProfiler, MemUsageParam, PStatsParam
 
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ProfileResults
 
-ProfileResults = Dict[int, Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]
 
-
-class _ProfileResultsParam(AccumulatorParam[Optional[ProfileResults]]):
+class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
     """
     AccumulatorParam for profilers.
     """
 
     @staticmethod
-    def zero(value: Optional[ProfileResults]) -> Optional[ProfileResults]:
+    def zero(value: Optional["ProfileResults"]) -> Optional["ProfileResults"]:
         return value
 
     @staticmethod
     def addInPlace(
-        value1: Optional[ProfileResults], value2: Optional[ProfileResults]
+        value1: Optional["ProfileResults"], value2: Optional["ProfileResults"]
     ) -> Optional[ProfileResults]:
         if value1 is None or len(value1) == 0:
             value1 = {}
@@ -152,7 +152,7 @@ class ProfilerCollector(ABC):
 
     @property
     @abstractmethod
-    def _profile_results(self) -> Dict[int, Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]:
+    def _profile_results(self) -> "ProfileResults":
         """
         Get the profile results.
         """
@@ -170,7 +170,7 @@ class AccumulatorProfilerCollector(ProfilerCollector):
             )
 
     @property
-    def _profile_results(self) -> Dict[int, Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]:
+    def _profile_results(self) -> "ProfileResults":
         with self._lock:
             value = self._accumulator.value
             return value if value is not None else {}

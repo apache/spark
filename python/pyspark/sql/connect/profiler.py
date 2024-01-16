@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import pstats
-from typing import Dict, Optional, Tuple
+from typing import TYPE_CHECKING
 
-from pyspark.profiler import CodeMapDict
-from pyspark.sql.profiler import ProfilerCollector, ProfileResults, ProfileResultsParam
+from pyspark.sql.profiler import ProfilerCollector, ProfileResultsParam
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ProfileResults
 
 
 class ConnectProfilerCollector(ProfilerCollector):
@@ -31,10 +32,10 @@ class ConnectProfilerCollector(ProfilerCollector):
         self._value = ProfileResultsParam.zero(None)
 
     @property
-    def _profile_results(self) -> Dict[int, Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]:
+    def _profile_results(self) -> "ProfileResults":
         with self._lock:
             return self._value if self._value is not None else {}
 
-    def _update(self, update: ProfileResults) -> None:
+    def _update(self, update: "ProfileResults") -> None:
         with self._lock:
             self._value = ProfileResultsParam.addInPlace(self._profile_results, update)
