@@ -231,8 +231,8 @@ private[spark] class SparkUnsupportedOperationException private(
 private[spark] object SparkUnsupportedOperationException {
   def apply(): SparkUnsupportedOperationException = {
     val stackTrace = Thread.currentThread().getStackTrace
-    val messageParameters = if (stackTrace.length > 2) {
-      val element = stackTrace(1)
+    val messageParameters = if (stackTrace.length >= 4) {
+      val element = stackTrace(3)
       Map("className" -> element.getClassName, "methodName" -> element.getMethodName)
     } else {
       Map("className" -> "?", "methodName" -> "?")

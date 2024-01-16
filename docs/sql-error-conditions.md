@@ -2335,7 +2335,7 @@ Unsupported arrow type `<typeName>`.
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-Not supported method call `<methodName>` of the class `<className>`.
+Cannot call the method "`<methodName>`" of the class "`<className>`".
 
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 

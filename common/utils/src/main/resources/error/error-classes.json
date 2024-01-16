@@ -3594,7 +3594,7 @@
   },
   "UNSUPPORTED_CALL" : {
     "message" : [
-      "Not supported method call <methodName> of the class <className>."
+      "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
     "sqlState" : "0A000"
   },
@@ -7210,11 +7210,6 @@
     ]
   },
   "_LEGACY_ERROR_TEMP_3125" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3126" : {
     "message" : [
       ""
     ]
