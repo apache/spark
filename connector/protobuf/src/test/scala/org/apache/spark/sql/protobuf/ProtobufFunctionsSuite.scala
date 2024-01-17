@@ -1125,8 +1125,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Retain empty proto fields when retain.empty.message.types=true") {
-    // When retain.empty.message=true, empty proto like 'message A {}' can be retained as a field
-    // by inserting a dummy column as sub column.
+    // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained as
+    // a field by inserting a dummy column as sub column.
     val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
 
     // EmptyProto at the top level. It will be an empty struct.
@@ -1153,8 +1153,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Write empty proto to parquet when retain.empty.message.types=true") {
-    // When retain.empty.message=true, empty proto like 'message A {}' can be retained as a field
-    // by inserting a dummy column as sub column, such schema can be written to parquet.
+    // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained
+    // as a field by inserting a dummy column as sub column, such schema can be written to parquet.
     val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
     withTempDir { file =>
       val binaryDF = Seq(
@@ -1173,6 +1173,25 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       ))
       // The dummy column of empty proto should have null value.
       checkAnswer(resultDF, Seq(Row(Row("my_name", null))))
+    }
+
+    // Top level message can't be empty, otherwise AnalysisException will be thrown.
+    // Dummy column won't be inserted for top level struct when retain.empty.message.types=true.
+    withTempDir { file =>
+      val binaryDF = Seq(
+        EmptyRecursiveProto.newBuilder.build().toByteArray)
+        .toDF("binary")
+      checkWithFileAndClassName("EmptyProto") {
+        case (name, descFilePathOpt) =>
+          val df = binaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+          )
+          val e = intercept[AnalysisException] {
+            df.write.format("parquet").mode("overwrite").save(file.getAbsolutePath)
+          }
+          assert(e.getMessage.contains(
+            "Datasource does not support writing empty or nested empty schemas."))
+      }
     }
   }
 
@@ -1204,7 +1223,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   test("Retain empty recursive proto fields when retain.empty.message.types=true") {
     // This verifies that a empty proto like 'message A { A a = 1}' can be retained by
-    // inserting a dumy field.
+    // inserting a dummy field.
 
     val emptyProtoSchema =
       StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
