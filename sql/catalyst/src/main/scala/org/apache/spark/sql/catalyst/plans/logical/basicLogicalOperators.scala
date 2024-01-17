@@ -842,10 +842,6 @@ case class CTERelationDef(
     copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
-
-  override def doCanonicalize(): LogicalPlan = {
-    copy(child = child.canonicalized, id = 0)
-  }
 }
 
 object CTERelationDef {
@@ -889,10 +885,6 @@ case class CTERelationRef(
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
 
   override def computeStats(): Statistics = statsOpt.getOrElse(Statistics(conf.defaultSizeInBytes))
-
-  override def doCanonicalize(): LogicalPlan = {
-    super.doCanonicalize().asInstanceOf[CTERelationRef].copy(cteId = 0)
-  }
 }
 
 /**
@@ -917,6 +909,30 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
 
   def withNewPlan(newPlan: LogicalPlan): WithCTE = {
     withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
+  }
+
+  override def doCanonicalize(): LogicalPlan = {
+    val canonicalized = super.doCanonicalize().asInstanceOf[WithCTE]
+    val defIndex = canonicalized.cteDefs.map(_.id).zipWithIndex.toMap
+
+    def canonicalizeCTE(plan: LogicalPlan): LogicalPlan = {
+      plan.resolveOperatorsUpWithPruning(
+        _.containsAnyPattern(CTE, PLAN_EXPRESSION)) {
+        case ref: CTERelationRef =>
+          ref.copy(cteId = defIndex(ref.cteId).toLong)
+
+        case other =>
+          other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+            case e: SubqueryExpression => e.withNewPlan(canonicalizeCTE(e.plan))
+          }
+      }
+    }
+
+    canonicalized.copy(
+      plan = canonicalizeCTE(canonicalized.plan),
+      cteDefs = canonicalized.cteDefs.map { cteDef =>
+        cteDef.copy(id = defIndex(cteDef.id).toLong)
+      })
   }
 }
 
