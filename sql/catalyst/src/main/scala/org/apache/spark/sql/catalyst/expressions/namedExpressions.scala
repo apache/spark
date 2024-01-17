@@ -418,15 +418,20 @@ case class PrettyAttribute(
 /**
  * An expression that has to be resolved against a scope of resolved attributes.
  */
-case class ScopedExpression(child: Expression, scope: Seq[Attribute])
-  extends UnaryExpression with Unevaluable {
-  override def dataType: DataType = child.dataType
-  override def nullable: Boolean = child.nullable
+case class ScopedExpression(expr: Expression, scope: Seq[Attribute])
+  extends Expression with Unevaluable {
+  override def children: Seq[Expression] = expr +: scope
+  override def dataType: DataType = expr.dataType
+  override def nullable: Boolean = expr.nullable
   override def prettyName: String = "scoped"
+  override def sql: String = s"$prettyName(${expr.sql}, $scope)"
+  override lazy val resolved: Boolean = expr.resolved
 
-  override def sql: String = s"$prettyName(${child.sql}, $scope)"
-
-  override def withNewChildInternal(newChild: Expression): ScopedExpression = copy(child = newChild)
+  override protected def withNewChildrenInternal(children: IndexedSeq[Expression]): Expression = {
+    val scope = children.tail
+    assert(scope.forall(_.isInstanceOf[Attribute]), "Scope children have to be attributes")
+    copy(expr = children.head, scope = scope.map(_.asInstanceOf[Attribute]))
+  }
 }
 
 /**
