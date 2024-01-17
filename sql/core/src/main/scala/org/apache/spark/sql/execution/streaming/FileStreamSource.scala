@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -131,17 +132,27 @@ class FileStreamSource(
 
   /**
    * Split files into a selected/unselected pair according to a total size threshold.
+   * Always puts the 1st element in a left split and keep adding it to a left split
+   * until reaches a specified threshold or [[Long.MaxValue]].
    */
   private def takeFilesUntilMax(files: Seq[NewFileEntry], maxSize: Long):
-    (Seq[NewFileEntry], Seq[NewFileEntry]) = {
-    var idx = 0
-    var totalSize = 0L
-    val (bFiles, usFiles) = files.span { case NewFileEntry(_, size, _) =>
-      idx += 1
-      totalSize = Math.addExact(totalSize, size)
-      idx == 1 || totalSize <= maxSize
+  (FilesSplit, FilesSplit) = {
+    var lSize = BigInt(0)
+    var rSize = BigInt(0)
+    val lFiles = ArrayBuffer[NewFileEntry]()
+    val rFiles = ArrayBuffer[NewFileEntry]()
+    for (i <- files.indices) {
+      val file = files(i)
+      val newSize = lSize + file.size
+      if (i == 0 || rFiles.isEmpty && newSize <= Long.MaxValue && newSize <= maxSize) {
+        lSize += file.size
+        lFiles += file
+      } else {
+        rSize += file.size
+        rFiles += file
+      }
     }
-    (bFiles, usFiles)
+    (FilesSplit(lFiles.toSeq, lSize), FilesSplit(rFiles.toSeq, rSize))
   }
 
   /**
@@ -188,10 +199,9 @@ class FileStreamSource(
 
       case files: ReadMaxBytes if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
-        val (bFiles, usFiles) = takeFilesUntilMax(newFiles, files.maxBytes())
-        val usFilesSize = usFiles
-          .foldLeft(0L) { case (sum, NewFileEntry(_, size, _)) => Math.addExact(sum, size) }
-        if (usFilesSize < files.maxBytes() * DISCARD_UNSEEN_FILES_RATIO) {
+        val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
+          takeFilesUntilMax(newFiles, files.maxBytes())
+        if (rSize < (files.maxBytes() * DISCARD_UNSEEN_FILES_RATIO).toLong) {
           // Discard unselected files if the total size of files is smaller than threshold.
           // This is to avoid the case when the next batch would have too small of a size of
           // files to read whereas there're new files available.
@@ -202,8 +212,9 @@ class FileStreamSource(
         }
 
       case files: ReadMaxBytes =>
+        val (FilesSplit(bFiles, _), _) = takeFilesUntilMax(newFiles, files.maxBytes())
         // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
-        (takeFilesUntilMax(newFiles, files.maxBytes())._1, null)
+        (bFiles, null)
 
       case _: ReadAllAvailable => (newFiles, null)
     }
@@ -422,6 +433,8 @@ object FileStreamSource {
 
   /** Newly fetched files metadata holder. */
   private case class NewFileEntry(path: SparkPath, size: Long, timestamp: Long)
+
+  private case class FilesSplit(files: Seq[NewFileEntry], size: BigInt)
 
   /**
    * A custom hash map used to track the list of files seen. This map is not thread-safe.
