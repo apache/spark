@@ -1545,7 +1545,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-42199: resolve expression against scoped attributes") {
     val plan = testRelation.select($"a".as("value")).analyze
-    implicit val intEncoder = ExpressionEncoder[Int]
+    implicit val intEncoder = ExpressionEncoder[Int]()
     val appendCols = AppendColumns[Int, Int]((x: Int) => x, plan)
 
     // AppendColumns adds a duplicate 'value' column, which makes $"value" ambiguous
