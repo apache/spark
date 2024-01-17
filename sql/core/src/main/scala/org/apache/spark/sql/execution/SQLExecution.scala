@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{ErrorMessageFormat, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{CLEAN_BROADCAST_AFTER_EXECUTION_END_ENABLED, SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
+import org.apache.spark.internal.config.{CLEAN_BROADCAST_AFTER_EXECUTION_ENABLED, SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -180,7 +180,7 @@ object SQLExecution extends Logging {
       }
     } finally {
       executionIdToQueryExecution.remove(executionId)
-      if(sc.conf.get(CLEAN_BROADCAST_AFTER_EXECUTION_END_ENABLED)) {
+      if(sc.conf.get(CLEAN_BROADCAST_AFTER_EXECUTION_ENABLED)) {
         sc.cleanBroadcastByExecution(executionId.toString)
       }
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
