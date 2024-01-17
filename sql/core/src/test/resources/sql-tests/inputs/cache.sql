@@ -1,0 +1,14 @@
+CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES 0, 1, 2 AS t(id);
+
+
+CACHE TABLE cache_table
+WITH
+t2 AS (SELECT 1)
+SELECT * FROM t2;
+
+SELECT * FROM cache_table;
+
+EXPLAIN EXTENDED SELECT * FROM cache_table;
+
+-- Clean up
+DROP TABLE IF EXISTS t1;

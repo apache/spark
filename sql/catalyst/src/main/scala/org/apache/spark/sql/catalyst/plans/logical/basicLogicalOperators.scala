@@ -842,6 +842,10 @@ case class CTERelationDef(
     copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
+
+  override def doCanonicalize(): LogicalPlan = {
+    copy(child = child.canonicalized, id = 0)
+  }
 }
 
 object CTERelationDef {
@@ -885,6 +889,10 @@ case class CTERelationRef(
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
 
   override def computeStats(): Statistics = statsOpt.getOrElse(Statistics(conf.defaultSizeInBytes))
+
+  override def doCanonicalize(): LogicalPlan = {
+    super.doCanonicalize().asInstanceOf[CTERelationRef].copy(cteId = 0)
+  }
 }
 
 /**
