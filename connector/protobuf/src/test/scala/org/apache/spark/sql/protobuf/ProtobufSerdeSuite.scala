@@ -127,7 +127,8 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
         "protobufType" -> "FieldMissingInProto",
         "toType" -> toSQLType(CATALYST_STRUCT)))
 
-    assertFailedConversionMessage(protoFile,
+    assertFailedConversionMessage(
+      protoFile,
       Serializer,
       BY_NAME,
       nonnullCatalyst,

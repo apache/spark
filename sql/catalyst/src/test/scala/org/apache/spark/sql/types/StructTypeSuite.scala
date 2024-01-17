@@ -591,18 +591,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         StructField(
           "b",
           StructType(
-            Seq(
-              StructField("c", StringType, nullable = false).withComment("struct comment")
-            )
-          ),
-          nullable = false
-        ),
+            Seq(StructField("c", StringType, nullable = false).withComment("struct comment"))),
+          nullable = false),
         StructField("b", StringType, nullable = false),
-        StructField("c", StringType).withComment("nullable comment")
-      )
-    )
-    assert(struct.toDDL == "b STRUCT<c: STRING NOT NULL COMMENT 'struct comment'> NOT NULL," +
-      "b STRING NOT NULL,c STRING COMMENT 'nullable comment'")
+        StructField("c", StringType).withComment("nullable comment")))
+    assert(
+      struct.toDDL == "b STRUCT<c: STRING NOT NULL COMMENT 'struct comment'> NOT NULL," +
+        "b STRING NOT NULL,c STRING COMMENT 'nullable comment'")
     assert(fromDDL(struct.toDDL) === struct)
   }
 }
