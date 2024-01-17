@@ -98,7 +98,7 @@ class PythonUDTFRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(
-    Seq(ChainedPythonFunctions(Seq(udtf.func))),
+    Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
     PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {

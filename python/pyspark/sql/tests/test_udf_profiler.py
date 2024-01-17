@@ -15,18 +15,40 @@
 # limitations under the License.
 #
 
+from contextlib import contextmanager
+import inspect
 import tempfile
 import unittest
 import os
 import sys
 import warnings
 from io import StringIO
-from typing import Iterator
+from typing import Iterator, cast
 
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import udf, pandas_udf
+from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.profiler import UDFBasicProfiler
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
+
+
+def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
+    @udf("long", useArrow=use_arrow)
+    def add1(x):
+        return x + 1
+
+    @udf("long", useArrow=use_arrow)
+    def add2(x):
+        return x + 2
+
+    df = spark.range(10).select(add1("id"), add2("id"), add1("id"), add2(col("id") + 1))
+    action(df)
 
 
 class UDFProfilerTests(unittest.TestCase):
@@ -47,10 +69,10 @@ class UDFProfilerTests(unittest.TestCase):
         sys.path = self._old_sys_path
 
     def test_udf_profiler(self):
-        self.do_computation()
+        _do_computation(self.spark)
 
         profilers = self.sc.profiler_collector.profilers
-        self.assertEqual(3, len(profilers))
+        self.assertEqual(4, len(profilers))
 
         old_stdout = sys.stdout
         try:
@@ -62,7 +84,7 @@ class UDFProfilerTests(unittest.TestCase):
         d = tempfile.gettempdir()
         self.sc.dump_profiles(d)
 
-        for i, udf_name in enumerate(["add1", "add2", "add1"]):
+        for i, udf_name in enumerate(["add1", "add2", "add1", "add2"]):
             id, profiler, _ = profilers[i]
             with self.subTest(id=id, udf_name=udf_name):
                 stats = profiler.stats()
@@ -81,27 +103,15 @@ class UDFProfilerTests(unittest.TestCase):
 
         self.sc.profiler_collector.udf_profiler_cls = TestCustomProfiler
 
-        self.do_computation()
+        _do_computation(self.spark)
 
         profilers = self.sc.profiler_collector.profilers
-        self.assertEqual(3, len(profilers))
+        self.assertEqual(4, len(profilers))
         _, profiler, _ = profilers[0]
         self.assertTrue(isinstance(profiler, TestCustomProfiler))
 
         self.sc.show_profiles()
         self.assertEqual("Custom formatting", profiler.result)
-
-    def do_computation(self):
-        @udf
-        def add1(x):
-            return x + 1
-
-        @udf
-        def add2(x):
-            return x + 2
-
-        df = self.spark.range(10)
-        df.select(add1("id"), add2("id"), add1("id")).collect()
 
     # Unsupported
     def exec_pandas_udf_iter_to_iter(self):
@@ -143,6 +153,190 @@ class UDFProfilerTests(unittest.TestCase):
             self.assertTrue(
                 "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
             )
+
+
+class UDFProfiler2TestsMixin:
+    @contextmanager
+    def trap_stdout(self):
+        old_stdout = sys.stdout
+        sys.stdout = io = StringIO()
+        try:
+            yield io
+        finally:
+            sys.stdout = old_stdout
+
+    @property
+    def profile_results(self):
+        return self.spark._profiler_collector._perf_profile_results
+
+    def test_perf_profiler_udf(self):
+        _do_computation(self.spark)
+
+        # Without the conf enabled, no profile results are collected.
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            _do_computation(self.spark)
+
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.trap_stdout() as io_all:
+            self.spark.showPerfProfiles()
+
+        for id in self.profile_results:
+            self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
+
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_udf_with_arrow(self):
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            _do_computation(self.spark, use_arrow=True)
+
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    def test_perf_profiler_udf_multiple_actions(self):
+        def action(df):
+            df.collect()
+            df.show()
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            _do_computation(self.spark, action=action)
+
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"20.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    def test_perf_profiler_udf_registered(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        self.spark.udf.register("add1", add1)
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_pandas_udf(self):
+        @pandas_udf("long")
+        def add1(x):
+            return x + 1
+
+        @pandas_udf("long")
+        def add2(x):
+            return x + 2
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df = self.spark.range(10, numPartitions=2).select(
+                add1("id"), add2("id"), add1("id"), add2(col("id") + 1)
+            )
+            df.collect()
+
+        self.assertEqual(3, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_pandas_udf_iterator_not_supported(self):
+        import pandas as pd
+
+        @pandas_udf("long")
+        def add1(x):
+            return x + 1
+
+        @pandas_udf("long")
+        def add2(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in iter:
+                yield s + 2
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df = self.spark.range(10, numPartitions=2).select(
+                add1("id"), add2("id"), add1("id"), add2(col("id") + 1)
+            )
+            df.collect()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_map_in_pandas_not_supported(self):
+        df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+
+        def filter_func(iterator):
+            for pdf in iterator:
+                yield pdf[pdf.id == 1]
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df.mapInPandas(filter_func, df.schema).show()
+
+        self.assertEqual(0, len(self.profile_results), str(self.profile_results.keys()))
+
+
+class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.spark._profiler_collector._accumulator._value = None
 
 
 if __name__ == "__main__":
