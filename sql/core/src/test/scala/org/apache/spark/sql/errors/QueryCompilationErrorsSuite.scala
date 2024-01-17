@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SPARK_DOC_ROOT
+import org.apache.spark.{SPARK_DOC_ROOT, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -917,6 +918,17 @@ class QueryCompilationErrorsSuite
           start = 7, stop = 7)
       )
     }
+  }
+
+  test("UNSUPPORTED_CALL: call the unsupported method update()") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        new UnsafeRow(1).update(0, 1)
+      },
+      errorClass = "UNSUPPORTED_CALL",
+      parameters = Map(
+        "methodName" -> "update",
+        "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 }
 

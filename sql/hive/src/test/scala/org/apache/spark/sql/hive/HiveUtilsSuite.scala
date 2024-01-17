@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.net.URI
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkConf, TestUtils}
@@ -32,12 +31,6 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-
-  private def testFormatTimeVarsForHiveClient(key: String, value: String, expected: Long): Unit = {
-    val conf = new Configuration
-    conf.set(key, value)
-    assert(HiveUtils.formatTimeVarsForHiveClient(conf)(key) === expected.toString)
-  }
 
   test("newTemporaryConfiguration overwrites listener configurations") {
     Seq(true, false).foreach { useInMemoryDerby =>

@@ -1211,7 +1211,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd", "lz4"))
-    .createWithDefault("snappy")
+    .createWithDefault("zstd")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
     .doc("When native, use the native version of ORC support instead of the ORC library in Hive. " +
@@ -4513,6 +4513,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES =
+    buildConf("spark.sql.optimizer.excludeSubqueryRefsFromRemoveRedundantAliases.enabled")
+      .internal()
+      .doc("When true, exclude the references from the subquery expressions (in, exists, etc.) " +
+        s"while removing redundant aliases.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TIME_TRAVEL_TIMESTAMP_KEY =
     buildConf("spark.sql.timeTravelTimestampKey")
       .doc("The option name to specify the time travel timestamp when reading a table.")
@@ -4608,6 +4617,18 @@ object SQLConf {
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
       "encoding or decoding string values. If it is false, such functions support only one of " +
       "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_EVAL_CURRENT_TIME = buildConf("spark.sql.legacy.earlyEvalCurrentTime")
+    .internal()
+    .doc("When set to true, evaluation and constant folding will happen for now() and " +
+      "current_timestamp() expressions before finish analysis phase. " +
+      "This flag will allow a bit more liberal syntax but it will sacrifice correctness - " +
+      "Results of now() and current_timestamp() can be different for different operations " +
+      "in a single query."
+    )
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -5515,6 +5536,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
+
+  def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -134,21 +134,13 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
-
+  extends LeafExpression with TimeZoneAwareExpression with Unevaluable {
   def this() = this(None)
-
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
-
   override def dataType: DataType = DateType
-
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  override def eval(input: InternalRow): Any = currentDate(zoneId)
 
   override def prettyName: String = "current_date"
 }
@@ -177,11 +169,9 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallback {
-  override def foldable: Boolean = true
+abstract class CurrentTimestampLike() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
-  override def eval(input: InternalRow): Any = currentTimestamp()
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
@@ -245,22 +235,13 @@ case class Now() extends CurrentTimestampLike {
   group = "datetime_funcs",
   since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
-  with TimeZoneAwareExpression with CodegenFallback {
-
+  with TimeZoneAwareExpression with Unevaluable {
   def this() = this(None)
-
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
-
   override def dataType: DataType = TimestampNTZType
-
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
-
   override def prettyName: String = "localtimestamp"
 }
 

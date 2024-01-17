@@ -2716,6 +2716,19 @@ abstract class AvroSuite
     assert(AvroOptions.isValidOption("datetimeRebaseMode"))
     assert(AvroOptions.isValidOption("enableStableIdentifiersForUnionType"))
   }
+
+  test("SPARK-46633: read file with empty blocks") {
+    for (maxPartitionBytes <- Seq(100, 100000, 100000000)) {
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> s"$maxPartitionBytes") {
+        val file = getResourceAvroFilePath("empty_blocks.avro")
+        val df = spark.read.format("avro").load(file)
+        val count = df.count()
+        val records = df.collect()
+        assert(count == 58)
+        assert(count == records.length)
+      }
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
