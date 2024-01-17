@@ -233,12 +233,6 @@ def main(infile: IO, outfile: IO) -> None:
             else result.acquireExecutionMemoryMbRequested,
             outfile,
         )
-        write_long(
-            0
-            if result.acquireExecutionMemoryMbActual is None
-            else result.acquireExecutionMemoryMbActual,
-            outfile,
-        )
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

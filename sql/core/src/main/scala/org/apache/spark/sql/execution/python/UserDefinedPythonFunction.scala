@@ -291,7 +291,6 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       partitionByExpressions = partitionByExpressions.toSeq,
       orderByExpressions = orderBy.toSeq,
       acquireMemoryMbRequested = acquireExecutionMemoryMbRequested,
-      acquireMemoryMbActual = acquireExecutionMemoryMbActual,
       pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }

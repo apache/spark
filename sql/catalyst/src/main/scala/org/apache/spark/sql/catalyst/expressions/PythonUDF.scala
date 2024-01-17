@@ -271,11 +271,6 @@ case class UnresolvedPolymorphicPythonUDTF(
  *                                 that the UDTF should request from each Spark executor that it
  *                                 runs on (see this field in the 'PythonUDTF' class for more
  *                                 background)
- * @param acquireMemoryMbActual If this is not None, the UDTF's 'analyze' method assigned a positive
- *                              integer to this field as a minimum memory requirement signal wherein
- *                              Spark will return an error if the
- *                              'TaskMemoryManager.acquireExecutionMemory' method returns a smaller
- *                              value
  * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
  *                             contains all metadata returned by the Python UDTF 'analyze' method
  *                             including the result schema of the function call as well as optional
@@ -287,7 +282,6 @@ case class PythonUDTFAnalyzeResult(
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
     acquireMemoryMbRequested: Option[Long],
-    acquireMemoryMbActual: Option[Long],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
