@@ -1172,7 +1172,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("Corner case: empty recursive proto fields should be dropped") {
+  test("Corner case: empty recursive proto fields should be dropped by default") {
     // This verifies that a empty proto like 'message A { A a = 1}' are completely dropped
     // irrespective of max depth setting.
 
@@ -1195,6 +1195,34 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         )
         // 'empty_recursive' field is dropped from the schema. Only "name" is present.
         assert(df.schema == structFromDDL("wrapper struct<name: string>"))
+    }
+  }
+
+  test("Corner case: retain empty recursive proto fields") {
+    // This verifies that a empty proto like 'message A { A a = 1}' can be retained by
+    // inserting a dumy field.
+
+    val emptyProtoSchema =
+      StructType(StructField("_dummy_field_to_retain_empty_message", StringType) :: Nil)
+    val expectedSchema = StructType(
+      // DDL: "proto STRUCT<name: string, groups: map<
+      //    struct<name: string, group: map<struct<name: string>>>>>"
+      StructField("empty_proto",
+        StructType(
+          StructField("recursive_field", emptyProtoSchema) ::
+            StructField("recursive_array", ArrayType(emptyProtoSchema, containsNull = false)
+          ) :: Nil
+        )
+      ) :: Nil
+    )
+
+    val options = Map("recursive.fields.max.depth" -> "2", "retain.empty.message" -> "true")
+    checkWithFileAndClassName("EmptyRecursiveProto") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+        )
+        assert(df.schema == expectedSchema)
     }
   }
 
