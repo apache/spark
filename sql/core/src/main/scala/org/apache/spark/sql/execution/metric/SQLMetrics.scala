@@ -48,6 +48,7 @@ class SQLMetric(
   // At the end of a task, we will update the metric making it valid, and the invalid metrics will
   // be filtered out when calculating min, max, etc. as a workaround
   // for SPARK-11013.
+  assert(initValue <= 0)
   private var _value = initValue
 
   override def copy(): SQLMetric = {
@@ -90,7 +91,7 @@ class SQLMetric(
 
   // _value may be uninitialized, in many cases being -1. We should not expose it to the user
   // and instead return 0.
-  override def value: Long = if (_value < 0) 0 else _value
+  override def value: Long = if (isZero) 0 else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
