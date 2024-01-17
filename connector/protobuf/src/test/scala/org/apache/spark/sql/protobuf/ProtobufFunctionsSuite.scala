@@ -1124,7 +1124,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("retain empty proto fields") {
+  test("Retain empty proto fields when retain.empty.message.types=true") {
     // When retain.empty.message=true, empty proto like 'message A {}' can be retained as a field
     // by inserting a dummy column as sub column.
     val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
@@ -1152,7 +1152,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("Write empty proto to parquet") {
+  test("Write empty proto to parquet when retain.empty.message.types=true") {
     // When retain.empty.message=true, empty proto like 'message A {}' can be retained as a field
     // by inserting a dummy column as sub column, such schema can be written to parquet.
     val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
@@ -1202,7 +1202,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("Corner case: retain empty recursive proto fields") {
+  test("Retain empty recursive proto fields when retain.empty.message.types=true") {
     // This verifies that a empty proto like 'message A { A a = 1}' can be retained by
     // inserting a dumy field.
 
