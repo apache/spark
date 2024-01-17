@@ -688,6 +688,14 @@ class Dataset[T] private[sql](
    * plan may grow exponentially. It will be saved to files inside the checkpoint
    * directory set with `SparkContext#setCheckpointDir`.
    *
+   * @param eager Whether to checkpoint this dataframe immediately
+   *
+   * @note When checkpoint is used with eager = false, the final data that is checkpointed after
+   *       the first action may be different from the data that was used during the job due to
+   *       non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *       saving a deterministic snapshot of the data, eager = true should be used. Otherwise,
+   *       it is only deterministic after the first execution, after the checkpoint was finalized.
+   *
    * @group basic
    * @since 2.1.0
    */
@@ -709,6 +717,14 @@ class Dataset[T] private[sql](
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. Local checkpoints are written to executor storage and despite
    * potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager Whether to checkpoint this dataframe immediately
+   *
+   * @note When checkpoint is used with eager = false, the final data that is checkpointed after
+   *       the first action may be different from the data that was used during the job due to
+   *       non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *       saving a deterministic snapshot of the data, eager = true should be used. Otherwise,
+   *       it is only deterministic after the first execution, after the checkpoint was finalized.
    *
    * @group basic
    * @since 2.3.0

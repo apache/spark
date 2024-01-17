@@ -490,7 +490,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
       resolveDataFrameColumn(u, q).getOrElse(u)
-    case _ if e.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+    case u: UnresolvedDataFrameStar =>
+      resolveDataFrameStar(u, q)
+    case _ if e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, UNRESOLVED_DF_STAR) =>
       e.mapChildren(c => tryResolveDataFrameColumns(c, q))
     case _ => e
   }
@@ -510,7 +512,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
       //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
       //  df1.select(df2.a)   <-   illegal reference df2.a
-      throw QueryCompilationErrors.cannotResolveColumn(u)
+      throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     }
     resolved
   }
@@ -588,4 +590,45 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
     (filtered, matched)
   }
+
+  private def resolveDataFrameStar(
+      u: UnresolvedDataFrameStar,
+      q: Seq[LogicalPlan]): ResolvedStar = {
+    resolveDataFrameStarByPlanId(u, u.planId, q).getOrElse(
+      // Can not find the target plan node with plan id, e.g.
+      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+      //  df1.select(df2["*"])   <-   illegal reference df2["*"]
+      throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
+    )
+  }
+
+  private def resolveDataFrameStarByPlanId(
+      u: UnresolvedDataFrameStar,
+      id: Long,
+      q: Seq[LogicalPlan]): Option[ResolvedStar] = {
+    q.iterator.map(resolveDataFrameStarRecursively(u, id, _))
+      .foldLeft(Option.empty[ResolvedStar]) {
+        case (r1, r2) =>
+          if (r1.nonEmpty && r2.nonEmpty) {
+            throw QueryCompilationErrors.ambiguousColumnReferences(u)
+          }
+          if (r1.nonEmpty) r1 else r2
+      }
+  }
+
+   private def resolveDataFrameStarRecursively(
+      u: UnresolvedDataFrameStar,
+      id: Long,
+      p: LogicalPlan): Option[ResolvedStar] = {
+     val resolved = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+       Some(ResolvedStar(p.output))
+     } else {
+       resolveDataFrameStarByPlanId(u, id, p.children)
+     }
+     resolved.filter { r =>
+       val outputSet = AttributeSet(p.output ++ p.metadataOutput)
+       r.expressions.forall(_.references.subsetOf(outputSet))
+     }
+   }
 }

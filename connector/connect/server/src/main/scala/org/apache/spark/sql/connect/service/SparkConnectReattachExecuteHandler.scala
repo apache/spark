@@ -29,25 +29,25 @@ class SparkConnectReattachExecuteHandler(
     extends Logging {
 
   def handle(v: proto.ReattachExecuteRequest): Unit = {
-    val executeHolder = SparkConnectService.executionManager
-      .getExecuteHolder(ExecuteKey(v.getUserContext.getUserId, v.getSessionId, v.getOperationId))
-      .getOrElse {
-        if (SparkConnectService.executionManager
-            .getAbandonedTombstone(
-              ExecuteKey(v.getUserContext.getUserId, v.getSessionId, v.getOperationId))
-            .isDefined) {
-          logDebug(s"Reattach operation abandoned: ${v.getOperationId}")
-          throw new SparkSQLException(
-            errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
-            messageParameters = Map("handle" -> v.getOperationId))
+    val sessionHolder = SparkConnectService.sessionManager
+      .getIsolatedSession(SessionKey(v.getUserContext.getUserId, v.getSessionId))
 
-        } else {
-          logDebug(s"Reattach operation not found: ${v.getOperationId}")
-          throw new SparkSQLException(
-            errorClass = "INVALID_HANDLE.OPERATION_NOT_FOUND",
-            messageParameters = Map("handle" -> v.getOperationId))
-        }
+    val executeHolder = sessionHolder.executeHolder(v.getOperationId).getOrElse {
+      if (SparkConnectService.executionManager
+          .getAbandonedTombstone(
+            ExecuteKey(v.getUserContext.getUserId, v.getSessionId, v.getOperationId))
+          .isDefined) {
+        logDebug(s"Reattach operation abandoned: ${v.getOperationId}")
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
+          messageParameters = Map("handle" -> v.getOperationId))
+      } else {
+        logDebug(s"Reattach operation not found: ${v.getOperationId}")
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_NOT_FOUND",
+          messageParameters = Map("handle" -> v.getOperationId))
       }
+    }
     if (!executeHolder.reattachable) {
       logWarning(s"Reattach to not reattachable operation.")
       throw new SparkSQLException(

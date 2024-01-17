@@ -22,7 +22,9 @@ from pyspark.sql import Row
 from pyspark.sql import functions as sf
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
+    have_pandas,
     have_pyarrow,
+    pandas_requirement_message,
     pyarrow_requirement_message,
 )
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
@@ -33,6 +35,8 @@ from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
     cast(str, pyarrow_requirement_message),
 )
 class GroupTestsMixin:
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
     def test_agg_func(self):
         data = [Row(key=1, value=10), Row(key=1, value=20), Row(key=1, value=30)]
         df = self.spark.createDataFrame(data)
@@ -71,6 +75,8 @@ class GroupTestsMixin:
         # test deprecated countDistinct
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
     def test_group_by_ordinal(self):
         spark = self.spark
         df = spark.createDataFrame(
@@ -130,6 +136,8 @@ class GroupTestsMixin:
             with self.assertRaises(IndexError):
                 df.groupBy(10).agg(sf.sum("b"))
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
     def test_order_by_ordinal(self):
         spark = self.spark
         df = spark.createDataFrame(
