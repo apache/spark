@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -59,7 +59,7 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
   override def output: Seq[Attribute] = plan.output
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException()
+    throw SparkUnsupportedOperationException()
   }
 }
 

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.*;
@@ -96,7 +97,7 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public boolean anyNull() {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
