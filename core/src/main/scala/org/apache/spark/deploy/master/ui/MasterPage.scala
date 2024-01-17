@@ -375,7 +375,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>{driver.desc.command.arguments(2)}</td>
       {if (showDuration) {
-        <td>{UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}</td>
+        <td sorttable_customkey={(-driver.startTime).toString}>
+          {UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}
+        </td>
       }}
     </tr>
   }

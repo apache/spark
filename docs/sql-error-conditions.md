@@ -2331,6 +2331,12 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 
 Unsupported arrow type `<typeName>`.
 
+### UNSUPPORTED_CALL
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot call the method "`<methodName>`" of the class "`<className>`".
+
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)

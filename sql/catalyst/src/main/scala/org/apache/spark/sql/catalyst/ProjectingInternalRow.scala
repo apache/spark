@@ -37,13 +37,9 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
     this.row = row
   }
 
-  override def setNullAt(i: Int): Unit = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3117")
-  }
+  override def setNullAt(i: Int): Unit = throw SparkUnsupportedOperationException()
 
-  override def update(i: Int, value: Any): Unit = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3117")
-  }
+  override def update(i: Int, value: Any): Unit = throw SparkUnsupportedOperationException()
 
   override def copy(): InternalRow = {
     val newRow = if (row != null) row.copy() else null
