@@ -1205,8 +1205,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val emptyProtoSchema =
       StructType(StructField("_dummy_field_to_retain_empty_message", StringType) :: Nil)
     val expectedSchema = StructType(
-      // DDL: "proto STRUCT<name: string, groups: map<
-      //    struct<name: string, group: map<struct<name: string>>>>>"
       StructField("empty_proto",
         StructType(
           StructField("recursive_field", emptyProtoSchema) ::
