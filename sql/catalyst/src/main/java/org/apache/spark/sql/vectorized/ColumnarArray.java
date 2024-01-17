@@ -189,11 +189,11 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3158");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void setNullAt(int ordinal) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3159");
+    throw SparkUnsupportedOperationException.apply();
   }
 }

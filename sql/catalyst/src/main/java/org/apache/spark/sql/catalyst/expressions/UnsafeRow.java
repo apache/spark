@@ -192,7 +192,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3126");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
