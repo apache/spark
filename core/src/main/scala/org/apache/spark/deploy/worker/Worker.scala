@@ -18,9 +18,9 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, IOException}
-import java.time.ZoneId
+import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
-import java.util.{Date, Locale, UUID}
+import java.util.{Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 import java.util.function.Supplier
@@ -820,7 +820,7 @@ private[deploy] class Worker(
   }
 
   private def generateWorkerId(): String = {
-    workerIdPattern.format(Worker.DATE_TIME_FORMATTER.format(new Date().toInstant), host, port)
+    workerIdPattern.format(Worker.DATE_TIME_FORMATTER.format(Instant.now()), host, port)
   }
 
   override def onStop(): Unit = {

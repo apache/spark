@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.pmml.`export`
 
-import java.time.ZoneId
+import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
-import java.util.{Date, Locale}
+import java.util.Locale
 
 import scala.beans.BeanProperty
 
@@ -40,7 +40,7 @@ private[mllib] trait PMMLModelExport {
     val version = getClass.getPackage.getImplementationVersion
     val app = new Application("Apache Spark MLlib").setVersion(version)
     val timestamp = new Timestamp()
-      .addContent(DATE_TIME_FORMATTER.format(new Date().toInstant))
+      .addContent(DATE_TIME_FORMATTER.format(Instant.now()))
     val header = new Header()
       .setApplication(app)
       .setTimestamp(timestamp)

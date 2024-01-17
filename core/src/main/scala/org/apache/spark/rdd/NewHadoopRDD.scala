@@ -18,9 +18,9 @@
 package org.apache.spark.rdd
 
 import java.io.{FileNotFoundException, IOException}
-import java.time.ZoneId
+import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
-import java.util.{Date, Locale}
+import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -109,7 +109,7 @@ class NewHadoopRDD[K, V](
       DateTimeFormatter
         .ofPattern("yyyyMMddHHmmss", Locale.US)
         .withZone(ZoneId.systemDefault())
-    dateTimeFormatter.format(new Date().toInstant)
+    dateTimeFormatter.format(Instant.now())
   }
 
   @transient protected val jobId = new JobID(jobTrackerId, id)
