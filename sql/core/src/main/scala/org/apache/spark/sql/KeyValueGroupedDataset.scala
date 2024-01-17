@@ -200,8 +200,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
       sortExprs: Column*)(
       f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs.map(_.expr))
-      // SPARK-42199: resolve these sort expressions only against dataAttributes
-      .map(scopeSortOrder(dataAttributes))
 
     Dataset[U](
       sparkSession,
@@ -870,13 +868,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
       case expr: Expression => SortOrder(expr, Ascending)
     }
 
-    // SPARK-42199: resolve these sort expressions only against dataAttributes
-    val thisSortOrder: Seq[SortOrder] = thisSortExprs
-          .map(toSortOrder)
-          .map(scopeSortOrder(dataAttributes))
-    val otherSortOrder: Seq[SortOrder] = otherSortExprs
-          .map(toSortOrder)
-          .map(scopeSortOrder(other.dataAttributes))
+    val thisSortOrder: Seq[SortOrder] = thisSortExprs.map(toSortOrder)
+    val otherSortOrder: Seq[SortOrder] = otherSortExprs.map(toSortOrder)
 
     implicit val uEncoder = other.vExprEnc
     Dataset[R](
@@ -918,9 +911,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
       thisSortExprs.toImmutableArraySeq: _*)(otherSortExprs.toImmutableArraySeq: _*)(
       (key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
-
-  private def scopeSortOrder(scope: Seq[Attribute])(sortOrder: SortOrder): SortOrder =
-    sortOrder.copy(child = ScopedExpression(sortOrder.child, scope))
 
   private def scopeTypedColumn(
       scope: Seq[Attribute])(
