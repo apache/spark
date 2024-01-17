@@ -1,4 +1,9 @@
 # HTML tables will be generated for each of the config groups defined here.
+# 
+# Some rules to keep in mind:
+#   - Group names must be in kebab-case.
+#   - Only public (i.e. non-internal) configs are allowed.
+#   - A config can be assigned to multiple groups.
 #
 # NOTE:
 #   PyYAML@6.0.1 will silently overwrite the value of a key if it is defined
