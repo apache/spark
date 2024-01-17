@@ -418,7 +418,7 @@ case class PrettyAttribute(
 /**
  * An expression that has to be resolved against a scope of resolved attributes.
  */
-case class ScopedExpression(child: Expression, scope: AttributeSeq)
+case class ScopedExpression(child: Expression, scope: Seq[Attribute])
   extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
