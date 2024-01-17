@@ -208,9 +208,15 @@ private[sql] class ProtobufOptions(
   val unwrapWellKnownTypes: Boolean =
     parameters.getOrElse("unwrap.primitive.wrapper.types", false.toString).toBoolean
 
-  // Since Spark doesn't allow empty StructType, empty proto message type as field will be
+  // Since Spark doesn't allow writing empty StructType, empty proto message type will be
   // dropped by default. Setting this option to true will insert a dummy column to empty proto
   // message so that the empty message will be retained.
+  // Example: message A {} is an empty message.
+  // When used as field in another message: Message B {A a = 1, string name = 2}
+  // By default, in the spark schema field a will be dropped, which result in schema
+  // b struct<name: string>
+  // If retain.empty.message=true, field a will be retained by inserting a dummy subcolumn.
+  // b struct<name: string, a struct<__dummy_field_in_empty_struct: string>>
   val retainEmptyMessage: Boolean =
     parameters.getOrElse("retain.empty.message", false.toString).toBoolean
 }
