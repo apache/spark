@@ -57,7 +57,7 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
       val newBind = new Bind(
         dir.getAbsolutePath,
         new Volume("/docker-entrypoint-initdb.d"),
-        AccessMode.ro)
+        AccessMode.DEFAULT)
       hostConfigBuilder.withBinds(hostConfigBuilder.getBinds :+ newBind: _*)
     } catch {
       case e: Exception =>

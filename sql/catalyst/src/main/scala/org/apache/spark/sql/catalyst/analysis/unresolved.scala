@@ -697,6 +697,23 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Une
 }
 
 /**
+ * Represents all input attributes to a given relational operator.
+ * This is used in Spark Connect dataframe, for example:
+ *    df1 = spark.createDataFrame([{"id": 1}])
+ *    df2 = spark.createDataFrame([{"id": 1, "val": "v"}])
+ *    df1.join(df2, "id").select(df1["*"])
+ * @param planId the plan id of target node.
+ */
+case class UnresolvedDataFrameStar(planId: Long)
+  extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DF_STAR)
+  override def toString: String = "UnresolvedDataFrameStar"
+}
+
+/**
  * Extracts a value or values from an Expression
  *
  * @param child The expression to extract value from,

@@ -282,6 +282,12 @@ Cannot recognize hive type string: `<fieldType>`, column: `<fieldName>`. The spe
 
 Renaming a `<type>` across schemas is not allowed.
 
+### CANNOT_RESOLVE_DATAFRAME_COLUMN
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve dataframe column `<name>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
+
 ### CANNOT_RESOLVE_STAR_EXPAND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1499,6 +1505,12 @@ The query does not include a GROUP BY clause. Add GROUP BY or turn it into the w
 
 Cannot specify time travel in both the time travel clause and options.
 
+### MULTIPLE_XML_DATA_SOURCE
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Detected multiple data sources with the name `<provider>` (`<sourceNames>`). Please specify the fully qualified class name or remove `<externalSource>` from the classpath.
+
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2318,6 +2330,12 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported arrow type `<typeName>`.
+
+### UNSUPPORTED_CALL
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot call the method "`<methodName>`" of the class "`<className>`".
 
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 

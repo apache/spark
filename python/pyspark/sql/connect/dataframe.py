@@ -71,9 +71,12 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import UnresolvedRegex
+from pyspark.sql.connect.expressions import (
+    ColumnReference,
+    UnresolvedRegex,
+    UnresolvedStar,
+)
 from pyspark.sql.connect.functions.builtin import (
-    _to_col_with_plan_id,
     _to_col,
     _invoke_function,
     col,
@@ -1702,9 +1705,11 @@ class DataFrame:
                 error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
 
-        return _to_col_with_plan_id(
-            col=name,
-            plan_id=self._plan._plan_id,
+        return Column(
+            ColumnReference(
+                unparsed_identifier=name,
+                plan_id=self._plan._plan_id,
+            )
         )
 
     __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
@@ -1719,14 +1724,31 @@ class DataFrame:
 
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
         if isinstance(item, str):
-            # validate the column name
-            if not hasattr(self._session, "is_mock_session"):
-                self.select(item).isLocal()
+            if item == "*":
+                return Column(
+                    UnresolvedStar(
+                        unparsed_target=None,
+                        plan_id=self._plan._plan_id,
+                    )
+                )
+            else:
+                # TODO: revisit vanilla Spark's Dataset.col
+                # if (sparkSession.sessionState.conf.supportQuotedRegexColumnName) {
+                #   colRegex(colName)
+                # } else {
+                #   Column(addDataFrameIdToCol(resolve(colName)))
+                # }
 
-            return _to_col_with_plan_id(
-                col=item,
-                plan_id=self._plan._plan_id,
-            )
+                # validate the column name
+                if not hasattr(self._session, "is_mock_session"):
+                    self.select(item).isLocal()
+
+                return Column(
+                    ColumnReference(
+                        unparsed_identifier=item,
+                        plan_id=self._plan._plan_id,
+                    )
+                )
         elif isinstance(item, Column):
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
