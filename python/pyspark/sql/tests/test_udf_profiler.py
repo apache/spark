@@ -26,6 +26,12 @@ from typing import Iterator
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf, pandas_udf
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.profiler import UDFBasicProfiler
 
 
@@ -125,6 +131,8 @@ class UDFProfilerTests(unittest.TestCase):
         df = self.spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0)], ("id", "v"))
         df.mapInPandas(map, schema=df.schema).collect()
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
     def test_unsupported(self):
         with warnings.catch_warnings(record=True) as warns:
             warnings.simplefilter("always")
