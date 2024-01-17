@@ -36,7 +36,7 @@ ipython
 nbsphinx
 numpydoc
 jinja2
-sphinx==4.2.0
+sphinx==4.5.0
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
@@ -67,4 +67,3 @@ torcheval
 
 # DeepspeedTorchDistributor dependencies
 deepspeed; sys_platform != 'darwin'
-

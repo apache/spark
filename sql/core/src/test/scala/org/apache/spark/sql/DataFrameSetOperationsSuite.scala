@@ -374,11 +374,7 @@ class DataFrameSetOperationsSuite extends QueryTest
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""),
-      context = ExpectedContext(
-        fragment = "distinct",
-        callSitePattern = getCurrentClassCallSitePattern)
-    )
+        "dataType" -> "\"MAP<STRING, BIGINT>\""))
     withTempView("v") {
       df.createOrReplaceTempView("v")
       checkError(

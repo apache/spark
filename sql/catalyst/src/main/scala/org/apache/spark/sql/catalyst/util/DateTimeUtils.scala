@@ -517,11 +517,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Obtains the current instant as microseconds since the epoch at the UTC time zone.
-   */
-  def currentTimestamp(): Long = instantToMicros(Instant.now())
-
-  /**
    * Obtains the current date as days since the epoch in the specified time-zone.
    */
   def currentDate(zoneId: ZoneId): Int = localDateToDays(LocalDate.now(zoneId))
@@ -572,7 +567,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
     extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
-      case "now" => Some(currentTimestamp())
+      case "now" => Some(instantToMicros(Instant.now()))
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
       case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
       case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))

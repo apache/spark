@@ -26,4 +26,20 @@ class AvroCodecSuite extends FileSourceCodecSuite {
   override val codecConfigName: String = SQLConf.AVRO_COMPRESSION_CODEC.key
   override protected def availableCodecs =
     AvroCompressionCodec.values().map(_.lowerCaseName()).iterator.to(Seq)
+
+  availableCodecs.foreach { codec =>
+    test(s"SPARK-46746: attach codec name to avro files - codec $codec") {
+      withTable("avro_t") {
+        sql(
+          s"""CREATE TABLE avro_t
+             | USING $format OPTIONS('compression'='$codec')
+             | AS SELECT 1 as id
+             | """.stripMargin)
+        spark.table("avro_t")
+          .inputFiles.foreach { file =>
+            assert(file.endsWith(s"$codec.avro".stripPrefix("uncompressed")))
+          }
+      }
+    }
+  }
 }

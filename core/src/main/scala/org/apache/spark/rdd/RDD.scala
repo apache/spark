@@ -1649,6 +1649,13 @@ abstract class RDD[T: ClassTag](
    * RDDs will be removed. This function must be called before any job has been
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
+   *
+   * The data is only checkpointed when `doCheckpoint()` is called, and this only happens at the
+   * end of the first action execution on this RDD. The final data that is checkpointed after the
+   * first action may be different from the data that was used during the action, due to
+   * non-determinism of the underlying operation and retries. If the purpose of the checkpoint is
+   * to achieve saving a deterministic snapshot of the data, an eager action may need to be called
+   * first on the RDD to trigger the checkpoint.
    */
   def checkpoint(): Unit = RDDCheckpointData.synchronized {
     // NOTE: we use a global lock here due to complexities downstream with ensuring
@@ -1678,6 +1685,13 @@ abstract class RDD[T: ClassTag](
    * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
    *
    * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
+   *
+   * The data is only checkpointed when `doCheckpoint()` is called, and this only happens at the
+   * end of the first action execution on this RDD. The final data that is checkpointed after the
+   * first action may be different from the data that was used during the action, due to
+   * non-determinism of the underlying operation and retries. If the purpose of the checkpoint is
+   * to achieve saving a deterministic snapshot of the data, an eager action may need to be called
+   * first on the RDD to trigger the checkpoint.
    */
   def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
     if (Utils.isDynamicAllocationEnabled(conf) &&
