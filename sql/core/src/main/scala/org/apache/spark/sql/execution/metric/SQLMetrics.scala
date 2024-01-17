@@ -49,6 +49,7 @@ class SQLMetric(
   // be filtered out when calculating min, max, etc. as a workaround
   // for SPARK-11013.
   assert(initValue <= 0)
+  // _value will always be either initValue or non-negative.
   private var _value = initValue
 
   override def copy(): SQLMetric = {
@@ -74,11 +75,10 @@ class SQLMetric(
   // the aggregation defined in [[SQLMetrics.stringValue]].
   // Note that we don't use 0 here since we may want to collect 0 metrics for
   // calculating min, max, etc. See SPARK-11013.
-  private def isZero(value: Long): Boolean = value <= initValue
-  override def isZero: Boolean = isZero(_value)
+  override def isZero: Boolean = _value == initValue
 
   override def add(v: Long): Unit = {
-    if (!isZero(v)) {
+    if (v >= 0) {
       if (isZero) _value = 0
       _value += v
     }
@@ -86,9 +86,13 @@ class SQLMetric(
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
-  def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)
+  def set(v: Double): Unit = if (v >= 0) {
+    SQLMetrics.setDoubleForAverageMetrics(this, v)
+  }
 
-  def set(v: Long): Unit = _value = v
+  def set(v: Long): Unit = if (v >= 0) {
+    _value = v
+  }
 
   def +=(v: Long): Unit = add(v)
 
