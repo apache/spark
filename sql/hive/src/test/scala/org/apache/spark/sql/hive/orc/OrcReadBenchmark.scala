@@ -47,7 +47,6 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
-    conf.set("orc.compression", OrcCompressionCodec.SNAPPY.name())
 
     val sparkSession = SparkSession.builder()
       .master("local[1]")
