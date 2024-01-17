@@ -213,7 +213,9 @@ case class RelationConversions(
 
   private def isConvertible(storage: CatalogStorageFormat): Boolean = {
     val serde = storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+    val inputFormat = storage.inputFormat.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("ParquetHiveSerDe") && inputFormat.contains("MapredParquetInputFormat") &&
+      conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
       serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
