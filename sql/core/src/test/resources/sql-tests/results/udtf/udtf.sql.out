@@ -557,26 +557,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM UDTFAcquireExecutionMemory(
-    requested_memory_mb => 4,
-    min_memory_mb => 0)
--- !query schema
-struct<initial_request:bigint,acquired_memory:bigint,min_memory:bigint,status:string>
--- !query output
-4	4	0	OK
-
-
--- !query
-SELECT * FROM UDTFAcquireExecutionMemory(
-    requested_memory_mb => 4,
-    min_memory_mb => 10)
--- !query schema
-struct<initial_request:bigint,acquired_memory:bigint,min_memory:bigint,status:string>
--- !query output
-4	4	10	Insufficient memory
-
-
--- !query
 SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
 -- !query schema
 struct<>
@@ -967,6 +947,26 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "unparsable"
   } ]
 }
+
+
+-- !query
+SELECT * FROM UDTFAcquireExecutionMemory(
+    requested_memory_mb => 4,
+    min_memory_mb => 0)
+-- !query schema
+struct<initial_request:bigint,acquired_memory:bigint,min_memory:bigint,status:string>
+-- !query output
+4	4	0	OK
+
+
+-- !query
+SELECT * FROM UDTFAcquireExecutionMemory(
+    requested_memory_mb => 4,
+    min_memory_mb => 10)
+-- !query schema
+struct<initial_request:bigint,acquired_memory:bigint,min_memory:bigint,status:string>
+-- !query output
+4	4	10	Insufficient memory
 
 
 -- !query

@@ -145,6 +145,7 @@ object PythonUDTFRunner {
     // Write the UDTF name.
     PythonWorkerUtils.writeUTF(udtf.name, dataOut)
     // Write the number of MB of acquired execution memory, if any.
+    print(s"@@@ write UDTF ${udtf.name}\n")
     dataOut.writeLong(udtf.acquireMemoryMbActual.getOrElse(0))
   }
 }

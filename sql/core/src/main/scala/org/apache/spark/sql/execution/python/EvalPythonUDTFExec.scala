@@ -22,7 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.memory.{MemoryConsumer, MemoryMode}
+import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -100,6 +100,14 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         projection(inputRow)
       }
 
+      // Acquire execution memory before evaluating the UDTF. After the evaluation is complete, we
+      // free the memory below.
+      val memoryConsumer: Option[PythonUDTFMemoryConsumer] = if (TaskContext.get() != null) {
+        Some(PythonUDTFMemoryConsumer(udtf, TaskContext.get().taskMemoryManager()))
+      } else {
+        None
+      }
+
       val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
@@ -113,12 +121,6 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       val nullRow = new GenericInternalRow(udtf.elementSchema.length)
       val resultProj = UnsafeProjection.create(output, output)
 
-      // Acquire execution memory before evaluating the UDTF. After the evaluation is complete, we
-      // free the memory below.
-      memoryConsumer.foreach { consumer =>
-        val acquireMemoryMbActual: Long = consumer.acquireMemory()
-        udtf.acquireMemoryMbActual = Some(acquireMemoryMbActual)
-      }
       try {
         outputRowIterator.flatMap { outputRows =>
           // If `count` is greater than zero, it means there are remaining input rows in the queue.
@@ -150,16 +152,6 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       }
     }
   }
-
-  // This object serves the purpose of acquiring execution memory before evaluating the UDTF.
-  // After the evaluation is complete, we call its 'freeMemory' method to release the memory.
-  lazy val memoryConsumer: Option[PythonUDTFMemoryConsumer] = {
-    if (TaskContext.get() != null) {
-      Some(PythonUDTFMemoryConsumer(udtf))
-    } else {
-      None
-    }
-  }
 }
 
 /**
@@ -179,19 +171,21 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
  * 'TaskMemoryManager.acquireExecutionMemory', so the 'eval' and 'terminate' and 'cleanup' methods
  * know it and can ensure to bound memory usage to at most this number.
  */
-case class PythonUDTFMemoryConsumer(udtf: PythonUDTF)
-  extends MemoryConsumer(TaskContext.get().taskMemoryManager(), MemoryMode.OFF_HEAP) {
+case class PythonUDTFMemoryConsumer(udtf: PythonUDTF, memoryManager: TaskMemoryManager)
+  extends MemoryConsumer(memoryManager, memoryManager .getTungstenMemoryMode) {
+
   private val BYTES_PER_MB = 1024 * 1024
-  def acquireMemory(): Long = {
-    udtf.acquireMemoryMbRequested.map { megabytes: Long =>
-      acquireMemory(megabytes * BYTES_PER_MB) / BYTES_PER_MB
-    }.getOrElse(0)
-  }
+
+  udtf.acquireMemoryMbActual = udtf.acquireMemoryMbRequested.map { megabytes: Long =>
+    Some(acquireMemory(megabytes * BYTES_PER_MB) / BYTES_PER_MB)
+  }.getOrElse(None)
+
   def freeMemory(): Unit = {
-    udtf.acquireMemoryMbRequested.foreach { megabytes: Long =>
+    udtf.acquireMemoryMbActual.foreach { megabytes: Long =>
       freeMemory(megabytes * BYTES_PER_MB)
     }
   }
+
   /** Return zero to indicate that we are not capable of spilling acquired memory to disk. */
   override def spill(size: Long, trigger: MemoryConsumer): Long = 0
 }
