@@ -16,11 +16,11 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+=============
+DataFrame API
+=============
 
-This page gives an overview of all public Spark SQL API.
+This page gives an overview of all public DataFrame API.
 
 .. toctree::
     :maxdepth: 2

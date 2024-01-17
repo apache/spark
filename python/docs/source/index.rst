@@ -42,10 +42,10 @@ DataFrames, Structured Streaming, Machine Learning (MLlib) and Spark Core.
    :class: borderless spec_table
 
    * -
-     - .. image:: ../../../docs/img/pyspark-spark_sql_and_dataframes.png
+     - .. image:: ../../../docs/img/pyspark-dataframe_api.png
           :target: reference/pyspark.sql/index.html
           :width: 100%
-          :alt: Spark SQL
+          :alt: DataFrame API
      - .. image:: ../../../docs/img/pyspark-pandas_api_on_spark.png
           :target: reference/pyspark.pandas/index.html
           :width: 100%
@@ -72,20 +72,20 @@ DataFrames, Structured Streaming, Machine Learning (MLlib) and Spark Core.
           :alt: Spark Core and RDDs
      -
 
-.. _Index Page - Spark SQL and DataFrames:
+.. _Index Page - DataFrame API:
 
-**Spark SQL and DataFrames**
+**DataFrame API**
 
-Spark SQL is Apache Spark's module for working with structured data.
-It allows you to seamlessly mix SQL queries with Spark programs.
-With PySpark DataFrames you can efficiently read, write, transform,
-and analyze data using Python and SQL.
-Whether you use Python or SQL, the same underlying execution
-engine is used so you will always leverage the full power of Spark.
+The DataFrame API is a core module of Apache Spark, optimized for working with structured data.
+This API enables seamless integration of SQL queries with Spark programs.
+Leveraging PySpark DataFrames, you can efficiently read, write, transform, and analyze data using both Python and SQL.
+Whether you opt for Python or SQL, the same underlying execution engine is utilized,
+ensuring full exploitation of Spark's capabilities.
+This approach empowers robust and efficient data processing and analysis, offering compatibility with a wide range of data sources.
 
 - :ref:`/getting_started/quickstart_df.ipynb`
 - |binder_df|_
-- :ref:`Spark SQL API Reference</reference/pyspark.sql/index.rst>`
+- :ref:`DataFrame API Reference</reference/pyspark.dataframe/index.rst>`
 
 **Pandas API on Spark**
 
@@ -99,7 +99,7 @@ pandas API and the Pandas API on Spark easily and without overhead.
 
 Pandas API on Spark aims to make the transition from pandas to Spark easy but
 if you are new to Spark or deciding which API to use, we recommend using PySpark
-(see :ref:`Spark SQL and DataFrames <Index Page - Spark SQL and DataFrames>`).
+(see :ref:`DataFrame API <Index Page - DataFrame API>`).
 
 - :ref:`/getting_started/quickstart_ps.ipynb`
 - |binder_ps|_
@@ -134,7 +134,7 @@ and in-memory computing capabilities.
 
 Note that the RDD API is a low-level API which can be difficult to use and you do not get
 the benefit of Spark's automatic query optimization capabilities.
-We recommend using DataFrames (see :ref:`Spark SQL and DataFrames <Index Page - Spark SQL and DataFrames>` above)
+We recommend using DataFrames (see :ref:`DataFrame API <Index Page - DataFrame API>` above)
 instead of RDDs as it allows you to express what you want more easily and lets Spark automatically
 construct the most efficient query for you.
 
