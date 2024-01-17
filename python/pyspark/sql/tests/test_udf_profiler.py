@@ -28,7 +28,17 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf, pandas_udf
 from pyspark.profiler import UDFBasicProfiler
 
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
+
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
+)
 class UDFProfilerTests(unittest.TestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
