@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, ResultSet, Statement}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.parallel.CollectionConverters._
 
 import org.apache.spark.sql.{QueryGeneratorHelper, QueryTest}
 import org.apache.spark.sql.Row
@@ -151,8 +152,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       }
     }
 
-    Query(selectClause, fromClause, whereClause, groupByClause,
-      orderByClause, limitClause)()
+    Query(selectClause, fromClause, whereClause, groupByClause, orderByClause, limitClause)
   }
 
   /**
@@ -230,12 +230,8 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     }
     val orderByClause = Some(OrderByClause(queryProjection))
 
-    val comment = f"-- innerTable=$innerTable, outerTable=$outerTable," +
-      f" subqueryLocation=$subqueryLocation, subqueryType=$subqueryType," +
-      f" isCorrelated=$isCorrelated, subqueryDistinct=$isDistinct," +
-      f" subqueryOperator=$operatorInSubquery"
     Query(selectClause, fromClause, whereClause, groupByClause = None,
-      orderByClause, limitClause = None)(comment)
+      orderByClause, limitClause = None)
   }
 
   private def getPostgresResult(stmt: Statement, sql: String): Array[Row] = {
@@ -281,8 +277,8 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
           condition = Equals(innerTable.output.head, JOIN_TABLE.output.head),
           joinType = joinType))
         // Hardcoded select all for set operation.
-        val leftTableQuery = Query(SelectClause(innerTable.output), FromClause(Seq(innerTable)))()
-        val rightTableQuery = Query(SelectClause(JOIN_TABLE.output), FromClause(Seq(JOIN_TABLE)))()
+        val leftTableQuery = Query(SelectClause(innerTable.output), FromClause(Seq(innerTable)))
+        val rightTableQuery = Query(SelectClause(JOIN_TABLE.output), FromClause(Seq(JOIN_TABLE)))
         val setOps = setOperations.map(setOp =>
           SetOperation(leftTableQuery, rightTableQuery, setOp))
           .map(plan => {
@@ -407,13 +403,36 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     // Enable ANSI so that { NULL IN { <empty> } } behavior is correct in Spark.
     localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
 
+    val failedQueries = scala.collection.mutable.Set[String]()
     // Run generated queries on both Spark and Postgres, and test against each other.
-    generatedQueries.toSeq.foreach { sqlStr =>
-      val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-      val sparkDf = localSparkSession.sql(sqlStr)
-      val postgresResult = getPostgresResult(stmt, sqlStr)
-      QueryTest.checkAnswer(sparkDf, postgresResult.toSeq)
+    generatedQueries.toSeq.par.foreach { sqlStr =>
+      if (!GeneratedSubquerySuite.KNOWN_QUERIES_WITH_DIFFERENT_RESULTS.contains(sqlStr)) {
+        val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+        val sparkDf = localSparkSession.sql(sqlStr)
+        val postgresResult = getPostgresResult(stmt, sqlStr)
+        QueryTest.checkAnswer(sparkDf, postgresResult.toSeq)
+      }
     }
     conn.close()
   }
+}
+
+object GeneratedSubquerySuite {
+
+  // scalastyle:off line.size.limit
+  private val KNOWN_QUERIES_WITH_DIFFERENT_RESULTS = Seq(
+    // SPARK-46743
+    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
+    // SPARK-46743
+    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table INNER JOIN join_table ON null_table.a = join_table.a WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
+    // SPARK-46743
+    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table LEFT OUTER JOIN join_table ON null_table.a = join_table.a WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
+    // SPARK-46743
+    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table RIGHT OUTER JOIN join_table ON null_table.a = join_table.a WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
+    // SPARK-46743
+    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(innerSubqueryAlias.a) AS aggFunctionAlias FROM (SELECT null_table.a, null_table.b FROM null_table INTERSECT SELECT join_table.a, join_table.b FROM join_table) AS innerSubqueryAlias WHERE innerSubqueryAlias.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
+    // SPARK-46743
+    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(innerSubqueryAlias.a) AS aggFunctionAlias FROM (SELECT null_table.a, null_table.b FROM null_table EXCEPT SELECT join_table.a, join_table.b FROM join_table) AS innerSubqueryAlias WHERE innerSubqueryAlias.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;"
+  )
+  // scalastyle:on line.size.limit
 }

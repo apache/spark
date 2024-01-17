@@ -209,7 +209,7 @@ trait QueryGeneratorHelper {
       groupByClause: Option[GroupByClause] = None,
       orderByClause: Option[OrderByClause] = None,
       limitClause: Option[Limit] = None
-  )(comment: String = "") extends Operator {
+  ) extends Operator {
 
     override def toString: String = {
       def getOptionClauseString(optionalClause: Option[Clause]): String =
@@ -218,11 +218,7 @@ trait QueryGeneratorHelper {
       val queryString = f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
         f"${getOptionClauseString(groupByClause)}${getOptionClauseString(orderByClause)}" +
         f"${getOptionClauseString(limitClause)}"
-      if (comment.isEmpty) {
-        queryString
-      } else {
-        comment + "\n" + queryString
-      }
+      queryString
     }
   }
 }
