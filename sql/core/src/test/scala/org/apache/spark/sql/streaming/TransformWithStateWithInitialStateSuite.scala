@@ -81,7 +81,7 @@ class AccumulateStatefulProcessorWithInitState extends StatefulProcessorWithInit
   }
 }
 
-class StatefulProcessorWithInitialStateSuite extends StreamTest {
+class TransformWithStateWithInitialStateSuite extends StreamTest {
   import testImplicits._
 
   private def createInitialDfForTest: KeyValueGroupedDataset[String, (String, Double)] = {
@@ -149,10 +149,9 @@ class StatefulProcessorWithInitialStateSuite extends StreamTest {
 
         // If processInitialState was processed multiple times,
         // following checks will fail
-        AddData(inputData, InputRow("init_1", "getOption", -1.0)),
-        CheckNewAnswer(("init_1", "getOption", 140.0)),
-        AddData(inputData, InputRow("init_2", "getOption", -1.0)),
-        CheckNewAnswer(("init_2", "getOption", 160.0))
+        AddData(inputData,
+          InputRow("init_1", "getOption", -1.0), InputRow("init_2", "getOption", -1.0)),
+        CheckNewAnswer(("init_2", "getOption", 160.0), ("init_1", "getOption", 140.0))
       )
     }
   }

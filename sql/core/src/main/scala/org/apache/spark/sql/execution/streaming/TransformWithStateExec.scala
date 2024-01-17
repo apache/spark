@@ -84,9 +84,6 @@ case class TransformWithStateExec(
 
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
-  // TODO will we run into race condition for this variable?
-  private var isFirstBatch: Boolean = false
-
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
    * to have the same grouping so that the data are co-lacated on the same task.
@@ -208,16 +205,6 @@ case class TransformWithStateExec(
     val groupedInitialStateIter =
       GroupedIterator(initStateIter, initialStateGroupingAttributes, initialState.output)
 
-    // Only process initial states for first batch
-    if (isFirstBatch) {
-      groupedInitialStateIter.foreach {
-        case (keyRow, valueRowIter) =>
-          processInitialStateRows(keyRow.asInstanceOf[UnsafeRow],
-            valueRowIter)
-      }
-      isFirstBatch = false
-    }
-
     groupedChildDataIter.flatMap { case (keyRow, valueRowIter) =>
       val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
       handleInputRows(keyUnsafeRow, valueRowIter)
@@ -267,8 +254,20 @@ case class TransformWithStateExec(
           assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
           statefulProcessor.init(processorHandle, outputMode)
           processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+
           // Check if is first batch
-          if (processorHandle.getQueryInfo().getBatchId == 0) isFirstBatch = true
+          // Only process initial states for first batch
+          if (processorHandle.getQueryInfo().getBatchId == 0) {
+            val groupedInitialStateIter =
+              GroupedIterator(initStateIterator,
+                initialStateGroupingAttributes, initialState.output)
+            groupedInitialStateIter.foreach {
+              case (keyRow, valueRowIter) =>
+                processInitialStateRows(keyRow.asInstanceOf[UnsafeRow],
+                  valueRowIter)
+            }
+          }
+
           val result = processDataWithPartition(childDataIterator, store,
             processorHandle, Option(initStateIterator))
           result
