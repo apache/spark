@@ -43,7 +43,7 @@ DataFrames, Structured Streaming, Machine Learning (MLlib) and Spark Core.
 
    * -
      - .. image:: ../../../docs/img/pyspark-dataframe_api.png
-          :target: reference/pyspark.sql/index.html
+          :target: reference/pyspark.dataframe/index.html
           :width: 100%
           :alt: DataFrame API
      - .. image:: ../../../docs/img/pyspark-pandas_api_on_spark.png
