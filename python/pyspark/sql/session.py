@@ -2113,10 +2113,10 @@ class SparkSession(SparkConversionMixin):
             message_parameters={"feature": "SparkSession.clearTags"},
         )
 
-    def show_perf_profiles(self, id: Optional[int] = None) -> None:
+    def showPerfProfiles(self, id: Optional[int] = None) -> None:
         self._profiler_collector.show_perf_profiles(id)
 
-    show_perf_profiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
+    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
 
 
 def _test() -> None:

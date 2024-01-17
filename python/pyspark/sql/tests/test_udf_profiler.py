@@ -181,13 +181,13 @@ class UDFProfiler2TestsMixin:
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
 
         with self.trap_stdout() as io_all:
-            self.spark.show_perf_profiles()
+            self.spark.showPerfProfiles()
 
         for id in self.profile_results:
             self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
 
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -206,7 +206,7 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -225,7 +225,7 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -246,7 +246,7 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -276,7 +276,7 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -309,7 +309,7 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
