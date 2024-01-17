@@ -422,10 +422,10 @@ class FunctionsTestsMixin:
         self.assertEqual(row[0], "Nov")
 
     def test_dayname(self):
-            dt = datetime.datetime(2017, 11, 6)
-            df = self.spark.createDataFrame([Row(date=dt)])
-            row = df.select(F.dayname(df.date)).first()
-            self.assertEqual(row[0], "Mon")
+        dt = datetime.datetime(2017, 11, 6)
+        df = self.spark.createDataFrame([Row(date=dt)])
+        row = df.select(F.dayname(df.date)).first()
+        self.assertEqual(row[0], "Mon")
 
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):

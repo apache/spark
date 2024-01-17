@@ -1106,7 +1106,7 @@ setMethod("monthname",
           })
 
 #' @details
-#' \code{dayname}: Extracts the three-letter abbreviated month name from a
+#' \code{dayname}: Extracts the three-letter abbreviated day name from a
 #' given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions

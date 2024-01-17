@@ -7306,7 +7306,7 @@ def monthname(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def dayname(col: "ColumnOrName") -> Column:
     """
-    Returns the three-letter abbreviated day name from the given date.
+    Date and Timestamp Function: Returns the three-letter abbreviated day name from the given date.
 
     .. versionadded:: 4.0.0
 
@@ -7323,12 +7323,12 @@ def dayname(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(dayname('dt').alias('day')).show()
-    +-----+
-    |day|
-    +-----+
-    |Wed|
-    +-----+
+    >>> df.select(dayname('dt').alias('dayname')).show()
+    +-------+
+    |dayname|
+    +-------+
+    |    Wed|
+    +-------+
     """
     return _invoke_function_over_columns("dayname", col)
 
