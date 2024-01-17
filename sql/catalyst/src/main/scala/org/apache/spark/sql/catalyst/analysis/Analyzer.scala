@@ -265,7 +265,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      SubstituteUnresolvedOrdinals,
+      ScopeExpressions),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -3505,6 +3506,33 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         j.getTagValue(LogicalPlan.PLAN_ID_TAG)
           .foreach(project.setTagValue(LogicalPlan.PLAN_ID_TAG, _))
         project
+    }
+  }
+
+  /**
+   * Restricts the scope of resolving some expressions.
+   */
+  object ScopeExpressions extends Rule[LogicalPlan] {
+    private def scopeOrder(scope: Seq[Attribute])(sortOrder: SortOrder): SortOrder = {
+      sortOrder match {
+        case so if so.child.isInstanceOf[ScopedExpression] => so
+        case so => so.copy(child = ScopedExpression(so.child, scope))
+      }
+    }
+
+    private def isNotScoped(sortOrder: SortOrder): Boolean =
+      !sortOrder.child.isInstanceOf[ScopedExpression]
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      // SPARK-42199: sort order of MapGroups must be scoped to their dataAttributes
+      case mg: MapGroups if mg.dataOrder.exists(isNotScoped) =>
+        mg.copy(dataOrder = mg.dataOrder.map(scopeOrder(mg.dataAttributes)))
+
+      // SPARK-42199: sort order of CoGroups must be scoped to their respective dataAttributes
+      case cg: CoGroup if Seq(cg.leftOrder, cg.rightOrder).exists(_.exists(isNotScoped)) =>
+        val scopedLeftOrder = cg.leftOrder.map(scopeOrder(cg.leftAttr))
+        val scopedRightOrder = cg.rightOrder.map(scopeOrder(cg.rightAttr))
+        cg.copy(leftOrder = scopedLeftOrder, rightOrder = scopedRightOrder)
     }
   }
 

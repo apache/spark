@@ -1570,6 +1570,87 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(plan.output.head.as("value")), appendCols.analyze))
   }
 
+  test("SPARK-42199: MapGroups scopes sort order expressions") {
+    def func(k: Int, it: Iterator[Int]): Iterator[Int] = {
+      Iterator.empty
+    }
+
+    implicit val intEncoder = ExpressionEncoder[Int]()
+
+    val rel = testRelation2.analyze
+    val group = MapGroups(
+      func,
+      rel.output.head :: Nil,
+      rel.output,
+      SortOrder($"b", Ascending) :: Nil,
+      rel
+    )
+
+    // apply the ScopeExpressions
+    val actualPlan = getAnalyzer.ScopeExpressions(group)
+    val mg = actualPlan.collectFirst {
+      case mg: MapGroups => mg
+    }
+
+    def hasScope(scope: Seq[Attribute])(sortOrder: SortOrder): Boolean = {
+      sortOrder.child.isInstanceOf[ScopedExpression] &&
+        sortOrder.child.asInstanceOf[ScopedExpression].scope.equals(scope)
+    }
+
+    // assert sort order to be scoped
+    assert(mg.isDefined)
+    mg.foreach { mg =>
+      assert(mg.dataOrder.size == 1)
+      assert(mg.dataOrder.forall(hasScope(mg.dataAttributes)))
+    }
+  }
+
+  test("SPARK-42199: CoGroup scopes sort order expressions") {
+    def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
+      Iterator.empty
+    }
+
+    implicit val intEncoder = ExpressionEncoder[Int]()
+
+    val left = testRelation2.select($"e").analyze
+    val right = testRelation3.select($"e", $"f").analyze
+    val leftWithKey = AppendColumns[Int, Int]((x: Int) => x, left)
+    val rightWithKey = AppendColumns[Int, Int]((x: Int) => x, right)
+    val leftOrder = SortOrder($"e", Ascending) :: Nil
+    val rightOrder = SortOrder($"e", Ascending) :: SortOrder($"f", Descending) :: Nil
+
+    val cogroup = leftWithKey.cogroup[Int, Int, Int, Int](
+      rightWithKey,
+      func,
+      leftWithKey.newColumns,
+      rightWithKey.newColumns,
+      left.output,
+      right.output,
+      leftOrder,
+      rightOrder
+    )
+
+    // apply the ScopeExpressions
+    val actualPlan = getAnalyzer.ScopeExpressions(cogroup)
+    val cg = actualPlan.collectFirst {
+      case cg: CoGroup => cg
+    }
+
+    def hasScope(scope: Seq[Attribute])(sortOrder: SortOrder): Boolean = {
+      sortOrder.child.isInstanceOf[ScopedExpression] &&
+        sortOrder.child.asInstanceOf[ScopedExpression].scope.equals(scope)
+    }
+
+    // assert sort order to be scoped
+    assert(cg.isDefined)
+    cg.foreach { cg =>
+      assert(cg.leftOrder.size == 1)
+      assert(cg.rightOrder.size == 2)
+      assert(cg.leftOrder.forall(hasScope(left.output)))
+      assert(cg.rightOrder.forall(hasScope(right.output)))
+    }
+  }
+
   test("SPARK-38591: resolve left and right CoGroup sort order on respective side only") {
     def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
       Iterator.empty
