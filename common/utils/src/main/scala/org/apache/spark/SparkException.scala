@@ -228,6 +228,19 @@ private[spark] class SparkUnsupportedOperationException private(
   override def getErrorClass: String = errorClass.orNull
 }
 
+private[spark] object SparkUnsupportedOperationException {
+  def apply(): SparkUnsupportedOperationException = {
+    val stackTrace = Thread.currentThread().getStackTrace
+    val messageParameters = if (stackTrace.length >= 4) {
+      val element = stackTrace(3)
+      Map("className" -> element.getClassName, "methodName" -> element.getMethodName)
+    } else {
+      Map("className" -> "?", "methodName" -> "?")
+    }
+    new SparkUnsupportedOperationException("UNSUPPORTED_CALL", messageParameters)
+  }
+}
+
 /**
  * Class not found exception thrown from Spark with an error class.
  */
