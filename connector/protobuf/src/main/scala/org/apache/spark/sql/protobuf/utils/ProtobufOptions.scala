@@ -218,7 +218,7 @@ private[sql] class ProtobufOptions(
   // If retain.empty.message=true, field a will be retained by inserting a dummy subcolumn.
   // b struct<name: string, a struct<__dummy_field_in_empty_struct: string>>
   val retainEmptyMessage: Boolean =
-    parameters.getOrElse("retain.empty.message", false.toString).toBoolean
+    parameters.getOrElse("retain.empty.message.types", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {

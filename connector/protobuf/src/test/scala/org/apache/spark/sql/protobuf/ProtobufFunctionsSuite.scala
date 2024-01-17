@@ -1127,7 +1127,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   test("retain empty proto fields") {
     // When retain.empty.message=true, empty proto like 'message A {}' can be retained as a field
     // by inserting a dummy column as sub column.
-    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message" -> "true")
+    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
 
     // EmptyProto at the top level. It will be an empty struct.
     checkWithFileAndClassName("EmptyProto") {
@@ -1155,7 +1155,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   test("Write empty proto to parquet") {
     // When retain.empty.message=true, empty proto like 'message A {}' can be retained as a field
     // by inserting a dummy column as sub column, such schema can be written to parquet.
-    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message" -> "true")
+    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
     withTempDir { file =>
       val binaryDF = Seq(
         EmptyRecursiveProtoWrapper.newBuilder.setName("my_name").build().toByteArray)
@@ -1218,7 +1218,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       ) :: Nil
     )
 
-    val options = Map("recursive.fields.max.depth" -> "2", "retain.empty.message" -> "true")
+    val options = Map("recursive.fields.max.depth" -> "2", "retain.empty.message.types" -> "true")
     checkWithFileAndClassName("EmptyRecursiveProto") {
       case (name, descFilePathOpt) =>
         val df = emptyBinaryDF.select(
