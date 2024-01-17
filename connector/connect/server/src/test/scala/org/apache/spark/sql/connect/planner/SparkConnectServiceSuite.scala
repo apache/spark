@@ -33,7 +33,7 @@ import org.mockito.Mockito.when
 import org.scalatest.Tag
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkException, SparkEnv}
+import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.CreateDataFrameViewCommand
 import org.apache.spark.internal.Logging
