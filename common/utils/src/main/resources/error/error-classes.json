@@ -3592,6 +3592,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_CALL" : {
+    "message" : [
+      "Cannot call the method \"<methodName>\" of the class \"<className>\"."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
     "message" : [
       "The char/varchar type can't be used in the table schema.",
@@ -7133,16 +7139,6 @@
       "Cannot bind a V1 function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3111" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3112" : {
-    "message" : [
-      "Operation unsupported for <class>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3113" : {
     "message" : [
       "UnresolvedTableSpec doesn't have a data type"
@@ -7153,74 +7149,9 @@
       "UnresolvedTableSpec doesn't have a data type"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3115" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3116" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3117" : {
-    "message" : [
-      "Cannot modify <class>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3118" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3119" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3120" : {
-    "message" : [
-      ""
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3121" : {
     "message" : [
       "A HllSketch instance cannot be updates with a Spark <dataType> type"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3122" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3123" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3124" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3125" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3126" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3127" : {
-    "message" : [
-      "Not supported on UnsafeArrayData."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3128" : {
-    "message" : [
-      ""
     ]
   },
   "_LEGACY_ERROR_TEMP_3129" : {
@@ -7333,24 +7264,9 @@
       "Cannot create columnar reader."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3151" : {
-    "message" : [
-      ""
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3152" : {
     "message" : [
       "Datatype not supported <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3153" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3154" : {
-    "message" : [
-      ""
     ]
   },
   "_LEGACY_ERROR_TEMP_3155" : {
@@ -7358,92 +7274,7 @@
       "Datatype not supported <dataType>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3156" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3157" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3158" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3159" : {
-    "message" : [
-      ""
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3160" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3161" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3162" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3163" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3164" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3165" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3166" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3167" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3168" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3169" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3170" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3171" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3172" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3173" : {
     "message" : [
       ""
     ]
