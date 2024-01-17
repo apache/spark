@@ -281,10 +281,6 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       val value = dataIn.readLong()
       if (value > 0) Some(value) else None
     }
-    val acquireExecutionMemoryMbActual = {
-      val value = dataIn.readLong()
-      if (value > 0) Some(value) else None
-    }
     PythonUDTFAnalyzeResult(
       schema = schema,
       withSinglePartition = withSinglePartition,
