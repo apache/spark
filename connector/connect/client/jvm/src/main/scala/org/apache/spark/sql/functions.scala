@@ -402,7 +402,14 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def count(e: Column): Column = Column.fn("count", e)
+  def count(e: Column): Column = {
+    val withoutStar = e.expr.getExprTypeCase match {
+      // Turn count(*) into count(1)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_STAR => lit(1)
+      case _ => e
+    }
+    Column.fn("count", withoutStar)
+  }
 
   /**
    * Aggregate function: returns the number of items in a group.

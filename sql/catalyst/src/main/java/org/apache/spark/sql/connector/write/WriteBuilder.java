@@ -72,7 +72,7 @@ public interface WriteBuilder {
    */
   @Deprecated(since = "3.2.0")
   default StreamingWrite buildForStreaming() {
-    throw new SparkUnsupportedOperationException(getClass().getName() +
+    throw new SparkUnsupportedOperationException(
       "_LEGACY_ERROR_TEMP_3136", Map.of("class", getClass().getName()));
   }
 }

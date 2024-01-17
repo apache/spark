@@ -76,15 +76,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
-def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
-    if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
-    elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
-    else:
-        return Column(ColumnReference(unparsed_identifier=col, plan_id=plan_id))
-
-
 def _to_col(col: "ColumnOrName") -> Column:
     assert isinstance(col, (Column, str))
     return col if isinstance(col, Column) else column(col)
@@ -224,7 +215,12 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    return _to_col_with_plan_id(col=col, plan_id=None)
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -1014,6 +1010,8 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
+    if isinstance(col, Column) and isinstance(col._expr, UnresolvedStar):
+        col = lit(1)
     return _invoke_function_over_columns("count", col)
 
 
