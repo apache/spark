@@ -74,11 +74,14 @@ class SQLMetric(
   // the aggregation defined in [[SQLMetrics.stringValue]].
   // Note that we don't use 0 here since we may want to collect 0 metrics for
   // calculating min, max, etc. See SPARK-11013.
-  override def isZero: Boolean = _value == initValue
+  private def isZero(value: Long): Boolean = value <= initValue
+  override def isZero: Boolean = isZero(_value)
 
   override def add(v: Long): Unit = {
-    if (isZero) _value = 0
-    _value += v
+    if (!isZero(v)) {
+      if (isZero) _value = 0
+      _value += v
+    }
   }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
