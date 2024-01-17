@@ -1533,6 +1533,13 @@ class SparkSession(SparkConversionMixin):
         positional parameters from `args`. It doesn't support named and positional parameters
         in the same SQL query.
 
+        This method allows the execution of SQL query supported in Spark.
+        For a comprehensive list of all SQL syntax supported by Spark, refer to the
+        `SQL Reference`_ page.
+
+
+        .. _SQL Reference: https://spark.apache.org/docs/latest/sql-ref.html
+
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
