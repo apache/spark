@@ -441,6 +441,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       webUrl => console.printInfo(s"Spark Web UI available at $webUrl")
     }
     console.printInfo(s"Spark master: $master, Application Id: $appId")
+    console.printInfo("Use exit or quit or Ctrl-D (i.e. EOF) to exit.")
   }
 
   override def processCmd(cmd: String): Int = {

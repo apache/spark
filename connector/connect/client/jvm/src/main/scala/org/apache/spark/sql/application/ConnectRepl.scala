@@ -45,7 +45,8 @@ object ConnectRepl {
       | ___/ / /_/ / /_/ / /  / ,<    / /___/ /_/ / / / / / / /  __/ /__/ /_
       |/____/ .___/\__,_/_/  /_/|_|   \____/\____/_/ /_/_/ /_/\___/\___/\__/
       |    /_/
-      |""".stripMargin
+      |
+      |Use exit or Ctrl-D (i.e. EOF) to exit.""".stripMargin
 
   def main(args: Array[String]): Unit = doMain(args)
 
