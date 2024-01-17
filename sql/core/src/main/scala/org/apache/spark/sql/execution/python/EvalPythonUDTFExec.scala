@@ -100,19 +100,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
         projection(inputRow)
       }
 
-      memoryConsumer.foreach { consumer =>
-        val acquireMemoryMbActual: Long = consumer.acquireMemory()
-        udtf.acquireMemoryMbActual = Some(acquireMemoryMbActual)
-      }
-      val outputRowIterator = try {
-        evaluate(argMetas, projectedRowIter, schema, context)
-      } finally {
-        if (TaskContext.get() != null) {
-          memoryConsumer.foreach { consumer =>
-            consumer.freeMemory()
-          }
-        }
-      }
+      val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
         if (child.outputSet == AttributeSet(requiredChildOutput)) {
@@ -125,32 +113,46 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       val nullRow = new GenericInternalRow(udtf.elementSchema.length)
       val resultProj = UnsafeProjection.create(output, output)
 
-      outputRowIterator.flatMap { outputRows =>
-        // If `count` is greater than zero, it means there are remaining input rows in the queue.
-        // In this case, the output rows of the UDTF are joined with the corresponding input row
-        // in the queue.
-        if (count > 0) {
-          val left = queue.remove()
-          count -= 1
-          joined.withLeft(pruneChildForResult(left))
-        }
-        // If `count` is zero, it means all input rows have been consumed. Any additional rows
-        // from the UDTF are from the `terminate()` call. We leave the left side as the last
-        // element of its child output to keep it consistent with the Generate implementation
-        // and Hive UDTFs.
-        outputRows.map { r =>
-          // When the UDTF's result is None, such as `def eval(): yield`,
-          // we join it with a null row to avoid NullPointerException.
-          if (r == null) {
-            resultProj(joined.withRight(nullRow))
-          } else {
-            resultProj(joined.withRight(r))
+      // Acquire execution memory before evaluating the UDTF. After the evaluation is complete, we
+      // free the memory below.
+      memoryConsumer.foreach { consumer =>
+        val acquireMemoryMbActual: Long = consumer.acquireMemory()
+        udtf.acquireMemoryMbActual = Some(acquireMemoryMbActual)
+      }
+      try {
+        outputRowIterator.flatMap { outputRows =>
+          // If `count` is greater than zero, it means there are remaining input rows in the queue.
+          // In this case, the output rows of the UDTF are joined with the corresponding input row
+          // in the queue.
+          if (count > 0) {
+            val left = queue.remove()
+            count -= 1
+            joined.withLeft(pruneChildForResult(left))
           }
+          // If `count` is zero, it means all input rows have been consumed. Any additional rows
+          // from the UDTF are from the `terminate()` call. We leave the left side as the last
+          // element of its child output to keep it consistent with the Generate implementation
+          // and Hive UDTFs.
+          outputRows.map { r =>
+            // When the UDTF's result is None, such as `def eval(): yield`,
+            // we join it with a null row to avoid NullPointerException.
+            if (r == null) {
+              resultProj(joined.withRight(nullRow))
+            } else {
+              resultProj(joined.withRight(r))
+            }
+          }
+        }
+      } finally {
+        memoryConsumer.foreach { consumer =>
+          consumer.freeMemory()
         }
       }
     }
   }
 
+  // This object serves the purpose of acquiring execution memory before evaluating the UDTF.
+  // After the evaluation is complete, we call its 'freeMemory' method to release the memory.
   lazy val memoryConsumer: Option[PythonUDTFMemoryConsumer] = {
     if (TaskContext.get() != null) {
       Some(PythonUDTFMemoryConsumer(udtf))
@@ -178,7 +180,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
  * know it and can ensure to bound memory usage to at most this number.
  */
 case class PythonUDTFMemoryConsumer(udtf: PythonUDTF)
-  extends MemoryConsumer(TaskContext.get().taskMemoryManager(), MemoryMode.ON_HEAP) {
+  extends MemoryConsumer(TaskContext.get().taskMemoryManager(), MemoryMode.OFF_HEAP) {
   private val BYTES_PER_MB = 1024 * 1024
   def acquireMemory(): Long = {
     udtf.acquireMemoryMbRequested.map { megabytes: Long =>

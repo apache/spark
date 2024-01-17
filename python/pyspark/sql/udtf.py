@@ -140,6 +140,7 @@ class AnalyzeResult:
         prevent executors from crashing by running out of memory due to the extra memory consumption
         invoked by the UDTF's 'eval' and 'terminate' and 'cleanup' methods. Spark will then call
         'TaskMemoryManager.acquireExecutionMemory' with the requested number of MB.
+        We set a default of 100 MB here, which the UDTF may override to a more accurate number.
     acquireExecutionMemoryMbActual: long
         If there is a task context available, Spark will assign this field to the number of MB
         returned from the call to the TaskMemoryManager.acquireExecutionMemory' method, as consumed
