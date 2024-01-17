@@ -25,7 +25,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
-import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
