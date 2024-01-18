@@ -923,6 +923,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row[1], {"a": "b"})
         self.assertEqual(row[2], Row(col1=1, col2=2))
 
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_named_arguments(self):
         @udf("int")
         def test_udf(a, b):
