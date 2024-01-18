@@ -542,6 +542,10 @@ pyspark_testing = Module(
         "pyspark.testing.utils",
         "pyspark.testing.pandasutils",
     ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
 )
 
 pyspark_resource = Module(
