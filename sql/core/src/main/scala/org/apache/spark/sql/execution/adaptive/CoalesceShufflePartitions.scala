@@ -156,7 +156,8 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     // If not all leaf nodes are exchange query stages, it's not safe to reduce the number of
     // shuffle partitions, because we may break the assumption that all children of a spark plan
     // have same number of output partitions.
-    case p if p.collectLeaves().forall(_.isInstanceOf[ExchangeQueryStageExec]) =>
+    case p
+        if p.collectLeaves().forall(_.isInstanceOf[ShuffleQueryStageExec]) && !containsUnion(p) =>
       val shuffleStages = collectShuffleStageInfos(p)
       // ShuffleExchanges introduced by repartition do not support partition number change.
       // We change the number of partitions only if all the ShuffleExchanges support it.
@@ -166,6 +167,12 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         Seq.empty
       }
     case _ => Seq.empty
+  }
+
+  private def containsUnion(plan: SparkPlan): Boolean = plan match {
+    case _: ShuffleQueryStageExec => false
+    case _: UnionExec => true
+    case _ => plan.children.exists(containsUnion)
   }
 
   private def collectShuffleStageInfos(plan: SparkPlan): Seq[ShuffleStageInfo] = plan match {
