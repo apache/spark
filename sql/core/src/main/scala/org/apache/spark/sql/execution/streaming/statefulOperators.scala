@@ -1097,39 +1097,19 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   protected val extraOptionOnStateStore: Map[String, String] = Map.empty
 
-  // Below three variables are Option as attributes in child won't have an event time column
-  // in the canonicalized plan. The executed plan will eventually call doExecute() and we can
-  // defer assertion of the existence of event time column at that time.
-  private val eventTimeColOpt: Option[Attribute] = WatermarkSupport.findEventTimeColumn(
-    child.output, allowMultipleEventTimeColumns = false)
-  private val delayThresholdMsOpt: Option[Long] = eventTimeColOpt.map(
-    _.metadata.getLong(EventTimeWatermark.delayKey))
-  private val eventTimeColOrdinalOpt: Option[Int] = eventTimeColOpt.map(child.output.indexOf)
-
-  // Below three variables will be set lazily when doExecute() is called.
-  private var eventTimeCol: Attribute = _
-  private var delayThresholdMs: Long = _
-  private var eventTimeColOrdinal: Int = _
+  // Below three variables are defined as lazy, as evaluating these variables does not work with
+  // canonicalized plan. Specifically, attributes in child won't have an event time column in
+  // the canonicalized plan. These variables are NOT referenced in canonicalized plan, hence
+  // defining these variables as lazy would avoid such error.
+  private lazy val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
+    allowMultipleEventTimeColumns = false).get
+  private lazy val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
+  private lazy val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
 
   protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = {
     val timeoutToUnsafeRow = UnsafeProjection.create(schemaForValueRow)
     val timeoutRow = timeoutToUnsafeRow(new SpecificInternalRow(schemaForValueRow))
     Some(timeoutRow)
-  }
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    require(eventTimeColOpt.isDefined, "DataFrame should have defined an event time column to " +
-      "use the API `dropDuplicatesWithinWatermark`.")
-
-    // if event time column is available, all below must be available as well.
-    assert(delayThresholdMsOpt.isDefined)
-    assert(eventTimeColOrdinalOpt.isDefined)
-
-    eventTimeCol = eventTimeColOpt.get
-    delayThresholdMs = delayThresholdMsOpt.get
-    eventTimeColOrdinal = eventTimeColOrdinalOpt.get
-
-    super.doExecute()
   }
 
   protected def putDupInfoIntoState(
