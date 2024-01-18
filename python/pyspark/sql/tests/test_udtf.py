@@ -69,6 +69,9 @@ from pyspark.testing.sqlutils import (
 )
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
+)
 class BaseUDTFTestsMixin:
     def test_simple_udtf(self):
         class TestUDTF:

@@ -51,6 +51,7 @@ def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
     action(df)
 
 
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class UDFProfilerTests(unittest.TestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)

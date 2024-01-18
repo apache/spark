@@ -40,6 +40,15 @@ except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     pyarrow_requirement_message = str(e)
 
+grpcio_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_grpcio_status_version
+
+    require_minimum_grpcio_status_version()
+except ImportError as e:
+    # If Grpcio version requirement is not satisfied, skip related tests.
+    grpcio_requirement_message = str(e)
+
 test_not_compiled_message = None
 try:
     from pyspark.sql.utils import require_test_compiled
@@ -55,6 +64,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
 
 have_pandas = pandas_requirement_message is None
 have_pyarrow = pyarrow_requirement_message is None
+have_grpcio = grpcio_requirement_message is None
 test_compiled = test_not_compiled_message is None
 
 
