@@ -971,7 +971,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns
-        // SPARK-42199: resolve these sort expressions only against dataAttributes
+        // SPARK-42199: resolve these aggregate expressions only against dataAttributes
+        // this is to hide key column from expression resolution
         .map(scopeTypedColumn(dataAttributes))
         .map(_.withInputType(vExprEnc, dataAttributes).named)
     val keyColumn = TypedAggUtils.aggKeyColumn(kExprEnc, groupingAttributes)
