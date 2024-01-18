@@ -19,7 +19,7 @@
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:focal-20221019
 
-ENV FULL_REFRESH_DATE 20231117
+ENV FULL_REFRESH_DATE 20240117
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -104,6 +104,7 @@ RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP
 # Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
 RUN python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.9 -m pip install deepspeed torcheval
+RUN python3.9 -m pip cache purge
 
 # Install Python 3.10 at the last stage to avoid breaking Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
@@ -114,6 +115,7 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS
 RUN python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.10 -m pip install deepspeed torcheval
+RUN python3.10 -m pip cache purge
 
 # Install Python 3.11 at the last stage to avoid breaking the existing Python installations
 RUN add-apt-repository ppa:deadsnakes/ppa
@@ -124,6 +126,7 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS
 RUN python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.11 -m pip install deepspeed torcheval
+RUN python3.11 -m pip cache purge
 
 # Install Python 3.12 at the last stage to avoid breaking the existing Python installations
 RUN add-apt-repository ppa:deadsnakes/ppa
@@ -137,3 +140,6 @@ RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml
 RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 RUN python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.12 -m pip install torcheval
+RUN python3.12 -m pip cache purge
+
+RUN df -h
