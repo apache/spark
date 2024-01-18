@@ -21,7 +21,7 @@ import java.util.Random
 
 import org.scalatest.matchers.must.Matchers._
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.test.RemoteSparkSession
 
 class ClientDataFrameStatSuite extends RemoteSparkSession {
@@ -248,19 +248,19 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
 
   test("Bloom filter test invalid inputs") {
     val df = spark.range(1000).toDF("id")
-    val message1 = intercept[SparkException] {
+    val message1 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", -1000, 100)
     }.getMessage
-    assert(message1.contains("Expected insertions must be positive"))
+    assert(message1.contains("VALUE_OUT_OF_RANGE"))
 
-    val message2 = intercept[SparkException] {
+    val message2 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -100)
     }.getMessage
-    assert(message2.contains("Number of bits must be positive"))
+    assert(message2.contains("VALUE_OUT_OF_RANGE"))
 
-    val message3 = intercept[SparkException] {
+    val message3 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -1.0)
     }.getMessage
-    assert(message3.contains("False positive probability must be within range (0.0, 1.0)"))
+    assert(message3.contains("VALUE_OUT_OF_RANGE"))
   }
 }

@@ -1805,31 +1805,8 @@ class SparkConnectPlanner(
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
         // [col, expectedNumItems: Long, numBits: Long]
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-
-        // Check expectedNumItems is LongType and value greater than 0L
-        val expectedNumItemsExpr = children(1)
-        val expectedNumItems = expectedNumItemsExpr match {
-          case Literal(l: Long, LongType) => l
-          case _ =>
-            throw InvalidPlanInput("Expected insertions must be long literal.")
-        }
-        if (expectedNumItems <= 0L) {
-          throw InvalidPlanInput("Expected insertions must be positive.")
-        }
-
-        val numBitsExpr = children(2)
-        // Check numBits is LongType and value greater than 0L
-        numBitsExpr match {
-          case Literal(numBits: Long, LongType) =>
-            if (numBits <= 0L) {
-              throw InvalidPlanInput("Number of bits must be positive.")
-            }
-          case _ =>
-            throw InvalidPlanInput("Number of bits must be long literal.")
-        }
-
         Some(
-          new BloomFilterAggregate(children.head, expectedNumItemsExpr, numBitsExpr)
+          new BloomFilterAggregate(children(0), children(1), children(2))
             .toAggregateExpression())
 
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
