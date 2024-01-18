@@ -913,7 +913,7 @@ case class MonthName(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the three-letter abbreviated day name from the given date.",
   examples = """
     Examples:
-      > SELECT _FUNC_('2008-02-20');
+      > SELECT _FUNC_(date'2008-02-20');
        Wed
   """,
   group = "datetime_funcs",
