@@ -35,9 +35,8 @@ class AvroCodecSuite extends FileSourceCodecSuite {
       withTable("avro_t") {
         sql(
           s"""CREATE TABLE avro_t
-             | USING $format OPTIONS('compression'='$codec')
-             | AS SELECT 1 as id
-             | """.stripMargin)
+             |USING $format OPTIONS('compression'='$codec')
+             |AS SELECT 1 as id""".stripMargin)
         spark
           .table("avro_t")
           .inputFiles.foreach { f =>
@@ -52,9 +51,8 @@ class AvroCodecSuite extends FileSourceCodecSuite {
       exception = intercept[SparkIllegalArgumentException](
         sql(
           s"""CREATE TABLE avro_t
-             | USING $format OPTIONS('compression'='unsupported')
-             | AS SELECT 1 as id
-             | """.stripMargin)),
+             |USING $format OPTIONS('compression'='unsupported')
+             |AS SELECT 1 as id""".stripMargin)),
       errorClass = "CODEC_SHORT_NAME_NOT_FOUND",
       sqlState = Some("42704"),
       parameters = Map("codecName" -> "unsupported")

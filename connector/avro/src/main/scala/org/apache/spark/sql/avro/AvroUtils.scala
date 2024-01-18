@@ -109,7 +109,7 @@ private[sql] object AvroUtils extends Logging {
             job.getConfiguration.setBoolean("mapred.output.compress", false)
           case compressed =>
             job.getConfiguration.setBoolean("mapred.output.compress", true)
-            job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codecName)
+            job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
             if (compressed == DEFLATE) {
               val deflateLevel = sqlConf.avroDeflateLevel
               logInfo(s"Compressing Avro output using the $codecName codec at level $deflateLevel")
