@@ -70,7 +70,7 @@ class SparkConnectServiceSuite
     val message = SparkConnectService.extractErrorMessage(e, ErrorMessageFormat.STANDARD)
     assert(message.startsWith("{"))
     assert(message.endsWith("}"))
-    assert(message.contains(""""messageTemplate" : "test""""))
+    assert(message.contains(""""message" : "test""""))
   }
 
   test("Test schema in analyze response") {
