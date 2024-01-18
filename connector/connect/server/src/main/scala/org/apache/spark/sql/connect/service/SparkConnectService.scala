@@ -383,6 +383,6 @@ object SparkConnectService extends Logging {
       case _ =>
         st.getMessage
     }
-    Option(StringUtils.abbreviate(message, 2048)).orElse("")
+    Option(StringUtils.abbreviate(message, 2048)).getOrElse("")
   }
 }
