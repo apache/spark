@@ -168,9 +168,6 @@ object NodeWithOnlyDeterministicProjectAndFilter {
 
 /**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
- *
- * Null-safe equality will be transformed into equality as joining key (replace null with default
- * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, otherCondition, conditionOnJoinKeys, leftChild,
@@ -194,18 +191,6 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
-        // Replace null with default value for joining key, then those rows with null in it could
-        // be joined together
-        case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
-          Seq((Coalesce(Seq(l, Literal.default(l.dataType))),
-            Coalesce(Seq(r, Literal.default(r.dataType)))),
-            (IsNull(l), IsNull(r))
-          )  // (coalesce(l, default) = coalesce(r, default)) and (isnull(l) = isnull(r))
-        case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
-          Seq((Coalesce(Seq(r, Literal.default(r.dataType))),
-            Coalesce(Seq(l, Literal.default(l.dataType)))),
-            (IsNull(r), IsNull(l))
-          )  // Same as above with left/right reversed.
         case _ => None
       }
       val (predicatesOfJoinKeys, otherPredicates) = predicates.partition {

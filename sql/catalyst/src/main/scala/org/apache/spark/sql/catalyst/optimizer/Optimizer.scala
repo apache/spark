@@ -199,6 +199,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
     Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
+    // This batch must run after batch which  may create join, e.g., `RewriteExceptAll`,
+    // `RewriteCorrelatedScalarSubquery`
+    Batch("Rewrite Null Safe Equality Join Keys", Once, RewriteNullSafeEqualityJoinKeys) :+
     // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
     Batch("Pre CBO Rules", Once, preCBORules: _*) :+
@@ -275,6 +278,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
       RewriteLateralSubquery.ruleName ::
+      RewriteNullSafeEqualityJoinKeys.ruleName ::
       OptimizeSubqueries.ruleName :: Nil
 
   /**
