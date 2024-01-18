@@ -363,6 +363,24 @@ Configuration of Avro can be done via `spark.conf.set` or by running `SET key=va
     <td>2.4.0</td>
   </tr>
   <tr>
+    <td>spark.sql.avro.xz.level</td>
+    <td>6</td>
+    <td>
+      Compression level for the xz codec used in writing of AVRO files. Valid value must be in
+      the range of from 1 to 9 inclusive. The default value is 6 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.zstandard.level</td>
+    <td>3</td>
+    <td>
+      Compression level for the zstandard codec used in writing of AVRO files.
+      The default value is 3 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
     <td>spark.sql.avro.datetimeRebaseModeInRead</td>
     <td><code>EXCEPTION</code></td>
     <td>The rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar:<br>
