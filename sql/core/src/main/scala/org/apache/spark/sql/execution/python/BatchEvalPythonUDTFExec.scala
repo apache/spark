@@ -50,6 +50,7 @@ case class BatchEvalPythonUDTFExec(
   extends EvalPythonUDTFExec with PythonSQLMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private val pythonRunnerConf = PythonUDFRunner.getPythonRunnerConfMap(conf)
 
   /**
    * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
@@ -67,7 +68,7 @@ case class BatchEvalPythonUDTFExec(
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDTFRunner(udtf, argMetas, pythonMetrics, jobArtifactUUID)
+      new PythonUDTFRunner(udtf, argMetas, pythonRunnerConf, pythonMetrics, jobArtifactUUID)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -95,11 +96,13 @@ case class BatchEvalPythonUDTFExec(
 class PythonUDTFRunner(
     udtf: PythonUDTF,
     argMetas: Array[ArgumentMetadata],
+    workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(
     Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
-    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+    PythonEvalType.SQL_TABLE_UDF,
+    Array(argMetas.map(_.offset)), workerConf, pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
