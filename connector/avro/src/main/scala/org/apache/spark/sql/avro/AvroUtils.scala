@@ -110,10 +110,11 @@ private[sql] object AvroUtils extends Logging {
           case compressed =>
             job.getConfiguration.setBoolean("mapred.output.compress", true)
             job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
-            if (compressed == DEFLATE) {
-              val deflateLevel = sqlConf.avroDeflateLevel
-              logInfo(s"Compressing Avro output using the $codecName codec at level $deflateLevel")
-              job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
+            if (compressed.getSupportCompressionLevel) {
+              val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
+                compressed.getDefaultCompressionLevel.toString)
+              logInfo(s"Compressing Avro output using the $codecName codec at level $level")
+              job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, level.toInt)
             } else {
               logInfo(s"Compressing Avro output using the $codecName codec")
             }
