@@ -332,7 +332,7 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     <td>snappy</td>
     <td>
       Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
-      snappy, bzip2 and xz. Default codec is snappy.
+      snappy, bzip2, xz and zstandard. Default codec is snappy.
     </td>
     <td>2.4.0</td>
   </tr>
