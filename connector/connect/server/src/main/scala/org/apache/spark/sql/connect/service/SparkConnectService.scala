@@ -381,9 +381,9 @@ object SparkConnectService extends Logging {
       case e: SparkThrowable =>
         SparkThrowableHelper.getMessage(e, format)
       case _ =>
-        StringUtils.abbreviate(st.getMessage, 2048)
+        st.getMessage
     }
-    convertNullString(message)
+    convertNullString(StringUtils.abbreviate(message, 2048))
   }
 
   def convertNullString(str: String): String = {
