@@ -30,7 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._
@@ -102,22 +102,25 @@ private[sql] object AvroUtils extends Logging {
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
 
-    if (parsedOptions.compression == UNCOMPRESSED.lowerCaseName()) {
-      job.getConfiguration.setBoolean("mapred.output.compress", false)
-    } else {
-      job.getConfiguration.setBoolean("mapred.output.compress", true)
-      logInfo(s"Compressing Avro output using the ${parsedOptions.compression} codec")
-      val codec = AvroCompressionCodec.fromString(parsedOptions.compression) match {
-        case DEFLATE =>
-          val deflateLevel = sqlConf.avroDeflateLevel
-          logInfo(s"Avro compression level $deflateLevel will be used for " +
-            s"${DEFLATE.getCodecName()} codec.")
-          job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
-          DEFLATE.getCodecName()
-        case codec @ (SNAPPY | BZIP2 | XZ | ZSTANDARD) => codec.getCodecName()
-        case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
-      }
-      job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
+    parsedOptions.compression.toLowerCase(Locale.ROOT) match {
+      case codecName if AvroCompressionCodec.values().exists(c => c.lowerCaseName() == codecName) =>
+        AvroCompressionCodec.fromString(codecName) match {
+          case UNCOMPRESSED =>
+            job.getConfiguration.setBoolean("mapred.output.compress", false)
+          case compressed =>
+            job.getConfiguration.setBoolean("mapred.output.compress", true)
+            job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
+            if (compressed == DEFLATE) {
+              val deflateLevel = sqlConf.avroDeflateLevel
+              logInfo(s"Compressing Avro output using the $codecName codec at level $deflateLevel")
+              job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
+            } else {
+              logInfo(s"Compressing Avro output using the $codecName codec")
+            }
+        }
+      case unknown =>
+        throw new SparkIllegalArgumentException(
+          "CODEC_SHORT_NAME_NOT_FOUND", Map("codecName" -> unknown))
     }
 
     new AvroOutputWriterFactory(dataSchema,

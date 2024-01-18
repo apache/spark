@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.avro
 
+import java.util.Locale
+
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.execution.datasources.FileSourceCodecSuite
 import org.apache.spark.sql.internal.SQLConf
 
@@ -27,19 +30,32 @@ class AvroCodecSuite extends FileSourceCodecSuite {
   override protected def availableCodecs =
     AvroCompressionCodec.values().map(_.lowerCaseName()).iterator.to(Seq)
 
-  availableCodecs.foreach { codec =>
+  (availableCodecs ++ availableCodecs.map(_.capitalize)).foreach { codec =>
     test(s"SPARK-46746: attach codec name to avro files - codec $codec") {
       withTable("avro_t") {
         sql(
           s"""CREATE TABLE avro_t
-             | USING $format OPTIONS('compression'='$codec')
-             | AS SELECT 1 as id
-             | """.stripMargin)
-        spark.table("avro_t")
-          .inputFiles.foreach { file =>
-            assert(file.endsWith(s"$codec.avro".stripPrefix("uncompressed")))
+             |USING $format OPTIONS('compression'='$codec')
+             |AS SELECT 1 as id""".stripMargin)
+        spark
+          .table("avro_t")
+          .inputFiles.foreach { f =>
+            assert(f.endsWith(s"$codec.avro".toLowerCase(Locale.ROOT).stripPrefix("uncompressed")))
           }
       }
     }
+  }
+
+  test("SPARK-46754: invalid compression codec name in avro table definition") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](
+        sql(
+          s"""CREATE TABLE avro_t
+             |USING $format OPTIONS('compression'='unsupported')
+             |AS SELECT 1 as id""".stripMargin)),
+      errorClass = "CODEC_SHORT_NAME_NOT_FOUND",
+      sqlState = Some("42704"),
+      parameters = Map("codecName" -> "unsupported")
+    )
   }
 }
