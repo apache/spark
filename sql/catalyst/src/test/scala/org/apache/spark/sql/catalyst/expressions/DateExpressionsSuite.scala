@@ -275,8 +275,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DayName(Cast(Literal(date), DateType, UTC_OPT)), "Wed")
     checkEvaluation(DayName(Cast(Literal(ts), DateType, UTC_OPT)), "Fri")
     checkEvaluation(DayName(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), "Fri")
-    checkEvaluation(DayName(Literal(LocalDate.parse("2017-05-27"))), "Sat")
-    checkEvaluation(DayName(Literal(LocalDate.parse("1582-10-15"))), "Fri")
+    checkEvaluation(DayName(Cast(Literal(LocalDate.parse("2017-05-27")), DateType, UTC_OPT)), "Sat")
+    checkEvaluation(DayName(Cast(Literal(LocalDate.parse("1582-10-15")), DateType, UTC_OPT)), "Fri")
     checkConsistencyBetweenInterpretedAndCodegen(DayName, DateType)
   }
 
