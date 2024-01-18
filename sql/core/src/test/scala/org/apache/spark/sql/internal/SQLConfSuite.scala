@@ -372,8 +372,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get(fallback.key, LZO.lowerCaseName()) === LZO.lowerCaseName())
 
     val displayValue = spark.sessionState.conf.getAllDefinedConfs
-      .find { case (key, _, _, _) => key == fallback.key }
-      .map { case (_, v, _, _) => v }
+      .find { case (key, _, _, _, _) => key == fallback.key }
+      .map { case (_, v, _, _, _) => v }
       .get
     assert(displayValue === fallback.defaultValueString)
 
@@ -384,8 +384,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get(fallback.key) === LZO.lowerCaseName())
 
     val newDisplayValue = spark.sessionState.conf.getAllDefinedConfs
-      .find { case (key, _, _, _) => key == fallback.key }
-      .map { case (_, v, _, _) => v }
+      .find { case (key, _, _, _, _) => key == fallback.key }
+      .map { case (_, v, _, _, _) => v }
       .get
     assert(newDisplayValue === LZO.lowerCaseName())
 
@@ -487,7 +487,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34454: configs from the legacy namespace should be internal") {
     val nonInternalLegacyConfigs = spark.sessionState.conf.getAllDefinedConfs
-      .filter { case (key, _, _, _) => key.contains("spark.sql.legacy.") }
+      .filter { case (key, _, _, _, _) => key.contains("spark.sql.legacy.") }
     assert(nonInternalLegacyConfigs.isEmpty,
       s"""
          |Non internal legacy SQL configs:
