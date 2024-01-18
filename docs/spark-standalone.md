@@ -143,6 +143,18 @@ You can optionally configure the cluster further by setting environment variable
     </td>
   </tr>
   <tr>
+    <td><code>SPARK_LOG_DIR</code></td>
+    <td>Where log files are stored. (default: SPARK_HOME/logs).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_LOG_MAX_FILES</code></td>
+    <td>The maximum number of log files (default: 5).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_PID_DIR</code></td>
+    <td>Where pid files are stored. (default: /tmp).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_WORKER_CORES</code></td>
     <td>Total number of cores to allow Spark applications to use on the machine (default: all available cores).</td>
   </tr>

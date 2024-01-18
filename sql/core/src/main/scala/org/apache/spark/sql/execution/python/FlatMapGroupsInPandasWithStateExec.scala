@@ -82,8 +82,10 @@ case class FlatMapGroupsInPandasWithStateExec(
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
-  private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
-  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
+  private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
+  private val pythonFunction = pythonUDF.func
+  private val chainedFunc =
+    Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))
   private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
     groupingAttributes ++ child.output, groupingAttributes)
 
