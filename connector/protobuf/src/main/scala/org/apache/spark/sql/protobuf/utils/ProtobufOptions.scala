@@ -211,15 +211,17 @@ private[sql] class ProtobufOptions(
   // Since Spark doesn't allow writing empty StructType, empty proto message type will be
   // dropped by default. Setting this option to true will insert a dummy column to empty proto
   // message so that the empty message will be retained.
-  // Example: message A {} is an empty message.
-  // When used as field in another message: Message B {A a = 1, string name = 2}
+  // For example, an empty message is used as field in another message:
+  //
+  // ```
+  // message A {}
+  // Message B {A a = 1, string name = 2}
+  // ```
+  //
   // By default, in the spark schema field a will be dropped, which result in schema
   // b struct<name: string>
-  // If retain.empty.message=true, field a will be retained by inserting a dummy subcolumn.
+  // If retain.empty.message.types=true, field a will be retained by inserting a dummy column.
   // b struct<name: string, a struct<__dummy_field_in_empty_struct: string>>
-  // Note: if the top level message is empty, a dummy column won't be inserted and data will have
-  // empty schema.
-  // message A{} will map to struct<>, which will cause analysis exception.
   val retainEmptyMessage: Boolean =
     parameters.getOrElse("retain.empty.message.types", false.toString).toBoolean
 }
