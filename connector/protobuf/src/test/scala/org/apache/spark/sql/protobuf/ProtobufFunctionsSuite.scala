@@ -1159,7 +1159,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
     withTempDir { file =>
       val binaryDF = Seq(
-        EmptyRecursiveProtoWrapper.newBuilder.setName("my_name").build().toByteArray)
+        EmptyProtoWrapper.newBuilder.setName("my_name").build().toByteArray)
         .toDF("binary")
       checkWithFileAndClassName("EmptyProtoWrapper") {
         case (name, descFilePathOpt) =>
@@ -1176,11 +1176,10 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       checkAnswer(resultDF, Seq(Row(Row("my_name", null))))
     }
 
-    // Top level message can't be empty, otherwise AnalysisException will be thrown.
-    // Dummy column won't be inserted for top level struct when retain.empty.message.types=true.
+    // When top level message is empty, write to parquet.
     withTempDir { file =>
       val binaryDF = Seq(
-        EmptyRecursiveProto.newBuilder.build().toByteArray)
+        EmptyProto.newBuilder.build().toByteArray)
         .toDF("binary")
       checkWithFileAndClassName("EmptyProto") {
         case (name, descFilePathOpt) =>
