@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
-import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
+import org.apache.avro.mapred.FsInput
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
@@ -114,7 +114,7 @@ private[sql] object AvroUtils extends Logging {
               val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
                 compressed.getDefaultCompressionLevel.toString)
               logInfo(s"Compressing Avro output using the $codecName codec at level $level")
-              val s = if (compressed  == ZSTANDARD) { "zstd" } else { codecName }
+              val s = if (compressed == ZSTANDARD) "zstd" else codecName
               job.getConfiguration.setInt(s"avro.mapred.$s.level", level.toInt)
             } else {
               logInfo(s"Compressing Avro output using the $codecName codec")
