@@ -383,14 +383,6 @@ object SparkConnectService extends Logging {
       case _ =>
         st.getMessage
     }
-    convertNullString(StringUtils.abbreviate(message, 2048))
-  }
-
-  def convertNullString(str: String): String = {
-    if (str != null) {
-      str
-    } else {
-      ""
-    }
+    Option(StringUtils.abbreviate(message, 2048)).orElse("")
   }
 }
