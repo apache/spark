@@ -114,7 +114,8 @@ private[sql] object AvroUtils extends Logging {
               val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
                 compressed.getDefaultCompressionLevel.toString)
               logInfo(s"Compressing Avro output using the $codecName codec at level $level")
-              job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, level.toInt)
+              val s = if (compressed  == ZSTANDARD) { "zstd" } else { codecName }
+              job.getConfiguration.setInt(s"avro.mapred.$s.level", level.toInt)
             } else {
               logInfo(s"Compressing Avro output using the $codecName codec")
             }
