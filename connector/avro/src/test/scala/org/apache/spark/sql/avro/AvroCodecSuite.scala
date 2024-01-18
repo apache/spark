@@ -47,7 +47,7 @@ class AvroCodecSuite extends FileSourceCodecSuite {
     }
   }
 
-  test("SPARK-46746: invalid compression codec name in avro table definition") {
+  test("SPARK-46754: invalid compression codec name in avro table definition") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](
         sql(
