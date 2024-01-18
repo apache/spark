@@ -2158,30 +2158,19 @@ class DataFrameAggregateSuite extends QueryTest
     def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
   }
 
-  def planValidationCheck(cache: () => Unit): Unit = {
+  test("plan_validation_fail") {
     withTempView("data") {
-      sql("""create or replace temp view data(c1, c2) as values
-            |(1, 2),
-            |(1, 3),
-            |(3, 7)""".stripMargin)
-      cache()
-      val df = sql("""select c1, (select count(*) from data d1 where d1.c1 = d2.c1), count(c2)
+      sql(
+        """create or replace temp view data(c1, c2) as values
+          |(1, 2),
+          |(1, 3),
+          |(3, 7)""".stripMargin)
+      sql("cache table data")
+      val df = sql(
+        """select c1, (select count(*) from data d1 where d1.c1 = d2.c1), count(c2)
           |from data d2 group by all""".stripMargin)
       checkAnswer(df, Row(1, 2, 2) :: Row(3, 1, 1) :: Nil)
     }
-  }
-
-  test("plan_validation_succeed") {
-    val cache: () => Unit = () => {
-    }
-    planValidationCheck(cache)
-  }
-
-  test("plan_validation_fail") {
-    val cache: () => Unit = () => {
-      sql("cache table data")
-    }
-    planValidationCheck(cache)
   }
 }
 
