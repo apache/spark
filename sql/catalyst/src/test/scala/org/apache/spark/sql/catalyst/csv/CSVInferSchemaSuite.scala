@@ -267,7 +267,9 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
     " with only one row") {
     val options = new CSVOptions(
-      Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
+      Map(
+        "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+        "timestampNTZFormat" -> "yyyy-MM-dd HH:mm:ss"),
       columnPruning = false,
       defaultTimeZoneId = "UTC")
     val inferSchema = new CSVInferSchema(options)

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
@@ -202,11 +202,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     // We can only parse the value as TimestampNTZType if it does not have zone-offset or
     // time-zone component and can be parsed with the timestamp formatter.
     // Otherwise, it is likely to be a timestamp with timezone.
-    val timestampType = SQLConf.get.timestampType
-    if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-        timestampType == TimestampNTZType) &&
-        timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-      timestampType
+    if (timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+      SQLConf.get.timestampType
     } else {
       tryParseTimestamp(field)
     }
