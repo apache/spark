@@ -36,7 +36,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -107,9 +107,9 @@ private[sql] object AvroUtils extends Logging {
         val jobConf = job.getConfiguration
         AvroCompressionCodec.fromString(codecName) match {
           case UNCOMPRESSED =>
-            jobConf.setBoolean("mapred.output.compress", false)
+            CompressionCodecs.setCodecConfiguration(jobConf, null)
           case compressed =>
-            jobConf.setBoolean("mapred.output.compress", true)
+            CompressionCodecs.setCodecConfiguration(jobConf, codecName)
             jobConf.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
             if (compressed.getSupportCompressionLevel) {
               val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
