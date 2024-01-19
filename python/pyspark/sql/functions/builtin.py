@@ -1614,51 +1614,38 @@ def acosh(col: "ColumnOrName") -> Column:
     Example 1: Compute the inverse hyperbolic cosine of a column of numbers
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, 1.5), (2, 2.5), (3, 3.5)], ["id", "value"])
-    >>> df.select(sf.acosh(df.value)).show()
-    +------------------+
-    |      ACOSH(value)|
-    +------------------+
-    |0.9624236501192069|
-    | 1.566799236972411|
-    |1.9248473002384139|
-    +------------------+
+    >>> df = spark.createDataFrame([(1,), (2,)], ["value"])
+    >>> df.select("value",
+    ...   sf.substring(sf.acosh(df.value), 0, 15).alias("ACOSH(value)")
+    ... ).show()
+    +-----+---------------+
+    |value|   ACOSH(value)|
+    +-----+---------------+
+    |    1|            0.0|
+    |    2|1.3169578969248|
+    +-----+---------------+
 
-    Example 2: Compute the inverse hyperbolic cosine of an expression
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, 1.5), (2, 2.5), (3, 3.5)], ["id", "value"])
-    >>> df.select(sf.acosh(df.id + df.value)).show()
-    +-------------------+
-    |ACOSH((id + value))|
-    +-------------------+
-    |  1.566799236972411|
-    |  2.184643791605109|
-    | 2.5589789770286124|
-    +-------------------+
-
-    Example 3: Compute the inverse hyperbolic cosine of a column with null values
+    Example 2: Compute the inverse hyperbolic cosine of a column with null values
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, None), (2, 2.5), (3, None)], ["id", "value"])
-    >>> df.select(sf.acosh(df.value)).show()
-    +-----------------+
-    |     ACOSH(value)|
-    +-----------------+
-    |             NULL|
-    |1.566799236972411|
-    |             NULL|
-    +-----------------+
-
-    Example 4: Compute the inverse hyperbolic cosine of a column with values less than 1
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, 0.5), (2, -0.5), (3, 0.0)], ["id", "value"])
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType
+    >>> schema = StructType([StructField("value", IntegerType(), True)])
+    >>> df = spark.createDataFrame([(None,)], schema=schema)
     >>> df.select(sf.acosh(df.value)).show()
     +------------+
     |ACOSH(value)|
     +------------+
-    |         NaN|
+    |        NULL|
+    +------------+
+
+    Example 3: Compute the inverse hyperbolic cosine of a column with values less than 1
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(0.5,), (-0.5,)], ["value"])
+    >>> df.select(sf.acosh(df.value)).show()
+    +------------+
+    |ACOSH(value)|
+    +------------+
     |         NaN|
     |         NaN|
     +------------+
