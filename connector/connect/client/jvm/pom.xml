@@ -51,15 +51,9 @@
       <version>${project.version}</version>
     </dependency>
     <!--
-      We need to define guava and protobuf here because we need to change the scope of both from
+      We need to define protobuf here because we need to change the scope of both from
       provided to compile. If we don't do this we can't shade these libraries.
     -->
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>${connect.guava.version}</version>
-      <scope>compile</scope>
-    </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>

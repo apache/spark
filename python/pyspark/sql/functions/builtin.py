@@ -15800,7 +15800,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
 @_try_remote_functions
 def map_keys(col: "ColumnOrName") -> Column:
     """
-    Collection function: Returns an unordered array containing the keys of the map.
+    Map function: Returns an unordered array containing the keys of the map.
 
     .. versionadded:: 2.3.0
 
@@ -15810,23 +15810,61 @@ def map_keys(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        Name of column or expression
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        keys of the map as an array.
+        Keys of the map as an array.
 
     Examples
     --------
-    >>> from pyspark.sql.functions import map_keys
+    Example 1: Extracting keys from a simple map
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
-    >>> df.select(map_keys("data").alias("keys")).show()
-    +------+
-    |  keys|
-    +------+
-    |[1, 2]|
-    +------+
+    >>> df.select(sf.sort_array(sf.map_keys("data"))).show()
+    +--------------------------------+
+    |sort_array(map_keys(data), true)|
+    +--------------------------------+
+    |                          [1, 2]|
+    +--------------------------------+
+
+    Example 2: Extracting keys from a map with complex keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(array(1, 2), 'a', array(3, 4), 'b') as data")
+    >>> df.select(sf.sort_array(sf.map_keys("data"))).show()
+    +--------------------------------+
+    |sort_array(map_keys(data), true)|
+    +--------------------------------+
+    |                [[1, 2], [3, 4]]|
+    +--------------------------------+
+
+    Example 3: Extracting keys from a map with duplicate keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> originalmapKeyDedupPolicy = spark.conf.get("spark.sql.mapKeyDedupPolicy")
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", "LAST_WIN")
+    >>> df = spark.sql("SELECT map(1, 'a', 1, 'b') as data")
+    >>> df.select(sf.map_keys("data")).show()
+    +--------------+
+    |map_keys(data)|
+    +--------------+
+    |           [1]|
+    +--------------+
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", originalmapKeyDedupPolicy)
+
+    Example 4: Extracting keys from an empty map
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map() as data")
+    >>> df.select(sf.map_keys("data")).show()
+    +--------------+
+    |map_keys(data)|
+    +--------------+
+    |            []|
+    +--------------+
     """
     return _invoke_function_over_columns("map_keys", col)
 
@@ -15834,7 +15872,7 @@ def map_keys(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def map_values(col: "ColumnOrName") -> Column:
     """
-    Collection function: Returns an unordered array containing the values of the map.
+    Map function: Returns an unordered array containing the values of the map.
 
     .. versionadded:: 2.3.0
 
@@ -15844,23 +15882,69 @@ def map_values(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        Name of column or expression
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        values of the map as an array.
+        Values of the map as an array.
 
     Examples
     --------
-    >>> from pyspark.sql.functions import map_values
+    Example 1: Extracting values from a simple map
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
-    >>> df.select(map_values("data").alias("values")).show()
-    +------+
-    |values|
-    +------+
-    |[a, b]|
-    +------+
+    >>> df.select(sf.sort_array(sf.map_values("data"))).show()
+    +----------------------------------+
+    |sort_array(map_values(data), true)|
+    +----------------------------------+
+    |                            [a, b]|
+    +----------------------------------+
+
+    Example 2: Extracting values from a map with complex values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, array('a', 'b'), 2, array('c', 'd')) as data")
+    >>> df.select(sf.sort_array(sf.map_values("data"))).show()
+    +----------------------------------+
+    |sort_array(map_values(data), true)|
+    +----------------------------------+
+    |                  [[a, b], [c, d]]|
+    +----------------------------------+
+
+    Example 3: Extracting values from a map with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, null, 2, 'b') as data")
+    >>> df.select(sf.sort_array(sf.map_values("data"))).show()
+    +----------------------------------+
+    |sort_array(map_values(data), true)|
+    +----------------------------------+
+    |                         [NULL, b]|
+    +----------------------------------+
+
+    Example 4: Extracting values from a map with duplicate values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'a') as data")
+    >>> df.select(sf.map_values("data")).show()
+    +----------------+
+    |map_values(data)|
+    +----------------+
+    |          [a, a]|
+    +----------------+
+
+    Example 5: Extracting values from an empty map
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map() as data")
+    >>> df.select(sf.map_values("data")).show()
+    +----------------+
+    |map_values(data)|
+    +----------------+
+    |              []|
+    +----------------+
     """
     return _invoke_function_over_columns("map_values", col)
 
@@ -15868,40 +15952,72 @@ def map_values(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def map_entries(col: "ColumnOrName") -> Column:
     """
-    Collection function: Returns an unordered array of all entries in the given map.
+    Map function: Returns an unordered array of all entries in the given map.
 
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+        Spark Connect.
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        Name of column or expression
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of key value pairs as a struct type
+        An array of key value pairs as a struct type
 
     Examples
     --------
-    >>> from pyspark.sql.functions import map_entries
+    Example 1: Extracting entries from a simple map
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
-    >>> df = df.select(map_entries("data").alias("entries"))
-    >>> df.show()
-    +----------------+
-    |         entries|
-    +----------------+
-    |[{1, a}, {2, b}]|
-    +----------------+
-    >>> df.printSchema()
-    root
-     |-- entries: array (nullable = false)
-     |    |-- element: struct (containsNull = false)
-     |    |    |-- key: integer (nullable = false)
-     |    |    |-- value: string (nullable = false)
+    >>> df.select(sf.sort_array(sf.map_entries("data"))).show()
+    +-----------------------------------+
+    |sort_array(map_entries(data), true)|
+    +-----------------------------------+
+    |                   [{1, a}, {2, b}]|
+    +-----------------------------------+
+
+    Example 2: Extracting entries from a map with complex keys and values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(array(1, 2), array('a', 'b'), "
+    ...   "array(3, 4), array('c', 'd')) as data")
+    >>> df.select(sf.sort_array(sf.map_entries("data"))).show(truncate=False)
+    +------------------------------------+
+    |sort_array(map_entries(data), true) |
+    +------------------------------------+
+    |[{[1, 2], [a, b]}, {[3, 4], [c, d]}]|
+    +------------------------------------+
+
+    Example 3: Extracting entries from a map with duplicate keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> originalmapKeyDedupPolicy = spark.conf.get("spark.sql.mapKeyDedupPolicy")
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", "LAST_WIN")
+    >>> df = spark.sql("SELECT map(1, 'a', 1, 'b') as data")
+    >>> df.select(sf.map_entries("data")).show()
+    +-----------------+
+    |map_entries(data)|
+    +-----------------+
+    |         [{1, b}]|
+    +-----------------+
+    >>> spark.conf.set("spark.sql.mapKeyDedupPolicy", originalmapKeyDedupPolicy)
+
+    Example 4: Extracting entries from an empty map
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map() as data")
+    >>> df.select(sf.map_entries("data")).show()
+    +-----------------+
+    |map_entries(data)|
+    +-----------------+
+    |               []|
+    +-----------------+
     """
     return _invoke_function_over_columns("map_entries", col)
 
@@ -17044,7 +17160,8 @@ def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column])
 @_try_remote_functions
 def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
-    Returns a map whose key-value pairs satisfy a predicate.
+    Collection function: Returns a new map column whose key-value pairs satisfy a given
+    predicate function.
 
     .. versionadded:: 3.1.0
 
@@ -17054,9 +17171,10 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column or expression
+        The name of the column or a column expression representing the map to be filtered.
     f : function
-        a binary function ``(k: Column, v: Column) -> Column...``
+        A binary function ``(k: Column, v: Column) -> Column...`` that defines the predicate.
+        This function should return a boolean column that will be used to filter the input map.
         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
@@ -17065,16 +17183,39 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        filtered map.
+        A new map column containing only the key-value pairs that satisfy the predicate.
 
     Examples
     --------
+    Example 1: Filtering a map with a simple condition
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-    >>> row = df.select(map_filter(
-    ...     "data", lambda _, v: v > 30.0).alias("data_filtered")
+    >>> row = df.select(
+    ...   sf.map_filter("data", lambda _, v: v > 30.0).alias("data_filtered")
     ... ).head()
     >>> sorted(row["data_filtered"].items())
     [('baz', 32.0), ('foo', 42.0)]
+
+    Example 2: Filtering a map with a condition on keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
+    >>> row = df.select(
+    ...   sf.map_filter("data", lambda k, _: k.startswith("b")).alias("data_filtered")
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('bar', 1.0), ('baz', 32.0)]
+
+    Example 3: Filtering a map with a complex condition
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
+    >>> row = df.select(
+    ...   sf.map_filter("data", lambda k, v: k.startswith("b") & (v > 1.0)).alias("data_filtered")
+    ... ).head()
+    >>> sorted(row["data_filtered"].items())
+    [('baz', 32.0)]
     """
     return _invoke_higher_order_function("MapFilter", [col], [f])
 
@@ -17086,7 +17227,8 @@ def map_zip_with(
     f: Callable[[Column, Column, Column], Column],
 ) -> Column:
     """
-    Merge two given maps, key-wise into a single map using a function.
+    Collection: Merges two given maps into a single map by applying a function to
+    the key-value pairs.
 
     .. versionadded:: 3.1.0
 
@@ -17096,11 +17238,13 @@ def map_zip_with(
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or str
-        name of the first column or expression
+        The name of the first column or a column expression representing the first map.
     col2 : :class:`~pyspark.sql.Column` or str
-        name of the second column or expression
+        The name of the second column or a column expression representing the second map.
     f : function
-        a ternary function ``(k: Column, v1: Column, v2: Column) -> Column...``
+        A ternary function ``(k: Column, v1: Column, v2: Column) -> Column...`` that defines
+        how to merge the values from the two maps. This function should return a column that
+        will be used as the value in the resulting map.
         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
@@ -17109,20 +17253,50 @@ def map_zip_with(
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        zipped map where entries are calculated by applying given function to each
-        pair of arguments.
+        A new map column where each key-value pair is the result of applying the function to
+        the corresponding key-value pairs in the input maps.
 
     Examples
     --------
+    Example 1: Merging two maps with a simple function
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
-    ...     (1, {"IT": 24.0, "SALES": 12.00}, {"IT": 2.0, "SALES": 1.4})],
-    ...     ("id", "base", "ratio")
-    ... )
-    >>> row = df.select(map_zip_with(
-    ...     "base", "ratio", lambda k, v1, v2: round(v1 * v2, 2)).alias("updated_data")
+    ...   (1, {"A": 1, "B": 2}, {"A": 3, "B": 4})],
+    ...   ("id", "map1", "map2"))
+    >>> row = df.select(
+    ...   sf.map_zip_with("map1", "map2", lambda _, v1, v2: v1 + v2).alias("updated_data")
     ... ).head()
     >>> sorted(row["updated_data"].items())
-    [('IT', 48.0), ('SALES', 16.8)]
+    [('A', 4), ('B', 6)]
+
+    Example 2: Merging two maps with a complex function
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...   (1, {"A": 1, "B": 2}, {"A": 3, "B": 4})],
+    ...   ("id", "map1", "map2"))
+    >>> row = df.select(
+    ...   sf.map_zip_with("map1", "map2",
+    ...     lambda k, v1, v2: sf.when(k == "A", v1 + v2).otherwise(v1 - v2)
+    ...   ).alias("updated_data")
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('A', 4), ('B', -2)]
+
+    Example 3: Merging two maps with mismatched keys
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...   (1, {"A": 1, "B": 2}, {"B": 3, "C": 4})],
+    ...   ("id", "map1", "map2"))
+    >>> row = df.select(
+    ...   sf.map_zip_with("map1", "map2",
+    ...     lambda _, v1, v2: sf.when(v2.isNull(), v1).otherwise(v1 + v2)
+    ...   ).alias("updated_data")
+    ... ).head()
+    >>> sorted(row["updated_data"].items())
+    [('A', 1), ('B', 5), ('C', None)]
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
@@ -17134,8 +17308,8 @@ def str_to_map(
     keyValueDelim: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Creates a map after splitting the text into key/value pairs using delimiters.
-    Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
+    Map function: Converts a string into a map after splitting the text into key/value pairs
+    using delimiters. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
 
     .. versionadded:: 3.5.0
 
@@ -17144,23 +17318,77 @@ def str_to_map(
     text : :class:`~pyspark.sql.Column` or str
         Input column or strings.
     pairDelim : :class:`~pyspark.sql.Column` or str, optional
-        delimiter to use to split pair.
+        Delimiter to use to split pairs. Default is comma (,).
     keyValueDelim : :class:`~pyspark.sql.Column` or str, optional
-        delimiter to use to split key/value.
+        Delimiter to use to split key/value. Default is colon (:).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of map type where each string in the original column is converted into a map.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
-    >>> df.select(str_to_map(df.e, lit(","), lit(":")).alias('r')).collect()
-    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+    Example 1: Using default delimiters
 
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
-    >>> df.select(str_to_map(df.e, lit(",")).alias('r')).collect()
-    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+    >>> df.select(sf.str_to_map(df.e)).show(truncate=False)
+    +------------------------+
+    |str_to_map(e, ,, :)     |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    +------------------------+
 
-    >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
-    >>> df.select(str_to_map(df.e).alias('r')).collect()
-    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+    Example 2: Using custom delimiters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a=1;b=2;c=3",)], ["e"])
+    >>> df.select(sf.str_to_map(df.e, sf.lit(";"), sf.lit("="))).show(truncate=False)
+    +------------------------+
+    |str_to_map(e, ;, =)     |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    +------------------------+
+
+    Example 3: Using different delimiters for different rows
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3",), ("d=4;e=5;f=6",)], ["e"])
+    >>> df.select(sf.str_to_map(df.e,
+    ...   sf.when(df.e.contains(";"), sf.lit(";")).otherwise(sf.lit(",")),
+    ...   sf.when(df.e.contains("="), sf.lit("=")).otherwise(sf.lit(":"))).alias("str_to_map")
+    ... ).show(truncate=False)
+    +------------------------+
+    |str_to_map              |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    |{d -> 4, e -> 5, f -> 6}|
+    +------------------------+
+
+    Example 4: Using a column of delimiters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3", ","), ("d=4;e=5;f=6", ";")], ["e", "delim"])
+    >>> df.select(sf.str_to_map(df.e, df.delim, sf.lit(":"))).show(truncate=False)
+    +---------------------------------------+
+    |str_to_map(e, delim, :)                |
+    +---------------------------------------+
+    |{a -> 1, b -> 2, c -> 3}               |
+    |{d=4 -> NULL, e=5 -> NULL, f=6 -> NULL}|
+    +---------------------------------------+
+
+    Example 5: Using a column of key/value delimiters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3", ":"), ("d=4;e=5;f=6", "=")], ["e", "delim"])
+    >>> df.select(sf.str_to_map(df.e, sf.lit(","), df.delim)).show(truncate=False)
+    +------------------------+
+    |str_to_map(e, ,, delim) |
+    +------------------------+
+    |{a -> 1, b -> 2, c -> 3}|
+    |{d -> 4;e=5;f=6}        |
+    +------------------------+
     """
     if pairDelim is None:
         pairDelim = lit(",")
@@ -17682,45 +17910,60 @@ def make_timestamp(
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or str
-        the year to represent, from 1 to 9999
+        The year to represent, from 1 to 9999
     months : :class:`~pyspark.sql.Column` or str
-        the month-of-year to represent, from 1 (January) to 12 (December)
+        The month-of-year to represent, from 1 (January) to 12 (December)
     days : :class:`~pyspark.sql.Column` or str
-        the day-of-month to represent, from 1 to 31
+        The day-of-month to represent, from 1 to 31
     hours : :class:`~pyspark.sql.Column` or str
-        the hour-of-day to represent, from 0 to 23
+        The hour-of-day to represent, from 0 to 23
     mins : :class:`~pyspark.sql.Column` or str
-        the minute-of-hour to represent, from 0 to 59
+        The minute-of-hour to represent, from 0 to 59
     secs : :class:`~pyspark.sql.Column` or str
-        the second-of-minute and its micro-fraction to represent, from 0 to 60.
+        The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
     timezone : :class:`~pyspark.sql.Column` or str, optional
-        the time zone identifier. For example, CET, UTC and etc.
+        The time zone identifier. For example, CET, UTC and etc.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a timestamp.
 
     Examples
     --------
+
+    Example 1: Make timestamp from years, months, days, hours, mins and secs.
+
+    >>> import pyspark.sql.functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
     ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(make_timestamp(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone).alias('r')
+    >>> df.select(sf.make_timestamp(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
     ... ).show(truncate=False)
-    +-----------------------+
-    |r                      |
-    +-----------------------+
-    |2014-12-27 21:30:45.887|
-    +-----------------------+
+    +----------------------------------------------------------+
+    |make_timestamp(year, month, day, hour, min, sec, timezone)|
+    +----------------------------------------------------------+
+    |2014-12-27 21:30:45.887                                   |
+    +----------------------------------------------------------+
 
-    >>> df.select(make_timestamp(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec).alias('r')
+    Example 2: Make timestamp without timezone.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(sf.make_timestamp(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
-    +-----------------------+
-    |r                      |
-    +-----------------------+
-    |2014-12-28 06:30:45.887|
-    +-----------------------+
+    +------------------------------------------------+
+    |make_timestamp(year, month, day, hour, min, sec)|
+    +------------------------------------------------+
+    |2014-12-28 06:30:45.887                         |
+    +------------------------------------------------+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
@@ -17753,25 +17996,33 @@ def make_timestamp_ltz(
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or str
-        the year to represent, from 1 to 9999
+        The year to represent, from 1 to 9999
     months : :class:`~pyspark.sql.Column` or str
-        the month-of-year to represent, from 1 (January) to 12 (December)
+        The month-of-year to represent, from 1 (January) to 12 (December)
     days : :class:`~pyspark.sql.Column` or str
-        the day-of-month to represent, from 1 to 31
+        The day-of-month to represent, from 1 to 31
     hours : :class:`~pyspark.sql.Column` or str
-        the hour-of-day to represent, from 0 to 23
+        The hour-of-day to represent, from 0 to 23
     mins : :class:`~pyspark.sql.Column` or str
-        the minute-of-hour to represent, from 0 to 59
+        The minute-of-hour to represent, from 0 to 59
     secs : :class:`~pyspark.sql.Column` or str
-        the second-of-minute and its micro-fraction to represent, from 0 to 60.
+        The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
     timezone : :class:`~pyspark.sql.Column` or str, optional
-        the time zone identifier. For example, CET, UTC and etc.
+        The time zone identifier. For example, CET, UTC and etc.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a current timestamp.
 
     Examples
     --------
+
+    Example 1: Make the current timestamp from years, months, days, hours, mins and secs.
+
     >>> import pyspark.sql.functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
@@ -17785,6 +18036,12 @@ def make_timestamp_ltz(
     |2014-12-27 21:30:45.887                                       |
     +--------------------------------------------------------------+
 
+    Example 2: Make the current timestamp without timezone.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
     >>> df.select(sf.make_timestamp_ltz(
     ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
@@ -17824,23 +18081,31 @@ def make_timestamp_ntz(
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or str
-        the year to represent, from 1 to 9999
+        The year to represent, from 1 to 9999
     months : :class:`~pyspark.sql.Column` or str
-        the month-of-year to represent, from 1 (January) to 12 (December)
+        The month-of-year to represent, from 1 (January) to 12 (December)
     days : :class:`~pyspark.sql.Column` or str
-        the day-of-month to represent, from 1 to 31
+        The day-of-month to represent, from 1 to 31
     hours : :class:`~pyspark.sql.Column` or str
-        the hour-of-day to represent, from 0 to 23
+        The hour-of-day to represent, from 0 to 23
     mins : :class:`~pyspark.sql.Column` or str
-        the minute-of-hour to represent, from 0 to 59
+        The minute-of-hour to represent, from 0 to 59
     secs : :class:`~pyspark.sql.Column` or str
-        the second-of-minute and its micro-fraction to represent, from 0 to 60.
+        The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a local date-time.
+
     Examples
     --------
+
+    Example 1: Make local date-time from years, months, days, hours, mins, secs.
+
     >>> import pyspark.sql.functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
@@ -17873,20 +18138,53 @@ def make_ym_interval(
     Parameters
     ----------
     years : :class:`~pyspark.sql.Column` or str, optional
-        the number of years, positive or negative
+        The number of years, positive or negative
     months : :class:`~pyspark.sql.Column` or str, optional
-        the number of months, positive or negative
+        The number of months, positive or negative
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a year-month interval.
 
     Examples
     --------
+
+    Example 1: Make year-month interval from years, months.
+
+    >>> import pyspark.sql.functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
-    >>> df.select(make_ym_interval(df.year, df.month).alias('r')).show(truncate=False)
+    >>> df.select(sf.make_ym_interval(df.year, df.month)).show(truncate=False)
     +-------------------------------+
-    |r                              |
+    |make_ym_interval(year, month)  |
     +-------------------------------+
     |INTERVAL '2015-0' YEAR TO MONTH|
     +-------------------------------+
+
+    Example 2: Make year-month interval from years.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
+    >>> df.select(sf.make_ym_interval(df.year)).show(truncate=False)
+    +-------------------------------+
+    |make_ym_interval(year, 0)      |
+    +-------------------------------+
+    |INTERVAL '2014-0' YEAR TO MONTH|
+    +-------------------------------+
+
+    Example 3: Make year-month interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
+    >>> df.select(sf.make_ym_interval()).show(truncate=False)
+    +----------------------------+
+    |make_ym_interval(0, 0)      |
+    +----------------------------+
+    |INTERVAL '0-0' YEAR TO MONTH|
+    +----------------------------+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     _years = lit(0) if years is None else years

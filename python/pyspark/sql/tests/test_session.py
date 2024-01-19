@@ -19,7 +19,6 @@ import os
 import unittest
 import unittest.mock
 from io import StringIO
-from lxml import etree
 
 from pyspark import SparkConf, SparkContext
 from pyspark.errors import PySparkRuntimeError
@@ -121,9 +120,14 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             self.assertEqual(spark.range(3).count(), 3)
 
             try:
-                etree.parse(StringIO(spark._repr_html_()), etree.HTMLParser(recover=False))
-            except Exception as e:
-                self.fail(f"Generated HTML from `_repr_html_` was invalid: {e}")
+                from lxml import etree
+
+                try:
+                    etree.parse(StringIO(spark._repr_html_()), etree.HTMLParser(recover=False))
+                except Exception as e:
+                    self.fail(f"Generated HTML from `_repr_html_` was invalid: {e}")
+            except ImportError:
+                pass
 
             # SPARK-37516: Only plain column references work as variable in SQL.
             self.assertEqual(

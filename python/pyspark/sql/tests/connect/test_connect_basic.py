@@ -558,6 +558,44 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             cdf1.select(cdf2.a).schema
 
+    def test_invalid_star(self):
+        data1 = [Row(a=1, b=2, c=3)]
+        cdf1 = self.connect.createDataFrame(data1)
+
+        data2 = [Row(a=2, b=0)]
+        cdf2 = self.connect.createDataFrame(data2)
+
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf3 = cdf1.select(cdf1.a)
+            cdf3.select(cdf1["*"]).schema
+
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            # column 'a has been replaced
+            cdf3 = cdf1.withColumn("a", CF.lit(0))
+            cdf3.select(cdf1["*"]).schema
+
+        # Can not find the target plan node by plan id
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf1.select(cdf2["*"]).schema
+
+        # cdf1["*"] exists on both side
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "AMBIGUOUS_COLUMN_REFERENCE",
+        ):
+            cdf1.join(cdf1).select(cdf1["*"]).schema
+
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)
         sdf = self.spark.read.table(self.tbl_name)

@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.6</asm.version>
     <slf4j.version>2.0.10</slf4j.version>
-    <log4j.version>2.22.0</log4j.version>
+    <log4j.version>2.22.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -128,7 +128,7 @@
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.9.1</zookeeper.version>
-    <curator.version>5.2.0</curator.version>
+    <curator.version>5.6.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
@@ -199,7 +199,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.14.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.11.1</commons-pool2.version>
+    <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
@@ -235,7 +235,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.9.1</kubernetes-client.version>
+    <kubernetes-client.version>6.10.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -3667,6 +3667,13 @@
       <id>hadoop-cloud</id>
       <modules>
         <module>hadoop-cloud</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>jvm-profiler</id>
+      <modules>
+        <module>connector/profiler</module>
       </modules>
     </profile>
 

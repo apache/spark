@@ -19,7 +19,7 @@
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:focal-20221019
 
-ENV FULL_REFRESH_DATE 20231117
+ENV FULL_REFRESH_DATE 20240117
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -69,15 +69,14 @@ RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57C
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
 
+# See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
     'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow',  \
-    'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')"
-
-# See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
-RUN Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
-RUN Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
-RUN Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
+    'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')" && \
+    Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
@@ -99,11 +98,11 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=14.0.0 six==1.16.0 pandas<=2.1.4 scipy plotly
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.59.3 grpcio-status==1.59.3 protobuf==4.25.1 googleapis-common-protos==1.56.4"
 
-
-RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS
 # Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
-RUN python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.9 -m pip install deepspeed torcheval
+RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.9 -m pip install deepspeed torcheval && \
+    python3.9 -m pip cache purge
 
 # Install Python 3.10 at the last stage to avoid breaking Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
@@ -111,9 +110,10 @@ RUN apt-get update && apt-get install -y \
     python3.10 python3.10-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
-RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS
-RUN python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.10 -m pip install deepspeed torcheval
+RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.10 -m pip install deepspeed torcheval && \
+    python3.10 -m pip cache purge
 
 # Install Python 3.11 at the last stage to avoid breaking the existing Python installations
 RUN add-apt-repository ppa:deadsnakes/ppa
@@ -121,9 +121,10 @@ RUN apt-get update && apt-get install -y \
     python3.11 python3.11-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS
-RUN python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.11 -m pip install deepspeed torcheval
+RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.11 -m pip install deepspeed torcheval && \
+    python3.11 -m pip cache purge
 
 # Install Python 3.12 at the last stage to avoid breaking the existing Python installations
 RUN add-apt-repository ppa:deadsnakes/ppa
@@ -132,8 +133,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 # TODO(SPARK-46647) Add unittest-xml-reporting into Python 3.12 image when it supports Python 3.12
-RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml
 # TODO(SPARK-46078) Use official one instead of nightly build when it's ready
-RUN python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
-RUN python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
-RUN python3.12 -m pip install torcheval
+RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
+    python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu && \
+    python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install torcheval && \
+    python3.12 -m pip cache purge

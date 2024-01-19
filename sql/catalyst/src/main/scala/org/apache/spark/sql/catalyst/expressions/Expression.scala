@@ -141,6 +141,11 @@ abstract class Expression extends TreeNode[Expression] {
   def stateful: Boolean = false
 
   /**
+   * Returns true if the expression could potentially throw an exception when evaluated.
+   */
+  lazy val throwable: Boolean = children.exists(_.throwable)
+
+  /**
    * Returns a copy of this expression where all stateful expressions are replaced with fresh
    * uninitialized copies. If the expression contains no stateful expressions then the original
    * expression is returned.
