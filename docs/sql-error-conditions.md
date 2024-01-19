@@ -2360,7 +2360,7 @@ Unsupported data type `<typeName>`.
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-The data source '`<source>`' cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
+The data source "`<source>`" cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

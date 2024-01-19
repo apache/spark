@@ -3619,7 +3619,7 @@
   },
   "UNSUPPORTED_DATA_SOURCE_SAVE_MODE" : {
     "message" : [
-      "The data source '<source>' cannot be written in the <createMode> mode. Please use either the \"Append\" or \"Overwrite\" mode instead."
+      "The data source \"<source>\" cannot be written in the <createMode> mode. Please use either the \"Append\" or \"Overwrite\" mode instead."
     ],
     "sqlState" : "0A000"
   },
