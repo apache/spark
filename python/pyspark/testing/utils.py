@@ -595,26 +595,30 @@ def assertDataFrameEqual(
     --------
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2)  # pass, DataFrames are identical
+    >>> # pass, DataFrames are identical
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +SKIP
 
     >>> df1 = spark.createDataFrame(data=[("1", 0.1), ("2", 3.23)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 0.109), ("2", 3.23)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # pass, DataFrames are approx equal by rtol
+    >>> # pass, DataFrames are approx equal by rtol
+    >>> assertDataFrameEqual(df1, df2, rtol=1e-1)  # doctest: +SKIP
 
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "amount"])
     >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
-    >>> assertDataFrameEqual(df1, list_of_rows)  # pass, actual and expected data are equal
+    >>> # pass, actual and expected data are equal
+    >>> assertDataFrameEqual(df1, list_of_rows)  # doctest: +SKIP
 
     >>> import pyspark.pandas as ps
     >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
     >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
-    >>> assertDataFrameEqual(df1, df2)  # pass, pandas-on-Spark DataFrames are equal
+    >>> # pass, pandas-on-Spark DataFrames are equal
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +SKIP
 
     >>> df1 = spark.createDataFrame(
     ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(
     ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
-    >>> assertDataFrameEqual(df1, df2)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +SKIP
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
@@ -642,10 +646,11 @@ def assertDataFrameEqual(
     ...         [StructField("amount", LongType(), True), StructField("id", StringType(), False)]
     ...     )
     ... )
-    >>> assertDataFrameEqual(df1_nullable, df2_nullable, ignoreNullable=True)  # pass
+    >>> # pass
+    >>> assertDataFrameEqual(df1_nullable, df2_nullable, ignoreNullable=True)  # doctest: +SKIP
     >>> assertDataFrameEqual(
     ...     df1_nullable, df2_nullable, ignoreNullable=False
-    ... )  # doctest: +IGNORE_EXCEPTION_DETAIL
+    ... )  # doctest: +SKIP
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
@@ -664,7 +669,7 @@ def assertDataFrameEqual(
     >>> df2_col_order = spark.createDataFrame(
     ...     data=[("1", 1000), ("2", 5000)], schema=["id", "amount"]
     ... )
-    >>> assertDataFrameEqual(df1_col_order, df2_col_order, ignoreColumnOrder=True)
+    >>> assertDataFrameEqual(df1_col_order, df2_col_order, ignoreColumnOrder=True)  # doctest: +SKIP
 
     Example for ignoreColumnName
 
@@ -674,7 +679,7 @@ def assertDataFrameEqual(
     >>> df2_col_names = spark.createDataFrame(
     ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "id"]
     ... )
-    >>> assertDataFrameEqual(df1_col_names, df2_col_names, ignoreColumnName=True)
+    >>> assertDataFrameEqual(df1_col_names, df2_col_names, ignoreColumnName=True)  # doctest: +SKIP
 
     Example for ignoreColumnType
 
@@ -684,13 +689,13 @@ def assertDataFrameEqual(
     >>> df2_col_types = spark.createDataFrame(
     ...     data=[(1000.0, "1"), (5000.0, "2")], schema=["amount", "id"]
     ... )
-    >>> assertDataFrameEqual(df1_col_types, df2_col_types, ignoreColumnType=True)
+    >>> assertDataFrameEqual(df1_col_types, df2_col_types, ignoreColumnType=True)  # doctest: +SKIP
 
     Example for maxErrors (will only report the first mismatching row)
 
     >>> df1 = spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")])
     >>> df2 = spark.createDataFrame([(1, "A"), (2, "X"), (3, "Y")])
-    >>> assertDataFrameEqual(df1, df2, maxErrors=1)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> assertDataFrameEqual(df1, df2, maxErrors=1)  # doctest: +SKIP
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 33.33333 % )
@@ -705,7 +710,7 @@ def assertDataFrameEqual(
 
     >>> df1 = spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")])
     >>> df2 = spark.createDataFrame([(1, "A"), (2, "X"), (3, "Y")])
-    >>> assertDataFrameEqual(df1, df2, showOnlyDiff=True)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> assertDataFrameEqual(df1, df2, showOnlyDiff=True)  # doctest: +SKIP
     Traceback (most recent call last):
     ...
     PySparkAssertionError: [DIFFERENT_ROWS] Results do not match: ( 66.66667 % )
@@ -724,7 +729,7 @@ def assertDataFrameEqual(
     >>> df2 = spark.createDataFrame(
     ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
     >>> try:
-    ...     assertDataFrameEqual(df1, df2, includeDiffRows=True)
+    ...     assertDataFrameEqual(df1, df2, includeDiffRows=True)  # doctest: +SKIP
     ... except PySparkAssertionError as e:
     ...     spark.createDataFrame(e.data).show()  # doctest: +NORMALIZE_WHITESPACE
     +-----------+-----------+
