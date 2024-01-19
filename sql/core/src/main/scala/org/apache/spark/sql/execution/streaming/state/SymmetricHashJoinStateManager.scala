@@ -50,6 +50,11 @@ import org.apache.spark.util.NextIterator
  * @param hadoopConf            Hadoop configuration for reading state data from storage
  * @param partitionId           A partition ID of source RDD.
  * @param stateFormatVersion    The version of format for state.
+ * @param skippedNullValueCount The instance of SQLMetric tracking the number of skipped null values.
+ * @param useStateStoreCoordinator  Whether to use a state store coordinator to maintain the state
+ *                                  store providers being used in this class. If true, Spark will
+ *                                  take care of management for state store providers, e.g. running
+ *                                  maintenance task for these providers.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
