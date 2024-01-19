@@ -151,10 +151,9 @@ public class VectorizedColumnReader {
     // rebasing.
     switch (typeName) {
       case INT32: {
-        boolean isDate = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation;
-        boolean isDecimal = logicalTypeAnnotation instanceof DecimalLogicalTypeAnnotation;
+        boolean isDecimal = sparkType instanceof DecimalType;
         boolean needsUpcast = sparkType == LongType || sparkType == DoubleType ||
-          (isDate && sparkType == TimestampNTZType) ||
+          sparkType == TimestampNTZType ||
           (isDecimal && !DecimalType.is32BitDecimalType(sparkType));
         boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
           !"CORRECTED".equals(datetimeRebaseMode);
@@ -162,7 +161,7 @@ public class VectorizedColumnReader {
         break;
       }
       case INT64: {
-        boolean isDecimal = logicalTypeAnnotation instanceof DecimalLogicalTypeAnnotation;
+        boolean isDecimal = sparkType instanceof DecimalType;
         boolean needsUpcast = (isDecimal && !DecimalType.is64BitDecimalType(sparkType)) ||
           updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&

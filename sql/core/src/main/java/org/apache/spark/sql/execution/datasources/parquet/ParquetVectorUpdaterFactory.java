@@ -1406,7 +1406,11 @@ public class ParquetVectorUpdaterFactory {
       super(sparkType);
       LogicalTypeAnnotation typeAnnotation =
         descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+        this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      } else {
+        this.parquetScale = 0;
+      }
     }
 
     @Override
@@ -1435,14 +1439,18 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-private static class LongToDecimalUpdater extends DecimalUpdater {
+  private static class LongToDecimalUpdater extends DecimalUpdater {
     private final int parquetScale;
 
-   LongToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+    LongToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
       super(sparkType);
       LogicalTypeAnnotation typeAnnotation =
         descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+        this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      } else {
+        this.parquetScale = 0;
+      }
     }
 
     @Override
@@ -1651,6 +1659,20 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
       int scaleIncrease = requestedType.scale() - parquetType.getScale();
       int precisionIncrease = requestedType.precision() - parquetType.getPrecision();
       return scaleIncrease >= 0 && precisionIncrease >= scaleIncrease;
+    } else if (typeAnnotation == null || typeAnnotation instanceof IntLogicalTypeAnnotation) {
+      // Allow reading integers (which may be un-annotated) as decimal as long as the requested
+      // decimal type is large enough to represent all possible values.
+      PrimitiveType.PrimitiveTypeName typeName =
+        descriptor.getPrimitiveType().getPrimitiveTypeName();
+      int integerPrecision = requestedType.precision() - requestedType.scale();
+      switch (typeName) {
+        case INT32:
+          return integerPrecision >= DecimalType$.MODULE$.IntDecimal().precision();
+        case INT64:
+          return integerPrecision >= DecimalType$.MODULE$.LongDecimal().precision();
+        default:
+          return false;
+      }
     }
     return false;
   }
@@ -1661,6 +1683,9 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
     if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
       DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
       return decimalType.getScale() == d.scale();
+    } else if (typeAnnotation == null || typeAnnotation instanceof IntLogicalTypeAnnotation) {
+      // Consider integers (which may be un-annotated) as having scale 0.
+      return d.scale() == 0;
     }
     return false;
   }
