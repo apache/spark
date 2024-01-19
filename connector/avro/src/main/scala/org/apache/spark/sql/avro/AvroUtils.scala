@@ -29,8 +29,8 @@ import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
-
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._
@@ -107,9 +107,9 @@ private[sql] object AvroUtils extends Logging {
         val jobConf = job.getConfiguration
         AvroCompressionCodec.fromString(codecName) match {
           case UNCOMPRESSED =>
-            CompressionCodecs.setCodecConfiguration(jobConf, null)
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", false)
           case compressed =>
-            CompressionCodecs.setCodecConfiguration(jobConf, codecName)
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", true)
             jobConf.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
             if (compressed.getSupportCompressionLevel) {
               val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
