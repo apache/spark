@@ -1546,19 +1546,16 @@ def acos(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(-1.0,), (-0.5,), (0.0,), (0.5,), (1.0,)], ["value"])
-    >>> df.select("value",
-    ...   sf.substring(sf.acos("value"), 0, 15).alias("ACOS(value)"),
-    ...   sf.substring(sf.degrees(sf.acos("value")), 0, 5).alias("DEGREES(ACOS(value))")
-    ... ).show()
-    +-----+---------------+--------------------+
-    |value|    ACOS(value)|DEGREES(ACOS(value))|
-    +-----+---------------+--------------------+
-    | -1.0|3.1415926535897|               180.0|
-    | -0.5|2.0943951023931|               120.0|
-    |  0.0|1.5707963267948|                90.0|
-    |  0.5|1.0471975511965|               60.00|
-    |  1.0|            0.0|                 0.0|
-    +-----+---------------+--------------------+
+    >>> df.select("value", sf.acos("value")).show()
+    +-----+------------------+
+    |value|       ACOS(value)|
+    +-----+------------------+
+    | -1.0| 3.141592653589...|
+    | -0.5|2.0943951023931...|
+    |  0.0|1.5707963267948...|
+    |  0.5|1.0471975511965...|
+    |  1.0|               0.0|
+    +-----+------------------+
 
     Example 2: Compute the inverse cosine of a column with null values
 
@@ -1615,15 +1612,13 @@ def acosh(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,), (2,)], ["value"])
-    >>> df.select("value",
-    ...   sf.substring(sf.acosh(df.value), 0, 15).alias("ACOSH(value)")
-    ... ).show()
-    +-----+---------------+
-    |value|   ACOSH(value)|
-    +-----+---------------+
-    |    1|            0.0|
-    |    2|1.3169578969248|
-    +-----+---------------+
+    >>> df.select("value", sf.acosh(df.value)).show()
+    +-----+------------------+
+    |value|      ACOSH(value)|
+    +-----+------------------+
+    |    1|               0.0|
+    |    2|1.3169578969248...|
+    +-----+------------------+
 
     Example 2: Compute the inverse hyperbolic cosine of a column with null values
 
