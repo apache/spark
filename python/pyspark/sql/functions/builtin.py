@@ -1545,51 +1545,42 @@ def acos(col: "ColumnOrName") -> Column:
     Example 1: Compute the inverse cosine of a column of numbers
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, 0.5), (2, -0.5), (3, 1.0)], ["id", "value"])
-    >>> df.select(sf.acos(df.value)).show()
-    +------------------+
-    |       ACOS(value)|
-    +------------------+
-    |1.0471975511965979|
-    |2.0943951023931957|
-    |               0.0|
-    +------------------+
+    >>> df = spark.createDataFrame([(-1.0,), (-0.5,), (0.0,), (0.5,), (1.0,)], ["value"])
+    >>> df.select("value",
+    ...   sf.substring(sf.acos("value"), 0, 15).alias("ACOS(value)"),
+    ...   sf.substring(sf.degrees(sf.acos("value")), 0, 5).alias("DEGREES(ACOS(value))")
+    ... ).show()
+    +-----+---------------+--------------------+
+    |value|    ACOS(value)|DEGREES(ACOS(value))|
+    +-----+---------------+--------------------+
+    | -1.0|3.1415926535897|               180.0|
+    | -0.5|2.0943951023931|               120.0|
+    |  0.0|1.5707963267948|                90.0|
+    |  0.5|1.0471975511965|               60.00|
+    |  1.0|            0.0|                 0.0|
+    +-----+---------------+--------------------+
 
-    Example 2: Compute the inverse cosine of an expression
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, 0.5), (2, -0.5), (3, 1.0)], ["id", "value"])
-    >>> df.select(sf.acos(df.id - df.value)).show()
-    +------------------+
-    |ACOS((id - value))|
-    +------------------+
-    |1.0471975511965979|
-    |               NaN|
-    |               NaN|
-    +------------------+
-
-    Example 3: Compute the inverse cosine of a column with null values
+    Example 2: Compute the inverse cosine of a column with null values
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, None), (2, -0.5), (3, None)], ["id", "value"])
-    >>> df.select(sf.acos(df.value)).show()
-    +------------------+
-    |       ACOS(value)|
-    +------------------+
-    |              NULL|
-    |2.0943951023931957|
-    |              NULL|
-    +------------------+
-
-    Example 4: Compute the inverse cosine of a column with values outside the valid range
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, 2), (2, -2), (3, 3)], ["id", "value"])
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType
+    >>> schema = StructType([StructField("value", IntegerType(), True)])
+    >>> df = spark.createDataFrame([(None,)], schema=schema)
     >>> df.select(sf.acos(df.value)).show()
     +-----------+
     |ACOS(value)|
     +-----------+
-    |        NaN|
+    |       NULL|
+    +-----------+
+
+    Example 3: Compute the inverse cosine of a column with values outside the valid range
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (-2,)], ["value"])
+    >>> df.select(sf.acos(df.value)).show()
+    +-----------+
+    |ACOS(value)|
+    +-----------+
     |        NaN|
     |        NaN|
     +-----------+
