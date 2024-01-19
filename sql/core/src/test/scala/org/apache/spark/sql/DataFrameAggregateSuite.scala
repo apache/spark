@@ -2158,7 +2158,7 @@ class DataFrameAggregateSuite extends QueryTest
     def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
   }
 
-  test("plan_validation_fail") {
+  test("SPARK-46779: Group by subquery with a cached relation") {
     withTempView("data") {
       sql(
         """create or replace temp view data(c1, c2) as values
