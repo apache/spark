@@ -50,7 +50,8 @@ import org.apache.spark.util.NextIterator
  * @param hadoopConf            Hadoop configuration for reading state data from storage
  * @param partitionId           A partition ID of source RDD.
  * @param stateFormatVersion    The version of format for state.
- * @param skippedNullValueCount The instance of SQLMetric tracking the number of skipped null values.
+ * @param skippedNullValueCount The instance of SQLMetric tracking the number of skipped null
+ *                              values.
  * @param useStateStoreCoordinator  Whether to use a state store coordinator to maintain the state
  *                                  store providers being used in this class. If true, Spark will
  *                                  take care of management for state store providers, e.g. running
