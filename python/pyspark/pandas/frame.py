@@ -21,6 +21,7 @@ A wrapper class for Spark DataFrame to behave like pandas DataFrame.
 from collections import defaultdict, namedtuple
 from collections.abc import Mapping
 import re
+import uuid
 import warnings
 import inspect
 import json
@@ -13446,10 +13447,48 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return psdf
 
+    @staticmethod
+    def _fall_back_frame(method: str):
+        def _internal_fall_back_function_(df: "DataFrame", *inputs: Any, **kwargs: Any):
+            log_advice(
+                f"`{method}` is executed in fallback mode. It loads partial data into the driver's memory"
+                f" to infer the schema, and loads all data into one executor's memory to compute. "
+                "It should only be used if the pandas DataFrame is expected to be small."
+            )
+            input_df = df.copy()
+
+            uid = str(uuid.uuid4()).replace("-", "")
+            tmp_agg_column_name = f"__tmp_aggregate_col_for_frame_{method}_{uid}__"
+            tmp_idx_column_name = f"__tmp_index_col_for_frame_{method}_{uid}__"
+
+            input_df[tmp_agg_column_name] = 0
+            input_df[tmp_idx_column_name] = input_df.index
+
+            def compute_function(pdf: pd.DataFrame):  # type: ignore[no-untyped-def]
+                pdf = pdf.drop(columns=[tmp_agg_column_name])
+                pdf = pdf.set_index(tmp_idx_column_name, drop=True)
+                pdf = pdf.sort_index()
+                pdf = getattr(pdf, method)(*inputs, **kwargs)
+                pdf[tmp_idx_column_name] = pdf.index
+                return pdf.reset_index(drop=True)
+
+            output_df = input_df.groupby(tmp_agg_column_name).apply(compute_function)
+            output_df = output_df.set_index(tmp_idx_column_name)
+            output_df.index.names = df.index.names
+
+            return output_df
+
+        return _internal_fall_back_function_
+
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
+            if key in [
+                "asfreq",
+            ]:
+                return DataFrame._fall_back_frame(key)
+
             property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):
                 return property_or_func.fget(self)
