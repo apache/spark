@@ -47,9 +47,7 @@ object ShufflePartitionsUtil extends Logging {
       advisoryTargetSize: Long,
       minNumPartitions: Int,
       minPartitionSize: Long): Seq[Seq[ShufflePartitionSpec]] = {
-    assert(mapOutputStatistics.length == inputPartitionSpecs.length)
-
-    if (mapOutputStatistics.isEmpty) {
+    if (mapOutputStatistics.length != inputPartitionSpecs.length || mapOutputStatistics.isEmpty) {
       return Seq.empty
     }
 
@@ -137,7 +135,9 @@ object ShufflePartitionsUtil extends Logging {
     // skewed partitions.
     val partitionIndices = partitionIndicesSeq.head
     // The fist index must be 0.
-    assert(partitionIndices.head == 0)
+    if (partitionIndices.head != 0) {
+      return Seq.empty
+    }
     val newPartitionSpecsSeq = Seq.fill(mapOutputStatistics.length)(
       ArrayBuffer.empty[ShufflePartitionSpec])
     val numPartitions = partitionIndices.length
@@ -173,7 +173,9 @@ object ShufflePartitionsUtil extends Logging {
         i = repeatIndex
       } else {
         // Indices outside of the skew section should be larger than the previous one by 1.
-        assert(partitionIndices(i - 1) + 1 == partitionIndices(i))
+        if (partitionIndices(i - 1) + 1 != partitionIndices(i)) {
+          return Seq.empty
+        }
         // no skew section detected, advance to the next index.
         i += 1
       }

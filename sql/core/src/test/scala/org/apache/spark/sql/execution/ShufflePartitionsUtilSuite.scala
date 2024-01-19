@@ -568,63 +568,61 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
     }
 
     {
-      // Assertion error if shuffle partition specs contain `CoalescedShuffleSpec` that has
-      // `end` - `start` > 1.
+      // If shuffle partition specs contain `CoalescedShuffleSpec` that has
+      // `end` - `start` > 1, return empty result.
       val bytesByPartitionId1 = Array[Long](10, 10, 10, 10, 10)
       val bytesByPartitionId2 = Array[Long](10, 10, 10, 10, 10)
       val specs1 = Seq(CoalescedPartitionSpec(0, 1), CoalescedPartitionSpec(1, 5))
       val specs2 = specs1
-      intercept[AssertionError] {
-        ShufflePartitionsUtil.coalescePartitions(
-          Array(
-            Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
-          Seq(
-            Some(specs1),
-            Some(specs2)),
-          targetSize, 1, 0)
-      }
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, 0)
+      assert(coalesced.isEmpty)
     }
 
     {
-      // Assertion error if shuffle partition specs contain `PartialMapperShuffleSpec`.
+      // If shuffle partition specs contain `PartialMapperShuffleSpec`, return empty result.
       val bytesByPartitionId1 = Array[Long](10, 10, 10, 10, 10)
       val bytesByPartitionId2 = Array[Long](10, 10, 10, 10, 10)
       val specs1 = Seq(CoalescedPartitionSpec(0, 1), PartialMapperPartitionSpec(1, 0, 1))
       val specs2 = specs1
-      intercept[AssertionError] {
-        ShufflePartitionsUtil.coalescePartitions(
-          Array(
-            Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
-          Seq(
-            Some(specs1),
-            Some(specs2)),
-          targetSize, 1, 0)
-      }
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, 0)
+      assert(coalesced.isEmpty)
     }
 
     {
-      // Assertion error if partition specs of different shuffles have different lengths.
+      // If partition specs of different shuffles have different lengths, return empty result.
       val bytesByPartitionId1 = Array[Long](10, 10, 10, 10, 10)
       val bytesByPartitionId2 = Array[Long](10, 10, 10, 10, 10)
       val specs1 = Seq.tabulate(4)(i => CoalescedPartitionSpec(i, i + 1)) ++
         Seq.tabulate(2)(i => PartialReducerPartitionSpec(4, i, i + 1, 10L))
       val specs2 = Seq.tabulate(5)(i => CoalescedPartitionSpec(i, i + 1))
-      intercept[AssertionError] {
-        ShufflePartitionsUtil.coalescePartitions(
-          Array(
-            Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
-          Seq(
-            Some(specs1),
-            Some(specs2)),
-          targetSize, 1, 0)
-      }
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, 0)
+      assert(coalesced.isEmpty)
     }
 
     {
-      // Assertion error if start indices of partition specs are not identical among all shuffles.
+      // If start indices of partition specs are not identical among all shuffles,
+      // return empty result.
       val bytesByPartitionId1 = Array[Long](10, 10, 10, 10, 10)
       val bytesByPartitionId2 = Array[Long](10, 10, 10, 10, 10)
       val specs1 = Seq.tabulate(4)(i => CoalescedPartitionSpec(i, i + 1)) ++
@@ -632,72 +630,68 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val specs2 = Seq.tabulate(2)(i => CoalescedPartitionSpec(i, i + 1)) ++
         Seq.tabulate(2)(i => PartialReducerPartitionSpec(2, i, i + 1, 10L)) ++
         Seq.tabulate(2)(i => CoalescedPartitionSpec(i + 3, i + 4))
-      intercept[AssertionError] {
-        ShufflePartitionsUtil.coalescePartitions(
-          Array(
-            Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
-          Seq(
-            Some(specs1),
-            Some(specs2)),
-          targetSize, 1, 0)
-      }
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, 0)
+      assert(coalesced.isEmpty)
     }
 
     {
-      // Assertion error if partition indices are out of order (in the beginning).
+      // If partition indices are out of order (in the beginning), return empty result.
       val bytesByPartitionId1 = Array[Long](10, 10, 10, 10, 10)
       val bytesByPartitionId2 = Array[Long](10, 10, 10, 10, 10)
       val specs1 = Seq.tabulate(4)(i => CoalescedPartitionSpec(i + 1, i + 2))
       val specs2 = specs1
-      intercept[AssertionError] {
-        ShufflePartitionsUtil.coalescePartitions(
-          Array(
-            Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
-          Seq(
-            Some(specs1),
-            Some(specs2)),
-          targetSize, 1, 0)
-      }
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, 0)
+      assert(coalesced.isEmpty)
     }
 
     {
-      // Assertion error if partition indices are out of order (before skew section).
+      // If partition indices are out of order (before skew section), return empty result.
       val bytesByPartitionId1 = Array[Long](10, 10, 10, 10, 10)
       val bytesByPartitionId2 = Array[Long](10, 10, 10, 10, 10)
       val specs1 = (Seq.tabulate(2)(i => CoalescedPartitionSpec(i, i + 1)) :+
         CoalescedPartitionSpec(0, 1)) ++ Seq.fill(3)(CoalescedPartitionSpec(2, 3))
       val specs2 = specs1
-      intercept[AssertionError] {
-        ShufflePartitionsUtil.coalescePartitions(
-          Array(
-            Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
-          Seq(
-            Some(specs1),
-            Some(specs2)),
-          targetSize, 1, 0)
-      }
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, 0)
+      assert(coalesced.isEmpty)
     }
 
     {
-      // Assertion error if partition indices are out of order (after skew section).
+      // If partition indices are out of order (after skew section), return empty result.
       val bytesByPartitionId1 = Array[Long](10, 10, 10, 10, 10)
       val bytesByPartitionId2 = Array[Long](10, 10, 10, 10, 10)
       val specs1 = Seq.fill(2)(CoalescedPartitionSpec(0, 1)) ++
         Seq.tabulate(2)(i => CoalescedPartitionSpec(i + 2, i + 3)) :+ CoalescedPartitionSpec(4, 5)
       val specs2 = specs1
-      intercept[AssertionError] {
-        ShufflePartitionsUtil.coalescePartitions(
-          Array(
-            Some(new MapOutputStatistics(0, bytesByPartitionId1)),
-            Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
-          Seq(
-            Some(specs1),
-            Some(specs2)),
-          targetSize, 1, 0)
-      }
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))).toImmutableArraySeq,
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, 0)
+      assert(coalesced.isEmpty)
     }
   }
 
