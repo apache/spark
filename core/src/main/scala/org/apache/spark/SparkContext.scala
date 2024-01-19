@@ -448,7 +448,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     _conf.setIfMissing(DRIVER_PORT, 0)
 
-    _conf.set(EXECUTOR_ID, SparkContext.DRIVER_IDENTIFIER)
+    // If `spark.executor.allowSparkContext` set to true, SparkContext can be created in executors.
+    // then it shouldn't set `spark.executor.id` to "driver"
+    if (!Utils.isInRunningSparkTask) {
+      _conf.set(EXECUTOR_ID, SparkContext.DRIVER_IDENTIFIER)
+    }
 
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption(FILES.key).map(_.split(",")).map(_.filter(_.nonEmpty))
