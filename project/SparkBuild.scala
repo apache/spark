@@ -1005,8 +1005,8 @@ object KubernetesIntegrationTests {
         val cmd = Seq(dockerTool,
           "-r", imageRepo,
           "-t", imageTag.getOrElse("dev"),
-          "-p", pyDockerFile,
-          "-R", rDockerFile) ++
+          "-p", pyDockerFile) ++
+          (if (rDockerFile.isBlank) Seq.empty else Seq("-R", rDockerFile)) ++
           (if (deployMode != Some("minikube")) Seq.empty else Seq("-m")) ++
           extraOptions :+
           "build"
