@@ -107,9 +107,9 @@ private[sql] object AvroUtils extends Logging {
         val jobConf = job.getConfiguration
         AvroCompressionCodec.fromString(codecName) match {
           case UNCOMPRESSED =>
-            jobConf.setBoolean("mapred.output.compress", false)
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", false)
           case compressed =>
-            jobConf.setBoolean("mapred.output.compress", true)
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", true)
             jobConf.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
             if (compressed.getSupportCompressionLevel) {
               val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
