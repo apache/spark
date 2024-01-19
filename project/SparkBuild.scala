@@ -995,8 +995,12 @@ object KubernetesIntegrationTests {
             s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
         val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
             s"$bindingsDir/python/Dockerfile")
-        val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
+        var rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
             s"$bindingsDir/R/Dockerfile")
+        val excludeTags = sys.props.getOrElse("test.exclude.tags", "").split(",")
+        if (excludeTags.exists(_.equalsIgnoreCase("r"))) {
+          rDockerFile = ""
+        }
         val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=$javaImageTag")
         } else {
