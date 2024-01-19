@@ -151,7 +151,8 @@ class VariantSuite extends QueryTest with SharedSparkSession {
 
     // At this point, JSON parsing logic is not really implemented. We just construct some number
     // inputs that are also valid JSON. This exercises passing VariantVal throughout the system.
-    val query = spark.sql("select id, parse_json(repeat('1', id)) as v from range(1, 10)")
+    val queryString = "select id, parse_json(repeat('1', id)) as v from range(1, 10)"
+    val query = spark.sql(queryString)
     verifyResult(query)
 
     // Partition by another column should work.
@@ -166,6 +167,30 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       val tempDir = new File(dir, "files").getCanonicalPath
       intercept[AnalysisException] {
         query.write.partitionBy("v").parquet(tempDir)
+      }
+    }
+
+    // Same as above, using saveAsTable
+    withTable("t") {
+      query.write.partitionBy("id").saveAsTable("t")
+      verifyResult(spark.sql("select * from t"))
+    }
+
+    withTable("t") {
+      intercept[AnalysisException] {
+        query.write.partitionBy("v").saveAsTable("t")
+      }
+    }
+
+    // Same as above, using SQL CTAS
+    withTable("t") {
+      spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (id) AS $queryString")
+      verifyResult(spark.sql("select * from t"))
+    }
+
+    withTable("t") {
+      intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (v) AS $queryString")
       }
     }
   }
