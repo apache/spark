@@ -627,6 +627,9 @@ class SparkThrowableSuite extends SparkFunSuite {
           |  } ]
           |}""".stripMargin)
     // scalastyle:on line.size.limit
+    val e5 = new SparkException("*" * 10000)
+    val limit = 2048
+    assert(SparkThrowableHelper.getMessage(e5, PRETTY, Some(limit)).length === limit)
   }
 
   test("overwrite error classes") {
