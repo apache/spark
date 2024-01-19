@@ -74,7 +74,11 @@ private[spark] object SparkThrowableHelper {
     errorClass.startsWith("INTERNAL_ERROR")
   }
 
-  def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value, limit: Option[Int] = None): String = {
+  def getMessage(
+    e: SparkThrowable with Throwable,
+    format: ErrorMessageFormat.Value,
+    limit: Option[Int] = None
+  ): String = {
     import ErrorMessageFormat._
     val defaultMessage = limit.map(e.getMessage.take).getOrElse(e.getMessage)
     format match {
