@@ -380,7 +380,7 @@ object SparkConnectService extends Logging {
     val limit = 2048
     val message = st match {
       case e: SparkThrowable =>
-        SparkThrowableHelper.getMessage(e, format, limit)
+        SparkThrowableHelper.getMessage(e, format, Some(limit))
       case _ =>
         st.getMessage
     }
