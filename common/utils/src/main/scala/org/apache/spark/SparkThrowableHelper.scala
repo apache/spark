@@ -74,17 +74,18 @@ private[spark] object SparkThrowableHelper {
     errorClass.startsWith("INTERNAL_ERROR")
   }
 
-  def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
+  def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value, limit: Option[Int] = None): String = {
     import ErrorMessageFormat._
+    val defaultMessage = limit.map(e.getMessage.take).getOrElse(e.getMessage)
     format match {
-      case PRETTY => e.getMessage
+      case PRETTY => defaultMessage
       case MINIMAL | STANDARD if e.getErrorClass == null =>
         toJsonString { generator =>
           val g = generator.useDefaultPrettyPrinter()
           g.writeStartObject()
           g.writeStringField("errorClass", "LEGACY")
           g.writeObjectFieldStart("messageParameters")
-          g.writeStringField("message", e.getMessage)
+          g.writeStringField("message", defaultMessage)
           g.writeEndObject()
           g.writeEndObject()
         }

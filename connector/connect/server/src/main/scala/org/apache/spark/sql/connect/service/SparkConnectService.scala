@@ -377,12 +377,13 @@ object SparkConnectService extends Logging {
   }
 
   def extractErrorMessage(st: Throwable, format: ErrorMessageFormat.Value): String = {
+    val limit = 2048
     val message = st match {
       case e: SparkThrowable =>
-        SparkThrowableHelper.getMessage(e, format)
+        SparkThrowableHelper.getMessage(e, format, limit)
       case _ =>
         st.getMessage
     }
-    Option(StringUtils.abbreviate(message, 2048)).getOrElse("")
+    Option(StringUtils.abbreviate(message, limit)).getOrElse("")
   }
 }
