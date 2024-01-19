@@ -22,7 +22,6 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.hive.HiveUtils
 
 private[client] abstract class HiveVersionSuite(version: String) extends SparkFunSuite {
   override protected val enableAutoThreadAudit = false
@@ -43,10 +42,7 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
       hadoopConf.set("hive.in.test", "true")
       hadoopConf.set("hive.query.reexecution.enabled", "false")
     }
-    HiveClientBuilder.buildClient(
-      version,
-      hadoopConf,
-      HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
+    HiveClientBuilder.buildClient(version, hadoopConf)
   }
 
   override def suiteName: String = s"${super.suiteName}($version)"

@@ -3671,6 +3671,13 @@
     </profile>
 
     <profile>
+      <id>jvm-profiler</id>
+      <modules>
+        <module>connector/profiler</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>

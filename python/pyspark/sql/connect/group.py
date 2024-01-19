@@ -40,7 +40,7 @@ from pyspark.sql.types import StructType
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions.builtin import _invoke_function, col, lit
+from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
 if TYPE_CHECKING:
@@ -132,7 +132,7 @@ class GroupedData:
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
             # Convert the dict into key value pairs
-            aggregate_cols = [_invoke_function(exprs[0][k], col(k)) for k in exprs[0]]
+            aggregate_cols = [F._invoke_function(exprs[0][k], F.col(k)) for k in exprs[0]]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -166,8 +166,6 @@ class GroupedData:
             field.name for field in schema.fields if isinstance(field.dataType, NumericType)
         ]
 
-        agg_cols: List[str] = []
-
         if len(cols) > 0:
             invalid_cols = [c for c in cols if c not in numerical_cols]
             if len(invalid_cols) > 0:
@@ -185,7 +183,7 @@ class GroupedData:
                 child=self._df._plan,
                 group_type=self._group_type,
                 grouping_cols=self._grouping_cols,
-                aggregate_cols=[_invoke_function(function, col(c)) for c in agg_cols],
+                aggregate_cols=[F._invoke_function(function, F.col(c)) for c in agg_cols],
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
                 grouping_sets=self._grouping_sets,
@@ -216,7 +214,7 @@ class GroupedData:
     mean = avg
 
     def count(self) -> "DataFrame":
-        return self.agg(_invoke_function("count", lit(1)).alias("count"))
+        return self.agg(F._invoke_function("count", F.lit(1)).alias("count"))
 
     count.__doc__ = PySparkGroupedData.count.__doc__
 
@@ -443,11 +441,6 @@ class PandasCogroupedOps:
         )
 
     applyInArrow.__doc__ = PySparkPandasCogroupedOps.applyInArrow.__doc__
-
-    @staticmethod
-    def _extract_cols(gd: "GroupedData") -> List[Column]:
-        df = gd._df
-        return [df[col] for col in df.columns]
 
 
 PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__

@@ -2731,10 +2731,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         parameters = Map(
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
-          "dataType2" -> "\"STRUCT<a: INT>\"",
+          "dataType2" -> "\"STRUCT<a: INT NOT NULL>\"",
           "operator" -> "EXCEPT",
           "hint" -> "",
-          "dataType1" -> "\"STRUCT<A: INT>\""),
+          "dataType1" -> "\"STRUCT<A: INT NOT NULL>\""),
         context = ExpectedContext(
           fragment = "SELECT struct(1 a) EXCEPT (SELECT struct(2 A))",
           start = 0,

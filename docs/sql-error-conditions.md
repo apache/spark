@@ -496,7 +496,7 @@ Data source '`<provider>`' not found. Please make sure the data source is regist
 
 [SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to find the data source: `<provider>`. Please find packages at `https://spark.apache.org/third-party-projects.html`.
+Failed to find the data source: `<provider>`. Make sure the provider name is correct and the package is properly registered and compatible with your Spark version.
 
 ### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
 
@@ -2331,6 +2331,12 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 
 Unsupported arrow type `<typeName>`.
 
+### UNSUPPORTED_CALL
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot call the method "`<methodName>`" of the class "`<className>`".
+
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -2354,7 +2360,7 @@ Unsupported data type `<typeName>`.
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-The data source '`<source>`' cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
+The data source "`<source>`" cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

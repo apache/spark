@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SPARK_DOC_ROOT
+import org.apache.spark.{SPARK_DOC_ROOT, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -402,7 +403,7 @@ class QueryCompilationErrorsSuite
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
       errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
-      parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT>>\"")
+      parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
     )
   }
 
@@ -621,7 +622,7 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       parameters = Map(
-        "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+        "schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {
@@ -630,7 +631,7 @@ class QueryCompilationErrorsSuite
     checkError(
       exception = e2,
       errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "1"))
   }
 
@@ -917,6 +918,17 @@ class QueryCompilationErrorsSuite
           start = 7, stop = 7)
       )
     }
+  }
+
+  test("UNSUPPORTED_CALL: call the unsupported method update()") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        new UnsafeRow(1).update(0, 1)
+      },
+      errorClass = "UNSUPPORTED_CALL",
+      parameters = Map(
+        "methodName" -> "update",
+        "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 }
 
