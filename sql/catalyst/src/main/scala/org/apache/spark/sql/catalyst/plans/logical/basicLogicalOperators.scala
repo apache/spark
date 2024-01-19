@@ -895,6 +895,7 @@ case class CTERelationRef(
  * @param cteDefs The CTE definitions.
  */
 case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends LogicalPlan {
+  assert(plan.find(_.isInstanceOf[WithCTE]).isEmpty, "Spark didn't support nested WithCTE.")
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
