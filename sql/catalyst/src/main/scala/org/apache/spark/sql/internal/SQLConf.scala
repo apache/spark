@@ -3643,6 +3643,12 @@ object SQLConf {
     .intConf
     .createOptional
 
+  val AVRO_ZSTANDARD_BUFFER_POOL_ENABLED = buildConf("spark.sql.avro.zstandard.bufferPool.enabled")
+    .doc("If true, enable buffer pool of ZSTD JNI library when writing of AVRO files")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
     .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
