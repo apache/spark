@@ -334,7 +334,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"array(struct(a), struct(b))\"",
         "functionName" -> "`array`",
-        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<b: INT>\")"),
+        "dataType" -> "(\"STRUCT<a: INT NOT NULL>\" or \"STRUCT<b: INT NOT NULL>\")"),
       context = ExpectedContext(
         fragment = "array",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -352,7 +352,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"array(struct(a), struct(2))\"",
         "functionName" -> "`array`",
-        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<col1: INT>\")"),
+        "dataType" -> "(\"STRUCT<a: INT NOT NULL>\" or \"STRUCT<col1: INT NOT NULL>\")"),
       context = ExpectedContext(
         fragment = "array",
         callSitePattern = getCurrentClassCallSitePattern))
