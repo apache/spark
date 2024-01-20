@@ -196,25 +196,41 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("PVs with local storage", k8sTestTag, MinikubeTag) {
+  test("PVs with local storage - driver", k8sTestTag, MinikubeTag) {
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.options.claimName",
         PVC_NAME)
-      .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.path",
-        CONTAINER_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName",
-        PVC_NAME)
-    val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
     try {
       setupLocalStorage()
+      val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
       runDFSReadWriteAndVerifyCompletion(
         FILE_CONTENTS.split(" ").length,
         driverPodChecker = (driverPod: Pod) => {
           doBasicDriverPodCheck(driverPod)
           checkPVs(driverPod, file)
         },
+        appArgs = Array(s"$CONTAINER_MOUNT_PATH/$file", s"$CONTAINER_MOUNT_PATH"),
+        interval = Some(PV_TESTS_INTERVAL)
+      )
+    } finally {
+      // make sure this always runs
+      deleteLocalStorage()
+    }
+  }
+
+  test("PVs with local storage - executor", k8sTestTag, MinikubeTag) {
+    sparkAppConf
+      .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.path",
+        CONTAINER_MOUNT_PATH)
+      .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName",
+        PVC_NAME)
+    try {
+      setupLocalStorage()
+      val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+      runDFSReadWriteAndVerifyCompletion(
+        FILE_CONTENTS.split(" ").length,
         executorPodChecker = (executorPod: Pod) => {
           doBasicExecutorPodCheck(executorPod)
           checkPVs(executorPod, file)
