@@ -20,27 +20,23 @@ license: |
   limitations under the License.
 ---
 
-# Downloading
+## Downloading
 
-Get Spark from the [downloads page](https://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
-Users can also download a "Hadoop free" binary and run Spark with any Hadoop version
-[by augmenting Spark's classpath](hadoop-provided.html).
-Scala and Java users can include Spark in their projects using its Maven coordinates and Python users can install Spark from PyPI.
+You can get Spark from the [downloads page](https://spark.apache.org/downloads.html) of the project website. 
 
+If you'd like to build Spark from source, visit [Building Spark](building-spark.html).
 
-If you'd like to build Spark from
-source, visit [Building Spark](building-spark.html).
+Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS).  It runs on platforms with a supported version of Java installed. This should include JVMs on x86_64 and ARM64. 
 
+It's easy to run Spark locally --- all you need is to have `java` installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS), and it should run on any platform that runs a supported version of Java. This should include JVMs on x86_64 and ARM64. It's easy to run locally on one machine --- all you need is to have `java` installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
-
-Spark runs on Java 17/21, Scala 2.13, Python 3.8+, and R 3.5+.
-When using the Scala API, it is necessary for applications to use the same version of Scala that Spark was compiled for.
-For example, when using Scala 2.13, use Spark compiled for 2.13, and compile code/applications for Scala 2.13 as well.
+Spark runs on Java 17/21, Scala 2.13, Python 3.8+, and R 3.5+.  When using the Scala API, you need use the same version of Scala that Spark was compiled for.  For example, when using Scala 2.13, use Spark compiled for 2.13.
 
 Setting `-Dio.netty.tryReflectionSetAccessible=true` is required for the Apache Arrow library. This prevents the `java.lang.UnsupportedOperationException: sun.misc.Unsafe or java.nio.DirectByteBuffer.(long, int) not available` error when Apache Arrow uses Netty internally.
 
-# Running the Examples and Shell
+## Running the Examples and Shell
+
+See [this page](https://spark.apache.org/examples.html) for examples on how to use Spark.
 
 Spark comes with several sample programs. Python, Scala, Java, and R examples are in the
 `examples/src/main` directory.
@@ -50,29 +46,23 @@ To run Spark interactively in a Python interpreter, use
 
     ./bin/pyspark --master "local[2]"
 
-Sample applications are provided in Python. For example:
+Some sample applications are provided in Python. For example:
 
-    ./bin/spark-submit examples/src/main/python/pi.py 10
+    ./bin/spark-submit examples/src/main/python/sql/basic.py
 
-To run one of the Scala or Java sample programs, use
-`bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this
-invokes the more general
-[`spark-submit` script](submitting-applications.html) for
-launching applications). For example,
+To run one of the Scala or Java sample programs, use `bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this invokes the more general [`spark-submit` script](submitting-applications.html) for launching applications). For example,
 
-    ./bin/run-example SparkPi 10
+    ./bin/run-example SparkDataFrame
 
 You can also run Spark interactively through a modified version of the Scala shell. This is a
 great way to learn the framework.
 
     ./bin/spark-shell --master "local[2]"
 
-The `--master` option specifies the
-[master URL for a distributed cluster](submitting-applications.html#master-urls), or `local` to run
-locally with one thread, or `local[N]` to run locally with N threads. You should start by using
-`local` for testing. For a full list of options, run the Spark shell with the `--help` option.
+The `--master` option specifies the [master URL for a distributed cluster](submitting-applications.html#master-urls), or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using `local` for testing. For a full list of options, run the Spark shell with the `--help` option.
 
 Since version 1.4, Spark has provided an [R API](sparkr.html) (only the DataFrame APIs are included).
+
 To run Spark interactively in an R interpreter, use `bin/sparkR`:
 
     ./bin/sparkR --master "local[2]"
@@ -83,46 +73,40 @@ Example applications are also provided in R. For example:
 
 ## Running Spark Client Applications Anywhere with Spark Connect
 
-Spark Connect is a new client-server architecture introduced in Spark 3.4 that decouples Spark
-client applications and allows remote connectivity to Spark clusters. The separation between
-client and server allows Spark and its open ecosystem to be leveraged from anywhere, embedded
-in any application. In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and
-DataFrame/Dataset API support in Scala.
+Spark Connect is a new client-server architecture introduced in Spark 3.4 that decouples Spark client applications and allows remote connectivity to Spark clusters. The separation between client and server allows Spark and its open ecosystem to be leveraged from anywhere, embedded in any application. In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and DataFrame/Dataset API support in Scala.
 
 To learn more about Spark Connect and how to use it, see [Spark Connect Overview](spark-connect-overview.html).
 
-# Launching on a Cluster
+## Launching on a Cluster
 
 The Spark [cluster mode overview](cluster-overview.html) explains the key concepts in running on a cluster.
-Spark can run both by itself, or over several existing cluster managers. It currently provides several
-options for deployment:
+
+Spark can run both by itself, or over several existing cluster managers. It currently provides several options for deployment:
 
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Hadoop YARN](running-on-yarn.html)
 * [Kubernetes](running-on-kubernetes.html)
 
-# Where to Go from Here
+## Where to Go from Here
 
 **Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [RDD Programming Guide](rdd-programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables
+* [PySpark](api/python/getting_started/index.html): processing data with Spark in Python
+* [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html): processing data with SQL on the command line
 * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): processing structured data with relational queries (newer API than RDDs)
 * [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams with relation queries (using Datasets and DataFrames, newer API than DStreams)
-* [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
 * [MLlib](ml-guide.html): applying machine learning algorithms
 * [GraphX](graphx-programming-guide.html): processing graphs
 * [SparkR](sparkr.html): processing data with Spark in R
-* [PySpark](api/python/getting_started/index.html): processing data with Spark in Python
-* [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html): processing data with SQL on the command line
 
 **API Docs:**
 
 * [Spark Python API (Sphinx)](api/python/index.html)
+* [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)
 * [Spark Scala API (Scaladoc)](api/scala/org/apache/spark/index.html)
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)
-* [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)
 
 **Deployment Guides:**
 
