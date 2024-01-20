@@ -1169,7 +1169,7 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
-SQLSTATE: ID001
+[SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Invalid inverse distribution function `<funcName>`.
 
