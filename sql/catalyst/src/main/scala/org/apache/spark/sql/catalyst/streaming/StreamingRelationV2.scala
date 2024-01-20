@@ -36,7 +36,7 @@ case class StreamingRelationV2(
     sourceName: String,
     table: Table,
     extraOptions: CaseInsensitiveStringMap,
-    output: Seq[Attribute],
+    output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     v1Relation: Option[LogicalPlan])
