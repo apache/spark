@@ -30,6 +30,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
 
   private def setupLocalStorage(): Unit = {
     val storageClassName = if (testBackend == MinikubeTestBackend) "standard" else "hostpath"
+    val hostname = if (testBackend == MinikubeTestBackend) "minikube" else "docker-desktop"
     val pvBuilder = new PersistentVolumeBuilder()
       .withKind("PersistentVolume")
       .withApiVersion("v1")
@@ -48,7 +49,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
                 .withMatchExpressions(new NodeSelectorRequirementBuilder()
                   .withKey("kubernetes.io/hostname")
                   .withOperator("In")
-                  .withValues("minikube", "m01", "docker-desktop")
+                  .withValues(hostname)
                   .build()).build())
             .endRequired()
           .endNodeAffinity()
