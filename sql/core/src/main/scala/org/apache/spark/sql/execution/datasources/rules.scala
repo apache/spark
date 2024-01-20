@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{AtomicType, StructType, VariantType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -330,7 +330,8 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     }
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
-      case _: AtomicType => // OK
+      // VariantType values are not comparable, so can't be used as partition columns.
+      case a: AtomicType if !a.isInstanceOf[VariantType] => // OK
       case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
     }
 
