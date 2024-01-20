@@ -51,12 +51,6 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -155,17 +149,6 @@
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>${connect.guava.version}</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>failureaccess</artifactId>
-      <version>${guava.failureaccess.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
@@ -287,7 +270,6 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
-              <include>com.google.guava:*</include>
               <include>io.grpc:*:</include>
               <include>com.google.protobuf:*</include>
 
@@ -307,13 +289,6 @@
             </includes>
           </artifactSet>
           <relocations>
-            <relocation>
-              <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-              <includes>
-                <include>com.google.common.**</include>
-              </includes>
-            </relocation>
             <relocation>
               <pattern>com.google.thirdparty</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>

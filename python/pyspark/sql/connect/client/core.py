@@ -54,11 +54,13 @@ import grpc
 from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
+from pyspark.accumulators import SpecialAccumulatorIds
 from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
 from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
 from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
@@ -636,6 +638,8 @@ class SparkConnectClient(object):
         # be updated on the first response received.
         self._server_session_id: Optional[str] = None
 
+        self._profiler_collector = ConnectProfilerCollector()
+
     def _retrying(self) -> "Retrying":
         return Retrying(self._retry_policies)
 
@@ -1169,7 +1173,14 @@ class SparkConnectClient(object):
             if b.observed_metrics:
                 logger.debug("Received observed metric batch.")
                 for observed_metrics in self._build_observed_metrics(b.observed_metrics):
-                    if observed_metrics.name in observations:
+                    if observed_metrics.name == "__python_accumulator__":
+                        from pyspark.worker_util import pickleSer
+
+                        for metric in observed_metrics.metrics:
+                            (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
+                            if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
+                                self._profiler_collector._update(update)
+                    elif observed_metrics.name in observations:
                         observation_result = observations[observed_metrics.name]._result
                         assert observation_result is not None
                         observation_result.update(

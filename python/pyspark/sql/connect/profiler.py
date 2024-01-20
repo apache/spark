@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,8 +14,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import TYPE_CHECKING
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+from pyspark.sql.profiler import ProfilerCollector, ProfileResultsParam
 
->&2 echo "This script is deprecated, use start-worker.sh"
-"${DIR}/start-worker.sh" "$@"
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ProfileResults
+
+
+class ConnectProfilerCollector(ProfilerCollector):
+    """
+    ProfilerCollector for Spark Connect.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._value = ProfileResultsParam.zero(None)
+
+    @property
+    def _profile_results(self) -> "ProfileResults":
+        with self._lock:
+            return self._value if self._value is not None else {}
+
+    def _update(self, update: "ProfileResults") -> None:
+        with self._lock:
+            self._value = ProfileResultsParam.addInPlace(self._profile_results, update)

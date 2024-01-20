@@ -972,8 +972,8 @@ class SparkConnectPlanner(
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
-      // Null accumulator
-      accumulator = null)
+      // Accumulator if available
+      accumulator = sessionHolder.pythonAccumulator.orNull)
   }
 
   private def transformCachedRemoteRelation(rel: proto.CachedRemoteRelation): LogicalPlan = {
@@ -1507,12 +1507,6 @@ class SparkConnectPlanner(
 
   /**
    * Translates a scalar function from proto to the Catalyst expression.
-   *
-   * TODO(SPARK-40546) We need to homogenize the function names for binary operators.
-   *
-   * @param fun
-   *   Proto representation of the function call.
-   * @return
    */
   private def transformUnresolvedFunction(
       fun: proto.Expression.UnresolvedFunction): Expression = {
@@ -1680,8 +1674,8 @@ class SparkConnectPlanner(
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
-      // Null accumulator
-      accumulator = null)
+      // Accumulator if available
+      accumulator = sessionHolder.pythonAccumulator.orNull)
   }
 
   /**

@@ -1549,10 +1549,11 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
-    // We only can combine them if and only if both are deterministic.
+    // We only can combine them if and only if both are deterministic and the outer condition is not
+    // throwable (inner can be throwable as it was going to be evaluated first anyways).
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (combineCandidates, nonDeterministic) =
-        splitConjunctivePredicates(fc).partition(_.deterministic)
+      val (combineCandidates, rest) =
+        splitConjunctivePredicates(fc).partition(p => p.deterministic && !p.throwable)
       val mergedFilter = (ExpressionSet(combineCandidates) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
@@ -1560,7 +1561,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
         case None =>
           nf
       }
-      nonDeterministic.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
+      rest.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 
@@ -1730,15 +1731,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (candidates, nonDeterministic) =
-        splitConjunctivePredicates(condition).partition(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.deterministic && !cond.throwable &&
+          cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
-
-      val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -1904,13 +1901,14 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
+    val (pushDownCandidates, stayUp) =
+      condition.partition(cond => cond.deterministic && !cond.throwable)
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
   }
 
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
@@ -1933,8 +1931,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          // don't push throwable expressions into join condition
           val (newJoinConditions, others) =
-            commonFilterCondition.partition(canEvaluateWithinJoin)
+            commonFilterCondition.partition(cond => canEvaluateWithinJoin(cond) && !cond.throwable)
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
           val join = Join(newLeft, newRight, joinType, newJoinCond, hint)

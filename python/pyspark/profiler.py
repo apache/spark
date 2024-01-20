@@ -422,8 +422,9 @@ class MemoryProfiler(Profiler):
         """Return the collected memory profiles"""
         return cast(CodeMapDict, self._accumulator.value)
 
+    @staticmethod
     def _show_results(
-        self, code_map: CodeMapDict, stream: Optional[Any] = None, precision: int = 1
+        code_map: CodeMapDict, stream: Optional[Any] = None, precision: int = 1
     ) -> None:
         if stream is None:
             stream = sys.stdout
