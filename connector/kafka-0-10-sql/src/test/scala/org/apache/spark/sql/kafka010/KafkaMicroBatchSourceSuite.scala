@@ -125,7 +125,8 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
       val sources: Seq[SparkDataStream] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _, _) => source
-          case r: StreamingDataSourceV2ScanRelation if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
+          case r: StreamingDataSourceV2ScanRelation
+            if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
               r.stream.isInstanceOf[KafkaContinuousStream] =>
             r.stream
         }
