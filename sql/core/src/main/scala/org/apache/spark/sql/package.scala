@@ -111,9 +111,10 @@ package object sql {
     }
   }
 
-  private val sparkCodePattern = Pattern.compile("org\\.apache\\.spark\\.sql\\." +
-      "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions)" +
-      "(?:|\\..*|\\$.*)")
+  private val sparkCodePattern = Pattern.compile("(org\\.apache\\.spark\\.sql\\." +
+      "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder)" +
+      "(?:|\\..*|\\$.*))" +
+      "|(scala\\.collection\\..*)")
 
   private def sparkCode(ste: StackTraceElement): Boolean = {
     sparkCodePattern.matcher(ste.getClassName).matches()

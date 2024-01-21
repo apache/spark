@@ -2,15 +2,15 @@
 radix sort
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 radix sort 25000000:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-reference TimSort key prefix array                14141          14208          96          1.8         565.6       1.0X
-reference Arrays.sort                              2961           2963           4          8.4         118.4       4.8X
-radix sort one byte                                 518            552          23         48.3          20.7      27.3X
-radix sort two bytes                               1077           1091          20         23.2          43.1      13.1X
-radix sort eight bytes                             4098           4109          16          6.1         163.9       3.5X
-radix sort key prefix array                        7741           7814         103          3.2         309.6       1.8X
+reference TimSort key prefix array                 8151           8156           7          3.1         326.0       1.0X
+reference Arrays.sort                              1971           1996          34         12.7          78.8       4.1X
+radix sort one byte                                  64             71           4        387.7           2.6     126.4X
+radix sort two bytes                                119            132           7        210.5           4.8      68.6X
+radix sort eight bytes                              472            488          15         52.9          18.9      17.3X
+radix sort key prefix array                         956            961           7         26.2          38.2       8.5X
 
 

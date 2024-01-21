@@ -26,13 +26,13 @@ Project [cast(udf(cast(c1#x as string)) as int) AS c1#x, cast(udf(cast(c2#x as s
    +- Union false, false
       :- Project [cast(udf(cast(c1#x as string)) as int) AS c1#x, cast(udf(cast(c2#x as string)) as string) AS c2#x]
       :  +- SubqueryAlias t1
-      :     +- View (`t1`, [c1#x,c2#x])
+      :     +- View (`t1`, [c1#x, c2#x])
       :        +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
       :           +- SubqueryAlias tbl
       :              +- LocalRelation [c1#x, c2#x]
       +- Project [cast(udf(cast(c1#x as string)) as int) AS c1#x, cast(udf(cast(c2#x as string)) as string) AS c2#x]
          +- SubqueryAlias t1
-            +- View (`t1`, [c1#x,c2#x])
+            +- View (`t1`, [c1#x, c2#x])
                +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
                   +- SubqueryAlias tbl
                      +- LocalRelation [c1#x, c2#x]
@@ -53,21 +53,21 @@ Project [cast(udf(cast(c1#x as string)) as decimal(11,1)) AS c1#x, cast(udf(cast
       :  :- Project [cast(c1#x as decimal(11,1)) AS c1#x, c2#x]
       :  :  +- Project [cast(udf(cast(c1#x as string)) as int) AS c1#x, cast(udf(cast(c2#x as string)) as string) AS c2#x]
       :  :     +- SubqueryAlias t1
-      :  :        +- View (`t1`, [c1#x,c2#x])
+      :  :        +- View (`t1`, [c1#x, c2#x])
       :  :           +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
       :  :              +- SubqueryAlias tbl
       :  :                 +- LocalRelation [c1#x, c2#x]
       :  +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as string) AS c2#x]
       :     +- Project [cast(udf(cast(c1#x as string)) as decimal(2,1)) AS c1#x, cast(udf(cast(c2#x as string)) as int) AS c2#x]
       :        +- SubqueryAlias t2
-      :           +- View (`t2`, [c1#x,c2#x])
+      :           +- View (`t2`, [c1#x, c2#x])
       :              +- Project [cast(c1#x as decimal(2,1)) AS c1#x, cast(c2#x as int) AS c2#x]
       :                 +- SubqueryAlias tbl
       :                    +- LocalRelation [c1#x, c2#x]
       +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as string) AS c2#x]
          +- Project [cast(udf(cast(c1#x as string)) as decimal(2,1)) AS c1#x, cast(udf(cast(c2#x as string)) as int) AS c2#x]
             +- SubqueryAlias t2
-               +- View (`t2`, [c1#x,c2#x])
+               +- View (`t2`, [c1#x, c2#x])
                   +- Project [cast(c1#x as decimal(2,1)) AS c1#x, cast(c2#x as int) AS c2#x]
                      +- SubqueryAlias tbl
                         +- LocalRelation [c1#x, c2#x]

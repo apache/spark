@@ -92,7 +92,7 @@ case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not
     // generate SQL for this join type
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3115")
+    throw SparkUnsupportedOperationException()
   }
 }
 

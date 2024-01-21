@@ -26,11 +26,11 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{SparkConf, SparkFunSuite, SslTestUtils}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SslTestUtils, Utils}
 
 class IndexShuffleBlockResolverSuite extends SparkFunSuite {
 

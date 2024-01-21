@@ -496,8 +496,8 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   val DRIVER_PG_TEMPLATE_MEMORY_3G = new File(
     getClass.getResource("/volcano/driver-podgroup-template-memory-3g.yml").getFile
   ).getAbsolutePath
-  val DRIVER_REQUEST_CORES = sys.props.get(CONFIG_DRIVER_REQUEST_CORES).getOrElse("1")
-  val EXECUTOR_REQUEST_CORES = sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).getOrElse("1")
+  val DRIVER_REQUEST_CORES = sys.props.get(CONFIG_DRIVER_REQUEST_CORES).getOrElse("0.2")
+  val EXECUTOR_REQUEST_CORES = sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).getOrElse("0.2")
   val VOLCANO_MAX_JOB_NUM = sys.props.get(CONFIG_KEY_VOLCANO_MAX_JOB_NUM).getOrElse("2")
   val TEMP_DIR = "/tmp/"
 }

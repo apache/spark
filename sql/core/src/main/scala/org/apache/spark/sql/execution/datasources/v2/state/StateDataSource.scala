@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DI
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -83,6 +83,7 @@ class StateDataSource extends TableProvider with DataSourceRegister {
       new StructType()
         .add("key", keySchema)
         .add("value", valueSchema)
+        .add("partition_id", IntegerType)
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)

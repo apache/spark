@@ -282,6 +282,12 @@ Cannot recognize hive type string: `<fieldType>`, column: `<fieldName>`. The spe
 
 Renaming a `<type>` across schemas is not allowed.
 
+### CANNOT_RESOLVE_DATAFRAME_COLUMN
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve dataframe column `<name>`. It's probably because of illegal references like `df1.select(df2.col("a"))`.
+
 ### CANNOT_RESOLVE_STAR_EXPAND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -482,6 +488,12 @@ For more details see [DATATYPE_MISMATCH](sql-error-conditions-datatype-mismatch-
 
 DataType `<type>` requires a length parameter, for example `<type>`(10). Please specify the length.
 
+### DATA_SOURCE_ALREADY_EXISTS
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Data source '`<provider>`' already exists. Please choose a different name for the new data source.
+
 ### DATA_SOURCE_NOT_EXIST
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -492,7 +504,7 @@ Data source '`<provider>`' not found. Please make sure the data source is regist
 
 [SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to find the data source: `<provider>`. Please find packages at `https://spark.apache.org/third-party-projects.html`.
+Failed to find the data source: `<provider>`. Make sure the provider name is correct and the package is properly registered and compatible with your Spark version.
 
 ### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
 
@@ -1279,6 +1291,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 Parameterized query must either use positional, or named parameters, but not both.
 
+### INVALID_SAVE_MODE
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The specified save mode `<mode>` is invalid. Valid save modes include "append", "overwrite", "ignore", "error", "errorifexists", and "default".
+
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
 [SQLSTATE: 42K07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1494,6 +1512,12 @@ The query does not include a GROUP BY clause. Add GROUP BY or turn it into the w
 [SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot specify time travel in both the time travel clause and options.
+
+### MULTIPLE_XML_DATA_SOURCE
+
+[SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Detected multiple data sources with the name `<provider>` (`<sourceNames>`). Please specify the fully qualified class name or remove `<externalSource>` from the classpath.
 
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 
@@ -1816,11 +1840,11 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
-### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+### PYTHON_DATA_SOURCE_ERROR
 
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
-Failed to `<action>` Python data source `<type>` in Python: `<msg>`
+Failed to `<action>` Python data source `<type>`: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
@@ -2315,6 +2339,12 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 
 Unsupported arrow type `<typeName>`.
 
+### UNSUPPORTED_CALL
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot call the method "`<methodName>`" of the class "`<className>`".
+
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -2333,6 +2363,12 @@ Unsupported data source type for direct query on files: `<dataSourceType>`
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
+
+### UNSUPPORTED_DATA_SOURCE_SAVE_MODE
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+The data source "`<source>`" cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

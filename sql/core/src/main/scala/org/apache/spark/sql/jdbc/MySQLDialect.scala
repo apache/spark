@@ -273,7 +273,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
@@ -286,10 +287,10 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

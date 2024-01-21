@@ -16,19 +16,19 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.data_type_ops.test_num_arithmetic import ArithmeticTestsMixin
-from pyspark.pandas.tests.connect.data_type_ops.testing_utils import OpsTestBase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ArithmeticParityTests(
-    ArithmeticTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
+    ArithmeticTestsMixin,
+    PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":

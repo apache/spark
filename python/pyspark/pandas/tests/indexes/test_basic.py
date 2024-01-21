@@ -22,12 +22,11 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
-class IndexesTestsMixin:
+class IndexBasicMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -66,109 +65,6 @@ class IndexesTestsMixin:
         with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
-    def test_index_getattr(self):
-        psidx = self.psdf.index
-        item = "databricks"
-
-        expected_error_message = "'.*Index' object has no attribute '{}'".format(item)
-        with self.assertRaisesRegex(AttributeError, expected_error_message):
-            psidx.__getattr__(item)
-        with self.assertRaisesRegex(AttributeError, expected_error_message):
-            ps.from_pandas(pd.date_range("2011-01-01", freq="D", periods=10)).__getattr__(item)
-
-    def test_multi_index_getattr(self):
-        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
-        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
-        pdf = pd.DataFrame(np.random.randn(4, 5), idx)
-        psdf = ps.from_pandas(pdf)
-        psidx = psdf.index
-        item = "databricks"
-
-        expected_error_message = "'MultiIndex' object has no attribute '{}'".format(item)
-        with self.assertRaisesRegex(AttributeError, expected_error_message):
-            psidx.__getattr__(item)
-
-    def test_index_names(self):
-        psdf = self.psdf
-        self.assertIsNone(psdf.index.name)
-
-        idx = pd.Index([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], name="x")
-        pdf = pd.DataFrame(np.random.randn(10, 5), index=idx, columns=list("abcde"))
-        psdf = ps.from_pandas(pdf)
-
-        pser = pdf.a
-        psser = psdf.a
-
-        self.assertEqual(psdf.index.name, pdf.index.name)
-        self.assertEqual(psdf.index.names, pdf.index.names)
-
-        pidx = pdf.index
-        psidx = psdf.index
-        pidx.name = "renamed"
-        psidx.name = "renamed"
-        self.assertEqual(psidx.name, pidx.name)
-        self.assertEqual(psidx.names, pidx.names)
-        self.assert_eq(psidx, pidx)
-        self.assertEqual(psdf.index.name, pdf.index.name)
-        self.assertEqual(psdf.index.names, pdf.index.names)
-        self.assertEqual(psser.index.names, pser.index.names)
-
-        pidx.name = None
-        psidx.name = None
-        self.assertEqual(psidx.name, pidx.name)
-        self.assertEqual(psidx.names, pidx.names)
-        self.assert_eq(psidx, pidx)
-        self.assertEqual(psdf.index.name, pdf.index.name)
-        self.assertEqual(psdf.index.names, pdf.index.names)
-        self.assertEqual(psser.index.names, pser.index.names)
-
-        with self.assertRaisesRegex(ValueError, "Names must be a list-like"):
-            psidx.names = "hi"
-
-        expected_error_message = "Length of new names must be {}, got {}".format(
-            psdf._internal.index_level, len(["0", "1"])
-        )
-        with self.assertRaisesRegex(ValueError, expected_error_message):
-            psidx.names = ["0", "1"]
-
-        expected_error_message = "Index.name must be a hashable type"
-        with self.assertRaisesRegex(TypeError, expected_error_message):
-            ps.Index([1, 2, 3], name=["0", "1"])
-        with self.assertRaisesRegex(TypeError, expected_error_message):
-            psidx.name = ["renamed"]
-        with self.assertRaisesRegex(TypeError, expected_error_message):
-            psidx.name = ["0", "1"]
-        # Specifying `names` when creating Index is no longer supported from pandas 2.0.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            pass
-        else:
-            with self.assertRaisesRegex(TypeError, expected_error_message):
-                ps.Index([(1, 2), (3, 4)], names=["a", ["b"]])
-
-    def test_multi_index_names(self):
-        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
-        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
-        pdf = pd.DataFrame(np.random.randn(4, 5), idx)
-        psdf = ps.from_pandas(pdf)
-
-        self.assertEqual(psdf.index.names, pdf.index.names)
-
-        pidx = pdf.index
-        psidx = psdf.index
-        pidx.names = ["renamed_number", "renamed_color"]
-        psidx.names = ["renamed_number", "renamed_color"]
-        self.assertEqual(psidx.names, pidx.names)
-
-        pidx.names = ["renamed_number", None]
-        psidx.names = ["renamed_number", None]
-        self.assertEqual(psidx.names, pidx.names)
-        self.assert_eq(psidx, pidx)
-
-        with self.assertRaises(PandasNotImplementedError):
-            psidx.name
-        with self.assertRaises(PandasNotImplementedError):
-            psidx.name = "renamed"
-
     def test_multi_index_copy(self):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
         idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
@@ -176,49 +72,6 @@ class IndexesTestsMixin:
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.index.copy(), pdf.index.copy())
-
-    def test_multiindex_set_names(self):
-        pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
-        psidx = ps.from_pandas(pidx)
-
-        pidx = pidx.set_names(["set", "new", "names"])
-        psidx = psidx.set_names(["set", "new", "names"])
-        self.assert_eq(pidx, psidx)
-
-        pidx.set_names(["set", "new", "names"], inplace=True)
-        psidx.set_names(["set", "new", "names"], inplace=True)
-        self.assert_eq(pidx, psidx)
-
-        pidx = pidx.set_names("first", level=0)
-        psidx = psidx.set_names("first", level=0)
-        self.assert_eq(pidx, psidx)
-
-        pidx = pidx.set_names("second", level=1)
-        psidx = psidx.set_names("second", level=1)
-        self.assert_eq(pidx, psidx)
-
-        pidx = pidx.set_names("third", level=2)
-        psidx = psidx.set_names("third", level=2)
-        self.assert_eq(pidx, psidx)
-
-        pidx.set_names("first", level=0, inplace=True)
-        psidx.set_names("first", level=0, inplace=True)
-        self.assert_eq(pidx, psidx)
-
-        pidx.set_names("second", level=1, inplace=True)
-        psidx.set_names("second", level=1, inplace=True)
-        self.assert_eq(pidx, psidx)
-
-        pidx.set_names("third", level=2, inplace=True)
-        psidx.set_names("third", level=2, inplace=True)
-        self.assert_eq(pidx, psidx)
-
-    def test_multiindex_tuple_column_name(self):
-        column_labels = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z")])
-        pdf = pd.DataFrame([[1, 2, 3], [4, 5, 6], [7, 8, 9]], columns=column_labels)
-        pdf.set_index(("a", "x"), append=True, inplace=True)
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf, psdf)
 
     def test_holds_integer(self):
         pidx = pd.Index([1, 2, 3, 4])
@@ -347,8 +200,8 @@ class IndexesTestsMixin:
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
 
 
-class IndexesTests(
-    IndexesTestsMixin,
+class IndexBasicTests(
+    IndexBasicMixin,
     PandasOnSparkTestCase,
     TestUtils,
 ):
@@ -356,7 +209,7 @@ class IndexesTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.indexes.test_base import *  # noqa: F401
+    from pyspark.pandas.tests.indexes.test_basic import *  # noqa: F401
 
     try:
         import xmlrunner

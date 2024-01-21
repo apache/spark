@@ -92,14 +92,17 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * immediately (if the query was terminated with exception). Use `resetTerminated()` to clear
    * past terminations and wait for new terminations.
    *
-   * For correctly documenting exceptions across multiple queries, users need to stop all of them
-   * after any of them terminates with exception, and then check the `query.exception()` for each
-   * query.
+   * In the case where multiple queries have terminated since `resetTermination()` was called, if
+   * any query has terminated with exception, then `awaitAnyTermination()` will throw any of the
+   * exception. For correctly documenting exceptions across multiple queries, users need to stop
+   * all of them after any of them terminates with exception, and then check the
+   * `query.exception()` for each query.
    *
+   * @throws StreamingQueryException
+   *   if any query has terminated with an exception
    * @since 3.5.0
    */
-  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
-  // framework is supported and modify the doc accordingly.
+  @throws[StreamingQueryException]
   def awaitAnyTermination(): Unit = {
     executeManagerCmd(_.getAwaitAnyTerminationBuilder.build())
   }
@@ -115,14 +118,17 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    * exception immediately (if the query was terminated with exception). Use `resetTerminated()`
    * to clear past terminations and wait for new terminations.
    *
-   * For correctly documenting exceptions across multiple queries, users need to stop all of them
-   * after any of them terminates with exception, and then check the `query.exception()` for each
-   * query.
+   * In the case where multiple queries have terminated since `resetTermination()` was called, if
+   * any query has terminated with exception, then `awaitAnyTermination()` will throw any of the
+   * exception. For correctly documenting exceptions across multiple queries, users need to stop
+   * all of them after any of them terminates with exception, and then check the
+   * `query.exception()` for each query.
    *
+   * @throws StreamingQueryException
+   *   if any query has terminated with an exception
    * @since 3.5.0
    */
-  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
-  // framework is supported and modify the doc accordingly.
+  @throws[StreamingQueryException]
   def awaitAnyTermination(timeoutMs: Long): Boolean = {
     require(timeoutMs > 0, "Timeout has to be positive")
     executeManagerCmd(

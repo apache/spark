@@ -351,4 +351,28 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
   }
+
+  Seq("NONE", "SNAPPY", "ZLIB", "LZ4", "LZO", "ZSTD").foreach { compression =>
+    test(s"SPARK-46742: Read and write with $compression compressions") {
+      Seq(true, false).foreach { convertMetastore =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+          withTempDir { dir =>
+            withTable("orc_tbl1") {
+              val orcTblStatement1 =
+                s"""
+                   |CREATE TABLE orc_tbl1(
+                   |  c1 int,
+                   |  c2 string)
+                   |STORED AS orc
+                   |TBLPROPERTIES ("orc.compress"="$compression")
+                   |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
+              sql(orcTblStatement1)
+              sql("INSERT INTO TABLE orc_tbl1 VALUES (1, 'orc1'), (2, 'orc2')")
+              checkAnswer(sql("SELECT * FROM orc_tbl1"), (1 to 2).map(i => Row(i, s"orc$i")))
+            }
+          }
+        }
+      }
+    }
+  }
 }

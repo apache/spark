@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.master
 
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
@@ -56,10 +57,6 @@ private[deploy] class Master(
 
   private val driverIdPattern = conf.get(DRIVER_ID_PATTERN)
   private val appIdPattern = conf.get(APP_ID_PATTERN)
-
-  // For application IDs
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-
   private val workerTimeoutMs = conf.get(WORKER_TIMEOUT) * 1000
   private val retainedApplications = conf.get(RETAINED_APPLICATIONS)
   private val retainedDrivers = conf.get(RETAINED_DRIVERS)
@@ -244,12 +241,13 @@ private[deploy] class Master(
       }
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
-        beginRecovery(storedApps, storedDrivers, storedWorkers)
-        recoveryCompletionTask = forwardMessageThread.schedule(new Runnable {
-          override def run(): Unit = Utils.tryLogNonFatalError {
-            self.send(CompleteRecovery)
-          }
-        }, recoveryTimeoutMs, TimeUnit.MILLISECONDS)
+        if (beginRecovery(storedApps, storedDrivers, storedWorkers)) {
+          recoveryCompletionTask = forwardMessageThread.schedule(new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              self.send(CompleteRecovery)
+            }
+          }, recoveryTimeoutMs, TimeUnit.MILLISECONDS)
+        }
       }
 
     case CompleteRecovery => completeRecovery()
@@ -508,6 +506,9 @@ private[deploy] class Master(
         workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state))
 
+    case RequestReadyz =>
+      context.reply(state != RecoveryState.STANDBY)
+
     case BoundPortsRequest =>
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
 
@@ -590,7 +591,7 @@ private[deploy] class Master(
   private var recoveryStartTimeNs = 0L
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-      storedWorkers: Seq[WorkerInfo]): Unit = {
+      storedWorkers: Seq[WorkerInfo]): Boolean = {
     recoveryStartTimeNs = System.nanoTime()
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
@@ -618,6 +619,14 @@ private[deploy] class Master(
       } catch {
         case e: Exception => logInfo("Worker " + worker.id + " had exception on reconnect")
       }
+    }
+
+    // In case of zero workers and apps, we can complete recovery.
+    if (canCompleteRecovery) {
+      completeRecovery()
+      false
+    } else {
+      true
     }
   }
 
@@ -1224,7 +1233,8 @@ private[deploy] class Master(
 
   /** Generate a new app ID given an app's submission date */
   private def newApplicationId(submitDate: Date): String = {
-    val appId = appIdPattern.format(createDateFormat.format(submitDate), nextAppNumber)
+    val appId = appIdPattern.format(
+      Master.DATE_TIME_FORMATTER.format(submitDate.toInstant), nextAppNumber)
     nextAppNumber += 1
     if (moduloAppNumber > 0) {
       nextAppNumber %= moduloAppNumber
@@ -1252,7 +1262,8 @@ private[deploy] class Master(
   }
 
   private def newDriverId(submitDate: Date): String = {
-    val appId = driverIdPattern.format(createDateFormat.format(submitDate), nextDriverNumber)
+    val appId = driverIdPattern.format(
+      Master.DATE_TIME_FORMATTER.format(submitDate.toInstant), nextDriverNumber)
     nextDriverNumber += 1
     appId
   }
@@ -1298,6 +1309,12 @@ private[deploy] class Master(
 private[deploy] object Master extends Logging {
   val SYSTEM_NAME = "sparkMaster"
   val ENDPOINT_NAME = "Master"
+
+  // For application IDs
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyyMMddHHmmss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   def main(argStrings: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(

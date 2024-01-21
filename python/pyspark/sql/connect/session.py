@@ -62,6 +62,7 @@ from pyspark.sql.connect.plan import (
     CachedRelation,
     CachedRemoteRelation,
 )
+from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
@@ -918,6 +919,15 @@ class SparkSession:
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def _profiler_collector(self) -> ProfilerCollector:
+        return self._client._profiler_collector
+
+    def showPerfProfiles(self, id: Optional[int] = None) -> None:
+        self._profiler_collector.show_perf_profiles(id)
+
+    showPerfProfiles.__doc__ = PySparkSession.showPerfProfiles.__doc__
 
 
 SparkSession.__doc__ = PySparkSession.__doc__
