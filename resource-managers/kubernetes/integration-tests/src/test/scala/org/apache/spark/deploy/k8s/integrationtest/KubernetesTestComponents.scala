@@ -75,6 +75,8 @@ private[spark] class KubernetesTestComponents(val kubernetesClient: KubernetesCl
       .set(UI_ENABLED.key, "true")
       .set("spark.kubernetes.submission.waitAppCompletion", "false")
       .set("spark.kubernetes.authenticate.driver.serviceAccountName", serviceAccountName)
+      .set("spark.kubernetes.driver.request.cores", "0.2")
+      .set("spark.kubernetes.executor.request.cores", "0.2")
   }
 }
 
