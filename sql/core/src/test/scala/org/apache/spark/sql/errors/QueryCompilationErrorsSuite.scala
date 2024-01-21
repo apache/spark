@@ -948,8 +948,8 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
       parameters = Map(
-        "expression" -> "COALESCE",
-        "inputTypes" -> "[INTEGER, STRING, STRING]"))
+        "expression" -> "\"coalesce(1, a, a)\"",
+        "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
   }
 
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
