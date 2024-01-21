@@ -957,9 +957,7 @@ jobs:
       - name: start minikube
         run: |
           # See more in "Installation" https://minikube.sigs.k8s.io/docs/start/
-          # curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-          # TODO(SPARK-44495): Resume to use the latest minikube for k8s-integration-tests.
-          curl -LO https://storage.googleapis.com/minikube/releases/v1.30.1/minikube-linux-amd64
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
           sudo install minikube-linux-amd64 /usr/local/bin/minikube
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           minikube start --cpus 2 --memory 6144
@@ -977,7 +975,7 @@ jobs:
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
           kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
-          build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
+          build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: failure()
         uses: actions/upload-artifact@v3
