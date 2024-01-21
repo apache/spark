@@ -17,24 +17,17 @@
 
 package org.apache.spark.sql.errors
 
-<<<<<<< HEAD
-import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException}
-import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
-import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal}
-=======
-import org.apache.spark.{SPARK_DOC_ROOT, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
->>>>>>> origin/master
+import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{array, from_json, grouping, grouping_id, lit, struct, sum, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
