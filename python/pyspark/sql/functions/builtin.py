@@ -7322,8 +7322,11 @@ def dayname(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Basic usage of dayname function.
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(dayname('dt').alias('dayname')).show()
+    >>> df.select(sf.dayname('dt').alias('dayname')).show()
     +-------+
     |dayname|
     +-------+
