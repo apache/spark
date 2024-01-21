@@ -935,7 +935,7 @@ class QueryCompilationErrorsSuite
         coalesce.dataType
       },
       errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
-      parameters = Map("expression" -> "COALESCE"))
+      parameters = Map("expression" -> "\"coalesce()\""))
   }
 
   test("ComplexTypeMergingExpression should throw " +
