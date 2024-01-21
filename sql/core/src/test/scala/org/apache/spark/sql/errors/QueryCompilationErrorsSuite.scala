@@ -950,6 +950,7 @@ class QueryCompilationErrorsSuite
       parameters = Map(
         "expression" -> "COALESCE",
         "inputTypes" -> "[INTEGER, STRING, STRING]"))
+  }
 
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
     checkError(
