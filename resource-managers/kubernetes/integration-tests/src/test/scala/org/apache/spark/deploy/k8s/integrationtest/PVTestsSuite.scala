@@ -24,6 +24,7 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Milliseconds, Span}
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
+import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
 private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
   import PVTestsSuite._
