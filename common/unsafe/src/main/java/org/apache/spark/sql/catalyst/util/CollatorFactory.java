@@ -40,8 +40,8 @@ public class CollatorFactory {
   private final CollatorInfo[] collatorTable;
 
   private static Collator CollatorFromCollationName(String collationName) {
-    // Expected format is <locale>-<ci/cs>-<ai/as>
-    var split = collationName.split("-");
+    // Expected format is <locale>_<ci/cs>_<ai/as>
+    var split = collationName.split("_");
     if (split.length != 3) {
       throw new IllegalArgumentException("Invalid collation name: " + collationName);
     }
@@ -78,19 +78,19 @@ public class CollatorFactory {
 
 
     // UNICODE case insensitive comparison (ROOT locale, in ICU).
-    collatorTable[3] = new CollatorInfo("UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0");
+    collatorTable[3] = new CollatorInfo("UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0");
     collatorTable[3].collator.setStrength(Collator.SECONDARY);
 
     // TODO: Create all the other collators here. e.g. for Serbian. We can decide to do this lazily as well.
     // NOTE: Measured impact of installing all available collators is ~10MBs
-    collatorTable[4] = new CollatorInfo("SR-CI-AI", CollatorFromCollationName("sr-ci-ai"), "153.120.0.0");
-    collatorTable[5] = new CollatorInfo("SR-CI-AS", CollatorFromCollationName("sr-ci-as"), "153.120.0.0");
-    collatorTable[6] = new CollatorInfo("SR-CS-AS", CollatorFromCollationName("sr-cs-as"), "153.120.0.0");
+    collatorTable[4] = new CollatorInfo("SR_CI_AI", CollatorFromCollationName("sr_ci_ai"), "153.120.0.0");
+    collatorTable[5] = new CollatorInfo("SR_CI_AS", CollatorFromCollationName("sr_ci_as"), "153.120.0.0");
+    collatorTable[6] = new CollatorInfo("SR_CS_AS", CollatorFromCollationName("sr_cs_as"), "153.120.0.0");
 
     // German
-    collatorTable[7] = new CollatorInfo("DE-CI-AI", CollatorFromCollationName("De-ci-ai"), "153.120.0.0");
-    collatorTable[8] = new CollatorInfo("DE-CI-AS", CollatorFromCollationName("De-ci-as"), "153.120.0.0");
-    collatorTable[9] = new CollatorInfo("DE-CS-AS", CollatorFromCollationName("De-cs-as"), "153.120.0.0");
+    collatorTable[7] = new CollatorInfo("DE_CI_AI", CollatorFromCollationName("De_ci_ai"), "153.120.0.0");
+    collatorTable[8] = new CollatorInfo("DE_CI_AS", CollatorFromCollationName("De_ci_as"), "153.120.0.0");
+    collatorTable[9] = new CollatorInfo("DE_CS_AS", CollatorFromCollationName("De_cs_as"), "153.120.0.0");
   }
 
   public int collationNameToId(String collationName) {

@@ -437,10 +437,6 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
-    if (this.comparatorId != 0) {
-      throw new RuntimeException("Can't do toLowerCase on collated string.");
-    }
-
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
@@ -471,10 +467,6 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
    * Returns the title case of this string, that could be used as title.
    */
   public UTF8String toTitleCase() {
-    if (this.comparatorId != 0) {
-      throw new RuntimeException("Can't do toTitleCase on collated string.");
-    }
-
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
