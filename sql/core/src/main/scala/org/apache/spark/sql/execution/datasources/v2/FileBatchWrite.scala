@@ -39,7 +39,8 @@ class FileBatchWrite(
     logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
     processStats(
-      description.statsTrackers, results.map(_.summary.stats).toImmutableArraySeq, duration)
+      description.statsTrackers, results.map(_.summary.stats).toImmutableArraySeq, duration,
+      results.map(_.summary.updatedPartitionsMap).reduce(_ ++ _))
     logInfo(s"Finished processing stats for write job ${description.uuid}.")
   }
 

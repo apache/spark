@@ -52,6 +52,8 @@ abstract class FileFormatDataWriter(
    */
   protected val MAX_FILE_COUNTER: Int = 1000 * 1000
   protected val updatedPartitions: mutable.Set[String] = mutable.Set[String]()
+  protected val updatedPartitionsMap: mutable.Map[InternalRow, String]
+      = mutable.Map[InternalRow, String]()
   protected var currentWriter: OutputWriter = _
 
   /** Trackers for computing various statistics on the data as it's being written out. */
@@ -116,7 +118,8 @@ abstract class FileFormatDataWriter(
     }
     val summary = ExecutedWriteSummary(
       updatedPartitions = updatedPartitions.toSet,
-      stats = statsTrackers.map(_.getFinalStats(taskCommitTime)))
+      stats = statsTrackers.map(_.getFinalStats(taskCommitTime)),
+      updatedPartitionsMap.toMap)
     WriteTaskResult(taskCommitMessage, summary)
   }
 
@@ -168,7 +171,7 @@ class SingleDirectoryDataWriter(
       dataSchema = description.dataColumns.toStructType,
       context = taskAttemptContext)
 
-    statsTrackers.foreach(_.newFile(currentPath))
+    statsTrackers.foreach(_.newFile(currentPath, None))
   }
 
   override def write(record: InternalRow): Unit = {
@@ -277,6 +280,9 @@ abstract class BaseDynamicPartitionDataWriter(
 
     val partDir = partitionValues.map(getPartitionPath(_))
     partDir.foreach(updatedPartitions.add)
+    if (partDir.isDefined) {
+      partitionValues.foreach(updatedPartitionsMap(_) = partDir.get)
+    }
 
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
@@ -305,7 +311,7 @@ abstract class BaseDynamicPartitionDataWriter(
       dataSchema = description.dataColumns.toStructType,
       context = taskAttemptContext)
 
-    statsTrackers.foreach(_.newFile(currentPath))
+    statsTrackers.foreach(_.newFile(currentPath, partitionValues))
   }
 
   /**
@@ -618,4 +624,5 @@ case class WriteTaskResult(commitMsg: TaskCommitMessage, summary: ExecutedWriteS
  */
 case class ExecutedWriteSummary(
     updatedPartitions: Set[String],
-    stats: Seq[WriteTaskStats])
+    stats: Seq[WriteTaskStats],
+    updatedPartitionsMap: Map[InternalRow, String])

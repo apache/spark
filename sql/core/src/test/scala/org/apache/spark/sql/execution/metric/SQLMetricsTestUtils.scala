@@ -20,12 +20,15 @@ package org.apache.spark.sql.execution.metric
 import java.io.File
 
 import scala.collection.mutable.HashMap
+import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.TestUtils
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.TestUtils.withListener
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerTaskEnd}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.datasources.SparkListenerPartitionTaskEvent
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
@@ -127,32 +130,58 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       provider: String,
       dataFormat: String,
       tableName: String): Unit = {
-    withTable(tableName) {
-      withTempPath { dir =>
-        spark.sql(
-          s"""
-             |CREATE TABLE $tableName(a int, b int)
-             |USING $provider
-             |PARTITIONED BY(a)
-             |LOCATION '${dir.toURI}'
-           """.stripMargin)
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+    val events: ListBuffer[SparkListenerPartitionTaskEvent]
+              = ListBuffer[SparkListenerPartitionTaskEvent]()
+    val listener: SparkListener = new SparkListener {
 
-        val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
-          .selectExpr("id a", "id b")
-
-        // 40 files, 80 rows, 40 dynamic partitions.
-        verifyWriteDataMetrics(Seq(40, 40, 80)) {
-          df.union(df).repartition(2, $"a")
-            .write
-            .format(dataFormat)
-            .mode("overwrite")
-            .insertInto(tableName)
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case partitionStats: SparkListenerPartitionTaskEvent =>
+            events += partitionStats
+          case _ => // ignore other events
         }
-        assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
+      }
+
+    }
+    withListener(sparkContext, listener) { _ =>
+      withTable(tableName) {
+        withTempPath { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE $tableName(a int, b int)
+               |USING $provider
+               |PARTITIONED BY(a)
+               |LOCATION '${dir.toURI}'
+           """.stripMargin)
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+          val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
+            .selectExpr("id a", "id b")
+
+          // 40 files, 80 rows, 40 dynamic partitions.
+          verifyWriteDataMetrics(Seq(40, 40, 80)) {
+            df.union(df).repartition(2, $"a")
+              .write
+              .format(dataFormat)
+              .mode("overwrite")
+              .insertInto(tableName)
+          }
+          assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
+        }
       }
     }
+
+    // Verify that there was a single event for the entire write process
+    assert(events.length == 1)
+    val event = events.head
+
+    // Verify the number of partitions
+    assert(event.stats.keySet.size == 40)
+    // Verify the number of files per partition
+    assert(event.stats.values.forall(partitionStats => partitionStats.numFiles == 1))
+    // Verify the number of rows per partition
+    assert(event.stats.values.forall(partitionStats => partitionStats.numRows == 2))
   }
 
   /**
