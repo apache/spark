@@ -2708,7 +2708,7 @@ class DatasetSuite extends QueryTest
     }
   }
 
-  test("Dataset with set field") {
+  test("SPARK-46791: Dataset with set field") {
     val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
     checkDataset(ds.map(t => t),
       WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
