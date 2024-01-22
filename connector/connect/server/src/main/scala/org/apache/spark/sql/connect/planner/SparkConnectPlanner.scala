@@ -1451,6 +1451,13 @@ class SparkConnectPlanner(
 
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
     case named: NamedExpression => named
+    case c: Cast =>
+      c.transformUp {
+        case c @ Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
+      } match {
+        case ne: NamedExpression => ne
+        case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
+      }
     case expr => UnresolvedAlias(expr)
   }
 
@@ -2129,12 +2136,14 @@ class SparkConnectPlanner(
   }
 
   private def transformCast(cast: proto.Expression.Cast): Expression = {
-    cast.getCastToTypeCase match {
+    val transCast = cast.getCastToTypeCase match {
       case proto.Expression.Cast.CastToTypeCase.TYPE =>
         Cast(transformExpression(cast.getExpr), transformDataType(cast.getType))
       case _ =>
         Cast(transformExpression(cast.getExpr), parser.parseDataType(cast.getTypeStr))
     }
+    transCast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    transCast
   }
 
   private def transformUnresolvedRegex(regex: proto.Expression.UnresolvedRegex): Expression = {
