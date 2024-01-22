@@ -1648,6 +1648,12 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
     return typeAnnotation instanceof DateLogicalTypeAnnotation;
   }
 
+  private static boolean isSignedIntAnnotation(LogicalTypeAnnotation typeAnnotation) {
+    if (!(typeAnnotation instanceof IntLogicalTypeAnnotation)) return false;
+    IntLogicalTypeAnnotation intAnnotation = (IntLogicalTypeAnnotation) typeAnnotation;
+    return intAnnotation.isSigned();
+  }
+
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {
     DecimalType requestedType = (DecimalType) dt;
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
@@ -1659,9 +1665,9 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
       int scaleIncrease = requestedType.scale() - parquetType.getScale();
       int precisionIncrease = requestedType.precision() - parquetType.getPrecision();
       return scaleIncrease >= 0 && precisionIncrease >= scaleIncrease;
-    } else if (typeAnnotation == null || typeAnnotation instanceof IntLogicalTypeAnnotation) {
-      // Allow reading integers (which may be un-annotated) as decimal as long as the requested
-      // decimal type is large enough to represent all possible values.
+    } else if (typeAnnotation == null || isSignedIntAnnotation(typeAnnotation)) {
+      // Allow reading signed integers (which may be un-annotated) as decimal as long as the
+      // requested decimal type is large enough to represent all possible values.
       PrimitiveType.PrimitiveTypeName typeName =
         descriptor.getPrimitiveType().getPrimitiveTypeName();
       int integerPrecision = requestedType.precision() - requestedType.scale();
@@ -1683,8 +1689,8 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
     if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
       DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
       return decimalType.getScale() == d.scale();
-    } else if (typeAnnotation == null || typeAnnotation instanceof IntLogicalTypeAnnotation) {
-      // Consider integers (which may be un-annotated) as having scale 0.
+    } else if (typeAnnotation == null || isSignedIntAnnotation(typeAnnotation)) {
+      // Consider signed integers (which may be un-annotated) as having scale 0.
       return d.scale() == 0;
     }
     return false;
