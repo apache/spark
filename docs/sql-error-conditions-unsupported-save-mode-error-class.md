@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
 
 The save mode `<saveMode>` is not supported for:
 
@@ -32,5 +32,3 @@ an existent path.
 ## NON_EXISTENT_PATH
 
 a non-existent path.
-
-

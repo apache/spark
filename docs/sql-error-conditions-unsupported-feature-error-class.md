@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
 
 The feature is not supported:
 
@@ -204,5 +204,3 @@ TRANSFORM with the DISTINCT/ALL clause.
 ## TRANSFORM_NON_HIVE
 
 TRANSFORM with SERDE is only supported in hive mode.
-
-
