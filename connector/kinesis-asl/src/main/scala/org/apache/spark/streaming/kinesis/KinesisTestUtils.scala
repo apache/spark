@@ -117,6 +117,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
     val splitShardRequest = SplitShardRequest.builder()
       .streamName(_streamName)
       .shardToSplit(shardId)
+      // Set a half of the max hash value
       .newStartingHashKey("170141183460469231731687303715884105728")
       .build()
     kinesisClient.splitShard(splitShardRequest)
@@ -230,7 +231,7 @@ private[kinesis] object KinesisTestUtils {
     val kinesisServiceMetadata = new KinesisServiceMetadata()
     kinesisServiceMetadata.regions
       .asScala
-      .find(r => kinesisServiceMetadata.endpointFor(r).toString.equals(uri.getHost))
+      .find(r => kinesisServiceMetadata.endpointFor(r).equals(uri))
       .map(_.id)
       .getOrElse(
         throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
@@ -269,7 +270,7 @@ private[kinesis] object KinesisTestUtils {
     Try { DefaultCredentialsProvider.create().resolveCredentials() }.isSuccess
   }
 
-  def getAwsCredentials: AwsCredentials = {
+  def getAWSCredentials(): AwsCredentials = {
     assert(shouldRunTests,
       "Kinesis test not enabled, should not attempt to get AWS credentials")
     Try { DefaultCredentialsProvider.create().resolveCredentials() } match {

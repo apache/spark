@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
  */
 private[kinesis] sealed trait SparkAWSCredentials extends Serializable {
   /**
-   * Return an AWSCredentialProvider instance that can be used by the Kinesis Client
+   * Return an AwsCredentialProvider instance that can be used by the Kinesis Client
    * Library to authenticate to AWS services (Kinesis, CloudWatch and DynamoDB).
    */
   def provider: AwsCredentialsProvider
@@ -44,7 +44,7 @@ private[kinesis] final case object DefaultCredentials extends SparkAWSCredential
 
 /**
  * Returns StaticCredentialsProvider constructed using basic AWS keypair. Falls back to using
- * DefaultCredentialsProviderChain if unable to construct a AWSCredentialsProviderChain
+ * DefaultCredentialsProvider if unable to construct a StaticCredentialsProvider
  * instance with the provided arguments (e.g. if they are null).
  */
 private[kinesis] final case class BasicCredentials(
@@ -56,13 +56,13 @@ private[kinesis] final case class BasicCredentials(
   } catch {
     case e: IllegalArgumentException =>
       logWarning("Unable to construct StaticCredentialsProvider with provided keypair; " +
-        "falling back to DefaultCredentialsProviderChain.", e)
+        "falling back to DefaultCredentialsProvider.", e)
       DefaultCredentialsProvider.create()
   }
 }
 
 /**
- * Returns an STSAssumeRoleSessionCredentialsProvider instance which assumes an IAM
+ * Returns an StsAssumeRoleCredentialsProvider instance which assumes an IAM
  * role in order to authenticate against resources in an external account.
  */
 private[kinesis] final case class STSCredentials(
@@ -109,8 +109,8 @@ object SparkAWSCredentials {
      *
      * @note The given AWS keypair will be saved in DStream checkpoints if checkpointing is
      * enabled. Make sure that your checkpoint directory is secure. Prefer using the
-     * default provider chain instead if possible
-     * (http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default).
+     * default credentials provider instead if possible
+     * (https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html).
      *
      * @param accessKeyId AWS access key ID
      * @param secretKey AWS secret key
