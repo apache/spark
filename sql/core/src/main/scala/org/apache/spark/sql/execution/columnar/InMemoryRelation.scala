@@ -391,7 +391,7 @@ case class InMemoryRelation(
   }
 
   override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),
+    copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
       cacheBuilder,
       outputOrdering)
 
