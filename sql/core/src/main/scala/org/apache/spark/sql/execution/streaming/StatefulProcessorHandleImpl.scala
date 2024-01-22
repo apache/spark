@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  * Object used to assign/retrieve/remove grouping key passed implicitly for various state
  * manipulation actions using the store handle.
  */
-object ImplicitKeyTracker {
+object ImplicitGroupingKeyTracker {
   val implicitKey: InheritableThreadLocal[Any] = new InheritableThreadLocal[Any]
 
   def getImplicitKeyOption: Option[Any] = Option(implicitKey.get())
@@ -84,14 +84,14 @@ class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
     val queryId = if (taskCtxOpt.isDefined) {
       taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY)
     } else {
-      assert(Utils.isTesting)
+      assert(Utils.isTesting, "Failed to find query id in task context")
       UUID.randomUUID().toString
     }
 
     val batchId = if (taskCtxOpt.isDefined) {
       taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong
     } else {
-      assert(Utils.isTesting)
+      assert(Utils.isTesting, "Failed to find batch id in task context")
       0
     }
 

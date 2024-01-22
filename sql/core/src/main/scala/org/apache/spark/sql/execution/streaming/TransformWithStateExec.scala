@@ -94,13 +94,13 @@ case class TransformWithStateExec(
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
     val keyObj = getKeyObj(keyRow)  // convert key to objects
-    ImplicitKeyTracker.setImplicitKey(keyObj)
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val valueObj = getValueObj(valueRow)  // convert value to objects
     val mappedIterator = statefulProcessor.handleInputRow(keyObj, valueObj,
       new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
       getOutputRow(obj)
     }
-    ImplicitKeyTracker.removeImplicitKey()
+    ImplicitGroupingKeyTracker.removeImplicitKey()
     mappedIterator
   }
 

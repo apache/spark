@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.execution.streaming.{ImplicitKeyTracker, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.test.SharedSparkSession
@@ -90,20 +90,20 @@ class ValueStateSuite extends SharedSparkSession
       assert(handle.getQueryInfo().getPartitionId === 0)
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState")
-      assert(ImplicitKeyTracker.getImplicitKeyOption.isEmpty)
+      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
       }
 
       assert(ex.isInstanceOf[UnsupportedOperationException])
       assert(ex.getMessage.contains("Implicit key not found"))
-      ImplicitKeyTracker.setImplicitKey("test_key")
-      assert(ImplicitKeyTracker.getImplicitKeyOption.isDefined)
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
       testState.update(123)
       assert(testState.get() === 123)
 
-      ImplicitKeyTracker.removeImplicitKey()
-      assert(ImplicitKeyTracker.getImplicitKeyOption.isEmpty)
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
 
       val ex1 = intercept[Exception] {
         testState.update(123)
@@ -121,7 +121,7 @@ class ValueStateSuite extends SharedSparkSession
       assert(handle.getQueryInfo().getPartitionId === 0)
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState")
-      ImplicitKeyTracker.setImplicitKey("test_key")
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
       testState.remove()
@@ -148,7 +148,7 @@ class ValueStateSuite extends SharedSparkSession
 
       val testState1: ValueState[Long] = handle.getValueState[Long]("testState1")
       val testState2: ValueState[Long] = handle.getValueState[Long]("testState2")
-      ImplicitKeyTracker.setImplicitKey("test_key")
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
       testState1.remove()

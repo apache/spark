@@ -41,7 +41,7 @@ class ValueStateImpl[S](
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
   private def encodeKey(): UnsafeRow = {
-    val keyOption = ImplicitKeyTracker.getImplicitKeyOption
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
       throw new UnsupportedOperationException("Implicit key not found for operation on" +
         s"stateName=$stateName")
