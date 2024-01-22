@@ -1452,8 +1452,8 @@ class SparkConnectPlanner(
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
     case named: NamedExpression => named
     case c: Cast =>
-      c.transformUp {
-        case c @ Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
+      c.transformUp { case c @ Cast(_: NamedExpression, _, _, _) =>
+        UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
         case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
