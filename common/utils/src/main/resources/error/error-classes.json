@@ -506,6 +506,24 @@
     ],
     "sqlState" : "22004"
   },
+  "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT" : {
+    "message" : [
+      "Cannot process input data types for the expression: <expression>."
+    ],
+    "subClass" : {
+      "MISMATCHED_TYPES" : {
+        "message" : [
+          "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
+        ]
+      },
+      "NO_INPUTS" : {
+        "message" : [
+          "The collection of input data types must not be empty."
+        ]
+      }
+    },
+    "sqlState" : "42K09"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -895,7 +913,7 @@
   },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
-      "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
+      "Failed to find the data source: <provider>. Make sure the provider name is correct and the package is properly registered and compatible with your Spark version."
     ],
     "sqlState" : "42K02"
   },
@@ -1991,7 +2009,7 @@
         ]
       }
     },
-    "sqlState" : "ID001"
+    "sqlState" : "42K0K"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -3619,7 +3637,7 @@
   },
   "UNSUPPORTED_DATA_SOURCE_SAVE_MODE" : {
     "message" : [
-      "The data source '<source>' cannot be written in the <createMode> mode. Please use either the \"Append\" or \"Overwrite\" mode instead."
+      "The data source \"<source>\" cannot be written in the <createMode> mode. Please use either the \"Append\" or \"Overwrite\" mode instead."
     ],
     "sqlState" : "0A000"
   },

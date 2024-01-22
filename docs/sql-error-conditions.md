@@ -419,6 +419,14 @@ The comparator has returned a NULL for a comparison between `<firstValue>` and `
 It should return a positive integer for "greater than", 0 for "equal" and a negative integer for "less than".
 To revert to deprecated behavior where NULL is treated as 0 (equal), you must set "spark.sql.legacy.allowNullComparisonResultInArraySort" to "true".
 
+### [COMPLEX_EXPRESSION_UNSUPPORTED_INPUT](sql-error-conditions-complex-expression-unsupported-input-error-class.html)
+
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot process input data types for the expression: `<expression>`.
+
+For more details see [COMPLEX_EXPRESSION_UNSUPPORTED_INPUT](sql-error-conditions-complex-expression-unsupported-input-error-class.html)
+
 ### CONCURRENT_QUERY
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -496,7 +504,7 @@ Data source '`<provider>`' not found. Please make sure the data source is regist
 
 [SQLSTATE: 42K02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to find the data source: `<provider>`. Please find packages at `https://spark.apache.org/third-party-projects.html`.
+Failed to find the data source: `<provider>`. Make sure the provider name is correct and the package is properly registered and compatible with your Spark version.
 
 ### DATA_SOURCE_TABLE_SCHEMA_MISMATCH
 
@@ -1169,7 +1177,7 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
-SQLSTATE: ID001
+[SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Invalid inverse distribution function `<funcName>`.
 
@@ -2360,7 +2368,7 @@ Unsupported data type `<typeName>`.
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-The data source '`<source>`' cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
+The data source "`<source>`" cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 

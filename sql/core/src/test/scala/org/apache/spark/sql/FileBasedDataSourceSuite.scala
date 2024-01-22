@@ -322,7 +322,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a)`",
-          "columnType" -> "\"STRUCT<a: INT>\"",
+          "columnType" -> "\"STRUCT<a: INT NOT NULL>\"",
           "format" -> "Text")
       )
 
@@ -404,7 +404,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a, b)`",
-          "columnType" -> "\"STRUCT<a: INT, b: STRING>\"",
+          "columnType" -> "\"STRUCT<a: INT NOT NULL, b: STRING>\"",
           "format" -> "CSV")
       )
 

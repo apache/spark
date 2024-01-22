@@ -2983,6 +2983,9 @@ case class Sequence(
 
   override def nullable: Boolean = children.exists(_.nullable)
 
+  // If step is defined, then an error will be thrown if the start and stop do not satisfy the step.
+  override lazy val throwable: Boolean = stepOpt.isDefined
+
   override def dataType: ArrayType = ArrayType(start.dataType, containsNull = false)
 
   override def checkInputDataTypes(): TypeCheckResult = {

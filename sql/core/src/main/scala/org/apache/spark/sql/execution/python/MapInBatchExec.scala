@@ -46,8 +46,9 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
-    val pythonFunction = func.asInstanceOf[PythonUDF].func
-    val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
+    val pythonUDF = func.asInstanceOf[PythonUDF]
+    val pythonFunction = pythonUDF.func
+    val chainedFunc = Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))
     val evaluatorFactory = new MapInBatchEvaluatorFactory(
       output,
       chainedFunc,
