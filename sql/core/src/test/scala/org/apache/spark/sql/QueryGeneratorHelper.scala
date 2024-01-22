@@ -30,8 +30,8 @@ package org.apache.spark.sql
  * 2. Define named expressions representing the columns to select using the Attribute class, and
  *    define the table relation with TableRelation.
  * {{{
- *   val col1Attr = Attribute("column1", qualifier = Some(tableName))
- *   val col2Attr = Attribute("column2", qualifier = Some(tableName))
+ *   val col1Attr = Attribute("col1", qualifier = Some(tableName))
+ *   val col2Attr = Attribute("col2", qualifier = Some(tableName))
  *   val table = TableRelation(tableName, Seq(col1Attr, col2Attr))
  * }}}
  * 3. Create a SELECT clause using the SelectClause class, and specify the FROM clause with the
@@ -55,7 +55,7 @@ package org.apache.spark.sql
  *   println(myQuery.toString)
  * }}}
  *
- * Output: SELECT t1.column1 FROM t1 WHERE t1.column1 = t1.column2
+ * Output: SELECT t1.col1 FROM t1 WHERE t1.col1 = t1.col2
  *
  */
 trait QueryGeneratorHelper {
