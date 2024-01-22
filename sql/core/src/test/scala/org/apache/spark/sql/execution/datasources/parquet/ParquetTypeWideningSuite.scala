@@ -18,8 +18,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetOutputFormat}
 
