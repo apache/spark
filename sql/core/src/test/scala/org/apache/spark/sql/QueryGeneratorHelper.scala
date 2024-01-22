@@ -200,7 +200,6 @@ trait QueryGeneratorHelper {
 
   /**
    * Case class that encapsulates a Query, built with its different clauses.
-   * @param comment A string that will be printed as a comment a line before the query string.
    */
   case class Query(
       selectClause: SelectClause,
@@ -215,10 +214,9 @@ trait QueryGeneratorHelper {
       def getOptionClauseString(optionalClause: Option[Clause]): String =
         if (optionalClause.isDefined) { " " + optionalClause.get.toString } else { "" }
 
-      val queryString = f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
+      f"$selectClause $fromClause${getOptionClauseString(whereClause)}" +
         f"${getOptionClauseString(groupByClause)}${getOptionClauseString(orderByClause)}" +
         f"${getOptionClauseString(limitClause)}"
-      queryString
     }
   }
 }
