@@ -511,7 +511,7 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
       assert("BatchScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
@@ -521,7 +521,7 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithExtended).size === 3)
       assert("BatchScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
@@ -566,7 +566,7 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
 
       // `extended = false` only displays the physical plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
       assert("ContinuousScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
@@ -574,7 +574,7 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithExtended).size === 3)
       assert("ContinuousScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
