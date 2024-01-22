@@ -115,7 +115,8 @@ class StreamStreamJoinStatePartitionReader(
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
         formatVersion,
-        skippedNullValueCount = None
+        skippedNullValueCount = None,
+        useStateStoreCoordinator = false
       )
     }
 

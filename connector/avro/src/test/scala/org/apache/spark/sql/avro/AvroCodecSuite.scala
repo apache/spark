@@ -20,6 +20,7 @@ package org.apache.spark.sql.avro
 import java.util.Locale
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.FileSourceCodecSuite
 import org.apache.spark.sql.internal.SQLConf
 
@@ -57,5 +58,21 @@ class AvroCodecSuite extends FileSourceCodecSuite {
       sqlState = Some("42704"),
       parameters = Map("codecName" -> "unsupported")
     )
+  }
+
+  test("SPARK-46759: compression level support for zstandard codec") {
+    Seq("9", "1").foreach { level =>
+      withSQLConf(
+        (SQLConf.AVRO_COMPRESSION_CODEC.key -> "zstandard"),
+        (SQLConf.AVRO_ZSTANDARD_LEVEL.key -> level)) {
+        withTable("avro_t") {
+          sql(
+            s"""CREATE TABLE avro_t
+               |USING $format
+               |AS SELECT 1 as id""".stripMargin)
+          checkAnswer(spark.table("avro_t"), Seq(Row(1)))
+        }
+      }
+    }
   }
 }

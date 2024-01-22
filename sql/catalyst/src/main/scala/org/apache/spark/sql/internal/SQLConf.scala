@@ -3625,7 +3625,29 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
-    .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+    .createOptional
+
+  val AVRO_XZ_LEVEL = buildConf("spark.sql.avro.zx.level")
+    .doc("Compression level for the xz codec used in writing of AVRO files. " +
+      "Valid value must be in the range of from 1 to 9 inclusive " +
+      "The default value is 6.")
+    .version("4.0.0")
+    .intConf
+    .checkValue(v => v > 0 && v <= 9, "The value must be in the range of from 1 to 9 inclusive.")
+    .createOptional
+
+  val AVRO_ZSTANDARD_LEVEL = buildConf("spark.sql.avro.zstandard.level")
+    .doc("Compression level for the zstandard codec used in writing of AVRO files. " +
+      "The default value is 3.")
+    .version("4.0.0")
+    .intConf
+    .createOptional
+
+  val AVRO_ZSTANDARD_BUFFER_POOL_ENABLED = buildConf("spark.sql.avro.zstandard.bufferPool.enabled")
+    .doc("If true, enable buffer pool of ZSTD JNI library when writing of AVRO files")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
@@ -5420,8 +5442,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
 
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
-
-  def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
 
   def replaceDatabricksSparkAvroEnabled: Boolean =
     getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)

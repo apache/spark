@@ -126,5 +126,5 @@ private[spark] object MountVolumesFeatureStep {
   val PVC_ON_DEMAND = "OnDemand"
   val PVC = "PersistentVolumeClaim"
   val PVC_POSTFIX = "-pvc"
-  val PVC_ACCESS_MODE = "ReadWriteOnce"
+  val PVC_ACCESS_MODE = "ReadWriteOncePod"
 }
