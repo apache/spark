@@ -57,9 +57,8 @@ private[kinesis] class KinesisCheckpointer(
   /**
    * Stop tracking the specified shardId.
    *
-   * If a checkpointer is provided, e.g. on IRecordProcessor.shutdown [[ShutdownReason.TERMINATE]],
-   * we will use that to make the final checkpoint. If `null` is provided, we will not make the
-   * checkpoint, e.g. in case of [[ShutdownReason.ZOMBIE]].
+   * If a checkpointer is provided, we will use that to make the final checkpoint. If `null`
+   * is provided, we will not make the checkpoint, e.g. in case of [[ShutdownReason.ZOMBIE]].
    */
   def removeCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     synchronized {

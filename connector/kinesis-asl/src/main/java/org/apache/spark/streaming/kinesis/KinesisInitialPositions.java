@@ -16,7 +16,6 @@
  */
 package org.apache.spark.streaming.kinesis;
 
-
 import software.amazon.kinesis.common.InitialPositionInStream;
 
 import java.io.Serializable;

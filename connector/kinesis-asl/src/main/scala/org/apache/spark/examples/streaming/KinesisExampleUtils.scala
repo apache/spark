@@ -27,7 +27,7 @@ private[streaming] object KinesisExampleUtils {
     val kinesisServiceMetadata = new KinesisServiceMetadata()
     kinesisServiceMetadata.regions
       .asScala
-      .find(r => kinesisServiceMetadata.endpointFor(r).toString.equals(uri.getHost))
+      .find(r => kinesisServiceMetadata.endpointFor(r).equals(uri))
       .map(_.id)
       .getOrElse(
         throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
