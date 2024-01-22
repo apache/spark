@@ -419,6 +419,14 @@ The comparator has returned a NULL for a comparison between `<firstValue>` and `
 It should return a positive integer for "greater than", 0 for "equal" and a negative integer for "less than".
 To revert to deprecated behavior where NULL is treated as 0 (equal), you must set "spark.sql.legacy.allowNullComparisonResultInArraySort" to "true".
 
+### [COMPLEX_EXPRESSION_UNSUPPORTED_INPUT](sql-error-conditions-complex-expression-unsupported-input-error-class.html)
+
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot process input data types for the expression: `<expression>`.
+
+For more details see [COMPLEX_EXPRESSION_UNSUPPORTED_INPUT](sql-error-conditions-complex-expression-unsupported-input-error-class.html)
+
 ### CONCURRENT_QUERY
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -1169,7 +1177,7 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
-SQLSTATE: ID001
+[SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Invalid inverse distribution function `<funcName>`.
 

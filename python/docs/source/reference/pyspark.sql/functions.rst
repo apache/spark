@@ -252,6 +252,7 @@ Date and Timestamp Functions
     datediff
     datepart
     day
+    dayname
     dayofmonth
     dayofweek
     dayofyear

@@ -506,6 +506,24 @@
     ],
     "sqlState" : "22004"
   },
+  "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT" : {
+    "message" : [
+      "Cannot process input data types for the expression: <expression>."
+    ],
+    "subClass" : {
+      "MISMATCHED_TYPES" : {
+        "message" : [
+          "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
+        ]
+      },
+      "NO_INPUTS" : {
+        "message" : [
+          "The collection of input data types must not be empty."
+        ]
+      }
+    },
+    "sqlState" : "42K09"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -1991,7 +2009,7 @@
         ]
       }
     },
-    "sqlState" : "ID001"
+    "sqlState" : "42K0K"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
