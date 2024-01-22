@@ -209,6 +209,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the three-letter abbreviated day name for the given number of days since 1970-01-01.
+   */
+  def getDayName(days: Int): UTF8String = {
+    val dayName = DayOfWeek
+      .of(getWeekDay(days) + 1)
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
+
+    UTF8String.fromString(dayName)
+  }
+
+  /**
    * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
    * timestamp at the given time zone, adds months, and converts the resulted local timestamp
    * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.

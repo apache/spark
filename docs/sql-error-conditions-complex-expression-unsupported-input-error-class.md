@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_INVERSE_DISTRIBUTION_FUNCTION error class
-displayTitle: INVALID_INVERSE_DISTRIBUTION_FUNCTION error class
+title: COMPLEX_EXPRESSION_UNSUPPORTED_INPUT error class
+displayTitle: COMPLEX_EXPRESSION_UNSUPPORTED_INPUT error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,22 +19,18 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Invalid inverse distribution function `<funcName>`.
+Cannot process input data types for the expression: `<expression>`.
 
 This error class has the following derived error classes:
 
-## DISTINCT_UNSUPPORTED
+## MISMATCHED_TYPES
 
-Cannot use DISTINCT with WITHIN GROUP.
+All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types `<inputTypes>`.
 
-## WITHIN_GROUP_MISSING
+## NO_INPUTS
 
-WITHIN GROUP is required for inverse distribution function.
-
-## WRONG_NUM_ORDERINGS
-
-Requires `<expectedNum>` orderings in WITHIN GROUP but got `<actualNum>`.
+The collection of input data types must not be empty.
 
 

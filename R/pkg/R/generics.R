@@ -1024,6 +1024,10 @@ setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 #' @name NULL
 setGeneric("monthname", function(x) { standardGeneric("monthname") })
 
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("dayname", function(x) { standardGeneric("dayname") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("decode", function(x, charset) { standardGeneric("decode") })

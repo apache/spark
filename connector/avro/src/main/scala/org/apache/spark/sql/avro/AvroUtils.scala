@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
-import org.apache.avro.mapred.FsInput
+import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
@@ -104,18 +104,25 @@ private[sql] object AvroUtils extends Logging {
 
     parsedOptions.compression.toLowerCase(Locale.ROOT) match {
       case codecName if AvroCompressionCodec.values().exists(c => c.lowerCaseName() == codecName) =>
+        val jobConf = job.getConfiguration
         AvroCompressionCodec.fromString(codecName) match {
           case UNCOMPRESSED =>
-            job.getConfiguration.setBoolean("mapred.output.compress", false)
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", false)
           case compressed =>
-            job.getConfiguration.setBoolean("mapred.output.compress", true)
-            job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", true)
+            jobConf.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
             if (compressed.getSupportCompressionLevel) {
               val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
                 compressed.getDefaultCompressionLevel.toString)
               logInfo(s"Compressing Avro output using the $codecName codec at level $level")
-              val s = if (compressed == ZSTANDARD) "zstd" else codecName
-              job.getConfiguration.setInt(s"avro.mapred.$s.level", level.toInt)
+              val s = if (compressed == ZSTANDARD) {
+                val bufferPoolEnabled = sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED)
+                jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY, bufferPoolEnabled)
+                "zstd"
+              } else {
+                codecName
+              }
+              jobConf.setInt(s"avro.mapred.$s.level", level.toInt)
             } else {
               logInfo(s"Compressing Avro output using the $codecName codec")
             }

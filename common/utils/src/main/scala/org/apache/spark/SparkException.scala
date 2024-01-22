@@ -106,6 +106,21 @@ object SparkException {
       messageParameters = Map("message" -> msg),
       cause = cause)
   }
+
+  /**
+   * This is like the Scala require precondition, except it uses SparkIllegalArgumentException.
+   * @param requirement The requirement you want to check
+   * @param errorClass The error class to type if the requirement isn't passed
+   * @param messageParameters Message parameters to append to the message
+   */
+  def require(
+      requirement: Boolean,
+      errorClass: String,
+      messageParameters: Map[String, String]): Unit = {
+    if (!requirement) {
+      throw new SparkIllegalArgumentException(errorClass, messageParameters)
+    }
+  }
 }
 
 /**
