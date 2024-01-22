@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Stable
  */
 @Stable
 class StringType private(val collation: String) extends AtomicType with Serializable {
-  def isDefaultCollation: Boolean = collation == "default"
+  def isDefaultCollation: Boolean = collation == "UCS_BASIC"
 
   override def toString: String = if (this.isDefaultCollation) "String" else s"String($collation)"
   override def typeName: String = if (this.isDefaultCollation) "string" else s"string($collation)"
@@ -47,6 +47,6 @@ class StringType private(val collation: String) extends AtomicType with Serializ
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType("default") {
+case object StringType extends StringType("UCS_BASIC") {
   def apply(collation: String): StringType = new StringType(collation)
 }

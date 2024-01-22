@@ -492,7 +492,10 @@ abstract class HashExpression[E] extends Expression {
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
     case st: StringType =>
-      val hash = CollatorFactory.getCollationAwareHash(input, st.collation)
+      // TODO: Fix this later, this doesn't make much sense to be like this.
+      val collatorId = CollatorFactory.getInstance().collationNameToId(st.collation)
+      val hash = CollatorFactory.getInfoForId(collatorId).hashFunction.apply(
+        UTF8String.fromString(input))
       genHashLong(hash.toString, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>

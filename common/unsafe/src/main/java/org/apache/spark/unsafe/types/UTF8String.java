@@ -22,7 +22,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -32,8 +31,6 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.util.CollatorFactory;
-import static org.apache.spark.sql.catalyst.util.CollatorFactory.getComparator;
-import static org.apache.spark.sql.catalyst.util.CollatorFactory.installComparator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -215,7 +212,7 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
   }
 
   public UTF8String installCollationAwareComparator(String collationName) {
-    this.comparatorId = installComparator(collationName);
+    this.comparatorId = CollatorFactory.getInstance().collationNameToId(collationName);
     return this;
   }
 
@@ -311,10 +308,6 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
    * @param until the position after last code point, exclusive.
    */
   public UTF8String substring(final int start, final int until) {
-    if (this.comparatorId != 0) {
-      throw new RuntimeException("Can't do substring on collated string.");
-    }
-
     if (until <= start || start >= numBytes) {
       return EMPTY_UTF8;
     }
@@ -342,10 +335,6 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
   }
 
   public UTF8String substringSQL(int pos, int length) {
-    if (this.comparatorId != 0) {
-      throw new RuntimeException("Can't do substring on collated string.");
-    }
-
     // Information regarding the pos calculation:
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
     // negative indices for start positions. If a start index i is greater than 0, it
@@ -1024,9 +1013,6 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
       if (input == null) {
         return null;
       }
-      if (input.comparatorId != commonComparator) {
-          throw new RuntimeException("Can't concat strings with different collations.");
-      }
       totalLength += input.numBytes;
     }
 
@@ -1495,35 +1481,28 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
     return fromBytes(bytes);
   }
 
+  public int binaryCompare(@Nonnull final UTF8String other) {
+    return ByteArray.compareBinary(
+            base, offset, numBytes, other.base, other.offset, other.numBytes);
+  }
+
   @Override
   public int compareTo(@Nonnull final UTF8String other) {
-    if (comparatorId == 0) {
-      return ByteArray.compareBinary(
-              base, offset, numBytes, other.base, other.offset, other.numBytes);
-    } else {
-      Comparator<UTF8String> comparator = getComparator(comparatorId);
-      return comparator.compare(this, other);
-    }
+    return CollatorFactory.getInfoForId(comparatorId).comparator.compare(this, other);
   }
 
   public int compare(final UTF8String other) {
     return compareTo(other);
   }
 
+  public boolean binaryEquals(final UTF8String other) {
+    return ByteArrayMethods.arrayEquals(base, offset, other.base, other.offset, numBytes);
+  }
+
   @Override
   public boolean equals(final Object other) {
     if (other instanceof UTF8String o) {
-      if (comparatorId == 0)
-      {
-        if (numBytes != o.numBytes) {
-          return false;
-        }
-        return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
-      }
-      else
-      {
-        return compareTo(o) == 0;
-      }
+      return CollatorFactory.getInfoForId(comparatorId).equalsFunction.apply(this, o);
     } else {
       return false;
     }
@@ -1692,12 +1671,13 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
 
   @Override
   public int hashCode() {
-    if (comparatorId == 0) {
-      return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
-    } else {
-      return CollatorFactory.getCollationAwareHash(this.toString(), comparatorId);
-    }
+    return CollatorFactory.getInfoForId(comparatorId).hashFunction.apply(this);
   }
+
+  public int binaryHash() {
+    return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
+  }
+
 
   /**
    * Soundex mapping table

@@ -30,8 +30,8 @@ object UTF8StringBenchmark extends BenchmarkBase {
         (UTF8String.fromString("a" * 4), UTF8String.fromString("a" * 4), "strlen(4) equal strings"),
       )
 
-      val collationName = "en_US-secondary"
-      val collationId = CollatorFactory.installComparator(collationName)
+      val collationName = "sr-ci-as"
+      val collationId = CollatorFactory.getInstance().collationNameToId(collationName)
 
       inputs.foreach(input => {
         val (sourceString, targetString, description) = input

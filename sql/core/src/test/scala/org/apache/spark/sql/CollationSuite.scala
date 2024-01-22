@@ -25,24 +25,14 @@ class CollationSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
-  // Collation pre-read - https://docs.oracle.com/javase/8/docs/api/java/text/Collator.html
-  // You can set a Collator's strength property to determine the level of difference considered
-  // significant in comparisons.
-  // Four strengths are provided:
-  // PRIMARY, SECONDARY, TERTIARY, and IDENTICAL.
-  // The exact assignment of strengths to language features is locale dependant.
-  // For example, in Czech, "e" and "f" are considered primary differences,
-  // while "e" and "ě" are secondary differences,
-  // "e" and "E" are tertiary differences and "e" and "e" are identical.
-
   test("collate keyword") {
     // Collated row is a simple string.
-    checkAnswer(sql("select collate('aaa', 'sr-primary')"), Row("aaa"))
-    assert(sql("select collate('aaa', 'sr-primary')").schema(0).dataType ==
-      StringType("sr-primary"))
+    checkAnswer(sql("select collate('aaa', 'sr-ci-ai')"), Row("aaa"))
+    assert(sql("select collate('aaa', 'sr-ci-ai')").schema(0).dataType ==
+      StringType("sr-ci-ai"))
 
     // Serbian case + accent insensitive ordering
-    var collationName = "sr-primary"
+    var collationName = "sr-ci-ai"
     checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
     checkAnswer(
       sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"), Row(true))
@@ -59,7 +49,7 @@ class CollationSuite extends QueryTest
       Row(true))
 
     // Serbian case insensitive ordering but accent sensitive
-    collationName = "sr-secondary"
+    collationName = "sr-ci-as"
     checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
     checkAnswer(
       sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"),
@@ -81,7 +71,7 @@ class CollationSuite extends QueryTest
       Row(true))
 
     // Serbian case and accent sensitive ordering.
-    collationName = "sr-tertiary"
+    collationName = "sr-cs-as"
     checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
     checkAnswer(
       sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"),
@@ -118,7 +108,7 @@ class CollationSuite extends QueryTest
       SELECT fruit FROM
       VALUES ('äpfel'), ('Äpfel'), ('Apfel'), ('apfel'), ('Banane'), ('banane')
        as data(fruit)
-      ORDER BY collate(fruit, 'de-tertiary')
+      ORDER BY collate(fruit, 'de-cs-as')
       """),
       Seq(
         Row("apfel"), Row("Apfel"),
@@ -129,7 +119,7 @@ class CollationSuite extends QueryTest
   test("agg simple") {
     checkAnswer(sql("""
       WITH t AS (
-        SELECT collate(col1, 'sr-primary') as c
+        SELECT collate(col1, 'sr-ci-ai') as c
         FROM
         VALUES ('aaa'), ('bbb'), ('AAA'), ('BBB')
       )
@@ -143,7 +133,7 @@ class CollationSuite extends QueryTest
     checkAnswer(sql(
       """
       with t as (
-        SELECT collate(c, 'sr-primary') as c
+        SELECT collate(c, 'sr-ci-ai') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
@@ -155,7 +145,7 @@ class CollationSuite extends QueryTest
     checkAnswer(sql(
       """
       with t as (
-        SELECT collate(c, 'sr-secondary') as c
+        SELECT collate(c, 'sr-ci-as') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
@@ -168,7 +158,7 @@ class CollationSuite extends QueryTest
     checkAnswer(sql(
       """
       with t as (
-        SELECT collate(c, 'sr-tertiary') as c
+        SELECT collate(c, 'sr-cs-as') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
@@ -180,13 +170,13 @@ class CollationSuite extends QueryTest
   test("views should propagate collation") {
     sql(
       """
-        SELECT collate(c, 'sr-primary') as c
+        SELECT collate(c, 'sr-ci-ai') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
       """).createOrReplaceTempView("V")
 
-    checkAnswer(sql("SELECT DISTINCT collation(c) FROM V"), Row("sr-primary"))
+    checkAnswer(sql("SELECT DISTINCT collation(c) FROM V"), Row("sr-ci-ai"))
   }
 
   test("in operator") {
@@ -195,40 +185,40 @@ class CollationSuite extends QueryTest
         SELECT * FROM VALUES ('ććć'), ('ccc') as data(c)
       """).createOrReplaceTempView("V")
 
-    // Primary
-    checkAnswer(sql("SELECT collate('CCC', 'sr-primary') IN " +
-      "(SELECT collate(c, 'sr-primary') FROM V)"), Row(true))
-    checkAnswer(sql("SELECT collate('ččč', 'sr-primary') IN " +
-      "(SELECT collate(c, 'sr-primary') FROM V)"), Row(true))
-    checkAnswer(sql("SELECT collate('xxx', 'sr-primary') IN " +
-      "(SELECT collate(c, 'sr-primary') FROM V)"), Row(false))
+    // Case and accent insensitive
+    checkAnswer(sql("SELECT collate('CCC', 'sr-ci-ai') IN " +
+      "(SELECT collate(c, 'sr-ci-ai') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('ččč', 'sr-ci-ai') IN " +
+      "(SELECT collate(c, 'sr-ci-ai') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('xxx', 'sr-ci-ai') IN " +
+      "(SELECT collate(c, 'sr-ci-ai') FROM V)"), Row(false))
 
-    // Secondary
-    checkAnswer(sql("SELECT collate('CCC', 'sr-secondary') IN " +
-      "(SELECT collate(c, 'sr-secondary') FROM V)"), Row(true))
-    checkAnswer(sql("SELECT collate('ččč', 'sr-secondary') IN " +
-      "(SELECT collate(c, 'sr-secondary') FROM V)"), Row(false))
+    // Case insensitive but accent sensitive
+    checkAnswer(sql("SELECT collate('CCC', 'sr-ci-as') IN " +
+      "(SELECT collate(c, 'sr-ci-as') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('ččč', 'sr-ci-as') IN " +
+      "(SELECT collate(c, 'sr-ci-as') FROM V)"), Row(false))
 
-    // Tertiary
-    checkAnswer(sql("SELECT collate('CCC', 'sr-tertiary') IN " +
-      "(SELECT collate(c, 'sr-tertiary') FROM V)"), Row(false))
-    checkAnswer(sql("SELECT collate('ččč', 'sr-tertiary') IN " +
-      "(SELECT collate(c, 'sr-tertiary') FROM V)"), Row(false))
-    checkAnswer(sql("SELECT collate('ccc', 'sr-tertiary') IN " +
-      "(SELECT collate(c, 'sr-tertiary') FROM V)"), Row(true))
+    // Case and accent sensitive
+    checkAnswer(sql("SELECT collate('CCC', 'sr-cs-as') IN " +
+      "(SELECT collate(c, 'sr-cs-as') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('ččč', 'sr-cs-as') IN " +
+      "(SELECT collate(c, 'sr-cs-as') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('ccc', 'sr-cs-as') IN " +
+      "(SELECT collate(c, 'sr-cs-as') FROM V)"), Row(true))
   }
 
   test("join operator") {
     // Ignore accents and casing.
     sql(
       """
-        SELECT collate(c, 'sr-primary') as c FROM VALUES
+        SELECT collate(c, 'sr-ci-ai') as c FROM VALUES
         ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
         as data(c)
       """).createOrReplaceTempView("V1")
     sql(
       """
-        SELECT collate(c, 'sr-primary') as c FROM VALUES ('ccc'), ('CCC') as data(c)
+        SELECT collate(c, 'sr-ci-ai') as c FROM VALUES ('ccc'), ('CCC') as data(c)
       """).createOrReplaceTempView("V2")
 
     // Everyone is going to pair with everyone.
@@ -246,13 +236,13 @@ class CollationSuite extends QueryTest
     // Ignore casing but not accents
     sql(
       """
-        SELECT collate(c, 'sr-secondary') as c FROM VALUES
+        SELECT collate(c, 'sr-ci-as') as c FROM VALUES
         ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
         as data(c)
       """).createOrReplaceTempView("V1")
     sql(
       """
-        SELECT collate(c, 'sr-secondary') as c FROM VALUES ('ććć'), ('CCC') as data(c)
+        SELECT collate(c, 'sr-ci-as') as c FROM VALUES ('ććć'), ('CCC') as data(c)
       """).createOrReplaceTempView("V2")
 
     checkAnswer(sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c"),
@@ -263,13 +253,13 @@ class CollationSuite extends QueryTest
     // Respect casing and accents
     sql(
       """
-        SELECT collate(c, 'sr-tertiary') as c FROM VALUES
+        SELECT collate(c, 'sr-cs-as') as c FROM VALUES
         ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
         as data(c)
       """).createOrReplaceTempView("V1")
     sql(
       """
-        SELECT collate(c, 'sr-tertiary') as c FROM VALUES ('ććć'), ('CCC') as data(c)
+        SELECT collate(c, 'sr-cs-as') as c FROM VALUES ('ććć'), ('CCC') as data(c)
       """).createOrReplaceTempView("V2")
 
     checkAnswer(sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c"),
@@ -281,10 +271,10 @@ class CollationSuite extends QueryTest
     // TODO: Filter pushdown and partitioning are todos.
     val tableName = "parquet_dummy_t1"
     withTable(tableName) {
-      sql(s"CREATE TABLE IF NOT EXISTS $tableName (c1 STRING COLLATE 'sr-primary') USING PARQUET")
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName (c1 STRING COLLATE 'sr-ci-ai') USING PARQUET")
       sql(s"INSERT INTO $tableName VALUES ('aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA')")
-      checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"), Seq(Row("sr-primary")))
+      checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"), Seq(Row("sr-ci-ai")))
       checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
     }
   }

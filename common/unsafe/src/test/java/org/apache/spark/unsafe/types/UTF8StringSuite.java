@@ -886,10 +886,8 @@ public class UTF8StringSuite {
   {
     // Case-insensitive and accent insensitive.
     {
-      int collationId = CollatorFactory.installComparator("en_US-primary");
-      assertEquals(collationId, 1);
-      UTF8String collatedUTF8String = UTF8String.fromString("ćčc");
-      collatedUTF8String.installCollationAwareComparator(collationId);
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-ai");
+      UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
       assertEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
       assertEquals(collatedUTF8String, UTF8String.fromString("ćčc", collationId));
       assertEquals(collatedUTF8String, UTF8String.fromString("ccc", collationId));
@@ -900,8 +898,7 @@ public class UTF8StringSuite {
 
     // Move to secondary strength (ignore case, respect accents).
     {
-      int collationId = CollatorFactory.installComparator("en_US-secondary");
-      assertEquals(collationId, 2);
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-as");
       UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
       assertEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
       assertEquals(collatedUTF8String, UTF8String.fromString("ĆČC", collationId));
@@ -910,8 +907,7 @@ public class UTF8StringSuite {
 
     // Tertiary strength (respect both)
     {
-      int collationId = CollatorFactory.installComparator("en_US-tertiary");
-      assertEquals(collationId, 3);
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr-cs-as");
       UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
       assertNotEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
       assertNotEquals(collatedUTF8String, UTF8String.fromString("ĆČC", collationId));
@@ -919,47 +915,48 @@ public class UTF8StringSuite {
 
       assertEquals(collatedUTF8String, UTF8String.fromString("ćčc", collationId));
     }
-
-    // TODO: Cache is stateful, clear it after each test.
   }
 
   @Test
   public void collatedStringHashing() {
     // Case-insensitive and accent insensitive.
     {
-      String collationName = "en_US-primary";
-      int collatedHash = CollatorFactory.getCollationAwareHash("ćčc", collationName);
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-ai");
+      var hashFunc = CollatorFactory.getInfoForId(collationId).hashFunction;
 
-      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ĆČC", collationName));
-      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ccc", collationName));
-      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("CCC", collationName));
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("cba", collationName));
+      int collatedHash = hashFunc.apply(UTF8String.fromString("ćčc", collationId));
+
+      assertEquals(collatedHash, hashFunc.apply(UTF8String.fromString("ĆČC", collationId)));
+      assertEquals(collatedHash, hashFunc.apply(UTF8String.fromString("ccc", collationId)));
+      assertEquals(collatedHash, hashFunc.apply(UTF8String.fromString("CCC", collationId)));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("cba", collationId)));
     }
 
     // Move to secondary strength (ignore case, respect accents).
     {
-      String collationName = "en_US-secondary";
-      int collatedHash = CollatorFactory.getCollationAwareHash("ćčc", collationName);
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-as");
+      var hashFunc = CollatorFactory.getInfoForId(collationId).hashFunction;
 
-      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ĆČC", collationName));
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("ccc", collationName));
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("CCC", collationName));
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("cba", collationName));
+      int collatedHash = hashFunc.apply(UTF8String.fromString("ćčc", collationId));
+
+      assertEquals(collatedHash, hashFunc.apply(UTF8String.fromString("ĆČC", collationId)));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("ccc", collationId)));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("CCC", collationId)));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("cba", collationId)));
     }
 
     // Tertiary strength (respect both)
     {
-      String collationName = "en_US-tertiary";
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr-cs-as");
+      var hashFunc = CollatorFactory.getInfoForId(collationId).hashFunction;
 
-      int collatedHash = CollatorFactory.getCollationAwareHash("ćčc", collationName);
+      int collatedHash = hashFunc.apply(UTF8String.fromString("ćčc", collationId));
 
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("ĆČC", collationName));
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("ccc", collationName));
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("CCC", collationName));
-      assertNotEquals(collatedHash, CollatorFactory.getCollationAwareHash("cba", collationName));
-      assertEquals(collatedHash, CollatorFactory.getCollationAwareHash("ćčc", collationName));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("ĆČC", collationId)));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("ccc", collationId)));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("CCC", collationId)));
+      assertNotEquals(collatedHash, hashFunc.apply(UTF8String.fromString("cba", collationId)));
+      assertEquals(collatedHash, hashFunc.apply(UTF8String.fromString("ćčc", collationId)));
     }
-
-    // TODO: Cache is stateful, clear it after each test.
   }
 }

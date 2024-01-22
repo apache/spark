@@ -172,7 +172,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected final def castToStringCode(
       from: DataType, ctx: CodegenContext, collation: Option[String]): (ExprValue, ExprValue)
     => Block = {
-    val collatorId = CollatorFactory.installComparator(collation.getOrElse("default"))
+    val collatorId = CollatorFactory.getInstance().collationNameToId(
+      collation.getOrElse(CollatorFactory.DEFAULT_COLLATION_NAME))
 
     from match {
       case BinaryType if useHexFormatForBinary =>
