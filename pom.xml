@@ -2790,8 +2790,8 @@
             <artifactId>jackson-core</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.eclipse.collections</groupId>
-            <artifactId>eclipse-collections</artifactId>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
