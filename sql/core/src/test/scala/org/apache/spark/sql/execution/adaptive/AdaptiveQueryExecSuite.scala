@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.functions._
@@ -1991,6 +1991,86 @@ class AdaptiveQueryExecSuite
             numPartition = 2 + 4
           )
         }
+      }
+    }
+  }
+
+  test("SPARK-46790: Support coalesce partition through cartesian product") {
+    def checkResultPartition(
+                              df: Dataset[Row],
+                              numCartesianProduct: Int,
+                              numShuffleReader: Int,
+                              numPartition: Int): Unit = {
+      df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case cp: CartesianProductExec => cp
+      }.size == numCartesianProduct)
+      assert(collect(df.queryExecution.executedPlan) {
+        case r: AQEShuffleReadExec => r
+      }.size === numShuffleReader)
+      assert(df.rdd.partitions.length === numPartition)
+    }
+
+    // advisory partition size 1048576 has no special meaning, just a big enough value
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2") {
+        spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+          .toDF().createOrReplaceTempView("t1")
+        spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+          .toDF().createOrReplaceTempView("t2")
+
+        // positive test that could be coalesced
+        checkResultPartition(
+          sql(
+            """
+              |SELECT * FROM
+              |(SELECT key, count(*) FROM t1 GROUP BY key)
+              |JOIN
+              |t2
+              """.stripMargin),
+          numCartesianProduct = 1,
+          numShuffleReader = 1,
+          numPartition = 1 * 4)
+
+        checkResultPartition(
+          sql(
+            """
+              |SELECT * FROM
+              |(SELECT key, count(*) FROM t1 GROUP BY key)
+              |JOIN
+              |t2
+              |JOIN
+              |t1
+              """.stripMargin),
+          2,
+          numShuffleReader = 1,
+          numPartition = 1 * 4 * 2)
+
+        checkResultPartition(
+          sql(
+            """
+              |SELECT * FROM
+              |(SELECT /*+ merge(t2) */ t1.key, t2.key FROM t1 JOIN t2 ON t1.key = t2.key)
+              |JOIN
+              |(SELECT key, count(*) FROM t2 GROUP BY key)
+              |JOIN
+              |t1
+              """.stripMargin),
+          2,
+          numShuffleReader = 3,
+          numPartition = 1 * 1 * 2)
+
+        // negative test
+        checkResultPartition(
+          sql("SELECT * FROM t1 JOIN t2"),
+          1,
+          numShuffleReader = 0,
+          numPartition = 2 * 4)
       }
     }
   }

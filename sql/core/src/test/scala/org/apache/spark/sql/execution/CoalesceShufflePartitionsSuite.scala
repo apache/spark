@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.joins.CartesianProductExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
@@ -438,6 +439,28 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
       // Before SPARK-34790, it will throw an exception when io encryption enabled.
       withSparkSession(test, Int.MaxValue, None, enableIOEncryption)
     }
+  }
+
+  test("SPARK-46790: Reduce the number of shuffle partition for cartesian product") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      val df1 = spark.range(2).join(spark.range(2), "id")
+      val df2 = spark.range(2)
+
+      val resultDf = df1.join(df2)
+      QueryTest.checkAnswer(resultDf, Row(0, 0) :: Row(0, 1) :: Row(1, 0) :: Row(1, 1) :: Nil)
+
+      val finalPlan = resultDf.queryExecution.executedPlan
+        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      assert(
+        finalPlan.collect {
+          case c: CartesianProductExec => c
+        }.size == 1)
+      assert(
+        finalPlan.collect {
+          case r @ CoalescedShuffleRead() => r
+        }.size == 2)
+    }
+    withSparkSession(test, 100, None)
   }
 }
 
