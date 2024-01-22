@@ -140,7 +140,7 @@ class MicroBatchExecution(
             // TODO: operator pushdown.
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
-          val relation = StreamingDataSourceV2Relation(
+            val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
             StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
           })

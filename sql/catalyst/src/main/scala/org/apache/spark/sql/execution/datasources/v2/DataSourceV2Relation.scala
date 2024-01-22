@@ -102,7 +102,7 @@ case class DataSourceV2Relation(
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options)
-    with ExposesMetadataColumns {
+  with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._
 
