@@ -73,7 +73,7 @@ if should_test_connect:
     import numpy as np
     from pyspark.sql.connect.proto import Expression as ProtoExpression
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import DefaultChannelBuilder
+    from pyspark.sql.connect.client import DefaultChannelBuilder, ChannelBuilder
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
@@ -3545,6 +3545,16 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
             self.assertIsNotNone(exception)
             self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
+
+    def test_custom_channel_builder(self):
+        channel = self.spark._client._channel
+        class CustomChannelBuilder(ChannelBuilder):
+            def toChannel(self):
+                return channel
+
+        session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
+        session.sql("select 1 + 1")
+        session.stop()
 
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
