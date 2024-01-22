@@ -150,6 +150,7 @@ case class LogicalRDD(
   }
 
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
+    .filterNot(SubqueryExpression.hasSubquery)
 }
 
 object LogicalRDD extends Logging {
