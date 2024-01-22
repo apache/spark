@@ -62,9 +62,9 @@ In certain scenarios, you may want to use a different docker context/endpoint in
 Docker Desktop.
 
     docker context ls
-    NAME                TYPE                DESCRIPTION                               DOCKER ENDPOINT                                      KUBERNETES ENDPOINT   ORCHESTRATOR
+    NAME                TYPE                DESCRIPTION                               DOCKER ENDPOINT                 KUBERNETES ENDPOINT   ORCHESTRATOR
     default *           moby                Current DOCKER_HOST based configuration   unix:///var/run/docker.sock
-    desktop-linux       moby                Docker Desktop                            unix:///Users/hzyaoqin/.docker/run/docker.sock
+    desktop-linux       moby                Docker Desktop                            unix:///Users/.../docker.sock
 
     docker context use desktop-linux
 
