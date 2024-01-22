@@ -928,6 +928,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     } catch {
       // Hive may have bugs and still throw an exception even if `throwException` is false.
       case e: HiveException if !throwException =>
+        logWarning(e.getMessage)
         null
     }
     if (table != null) {
