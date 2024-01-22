@@ -71,17 +71,17 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
   protected var writer: ArrowStreamWriter = _
 
-protected def close(): Unit = {
-  Utils.tryWithSafeFinally {
-    // end writes footer to the output stream and doesn't clean any resources.
-    // It could throw exception if the output stream is closed, so it should be
-    // in the try block.
-    writer.end()
-  } {
-    root.close()
-    allocator.close()
+  protected def close(): Unit = {
+    Utils.tryWithSafeFinally {
+      // end writes footer to the output stream and doesn't clean any resources.
+      // It could throw exception if the output stream is closed, so it should be
+      // in the try block.
+      writer.end()
+    } {
+      root.close()
+      allocator.close()
+    }
   }
-}
 
   protected override def newWriter(
       env: SparkEnv,

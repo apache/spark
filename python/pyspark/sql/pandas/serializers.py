@@ -19,9 +19,13 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
+from enum import Enum
+import os
+import socket
+from typing import Any
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.loose_version import LooseVersion
-from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
+from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer, write_with_length
 from pyspark.sql.pandas.types import (
     from_arrow_type,
     to_arrow_type,
@@ -1101,6 +1105,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             This function helps to ensure the requirement for Pandas UDFs - Pandas UDFs require a
             START_ARROW_STREAM before the Arrow stream is sent.
 
+            
             START_ARROW_STREAM should be sent after creating the first record batch so in case of
             an error, it can be sent back to the JVM before the Arrow stream starts.
             """
@@ -1116,3 +1121,87 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         batches_to_write = init_stream_yield_batches(serialize_batches())
 
         return ArrowStreamSerializer.dump_stream(self, batches_to_write, stream)
+
+
+class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
+
+    def __init__(
+            self,
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            state_server_port):
+        super(TransformWithStateInPandasSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
+
+        self.state_server_port = state_server_port
+
+        # open state server socket
+        self._client_socket = socket.socket()
+        self._client_socket.connect(("localhost", state_server_port))
+        sockfile = self._client_socket.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+        self.state_serializer = TransformWithStateInPandasStateSerializer(sockfile)
+
+    # Nothing special here, we need to create the handle and read
+    # data in groups.
+    def load_stream(self, stream):
+        data_pandas = super().load_stream(stream)
+
+        for data in data_pandas:
+            yield (self.state_serializer, data)
+
+
+    def dump_stream(self, iterator, stream):
+        try:
+            super().dump_stream(iterator, stream)
+        finally:
+            print("closing the state socket")
+            self._client_socket.close()
+            self.state_serializer.handleState = StatefulProcessorHandleState.CREATED
+            self.state_serializer.send("setHandleState", "CLOSED")
+            code = self.state_serializer.receive()
+            assert code == 0
+
+        return
+    
+class ImplicitGroupingKeyTracker:
+    def __init__(self) -> None:
+        self._key = None
+
+    def setKey(self, key: Any) -> None:
+        self._key = key
+
+    def getKey(self) -> Any:
+        return self._key
+
+class StatefulProcessorHandleState(Enum):
+    CREATED = 1
+    INITIALIZED = 2
+    DATA_PROCESSED = 3
+    CLOSED = 4
+
+class TransformWithStateInPandasStateSerializer:
+
+    def __init__(self, sockfile) -> None:
+        self.sockfile = sockfile
+        self.handleState = StatefulProcessorHandleState.CREATED
+        self.send("setHandleState", "CREATED")
+        code = self.receive()
+        assert code == 0
+        self.grouping_key_tracker = ImplicitGroupingKeyTracker()
+
+    def load_stream(self, stream):
+        pass
+
+    def dump_stream(self, iterator, stream):
+        pass
+
+    def send(self, *args):
+        message = ':'.join(args).encode()
+        write_with_length(message, self.sockfile)
+        self.sockfile.flush()
+
+    def receive(self):
+        return read_int(self.sockfile)
+    
+    def readStr(self):
+        return self.sockfile.readline()

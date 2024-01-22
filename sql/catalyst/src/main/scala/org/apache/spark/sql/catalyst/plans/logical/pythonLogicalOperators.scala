@@ -161,6 +161,21 @@ case class FlatMapGroupsInPandasWithState(
     newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
 }
 
+case class TransformWithStateInPandas(
+    functionExpr: Expression,
+    groupingAttributes: Seq[Attribute],
+    outputAttrs: Seq[Attribute],
+    outputMode: OutputMode,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = outputAttrs
+
+  override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): TransformWithStateInPandas = copy(child = newChild)
+}
+
 /**
  * Flatmap cogroups using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch)
  * This is used by DataFrame.groupby().cogroup().applyInArrow().

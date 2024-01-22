@@ -15,14 +15,17 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Union, TYPE_CHECKING, cast
+from typing import Any, List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError
 from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions.builtin import udf
+from pyspark.sql.pandas.serializers import StatefulProcessorHandleState, TransformWithStateInPandasStateSerializer
 from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
@@ -33,6 +36,7 @@ if TYPE_CHECKING:
         PandasCogroupedMapFunction,
         ArrowGroupedMapFunction,
         ArrowCogroupedMapFunction,
+        DataFrameLike as PandasDataFrameLike
     )
     from pyspark.sql.group import GroupedData
 
@@ -357,6 +361,51 @@ class PandasGroupedOpsMixin:
             timeoutConf,
         )
         return DataFrame(jdf, self.session)
+
+
+    def transformWithStateInPandas(self, 
+            stateful_processor: StatefulProcessor,
+            outputStructType: Union[StructType, str],
+            outputMode: str) -> DataFrame:
+        
+        from pyspark.sql import GroupedData
+        from pyspark.sql.functions import pandas_udf
+        assert isinstance(self, GroupedData)
+
+        def transformWithStateUDF(state_serializer: TransformWithStateInPandasStateSerializer, key: Any,
+                                  inputRows: "PandasDataFrameLike") -> "PandasDataFrameLike":
+            handle = StatefulProcessorHandle(state_serializer)
+            
+            if (state_serializer.handleState == StatefulProcessorHandleState.CREATED):
+                stateful_processor.init(handle)
+                state_serializer.send("setHandleState", "INITIALIZED")
+                code = state_serializer.receive()
+                assert code == 0
+                state_serializer.handleState = StatefulProcessorHandleState.INITIALIZED
+            
+            state_serializer.grouping_key_tracker.setKey(key[0])
+            result = stateful_processor.handle_input_rows(handle, key, inputRows)
+            
+            return result
+        
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+
+        udf = pandas_udf(
+            transformWithStateUDF,  # type: ignore[call-overload]
+            returnType=outputStructType,
+            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE,
+        )
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        
+        jdf = self._jgd.transformWithStateInPandas(
+            udf_column._jc.expr(),
+            self.session._jsparkSession.parseDataType(outputStructType.json()),
+            outputMode,
+        )
+        return DataFrame(jdf, self.session)
+
 
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]

@@ -725,6 +725,28 @@ class RelationalGroupedDataset protected[sql](
     Dataset.ofRows(df.sparkSession, plan)
   }
 
+  private[sql] def transformWithStateInPandas(
+      func: PythonUDF,
+      outputStructType: StructType,
+      outputModeStr: String): DataFrame = {
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+    val outputAttrs = toAttributes(outputStructType)
+    val outputMode = InternalOutputModes(outputModeStr)
+
+    val plan = TransformWithStateInPandas(
+      func,
+      groupingAttrs,
+      outputAttrs,
+      outputMode,
+      child = df.logicalPlan
+    )
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
   override def toString: String = {
     val builder = new StringBuilder
     builder.append("RelationalGroupedDataset: [grouping expressions: [")
