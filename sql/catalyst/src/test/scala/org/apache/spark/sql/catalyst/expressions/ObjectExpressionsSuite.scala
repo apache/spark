@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -361,8 +362,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
         case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
           assert(result.asInstanceOf[java.util.List[_]].asScala == expected)
+        case s if classOf[java.util.Set[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[java.util.Set[_]].asScala == expected.toSet)
         case a if classOf[mutable.ArraySeq[Int]].isAssignableFrom(a) =>
           assert(result == mutable.ArraySeq.make[Int](expected.toArray))
+        case a if classOf[immutable.ArraySeq[Int]].isAssignableFrom(a) =>
+          assert(result.isInstanceOf[immutable.ArraySeq[_]])
+          assert(result == immutable.ArraySeq.unsafeWrapArray[Int](expected.toArray))
         case s if classOf[Seq[_]].isAssignableFrom(s) =>
           assert(result.asInstanceOf[Seq[_]] == expected)
         case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
@@ -370,11 +376,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    val customCollectionClasses = Seq(classOf[mutable.ArraySeq[Int]],
+    val customCollectionClasses = Seq(
+      classOf[mutable.ArraySeq[Int]], classOf[immutable.ArraySeq[Int]],
       classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
       classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
       classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
-      classOf[java.util.Stack[Int]], null)
+      classOf[java.util.Stack[Int]], null,
+      classOf[java.util.Set[Int]])
 
     val list = new java.util.ArrayList[Int]()
     list.add(1)
@@ -392,6 +400,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(
       (Seq(1, 2, 3), ObjectType(classOf[mutable.ArraySeq[Int]])),
+      (Seq(1, 2, 3), ObjectType(classOf[immutable.ArraySeq[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),
       (Array(1, 2, 3), ObjectType(classOf[Array[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Object])),

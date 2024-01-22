@@ -42,7 +42,7 @@ private[sql] object H2Dialect extends JdbcDialect {
 
   private val distinctUnsupportedAggregateFunctions =
     Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY",
-      "MODE")
+      "MODE", "PERCENTILE_CONT", "PERCENTILE_DISC")
 
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
@@ -197,7 +197,8 @@ private[sql] object H2Dialect extends JdbcDialect {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case exception: SQLException =>
         // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
@@ -241,7 +242,7 @@ private[sql] object H2Dialect extends JdbcDialect {
         }
       case _ => // do nothing
     }
-    super.classifyException(e, errorClass, messageParameters)
+    super.classifyException(e, errorClass, messageParameters, description)
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -270,18 +271,7 @@ private[sql] object H2Dialect extends JdbcDialect {
         throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
           s"support aggregate function: $funcName with DISTINCT")
       } else {
-        funcName match {
-          case "MODE" =>
-            // Support Mode only if it is deterministic or reverse is defined.
-            assert(inputs.length == 2)
-            if (inputs.last == "true") {
-              s"MODE() WITHIN GROUP (ORDER BY ${inputs.head})"
-            } else {
-              s"MODE() WITHIN GROUP (ORDER BY ${inputs.head} DESC)"
-            }
-          case _ =>
-            super.visitAggregateFunction(funcName, isDistinct, inputs)
-        }
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
     override def visitExtract(field: String, source: String): String = {

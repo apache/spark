@@ -19,6 +19,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
@@ -207,7 +208,11 @@ class BinaryOpsTestsMixin:
         self.assert_eq(byte_pdf["this"] >= byte_pdf["this"], byte_psdf["this"] >= byte_psdf["this"])
 
 
-class BinaryOpsTests(BinaryOpsTestsMixin, OpsTestBase):
+class BinaryOpsTests(
+    BinaryOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

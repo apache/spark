@@ -454,10 +454,10 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
               .write.format(cls.getName)
               .option("path", path).mode("ignore").save()
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1308",
+          errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
           parameters = Map(
             "source" -> cls.getName,
-            "createMode" -> "Ignore"
+            "createMode" -> "\"Ignore\""
           )
         )
 
@@ -467,10 +467,10 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
               .write.format(cls.getName)
               .option("path", path).mode("error").save()
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1308",
+          errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
           parameters = Map(
             "source" -> cls.getName,
-            "createMode" -> "ErrorIfExists"
+            "createMode" -> "\"ErrorIfExists\""
           )
         )
       }

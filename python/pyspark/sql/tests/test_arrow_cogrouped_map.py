@@ -266,6 +266,41 @@ class CogroupedMapInArrowTestsMixin:
                 self.assertEqual(r.a, "hi")
                 self.assertEqual(r.b, 1)
 
+    def test_with_local_data(self):
+        df1 = self.spark.createDataFrame(
+            [(1, 1.0, "a"), (2, 2.0, "b"), (1, 3.0, "c"), (2, 4.0, "d")], ("id", "v1", "v2")
+        )
+        df2 = self.spark.createDataFrame([(1, "x"), (2, "y"), (1, "z")], ("id", "v3"))
+
+        def summarize(left, right):
+            return pa.Table.from_pydict(
+                {
+                    "left_rows": [left.num_rows],
+                    "left_columns": [left.num_columns],
+                    "right_rows": [right.num_rows],
+                    "right_columns": [right.num_columns],
+                }
+            )
+
+        df = (
+            df1.groupby("id")
+            .cogroup(df2.groupby("id"))
+            .applyInArrow(
+                summarize,
+                schema="left_rows long, left_columns long, right_rows long, right_columns long",
+            )
+        )
+
+        self.assertEqual(
+            df._show_string(),
+            "+---------+------------+----------+-------------+\n"
+            "|left_rows|left_columns|right_rows|right_columns|\n"
+            "+---------+------------+----------+-------------+\n"
+            "|        2|           3|         2|            2|\n"
+            "|        2|           3|         1|            2|\n"
+            "+---------+------------+----------+-------------+\n",
+        )
+
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod

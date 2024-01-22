@@ -38,9 +38,14 @@ object StaxXmlParserUtils {
   def filteredReader(xml: String): XMLEventReader = {
     val filter = new EventFilter {
       override def accept(event: XMLEvent): Boolean =
-        // Ignore comments and processing instructions
         event.getEventType match {
+          // Ignore comments and processing instructions
           case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
+          // unsupported events
+          case XMLStreamConstants.DTD |
+               XMLStreamConstants.ENTITY_DECLARATION |
+               XMLStreamConstants.ENTITY_REFERENCE |
+               XMLStreamConstants.NOTATION_DECLARATION => false
           case _ => true
         }
     }
@@ -121,7 +126,10 @@ object StaxXmlParserUtils {
   /**
    * Convert the current structure of XML document to a XML string.
    */
-  def currentStructureAsString(parser: XMLEventReader): String = {
+  def currentStructureAsString(
+      parser: XMLEventReader,
+      startElementName: String,
+      options: XmlOptions): String = {
     val xmlString = new StringBuilder()
     var indent = 0
     do {
@@ -151,6 +159,7 @@ object StaxXmlParserUtils {
         indent > 0
       case _ => true
     })
+    skipNextEndElement(parser, startElementName, options)
     xmlString.toString()
   }
 
@@ -176,6 +185,23 @@ object StaxXmlParserUtils {
           shouldStop = checkEndElement(parser)
         case _: XMLEvent => // do nothing
       }
+    }
+  }
+
+  @tailrec
+  def skipNextEndElement(
+      parser: XMLEventReader,
+      expectedNextEndElementName: String,
+      options: XmlOptions): Unit = {
+    parser.nextEvent() match {
+      case c: Characters if c.isWhiteSpace =>
+        skipNextEndElement(parser, expectedNextEndElementName, options)
+      case endElement: EndElement =>
+        assert(
+          getName(endElement.getName, options) == expectedNextEndElementName,
+          s"Expected EndElement </$expectedNextEndElementName>")
+      case _ => throw new IllegalStateException(
+        s"Expected EndElement </$expectedNextEndElementName>")
     }
   }
 }

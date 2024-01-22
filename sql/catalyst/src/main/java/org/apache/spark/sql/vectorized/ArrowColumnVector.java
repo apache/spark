@@ -23,6 +23,7 @@ import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.holders.NullableLargeVarCharHolder;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
@@ -201,7 +202,7 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof IntervalMonthDayNanoVector intervalMonthDayNanoVector) {
       accessor = new IntervalMonthDayNanoAccessor(intervalMonthDayNanoVector);
     } else {
-      throw new UnsupportedOperationException();
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3160");
     }
   }
 
@@ -226,55 +227,55 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     boolean getBoolean(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     byte getByte(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     short getShort(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     int getInt(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     long getLong(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     float getFloat(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     double getDouble(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     CalendarInterval getInterval(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     Decimal getDecimal(int rowId, int precision, int scale) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     UTF8String getUTF8String(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     byte[] getBinary(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     ColumnarArray getArray(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     ColumnarMap getMap(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
   }
 

@@ -91,7 +91,10 @@ class BaseTestsMixin:
             self.assertIsInstance(DataTypeOps(ExtensionDtype(), BooleanType()), BooleanOps)
 
 
-class BaseTests(BaseTestsMixin, unittest.TestCase):
+class BaseTests(
+    BaseTestsMixin,
+    unittest.TestCase,
+):
     pass
 
 

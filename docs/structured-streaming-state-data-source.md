@@ -96,9 +96,9 @@ Each row in the source has the following schema:
   <td></td>
 </tr>
 <tr>
-  <td>_partition_id</td>
+  <td>partition_id</td>
   <td>int</td>
-  <td>metadata column (hidden unless specified with SELECT)</td>
+  <td></td>
 </tr>
 </table>
 

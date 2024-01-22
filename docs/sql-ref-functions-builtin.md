@@ -17,125 +17,102 @@ license: |
   limitations under the License.
 ---
 
-* Table of contents
-{:toc}
-
 ### Aggregate Functions
-{% include_relative _generated_function_html/agg-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/agg-funcs-examples.html %}
+{% include_api_gen generated-agg-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-agg-funcs-examples.html %}
 
 ### Window Functions
-{% include_relative _generated_function_html/window-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/window-funcs-examples.html %}
+{% include_api_gen generated-window-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-window-funcs-examples.html %}
 
 ### Array Functions
-{% include_relative _generated_function_html/array-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/array-funcs-examples.html %}
+{% include_api_gen generated-array-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-array-funcs-examples.html %}
 
 ### Collection Functions
-{% include_relative _generated_function_html/collection-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/collection-funcs-examples.html %}
+{% include_api_gen generated-collection-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-collection-funcs-examples.html %}
 
 ### STRUCT Functions
-{% include_relative _generated_function_html/struct-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/struct-funcs-examples.html %}
+{% include_api_gen generated-struct-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-struct-funcs-examples.html %}
 
 ### Map Functions
-{% include_relative _generated_function_html/map-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/map-funcs-examples.html %}
+{% include_api_gen generated-map-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-map-funcs-examples.html %}
 
 ### Date and Timestamp Functions
-{% include_relative _generated_function_html/datetime-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/datetime-funcs-examples.html %}
+{% include_api_gen generated-datetime-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-datetime-funcs-examples.html %}
 
 ### Mathematical Functions
-{% include_relative _generated_function_html/math-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/math-funcs-examples.html %}
+{% include_api_gen generated-math-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-math-funcs-examples.html %}
 
 ### String Functions
-{% include_relative _generated_function_html/string-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/string-funcs-examples.html %}
+{% include_api_gen generated-string-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-string-funcs-examples.html %}
 
 ### Conditional Functions
-{% include_relative _generated_function_html/conditional-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/conditional-funcs-examples.html %}
+{% include_api_gen generated-conditional-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-conditional-funcs-examples.html %}
 
 ### Hash Functions
-{% include_relative _generated_function_html/hash-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/hash-funcs-examples.html %}
+{% include_api_gen generated-hash-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-hash-funcs-examples.html %}
 
 ### CSV Functions
-{% include_relative _generated_function_html/csv-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/csv-funcs-examples.html %}
+{% include_api_gen generated-csv-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-csv-funcs-examples.html %}
 
 ### JSON Functions
-{% include_relative _generated_function_html/json-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/json-funcs-examples.html %}
+{% include_api_gen generated-json-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-json-funcs-examples.html %}
 
 ### XML Functions
-{% include_relative _generated_function_html/xml-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/xml-funcs-examples.html %}
+{% include_api_gen generated-xml-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-xml-funcs-examples.html %}
 
 ### URL Functions
-{% include_relative _generated_function_html/url-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/url-funcs-examples.html %}
+{% include_api_gen generated-url-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-url-funcs-examples.html %}
 
 ### Bitwise Functions
-{% include_relative _generated_function_html/bitwise-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/bitwise-funcs-examples.html %}
+{% include_api_gen generated-bitwise-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-bitwise-funcs-examples.html %}
 
 ### Conversion Functions
-{% include_relative _generated_function_html/conversion-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/conversion-funcs-examples.html %}
+{% include_api_gen generated-conversion-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-conversion-funcs-examples.html %}
 
 ### Predicate Functions
-{% include_relative _generated_function_html/predicate-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/predicate-funcs-examples.html %}
+{% include_api_gen generated-predicate-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-predicate-funcs-examples.html %}
 
 ### Misc Functions
-{% include_relative _generated_function_html/misc-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/misc-funcs-examples.html %}
+{% include_api_gen generated-misc-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-misc-funcs-examples.html %}
 
 ### Generator Functions
-{% include_relative _generated_function_html/generator-funcs-table.html %}
-
-**Examples**
-{% include_relative _generated_function_html/generator-funcs-examples.html %}
+{% include_api_gen generated-generator-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-generator-funcs-examples.html %}

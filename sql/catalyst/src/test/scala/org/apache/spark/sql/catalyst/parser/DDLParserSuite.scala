@@ -2421,6 +2421,18 @@ class DDLParserSuite extends AnalysisTest {
         stop = 42))
   }
 
+  test("SPARK-46610: throw exception when no value for a key in create table options") {
+    val createTableSql = "create table test_table using my_data_source options (password)"
+    checkError(
+      exception = parseException(createTableSql),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "A value must be specified for the key: password."),
+      context = ExpectedContext(
+        fragment = createTableSql,
+        start = 0,
+        stop = 62))
+  }
+
   test("UNCACHE TABLE") {
     comparePlans(
       parsePlan("UNCACHE TABLE a.b.c"),

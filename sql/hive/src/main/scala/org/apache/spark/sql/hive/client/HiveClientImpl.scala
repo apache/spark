@@ -1285,7 +1285,7 @@ private[hive] object HiveClientImpl extends Logging {
   def newHiveConf(
       sparkConf: SparkConf,
       hadoopConf: JIterable[JMap.Entry[String, String]],
-      extraConfig: Map[String, String],
+      extraConfig: Map[String, String] = Map.empty,
       classLoader: Option[ClassLoader] = None): HiveConf = {
     val hiveConf = new HiveConf(classOf[SessionState])
     // HiveConf is a Hadoop Configuration, which has a field of classLoader and
@@ -1318,10 +1318,11 @@ private[hive] object HiveClientImpl extends Logging {
         " false to disable useless hive logic")
       hiveConf.setBoolean("hive.session.history.enabled", false)
     }
-    // If this is tez engine, SessionState.start might bring extra logic to initialize tez stuff,
-    // which is useless for spark.
-    if (hiveConf.get("hive.execution.engine") == "tez") {
-      logWarning("Detected HiveConf hive.execution.engine is 'tez' and will be reset to 'mr'" +
+    // If this is non-mr engine, e.g. spark, tez, SessionState.start might bring extra logic to
+    // initialize spark or tez stuff, which is useless for spark.
+    val engine = hiveConf.get("hive.execution.engine")
+    if (engine != "mr") {
+      logWarning(s"Detected HiveConf hive.execution.engine is '$engine' and will be reset to 'mr'" +
         " to disable useless hive logic")
       hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
     }

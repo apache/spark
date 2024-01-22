@@ -267,6 +267,30 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(2, 2, 0))
   }
 
+  test("monthname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(monthname($"a"), monthname($"b"), monthname($"c")),
+      Row("Apr", "Apr", "Apr"))
+
+    checkAnswer(
+      df.selectExpr("monthname(a)", "monthname(b)", "monthname(c)"),
+      Row("Apr", "Apr", "Apr"))
+  }
+
+  test("dayname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dayname($"a"), dayname($"b"), dayname($"c")),
+      Row("Wed", "Wed", "Mon"))
+
+    checkAnswer(
+      df.selectExpr("dayname(a)", "dayname(b)", "dayname(c)"),
+      Row("Wed", "Wed", "Mon"))
+  }
+
   test("extract") {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
