@@ -32,7 +32,7 @@ import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
@@ -394,8 +394,11 @@ object ParquetUtils extends Logging {
       isMax: Boolean): Any = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.hasNonNullValue) {
-      throw new UnsupportedOperationException(s"No min/max found for Parquet file $filePath. " +
-        s"Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3172",
+        messageParameters = Map(
+          "filePath" -> filePath,
+          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     } else {
       if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
@@ -407,9 +410,11 @@ object ParquetUtils extends Logging {
       i: Int): Long = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.isNumNullsSet) {
-      throw new UnsupportedOperationException(s"Number of nulls not set for Parquet file" +
-        s" $filePath. Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute" +
-        s" again")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3171",
+        messageParameters = Map(
+          "filePath" -> filePath,
+          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     }
     statistics.getNumNulls;
   }

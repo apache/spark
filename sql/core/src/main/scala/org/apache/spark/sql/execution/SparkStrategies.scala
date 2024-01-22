@@ -863,8 +863,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ) :: Nil
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
-        throw new UnsupportedOperationException(
-          "applyInPandasWithState is unsupported in batch query. Use applyInPandas instead.")
+        throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3176")
       case logical.CoGroup(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr, left, right) =>
         execution.CoGroupExec(
