@@ -7279,6 +7279,21 @@
       ""
     ]
   },
+  "_LEGACY_ERROR_TEMP_3161" : {
+    "message" : [
+      "Uploading artifact file to local file system destination path is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3162" : {
+    "message" : [
+      "Unsupported physical type <type>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3163" : {
+    "message" : [
+      "Unsupported number of children: <num>."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
