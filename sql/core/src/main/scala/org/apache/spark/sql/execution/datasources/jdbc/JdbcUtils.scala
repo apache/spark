@@ -1156,7 +1156,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         dialect.createTable(statement, tableName, strSchema, options)
       }
       if (options.isUpsert) {
-        // creating a table that is going to be upserted requires a primary index
+        // creating a table that is going to be upsert requires a primary index
         assert(mergeDialect.isDefined)
         mergeDialect.foreach(_.createPrimaryIndex(statement, tableName, options.upsertKeyColumns))
       }
