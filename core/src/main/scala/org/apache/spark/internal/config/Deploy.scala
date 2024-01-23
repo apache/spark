@@ -97,8 +97,9 @@ private[spark] object Deploy {
     .intConf
     .createWithDefault(10)
 
-  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOut")
+  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOutApps")
     .version("0.6.1")
+    .withAlternative("spark.deploy.spreadOut")
     .booleanConf
     .createWithDefault(true)
 

@@ -279,7 +279,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.deploy.spreadOut</code></td>
+  <td><code>spark.deploy.spreadOutApps</code></td>
   <td>true</td>
   <td>
     Whether the standalone cluster manager should spread applications out across nodes or try
