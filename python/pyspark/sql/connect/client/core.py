@@ -89,7 +89,7 @@ from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_sch
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError, PySparkAssertionError
+from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
@@ -157,7 +157,7 @@ class ChannelBuilder:
         self._secure_channel so that configuration options are applied
         appropriately.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError
 
     def _insecure_channel(self, target, **kwargs):
         channel = grpc.insecure_channel(target, options=self._channel_options, **kwargs)
@@ -634,7 +634,7 @@ class SparkConnectClient(object):
         # Parse the connection string.
         self._builder = (
             connection
-            if isinstance(connection, DefaultChannelBuilder)
+            if isinstance(connection, ChannelBuilder)
             else DefaultChannelBuilder(connection, channel_options)
         )
         self._user_id = None
