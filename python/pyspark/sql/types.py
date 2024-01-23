@@ -2236,7 +2236,7 @@ def _make_type_verifier(
                     error_class="NOT_INSTANCE_OF",
                     message_parameters={
                         "value": str(obj),
-                        "data_type": str(dataType),
+                        "type": str(dataType),
                     },
                 )
             verifier(dataType.toInternal(obj))

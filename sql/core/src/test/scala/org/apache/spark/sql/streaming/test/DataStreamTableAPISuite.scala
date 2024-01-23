@@ -433,7 +433,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           val explainWithExtended = sq.explainInternal(true)
           // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
           // plan.
-          assert("StreamingDataSourceV2Relation".r
+          assert("StreamingDataSourceV2ScanRelation".r
             .findAllMatchIn(explainWithExtended).size === 3)
           // WriteToMicroBatchDataSource is used for both parsed and analyzed logical plan
           assert("WriteToMicroBatchDataSource".r

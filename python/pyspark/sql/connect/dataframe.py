@@ -1663,7 +1663,7 @@ class DataFrame:
                         "arg_name": "fractions",
                         "arg_type": type(fractions).__name__,
                         "allowed_types": "float, int, str",
-                        "return_type": type(k).__name__,
+                        "item_type": type(k).__name__,
                     },
                 )
             fractions[k] = float(v)
