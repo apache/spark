@@ -70,7 +70,9 @@ abstract class FileScanBuilder(
   }
 
   override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
-    val (deterministicFilters, nonDeterminsticFilters) = filters.partition(_.deterministic)
+    val (deterministicFilters, nonDeterminsticFilters) = filters
+      .filter(f => DataSourceUtils.shouldPushFilter(f))
+      .partition(_.deterministic)
     val (partitionFilters, dataFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
     this.partitionFilters = partitionFilters

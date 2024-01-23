@@ -308,4 +308,31 @@ class CollationSuite extends QueryTest
       checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
     }
   }
+
+  test("disable filter pushdown") {
+    val tableName = "parquet_dummy_t2"
+    val collation = "'sr_ci_ai'"
+    withTable(tableName) {
+      spark.sql(
+        s"""
+           | CREATE TABLE $tableName(c1 STRING COLLATE $collation) USING PARQUET
+           |""".stripMargin)
+      spark.sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      spark.sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      val filters = Seq(
+        (">=", Seq(Row("aaa"), Row("AAA"))),
+        ("<=", Seq(Row("aaa"), Row("AAA"))),
+        (">", Seq()),
+        ("<", Seq()),
+        ("!=", Seq())
+      )
+
+      filters.foreach { filter =>
+        val df = sql(s"SELECT * FROM $tableName WHERE c1 ${filter._1} collate('aaa', $collation)")
+        assert(df.queryExecution.toString().contains("PushedFilters: []"))
+        checkAnswer(df, filter._2)
+      }
+    }
+  }
 }
