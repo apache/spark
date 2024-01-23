@@ -7407,6 +7407,46 @@
       "<class> does not support aggregate function: <funcName> with DISTINCT"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3185" : {
+    "message" : [
+      "Schema evolution not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3186" : {
+    "message" : [
+      "Boolean is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3187" : {
+    "message" : [
+      "only readInts is valid."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3188" : {
+    "message" : [
+      "only skipIntegers is valid"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3189" : {
+    "message" : [
+      "Unsupported encoding: <encoding>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3190" : {
+    "message" : [
+      "RLE encoding is not supported for values of type: <typeName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3191" : {
+    "message" : [
+      "Dictionary encoding does not support String"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3192" : {
+    "message" : [
+      "Datatype not supported <dt>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

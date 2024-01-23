@@ -72,7 +72,7 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     } else if (vector instanceof TimestampColumnVector timestampColumnVector) {
       timestampData = timestampColumnVector;
     } else {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
   }
 
