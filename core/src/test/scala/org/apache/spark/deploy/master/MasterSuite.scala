@@ -691,6 +691,44 @@ class MasterSuite extends SparkFunSuite
     assert(drivers.size === 6 && waitingDrivers.size === 2)
   }
 
+  test("SPARK-46800: schedule to spread out drivers") {
+    verifyDrivers(true, 1, 1, 1)
+  }
+
+  test("SPARK-46800: schedule not to spread out drivers") {
+    verifyDrivers(false, 3, 0, 0)
+  }
+
+  private def verifyDrivers(spreadOut: Boolean, answer1: Int, answer2: Int, answer3: Int): Unit = {
+    val master = makeMaster(new SparkConf().set(SPREAD_OUT_DRIVERS, spreadOut))
+    val worker1 = makeWorkerInfo(4096, 10)
+    val worker2 = makeWorkerInfo(4096, 10)
+    val worker3 = makeWorkerInfo(4096, 10)
+    master.state = RecoveryState.ALIVE
+    master.workers += worker1
+    master.workers += worker2
+    master.workers += worker3
+    val drivers = getDrivers(master)
+    val waitingDrivers = master.invokePrivate(_waitingDrivers())
+
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 0 && waitingDrivers.size === 0)
+
+    val command = Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    (1 to 3).foreach { i =>
+      val driver = new DriverInfo(0, "driver" + i, desc, new Date())
+      waitingDrivers += driver
+      drivers.add(driver)
+    }
+    assert(drivers.size === 3 && waitingDrivers.size === 3)
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 3 && waitingDrivers.size === 0)
+    assert(worker1.drivers.size === answer1)
+    assert(worker2.drivers.size === answer2)
+    assert(worker3.drivers.size === answer3)
+  }
+
   private def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
     val appInfo: ApplicationInfo = if (withMaxCores) {
       makeAppInfo(
