@@ -97,6 +97,11 @@ private[spark] object Deploy {
     .intConf
     .createWithDefault(10)
 
+  val SPREAD_OUT_DRIVERS = ConfigBuilder("spark.deploy.spreadOutDrivers")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOutApps")
     .version("0.6.1")
     .withAlternative("spark.deploy.spreadOut")
