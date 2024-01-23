@@ -968,9 +968,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition { iterator =>
-      savePartition(None, iterator, rddSchema, insertStmt, batchSize, dialect,
-        isolationLevel, options)
+    repartitionedDF.foreachPartition { iterator: Iterator[Row] => savePartition(
+      None, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }
 
@@ -1008,9 +1007,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition { iterator => upsertPartition(
-      table, iterator, rddSchema, tableSchema, isCaseSensitive, batchSize,
-      dialectWithMerge, isolationLevel, options)
+    repartitionedDF.foreachPartition { iterator: Iterator[Row] => upsertPartition(
+      table, iterator, rddSchema, tableSchema, isCaseSensitive, batchSize, dialectWithMerge,
+      isolationLevel, options)
     }
   }
 
