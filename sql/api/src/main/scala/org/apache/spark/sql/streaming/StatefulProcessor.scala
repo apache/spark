@@ -50,9 +50,9 @@ trait StatefulProcessor[K, I, O] extends Serializable {
    *                    time if available
    * @return - Zero or more output rows
    */
-  def handleInputRow(
+  def handleInputRows(
       key: K,
-      inputRow: I,
+      inputRows: Iterator[I],
       timerValues: TimerValues): Iterator[O]
 
   /**

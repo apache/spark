@@ -83,7 +83,7 @@ case class TransformWithStateExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
     groupingAttributes.map(SortOrder(_, Ascending)))
 
-  private def handleInputRow(keyRow: UnsafeRow, valueRow: InternalRow):
+  private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
     val getKeyObj =
       ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
@@ -95,8 +95,8 @@ case class TransformWithStateExec(
 
     val keyObj = getKeyObj(keyRow)  // convert key to objects
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val valueObj = getValueObj(valueRow)  // convert value to objects
-    val mappedIterator = statefulProcessor.handleInputRow(keyObj, valueObj,
+    val valueObjIter = valueRowIter.map(getValueObj.apply)
+    val mappedIterator = statefulProcessor.handleInputRows(keyObj, valueObjIter,
       new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
       getOutputRow(obj)
     }
@@ -108,9 +108,7 @@ case class TransformWithStateExec(
     val groupedIter = GroupedIterator(dataIter, groupingAttributes, child.output)
     groupedIter.flatMap { case (keyRow, valueRowIter) =>
       val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
-      valueRowIter.flatMap { valueRow =>
-        handleInputRow(keyUnsafeRow, valueRow)
-      }
+      handleInputRows(keyUnsafeRow, valueRowIter)
     }
   }
 
