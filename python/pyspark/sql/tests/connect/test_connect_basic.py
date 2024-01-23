@@ -3796,11 +3796,11 @@ class ChannelBuilderTests(unittest.TestCase):
             self.assertNotIn(
                 kv[0],
                 [
-                    DefaultChannelBuilder.PARAM_SESSION_ID,
-                    DefaultChannelBuilder.PARAM_TOKEN,
-                    DefaultChannelBuilder.PARAM_USER_ID,
-                    DefaultChannelBuilder.PARAM_USER_AGENT,
-                    DefaultChannelBuilder.PARAM_USE_SSL,
+                    ChannelBuilder.PARAM_SESSION_ID,
+                    ChannelBuilder.PARAM_TOKEN,
+                    ChannelBuilder.PARAM_USER_ID,
+                    ChannelBuilder.PARAM_USER_AGENT,
+                    ChannelBuilder.PARAM_USE_SSL,
                 ],
                 "Metadata must not contain fixed params",
             )
