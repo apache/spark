@@ -132,16 +132,15 @@ jobs:
                     await new Promise(resolve => setTimeout(resolve, 3000));
                   }
                 }
-
-                if (!check_run_head) {
-                  throw new Error('Failed to retrieve check_run_head after 3 attempts');
-                }
-
-                if (check_run_head.head_sha != context.payload.pull_request.head.sha) {
-                  throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
-                }
               };
               retryWithDelay();
+              if (!check_run_head) {
+                throw new Error('Failed to retrieve check_run_head after 3 attempts');
+              }
+
+              if (check_run_head.head_sha != context.payload.pull_request.head.sha) {
+                throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
+              }
 
               const check_run_url = 'https://github.com/'
                 + context.payload.pull_request.head.repo.full_name
