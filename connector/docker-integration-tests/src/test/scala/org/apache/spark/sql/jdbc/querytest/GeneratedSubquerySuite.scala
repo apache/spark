@@ -17,9 +17,9 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, ResultSet, Statement}
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.parallel.CollectionConverters._
 
 import org.apache.spark.sql.{QueryGeneratorHelper, QueryTest}
 import org.apache.spark.sql.Row
@@ -358,9 +358,9 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     // Create separate test case for each partition.
     partitionedQueries.foreach { case ((isCorrelated, subqueryType), querySpec) =>
       val testName = if (isCorrelated) {
-        s"correlated-${subqueryType}"
+        s"correlated-${subqueryType.toString.toLowerCase(Locale.ROOT)}"
       } else {
-        s"uncorrelated-${subqueryType}"
+        s"uncorrelated-${subqueryType.toString.toLowerCase(Locale.ROOT)}"
       }
       test(testName) {
         val conn = getConnection()
@@ -418,9 +418,12 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         // Enable ANSI so that { NULL IN { <empty> } } behavior is correct in Spark.
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
 
-        val generatedQueries = generatedQuerySpecs.map(_.query)
+        val generatedQueries = generatedQuerySpecs.map(_.query).toSeq
+        // Randomize query order because we are taking a subset of queries.
+        val shuffledQueries = scala.util.Random.shuffle(generatedQueries)
+
         // Run generated queries on both Spark and Postgres, and test against each other.
-        generatedQueries.toSeq.par.foreach { sqlStr =>
+        shuffledQueries.take(GeneratedSubquerySuite.NUM_QUERIES_PER_TEST).foreach { sqlStr =>
           if (!GeneratedSubquerySuite.KNOWN_QUERIES_WITH_DIFFERENT_RESULTS.contains(sqlStr)) {
             val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY,
               ResultSet.CONCUR_READ_ONLY)
@@ -438,6 +441,9 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
 }
 
 object GeneratedSubquerySuite {
+
+  // Limit number of generated queries per test so that tests will not take too long.
+  private val NUM_QUERIES_PER_TEST = 1000
 
   // scalastyle:off line.size.limit
   private val KNOWN_QUERIES_WITH_DIFFERENT_RESULTS = Seq(
