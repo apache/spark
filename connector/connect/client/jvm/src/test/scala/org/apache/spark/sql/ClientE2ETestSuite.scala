@@ -1509,8 +1509,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       }
   }
 
-  test(
-    "SPARK-46738: `cast` displayed different results between Regular Spark and Spark Connect") {
+  test("SPARK-46738: Make the display of cast in Regular Spark and Spark Connect consistent") {
     val df = spark.sql("select 'Spark SQL' as key")
     val castDF = df.select(to_binary(df.col("key"), lit("utf-8")).cast("STRING"))
     testCapturedStdOut(
