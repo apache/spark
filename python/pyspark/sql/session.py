@@ -1707,6 +1707,12 @@ class SparkSession(SparkConversionMixin):
         |  4|
         +---+
         """
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return DataFrame(self._jsparkSession.table(tableName), self)
 
     @property
