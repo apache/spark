@@ -1319,6 +1319,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                     message_parameters={
                         "arg_name": "parameters",
+                        "arg_type": type(parameters).__name__,
                         "allowed_types": allowed_types_repr,
                         "item_type": type(p).__name__,
                     },
@@ -1329,6 +1330,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                         message_parameters={
                             "arg_name": "parameters",
+                            "arg_type": type(parameters).__name__,
                             "allowed_types": allowed_types_repr,
                             "item_type": type(p).__name__ + "[" + type(p[0]).__name__ + "]",
                         },
@@ -2385,7 +2387,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         "arg_name": "fractions",
                         "arg_type": type(fractions).__name__,
                         "allowed_types": "float, int, str",
-                        "return_type": type(k).__name__,
+                        "item_type": type(k).__name__,
                     },
                 )
             fractions[k] = float(v)
@@ -5839,7 +5841,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         "arg_name": "col",
                         "arg_type": type(col).__name__,
                         "allowed_types": "str",
-                        "return_type": type(c).__name__,
+                        "item_type": type(c).__name__,
                     },
                 )
         col = _to_list(self._sc, cast(List["ColumnOrName"], col))
