@@ -117,20 +117,17 @@ jobs:
               // Here we get check run ID to provide Check run view instead of Actions view, see also SPARK-37879.
               let retryCount = 0;
               let check_run_head;
-              const retryWithDelay = () => {
-                while (retryCount < 3) {
-                  const check_runs = await github.request(check_run_endpoint, check_run_params);
-                  check_run_head = check_runs.data.check_runs.find(r => r.name === "Run / Check changes");
-                  if (check_run_head) {
-                    break;
-                  }
-                  retryCount++;
-                  if (retryCount < 3) {
-                    await new Promise(resolve => setTimeout(resolve, 3000));
-                  }
+              while (retryCount < 3) {
+                const check_runs = await github.request(check_run_endpoint, check_run_params);
+                check_run_head = check_runs.data.check_runs.find(r => r.name === "Run / Check changes");
+                if (check_run_head) {
+                  break;
                 }
-              };
-              retryWithDelay();
+                retryCount++;
+                if (retryCount < 3) {
+                  await new Promise(resolve => setTimeout(resolve, 3000));
+                }
+              }
               if (!check_run_head) {
                 throw new Error('Failed to retrieve check_run_head after 3 attempts');
               }
