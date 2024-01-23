@@ -185,7 +185,7 @@ The provided URL cannot be decoded: `<url>`. Please ensure that the URL is prope
 
 ### CANNOT_INVOKE_IN_TRANSFORMATIONS
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702.
 
@@ -278,7 +278,7 @@ Cannot recognize hive type string: `<fieldType>`, column: `<fieldName>`. The spe
 
 ### CANNOT_RENAME_ACROSS_SCHEMA
 
-[SQLSTATE: 0AKD0](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0AKD0](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Renaming a `<type>` across schemas is not allowed.
 
@@ -302,13 +302,13 @@ Failed to set permissions on created path `<path>` back to `<permission>`.
 
 ### CANNOT_SAVE_VARIANT
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot save variant data type into external storage.
 
 ### [CANNOT_UPDATE_FIELD](sql-error-conditions-cannot-update-field-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot update `<table>` field `<fieldName>` type:
 
@@ -363,7 +363,7 @@ If this problem persists, you may consider using `rdd.checkpoint()` instead, whi
 
 ### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 `MapObjects` does not support the class `<cls>` as resulting collection.
 
@@ -429,7 +429,7 @@ For more details see [COMPLEX_EXPRESSION_UNSUPPORTED_INPUT](sql-error-conditions
 
 ### CONCURRENT_QUERY
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Another instance of this query was just started by a concurrent session.
 
@@ -456,7 +456,7 @@ The value `<str>` (`<fmt>`) cannot be converted to `<targetType>` because it is 
 
 ### CREATE_PERMANENT_VIEW_WITHOUT_ALIAS
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Not allowed to create the permanent view `<name>` without explicitly assigning an alias for the expression `<attr>`.
 
@@ -541,7 +541,7 @@ For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAUL
 
 ### DISTINCT_WINDOW_FUNCTION_UNSUPPORTED
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Distinct window functions are not supported: `<windowExpr>`.
 
@@ -937,7 +937,7 @@ Data columns: `<dataColumns>`.
 
 ### [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insufficient-table-property-error-class.html)
 
-[SQLSTATE: XXKUC](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XXKUC](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Can't find table property:
 
@@ -945,31 +945,31 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 
 ### INTERNAL_ERROR
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<message>`
 
 ### INTERNAL_ERROR_BROADCAST
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<message>`
 
 ### INTERNAL_ERROR_EXECUTOR
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<message>`
 
 ### INTERNAL_ERROR_MEMORY
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<message>`
 
 ### [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 An object in the metadata catalog has been corrupted:
 
@@ -977,19 +977,19 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 ### INTERNAL_ERROR_NETWORK
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<message>`
 
 ### INTERNAL_ERROR_SHUFFLE
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<message>`
 
 ### INTERNAL_ERROR_STORAGE
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<message>`
 
@@ -1057,7 +1057,7 @@ Column or field `<name>` is of type `<type>` while it's required to be `<expecte
 
 ### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
-[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 The cursor is invalid.
 
@@ -1143,7 +1143,7 @@ The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ans
 
 ### [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
 
-[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 The handle `<handle>` is invalid.
 
@@ -1253,7 +1253,7 @@ For more details see [INVALID_OPTIONS](sql-error-conditions-invalid-options-erro
 
 ### INVALID_PANDAS_UDF_PLACEMENT
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The group aggregate pandas UDF `<functionList>` cannot be invoked together with as other, non-pandas aggregate functions.
 
@@ -1397,7 +1397,7 @@ Variable type must be string type but got `<varType>`.
 
 ### INVALID_VIEW_TEXT
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 The view `<viewName>` cannot be displayed due to invalid view text: `<viewText>`. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with.
 
@@ -1466,7 +1466,7 @@ Malformed CSV record: `<badRecord>`
 
 ### MALFORMED_PROTOBUF_MESSAGE
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Malformed Protobuf messages are detected in message deserialization. Parse Mode: `<failFastMode>`. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'.
 
@@ -1495,7 +1495,7 @@ Add the columns or the expression to the GROUP BY, aggregate the expression, or 
 
 ### [MISSING_ATTRIBUTES](sql-error-conditions-missing-attributes-error-class.html)
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Resolved attribute(s) `<missingAttributes>` missing from `<input>` in operator `<operator>`.
 
@@ -1527,7 +1527,7 @@ The expression `<expr>` does not support more than one source.
 
 ### MULTI_UDF_INTERFACE_ERROR
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Not allowed to implement multiple UDF interfaces, UDF class `<className>`.
 
@@ -1539,7 +1539,7 @@ Named parameters are not supported for function `<functionName>`; please retry t
 
 ### NAMED_PARAMETER_SUPPORT_DISABLED
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot call function `<functionName>` because named argument references are not enabled here.
 In this case, the named argument reference was `<argument>`.
@@ -1632,25 +1632,25 @@ For more details see [NOT_NULL_CONSTRAINT_VIOLATION](sql-error-conditions-not-nu
 
 ### NOT_SUPPORTED_CHANGE_COLUMN
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing `<table>`'s column `<originName>` with type `<originType>` to `<newName>` with type `<newType>`.
 
 ### NOT_SUPPORTED_COMMAND_FOR_V2_TABLE
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 `<cmd>` is not supported for v2 tables.
 
 ### NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 `<cmd>` is not supported, if you want to enable it, please set "spark.sql.catalogImplementation" to "hive".
 
 ### [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Not supported command in JDBC catalog:
 
@@ -1731,7 +1731,7 @@ Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output
 
 ### OPERATION_CANCELED
 
-[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
+[SQLSTATE: HY008](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 Operation has been canceled.
 
@@ -1788,13 +1788,13 @@ Invalid pivot value '`<value>`': value data type `<valueType>` does not match pi
 
 ### PLAN_VALIDATION_FAILED_RULE_EXECUTOR
 
-[SQLSTATE: XXKD0](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XXKD0](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 The input plan of `<ruleExecutor>` is invalid: `<reason>`
 
 ### PLAN_VALIDATION_FAILED_RULE_IN_BATCH
 
-[SQLSTATE: XXKD0](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XXKD0](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Rule `<rule>` in batch `<batch>` generated an invalid plan: `<reason>`
 
@@ -1917,7 +1917,7 @@ Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The correlated scalar subquery '`<sqlExpr>`' is neither present in GROUP BY, nor in an aggregate function.
 Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get.
@@ -1970,7 +1970,7 @@ sortBy must be used together with bucketBy.
 
 ### SPARK_JOB_CANCELLED
 
-[SQLSTATE: XXKDA](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XXKDA](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Job `<jobId>` cancelled `<reason>`
 
@@ -2010,7 +2010,7 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 ### STAR_GROUP_BY_POS
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
@@ -2041,7 +2041,7 @@ Rerun the streaming query to construct the state schema, and report to the corre
 
 ### STDS_INTERNAL_ERROR
 
-[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Internal error: `<message>`
 Please, report this bug to the corresponding communities or vendors, and provide the full stack trace.
@@ -2082,7 +2082,7 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 
 ### STREAM_FAILED
 
-[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Query [id = `<id>`, runId = `<runId>`] terminated with exception: `<message>`
 
@@ -2327,7 +2327,7 @@ Attempted to unset non-existent properties [`<properties>`] in table `<table>`.
 
 ### [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add-file-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Don't support add file.
 
@@ -2335,50 +2335,50 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 
 ### UNSUPPORTED_ARROWTYPE
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported arrow type `<typeName>`.
 
 ### UNSUPPORTED_CALL
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot call the method "`<methodName>`" of the class "`<className>`".
 
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The char/varchar type can't be used in the table schema.
 If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
 
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data source type for direct query on files: `<dataSourceType>`
 
 ### UNSUPPORTED_DATATYPE
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data type `<typeName>`.
 
 ### UNSUPPORTED_DATA_SOURCE_SAVE_MODE
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The data source "`<source>`" cannot be written in the `<createMode>` mode. Please use either the "Append" or "Overwrite" mode instead.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The `<format>` datasource doesn't support the column `<columnName>` of the type `<columnType>`.
 
 ### [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 DEFAULT column values is not supported.
 
@@ -2386,7 +2386,7 @@ For more details see [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupporte
 
 ### [UNSUPPORTED_DESERIALIZER](sql-error-conditions-unsupported-deserializer-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The deserializer is not supported:
 
@@ -2422,7 +2422,7 @@ Expression `<sqlExpr>` not supported within a window function.
 
 ### [UNSUPPORTED_FEATURE](sql-error-conditions-unsupported-feature-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The feature is not supported:
 
@@ -2468,7 +2468,7 @@ For more details see [UNSUPPORTED_OVERWRITE](sql-error-conditions-unsupported-ov
 
 ### [UNSUPPORTED_SAVE_MODE](sql-error-conditions-unsupported-save-mode-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The save mode `<saveMode>` is not supported for:
 
@@ -2476,7 +2476,7 @@ For more details see [UNSUPPORTED_SAVE_MODE](sql-error-conditions-unsupported-sa
 
 ### [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-conditions-unsupported-subquery-expression-category-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported subquery expression:
 
@@ -2484,7 +2484,7 @@ For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-condit
 
 ### UNSUPPORTED_TYPED_LITERAL
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Literals of the type `<unsupportedType>` are not supported. Supported types are `<supportedTypes>`.
 

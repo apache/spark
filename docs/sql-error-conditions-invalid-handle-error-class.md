@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
+[SQLSTATE: HY000](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 The handle `<handle>` is invalid.
 
@@ -48,3 +48,5 @@ Session was closed.
 ## SESSION_NOT_FOUND
 
 Session not found.
+
+

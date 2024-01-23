@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot update `<table>` field `<fieldName>` type:
 
@@ -44,3 +44,5 @@ Update a struct by updating its fields.
 ## USER_DEFINED_TYPE
 
 Update a UserDefinedType[`<udtSql>`] by updating its fields.
+
+
