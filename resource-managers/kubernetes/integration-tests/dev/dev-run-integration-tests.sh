@@ -206,7 +206,6 @@ properties+=(
   ./build/mvn install \
     -pl resource-managers/kubernetes/integration-tests \
     $BUILD_DEPENDENCIES_MVN_FLAG \
-    -Pscala-$SCALA_VERSION \
     -P$HADOOP_PROFILE \
     -Pkubernetes \
     -Pkubernetes-integration-tests \

@@ -18,5 +18,5 @@
 #
 
 VERSION="${@:-2.13}"
-./build/mvn -Pscala-$VERSION scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=false
+./build/mvn scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=false
 
