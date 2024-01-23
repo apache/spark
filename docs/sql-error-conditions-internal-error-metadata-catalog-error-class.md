@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 An object in the metadata catalog has been corrupted:
 
@@ -48,3 +48,5 @@ Corrupted view referred temp view names in catalog.
 ## VIEW_QUERY_COLUMN_ARITY
 
 Corrupted view query output column names in catalog: `<numCols>` parts expected, but part `<index>` is missing.
+
+

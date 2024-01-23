@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Don't support add file.
 
@@ -32,3 +32,5 @@ The file `<path>` is a directory, consider to set "spark.sql.legacy.addSingleFil
 ## LOCAL_DIRECTORY
 
 The local directory `<path>` is not supported in a non-local master mode.
+
+

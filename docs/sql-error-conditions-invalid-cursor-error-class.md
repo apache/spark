@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-hy-cli-specific-condition)
+[SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
 
 The cursor is invalid.
 
@@ -40,3 +40,5 @@ The cursor position id `<responseId>` is no longer available at index `<index>`.
 ## POSITION_NOT_FOUND
 
 The cursor position id `<responseId>` is not found.
+
+
