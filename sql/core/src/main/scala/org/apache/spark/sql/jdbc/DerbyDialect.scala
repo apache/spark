@@ -74,6 +74,8 @@ private case class DerbyDialect() extends JdbcDialect with MergeByTempTable with
     Option(exception.getSQLState).exists(_.startsWith("42"))
   }
 
+  override def createTempTableName(): String = "SESSION." + super.createTempTableName()
+
   override def createTempTable(
       statement: Statement,
       tableName: String,
