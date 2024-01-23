@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 __all__ = [
-    "DefaultChannelBuilder",
+    "ChannelBuilder",
     "DefaultChannelBuilder",
     "SparkConnectClient",
 ]
