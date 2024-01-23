@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
 
 The deserializer is not supported:
 
@@ -32,5 +32,3 @@ need a(n) `<desiredType>` field but got `<dataType>`.
 ## FIELD_NUMBER_MISMATCH
 
 try to map `<schema>` to Tuple`<ordinal>`, but failed as the number of fields does not line up.
-
-

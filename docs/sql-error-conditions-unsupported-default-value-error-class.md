@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0a-feature-not-supported)
 
 DEFAULT column values is not supported.
 
@@ -32,5 +32,3 @@ This error class has the following derived error classes:
 ## WITH_SUGGESTION
 
 Enable it by setting "spark.sql.defaultColumn.enabled" to "true".
-
-
