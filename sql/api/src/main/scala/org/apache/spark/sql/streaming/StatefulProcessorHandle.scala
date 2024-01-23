@@ -26,7 +26,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
  */
 @Experimental
 @Evolving
-trait StatefulProcessorHandle extends Serializable {
+private[sql] trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to create new or return existing single value state variable of given type

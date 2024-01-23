@@ -659,7 +659,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param outputMode The output mode of the stateful processor. Defaults to APPEND mode.
    *
    */
-  def transformWithState[U: Encoder](
+  private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
       outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {

@@ -27,7 +27,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
  */
 @Experimental
 @Evolving
-trait TimerValues extends Serializable {
+private[sql] trait TimerValues extends Serializable {
   /**
    * Get the current processing time as milliseconds in epoch time.
    * @note This will return a constant value throughout the duration of a streaming query trigger,

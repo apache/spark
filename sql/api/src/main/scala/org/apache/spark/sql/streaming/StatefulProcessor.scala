@@ -27,7 +27,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
  */
 @Experimental
 @Evolving
-trait StatefulProcessor[K, I, O] extends Serializable {
+private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
 
   /**
    * Function that will be invoked as the first method that allows for users to
