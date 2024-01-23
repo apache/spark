@@ -1101,7 +1101,7 @@ class DataFrameTestsMixin:
         # observation requires name (if given) to be non empty string
         with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):
             Observation(123)
-        with self.assertRaisesRegex(ValueError, "`name` must be a non empty string, got ''."):
+        with self.assertRaisesRegex(ValueError, "`name` must be a non-empty string, got ''."):
             Observation("")
 
         # dataframe.observe requires at least one expr
