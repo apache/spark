@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.parquet.io.InputFile;
 import scala.Option;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -100,13 +101,17 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
     ParquetFileReader fileReader;
+    ParquetReadOptions options = HadoopReadOptions
+        .builder(configuration, file)
+        .withRange(split.getStart(), split.getStart() + split.getLength())
+        .build();
     if (fileFooter.isDefined()) {
-      fileReader = new ParquetFileReader(configuration, file, fileFooter.get());
+      InputFile inputFile = fileFooter.get().getInputFile();
+      if (inputFile == null) {
+        inputFile = HadoopInputFile.fromPath(file, configuration);
+      }
+      fileReader = new ParquetFileReader(inputFile, options, fileFooter.get());
     } else {
-      ParquetReadOptions options = HadoopReadOptions
-          .builder(configuration, file)
-          .withRange(split.getStart(), split.getStart() + split.getLength())
-          .build();
       fileReader = new ParquetFileReader(
           HadoopInputFile.fromPath(file, configuration), options);
     }
