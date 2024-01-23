@@ -268,11 +268,9 @@ case class PhysicalStringType(collationId: Int) extends PhysicalDataType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 object PhysicalStringType {
-  def apply(collationId: Int): PhysicalStringType =
-    new PhysicalStringType(collationId)
+  def apply(collationId: Int): PhysicalStringType = new PhysicalStringType(collationId)
 
-  def apply(): PhysicalStringType =
-    new PhysicalStringType(DataType.DEFAULT_COLLATION_ID)
+  def apply(): PhysicalStringType = new PhysicalStringType(StringType.DEFAULT_COLLATION_ID)
 }
 
 case class PhysicalArrayType(

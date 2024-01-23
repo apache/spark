@@ -233,7 +233,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
            """.stripMargin
         }
       case pudt: PythonUserDefinedType =>
-        castToStringCode(pudt.sqlType, ctx, DataType.DEFAULT_COLLATION_ID)
+        castToStringCode(pudt.sqlType, ctx, StringType.DEFAULT_COLLATION_ID)
       case udt: UserDefinedType[_] =>
         val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
         (c, evPrim) =>
@@ -281,7 +281,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       array: ExprValue,
       buffer: ExprValue,
       ctx: CodegenContext): Block = {
-    val elementToStringCode = castToStringCode(et, ctx, DataType.DEFAULT_COLLATION_ID)
+    val elementToStringCode = castToStringCode(et, ctx, StringType.DEFAULT_COLLATION_ID)
     val funcName = ctx.freshName("elementToString")
     val element = JavaCode.variable("element", et)
     val elementStr = JavaCode.variable("elementStr", StringType)
@@ -326,7 +326,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
     def dataToStringFunc(func: String, dataType: DataType) = {
       val funcName = ctx.freshName(func)
-      val dataToStringCode = castToStringCode(dataType, ctx, DataType.DEFAULT_COLLATION_ID)
+      val dataToStringCode = castToStringCode(dataType, ctx, StringType.DEFAULT_COLLATION_ID)
       val data = JavaCode.variable("data", dataType)
       val dataStr = JavaCode.variable("dataStr", StringType)
       val functionCall = ctx.addNewFunction(funcName,
@@ -383,7 +383,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       buffer: ExprValue,
       ctx: CodegenContext): Block = {
     val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
-      val fieldToStringCode = castToStringCode(ft, ctx, DataType.DEFAULT_COLLATION_ID)
+      val fieldToStringCode = castToStringCode(ft, ctx, StringType.DEFAULT_COLLATION_ID)
       val field = ctx.freshVariable("field", ft)
       val fieldStr = ctx.freshVariable("fieldStr", StringType)
       val javaType = JavaCode.javaType(ft)

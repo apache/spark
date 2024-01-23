@@ -119,8 +119,6 @@ object DataType {
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
   private val COLLATED_STRING_TYPE = """string\(\s*([\w_]+)\s*\)""".r
 
-  val DEFAULT_COLLATION_ID = 0
-
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,

@@ -19,14 +19,15 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.util.CollatorFactory
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.StringType
 
 class CollationSuite extends QueryTest
   with SharedSparkSession {
   test("collate keyword") {
     checkAnswer(sql("select collate('aaa', 'ucs_basic')"), Row("aaa"))
-    assert(sql("select collate('aaa', 'ucs_basic')").schema(0).dataType ==
-      StringType(DataType.DEFAULT_COLLATION_ID))
+    // This is backward compatibility check - Even string with explicit ucs_basic collation
+    // will still be of type StringType object.
+    assert(sql("select collate('aaa', 'ucs_basic')").schema(0).dataType == StringType)
 
     // check collation of string literal.
     checkAnswer(sql("select collation('aaa')"), Row("UCS_BASIC"))

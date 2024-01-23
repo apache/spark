@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.util.CollatorFactory
  */
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
-  // TODO: When we implement session level collation it should be used here as the default.
   def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
 
   override def toString: String =
@@ -55,6 +54,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  */
 @Stable
 case object StringType extends StringType(0) {
+  // TODO: When we implement session level collation it should be used here as the default.
   val DEFAULT_COLLATION_ID = 0
   def apply(collationId: Int): StringType = new StringType(collationId)
 }
