@@ -190,7 +190,7 @@ class FunctionsTestsMixin:
                 "arg_name": "fractions",
                 "arg_type": "dict",
                 "allowed_types": "float, int, str",
-                "return_type": "NoneType",
+                "item_type": "NoneType",
             },
         )
 

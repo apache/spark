@@ -1111,7 +1111,7 @@ class DataFrameTestsMixin:
         # observation requires name (if given) to be non empty string
         with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):
             Observation(123)
-        with self.assertRaisesRegex(ValueError, "`name` must be a non empty string, got ''."):
+        with self.assertRaisesRegex(ValueError, "`name` must be a non-empty string, got ''."):
             Observation("")
 
         # dataframe.observe requires at least one expr
@@ -2044,7 +2044,7 @@ class DataFrameTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+            message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
         )
 
 
