@@ -101,7 +101,7 @@ class ChannelBuilder:
     This is a helper class that is used to create a GRPC channel based on the given
     connection string per the documentation of Spark Connect.
 
-    The standard implementation is in DefaultChannelBuilder.
+    The standard implementation is in :class:`DefaultChannelBuilder`.
     """
 
     PARAM_USE_SSL = "use_ssl"
