@@ -259,7 +259,6 @@ class ChannelBuilder:
         )
 
 
-
 class DefaultChannelBuilder(ChannelBuilder):
     """
     This is a helper class that is used to create a GRPC channel based on the given
@@ -326,7 +325,7 @@ class DefaultChannelBuilder(ChannelBuilder):
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
                     "detail": "The URL must start with 'sc://'. Please update the URL to "
-                              "follow the correct format, e.g., 'sc://hostname:port'.",
+                    "follow the correct format, e.g., 'sc://hostname:port'.",
                 },
             )
         # Rewrite the URL to use http as the scheme so that we can leverage
@@ -338,7 +337,7 @@ class DefaultChannelBuilder(ChannelBuilder):
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
                     "detail": f"The path component '{self.url.path}' must be empty. Please update "
-                              f"the URL to follow the correct format, e.g., 'sc://hostname:port'.",
+                    f"the URL to follow the correct format, e.g., 'sc://hostname:port'.",
                 },
             )
         self._extract_attributes()
@@ -353,8 +352,8 @@ class DefaultChannelBuilder(ChannelBuilder):
                         error_class="INVALID_CONNECT_URL",
                         message_parameters={
                             "detail": f"Parameter '{p}' should be provided as a "
-                                      f"key-value pair separated by an equal sign (=). Please update "
-                                      f"the parameter to follow the correct format, e.g., 'key=value'.",
+                            f"key-value pair separated by an equal sign (=). Please update "
+                            f"the parameter to follow the correct format, e.g., 'key=value'.",
                         },
                     )
                 self.set(kv[0], urllib.parse.unquote(kv[1]))
@@ -371,8 +370,8 @@ class DefaultChannelBuilder(ChannelBuilder):
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
                     "detail": f"Target destination '{self.url.netloc}' should match the "
-                              f"'<host>:<port>' pattern. Please update the destination to follow "
-                              f"the correct format, e.g., 'hostname:port'.",
+                    f"'<host>:<port>' pattern. Please update the destination to follow "
+                    f"the correct format, e.g., 'hostname:port'.",
                 },
             )
 
@@ -486,18 +485,18 @@ class PlanObservedMetrics:
 
 class AnalyzeResult:
     def __init__(
-            self,
-            schema: Optional[DataType],
-            explain_string: Optional[str],
-            tree_string: Optional[str],
-            is_local: Optional[bool],
-            is_streaming: Optional[bool],
-            input_files: Optional[List[str]],
-            spark_version: Optional[str],
-            parsed: Optional[DataType],
-            is_same_semantics: Optional[bool],
-            semantic_hash: Optional[int],
-            storage_level: Optional[StorageLevel],
+        self,
+        schema: Optional[DataType],
+        explain_string: Optional[str],
+        tree_string: Optional[str],
+        is_local: Optional[bool],
+        is_streaming: Optional[bool],
+        input_files: Optional[List[str]],
+        spark_version: Optional[str],
+        parsed: Optional[DataType],
+        is_same_semantics: Optional[bool],
+        semantic_hash: Optional[int],
+        storage_level: Optional[StorageLevel],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -588,12 +587,12 @@ class SparkConnectClient(object):
     """
 
     def __init__(
-            self,
-            connection: Union[str, DefaultChannelBuilder],
-            user_id: Optional[str] = None,
-            channel_options: Optional[List[Tuple[str, Any]]] = None,
-            retry_policy: Optional[Dict[str, Any]] = None,
-            use_reattachable_execute: bool = True,
+        self,
+        connection: Union[str, DefaultChannelBuilder],
+        user_id: Optional[str] = None,
+        channel_options: Optional[List[Tuple[str, Any]]] = None,
+        retry_policy: Optional[Dict[str, Any]] = None,
+        use_reattachable_execute: bool = True,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -702,12 +701,12 @@ class SparkConnectClient(object):
         return list(self._retry_policies)
 
     def register_udf(
-            self,
-            function: Any,
-            return_type: "DataTypeOrString",
-            name: Optional[str] = None,
-            eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
-            deterministic: bool = True,
+        self,
+        function: Any,
+        return_type: "DataTypeOrString",
+        name: Optional[str] = None,
+        eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
+        deterministic: bool = True,
     ) -> str:
         """
         Create a temporary UDF in the session catalog on the other side. We generate a
@@ -741,12 +740,12 @@ class SparkConnectClient(object):
         return name
 
     def register_udtf(
-            self,
-            function: Any,
-            return_type: Optional["DataTypeOrString"],
-            name: str,
-            eval_type: int = PythonEvalType.SQL_TABLE_UDF,
-            deterministic: bool = True,
+        self,
+        function: Any,
+        return_type: Optional["DataTypeOrString"],
+        name: str,
+        eval_type: int = PythonEvalType.SQL_TABLE_UDF,
+        deterministic: bool = True,
     ) -> str:
         """
         Register a user-defined table function (UDTF) in the session catalog
@@ -775,11 +774,11 @@ class SparkConnectClient(object):
         return name
 
     def register_java(
-            self,
-            name: str,
-            javaClassName: str,
-            return_type: Optional["DataTypeOrString"] = None,
-            aggregate: bool = False,
+        self,
+        name: str,
+        javaClassName: str,
+        return_type: Optional["DataTypeOrString"] = None,
+        aggregate: bool = False,
     ) -> None:
         # construct a JavaUDF
         if return_type is None:
@@ -816,12 +815,12 @@ class SparkConnectClient(object):
         return resources
 
     def _build_observed_metrics(
-            self, metrics: Sequence["pb2.ExecutePlanResponse.ObservedMetrics"]
+        self, metrics: Sequence["pb2.ExecutePlanResponse.ObservedMetrics"]
     ) -> Iterator[PlanObservedMetrics]:
         return (PlanObservedMetrics(x.name, [v for v in x.values], list(x.keys)) for x in metrics)
 
     def to_table_as_iterator(
-            self, plan: pb2.Plan, observations: Dict[str, Observation]
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
     ) -> Iterator[Union[StructType, "pa.Table"]]:
         """
         Return given plan as a PyArrow Table iterator.
@@ -836,7 +835,7 @@ class SparkConnectClient(object):
                 yield pa.Table.from_batches([response])
 
     def to_table(
-            self, plan: pb2.Plan, observations: Dict[str, Observation]
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
     ) -> Tuple["pa.Table", Optional[StructType]]:
         """
         Return given plan as a PyArrow Table.
@@ -972,7 +971,7 @@ class SparkConnectClient(object):
         return result
 
     def execute_command(
-            self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
+        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
     ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
         """
         Execute given command.
@@ -1174,7 +1173,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch_as_iterator(
-            self, req: pb2.ExecutePlanRequest, observations: Dict[str, Observation]
+        self, req: pb2.ExecutePlanRequest, observations: Dict[str, Observation]
     ) -> Iterator[
         Union[
             "pa.RecordBatch",
@@ -1189,7 +1188,7 @@ class SparkConnectClient(object):
         num_records = 0
 
         def handle_response(
-                b: pb2.ExecutePlanResponse,
+            b: pb2.ExecutePlanResponse,
         ) -> Iterator[
             Union[
                 "pa.RecordBatch",
@@ -1223,8 +1222,8 @@ class SparkConnectClient(object):
                             {
                                 key: LiteralExpression._to_value(metric)
                                 for key, metric in zip(
-                                observed_metrics.keys, observed_metrics.metrics
-                            )
+                                    observed_metrics.keys, observed_metrics.metrics
+                                )
                             }
                         )
                     yield observed_metrics
@@ -1260,8 +1259,8 @@ class SparkConnectClient(object):
                 )
 
                 if (
-                        b.arrow_batch.HasField("start_offset")
-                        and num_records != b.arrow_batch.start_offset
+                    b.arrow_batch.HasField("start_offset")
+                    and num_records != b.arrow_batch.start_offset
                 ):
                     raise SparkConnectException(
                         f"Expected arrow batch to start at row offset {num_records} in results, "
@@ -1300,10 +1299,10 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch(
-            self,
-            req: pb2.ExecutePlanRequest,
-            observations: Dict[str, Observation],
-            self_destruct: bool = False,
+        self,
+        req: pb2.ExecutePlanRequest,
+        observations: Dict[str, Observation],
+        self_destruct: bool = False,
     ) -> Tuple[
         Optional["pa.Table"],
         Optional[StructType],
@@ -1378,7 +1377,7 @@ class SparkConnectClient(object):
         return tuple(configs.get(key) for key in keys)
 
     def get_config_with_defaults(
-            self, *pairs: Tuple[str, Optional[str]]
+        self, *pairs: Tuple[str, Optional[str]]
     ) -> Tuple[Optional[str], ...]:
         op = pb2.ConfigRequest.Operation(
             get_with_default=pb2.ConfigRequest.GetWithDefault(
@@ -1414,7 +1413,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _interrupt_request(
-            self, interrupt_type: str, id_or_tag: Optional[str] = None
+        self, interrupt_type: str, id_or_tag: Optional[str] = None
     ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
@@ -1662,17 +1661,17 @@ class SparkConnectClient(object):
         raise SparkConnectException("Invalid state during retry exception handling.")
 
     def _verify_response_integrity(
-            self,
-            response: Union[
-                pb2.ConfigResponse,
-                pb2.ExecutePlanResponse,
-                pb2.InterruptResponse,
-                pb2.ReleaseExecuteResponse,
-                pb2.AddArtifactsResponse,
-                pb2.AnalyzePlanResponse,
-                pb2.FetchErrorDetailsResponse,
-                pb2.ReleaseSessionResponse,
-            ],
+        self,
+        response: Union[
+            pb2.ConfigResponse,
+            pb2.ExecutePlanResponse,
+            pb2.InterruptResponse,
+            pb2.ReleaseExecuteResponse,
+            pb2.AddArtifactsResponse,
+            pb2.AnalyzePlanResponse,
+            pb2.FetchErrorDetailsResponse,
+            pb2.ReleaseSessionResponse,
+        ],
     ) -> None:
         """
         Verifies the integrity of the response. This method checks if the session ID and the
@@ -1688,8 +1687,8 @@ class SparkConnectClient(object):
             )
         if self._server_session_id is not None:
             if (
-                    response.server_side_session_id
-                    and response.server_side_session_id != self._server_session_id
+                response.server_side_session_id
+                and response.server_side_session_id != self._server_session_id
             ):
                 raise PySparkAssertionError(
                     "Received incorrect server side session identifier for request. "

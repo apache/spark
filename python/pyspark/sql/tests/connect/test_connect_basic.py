@@ -3548,6 +3548,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
     def test_custom_channel_builder(self):
         channel = self.spark._client._channel
+
         class CustomChannelBuilder(ChannelBuilder):
             def toChannel(self):
                 return channel
@@ -3767,14 +3768,18 @@ class ChannelBuilderTests(unittest.TestCase):
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
-        chan = DefaultChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
+        chan = DefaultChannelBuilder(
+            "sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021"
+        )
         self.assertEqual("host:15002", chan.endpoint)
         self.assertIn("foo", chan.userAgent.split(" "))
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
     def test_metadata(self):
-        chan = DefaultChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
+        chan = DefaultChannelBuilder(
+            "sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd"
+        )
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
@@ -3783,7 +3788,9 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = DefaultChannelBuilder(f"sc://host/;session_id={id}")
         self.assertEqual(id, chan.session_id)
 
-        chan = DefaultChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        chan = DefaultChannelBuilder(
+            f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true"
+        )
         md = chan.metadata()
         for kv in md:
             self.assertNotIn(
