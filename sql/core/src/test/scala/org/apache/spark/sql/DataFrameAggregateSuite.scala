@@ -2157,6 +2157,21 @@ class DataFrameAggregateSuite extends QueryTest
 
     def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
   }
+
+  test("SPARK-46779: Group by subquery with a cached relation") {
+    withTempView("data") {
+      sql(
+        """create or replace temp view data(c1, c2) as values
+          |(1, 2),
+          |(1, 3),
+          |(3, 7)""".stripMargin)
+      sql("cache table data")
+      val df = sql(
+        """select c1, (select count(*) from data d1 where d1.c1 = d2.c1), count(c2)
+          |from data d2 group by all""".stripMargin)
+      checkAnswer(df, Row(1, 2, 2) :: Row(3, 1, 1) :: Nil)
+    }
+  }
 }
 
 case class B(c: Option[Double])

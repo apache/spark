@@ -116,7 +116,7 @@
     - text: DATATYPE_MISMATCH error class
       url: sql-error-conditions-datatype-mismatch-error-class.html
     - text: INCOMPATIBLE_DATA_FOR_TABLE error class
-      url: sql-error-conditions-incompatible-data-to-table-error-class.html
+      url: sql-error-conditions-incompatible-data-for-table-error-class.html
     - text: INCOMPLETE_TYPE_DEFINITION error class
       url: sql-error-conditions-incomplete-type-definition-error-class.html
     - text: INCONSISTENT_BEHAVIOR_CROSS_VERSION error class

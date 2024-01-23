@@ -752,14 +752,20 @@ object SparkConnect {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
-    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`,`guava-*.jar`,
+    // `failureaccess-*.jar`, `annotations-*.jar`, `grpc-*.jar`, `protobuf-*.jar`,
+    // `gson-*.jar`, `error_prone_annotations-*.jar`, `j2objc-annotations-*.jar`,
+    // `animal-sniffer-annotations-*.jar`, `perfmark-api-*.jar`,
+    // `proto-google-common-protos-*.jar` in assembly.
+    // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      cp filter { v =>
-        val name = v.data.getName
-        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
+      val validPrefixes = Set("spark-connect", "unused-", "guava-", "failureaccess-",
+        "annotations-", "grpc-", "protobuf-", "gson", "error_prone_annotations",
+        "j2objc-annotations", "animal-sniffer-annotations", "perfmark-api",
+        "proto-google-common-protos")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
       }
     },
 
@@ -989,8 +995,12 @@ object KubernetesIntegrationTests {
             s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
         val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
             s"$bindingsDir/python/Dockerfile")
-        val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
+        var rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
             s"$bindingsDir/R/Dockerfile")
+        val excludeTags = sys.props.getOrElse("test.exclude.tags", "").split(",")
+        if (excludeTags.exists(_.equalsIgnoreCase("r"))) {
+          rDockerFile = ""
+        }
         val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=$javaImageTag")
         } else {

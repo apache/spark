@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 
 /**
  * Holds common logic for join operators by shuffling two child relations
@@ -54,16 +54,6 @@ trait ShuffledJoin extends JoinCodegenSupport {
     case x =>
       throw new IllegalArgumentException(
         s"ShuffledJoin should not take $x as the JoinType")
-  }
-
-  def satisfiesOutputPartitioning(keys: Seq[Expression], partitioning: Partitioning): Boolean = {
-    partitioning match {
-      case HashPartitioning(exprs, _) if exprs.length == keys.length =>
-        exprs.forall(e => keys.exists(_.semanticEquals(e)))
-      case PartitioningCollection(partitionings) =>
-        partitionings.exists(satisfiesOutputPartitioning(keys, _))
-      case _ => false
-    }
   }
 
   override def output: Seq[Attribute] = {

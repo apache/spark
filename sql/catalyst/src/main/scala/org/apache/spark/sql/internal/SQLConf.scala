@@ -564,14 +564,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED =
-    buildConf("spark.sql.unwrapCastInJoinCondition.enabled")
-      .doc("When true, unwrap the cast in the join condition to reduce shuffle if they are " +
-        "integral types.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val MAX_SINGLE_PARTITION_BYTES = buildConf("spark.sql.maxSinglePartitionBytes")
     .doc("The maximum number of bytes allowed for a single partition. Otherwise, The planner " +
       "will introduce shuffle to improve parallelism.")
@@ -3643,6 +3635,12 @@ object SQLConf {
     .intConf
     .createOptional
 
+  val AVRO_ZSTANDARD_BUFFER_POOL_ENABLED = buildConf("spark.sql.avro.zstandard.bufferPool.enabled")
+    .doc("If true, enable buffer pool of ZSTD JNI library when writing of AVRO files")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
     .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
@@ -5119,8 +5117,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
-
-  def unwrapCastInJoinConditionEnabled: Boolean = getConf(UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
