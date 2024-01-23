@@ -284,7 +284,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Whether the standalone cluster manager should spread drivers out across nodes or try
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
-    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
+    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads.
   </td>
   <td>4.0.0</td>
 </tr>
