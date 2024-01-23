@@ -957,7 +957,7 @@ class MasterSuite extends SparkFunSuite
 
     val desc = new ApplicationDescription(
       "test", maxCores, null, "", rp, None, None, initialExecutorLimit)
-    val appId = System.currentTimeMillis.toString
+    val appId = System.nanoTime().toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
@@ -966,7 +966,7 @@ class MasterSuite extends SparkFunSuite
   }
 
   private def makeWorkerInfo(memoryMb: Int, cores: Int): WorkerInfo = {
-    val workerId = System.currentTimeMillis.toString
+    val workerId = System.nanoTime().toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
