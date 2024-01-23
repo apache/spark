@@ -886,7 +886,7 @@ public class UTF8StringSuite {
   {
     // Case-insensitive and accent insensitive.
     {
-      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-ai");
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr_ci_ai");
       UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
       assertEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
       assertEquals(collatedUTF8String, UTF8String.fromString("ćčc", collationId));
@@ -898,7 +898,7 @@ public class UTF8StringSuite {
 
     // Move to secondary strength (ignore case, respect accents).
     {
-      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-as");
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr_ci_as");
       UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
       assertEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
       assertEquals(collatedUTF8String, UTF8String.fromString("ĆČC", collationId));
@@ -907,7 +907,7 @@ public class UTF8StringSuite {
 
     // Tertiary strength (respect both)
     {
-      int collationId = CollatorFactory.getInstance().collationNameToId("sr-cs-as");
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr_cs_as");
       UTF8String collatedUTF8String = UTF8String.fromString("ćčc", collationId);
       assertNotEquals(0, collatedUTF8String.compareTo(UTF8String.fromString("ĆČC", collationId)));
       assertNotEquals(collatedUTF8String, UTF8String.fromString("ĆČC", collationId));
@@ -921,7 +921,7 @@ public class UTF8StringSuite {
   public void collatedStringHashing() {
     // Case-insensitive and accent insensitive.
     {
-      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-ai");
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr_ci_ai");
       var hashFunc = CollatorFactory.getInfoForId(collationId).hashFunction;
 
       int collatedHash = hashFunc.apply(UTF8String.fromString("ćčc", collationId));
@@ -934,7 +934,7 @@ public class UTF8StringSuite {
 
     // Move to secondary strength (ignore case, respect accents).
     {
-      int collationId = CollatorFactory.getInstance().collationNameToId("sr-ci-as");
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr_ci_as");
       var hashFunc = CollatorFactory.getInfoForId(collationId).hashFunction;
 
       int collatedHash = hashFunc.apply(UTF8String.fromString("ćčc", collationId));
@@ -947,7 +947,7 @@ public class UTF8StringSuite {
 
     // Tertiary strength (respect both)
     {
-      int collationId = CollatorFactory.getInstance().collationNameToId("sr-cs-as");
+      int collationId = CollatorFactory.getInstance().collationNameToId("sr_cs_as");
       var hashFunc = CollatorFactory.getInfoForId(collationId).hashFunction;
 
       int collatedHash = hashFunc.apply(UTF8String.fromString("ćčc", collationId));

@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.catalyst.util.CollatorFactory
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, StringType}
 
 class CollationSuite extends QueryTest
-  with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with SharedSparkSession {
   test("collate keyword") {
     checkAnswer(sql("select collate('aaa', 'ucs_basic')"), Row("aaa"))
     assert(sql("select collate('aaa', 'ucs_basic')").schema(0).dataType ==
-      StringType("ucs_basic"))
+      StringType(DataType.DEFAULT_COLLATION_ID))
 
     // check collation of string literal.
     checkAnswer(sql("select collation('aaa')"), Row("UCS_BASIC"))
@@ -52,17 +51,17 @@ class CollationSuite extends QueryTest
       Row(false))
     checkAnswer(
       sql(s"select collation(collate('aaa', 'ucs_basic_lcase'))"),
-      Row("ucs_basic_lcase"))
+      Row("UCS_BASIC_LCASE"))
   }
 
   test("collate keyword with locale") {
     // Collated row is a simple string.
-    checkAnswer(sql("select collate('aaa', 'sr_ci_ai')"), Row("aaa"))
-    assert(sql("select collate('aaa', 'sr_ci_ai')").schema(0).dataType ==
-      StringType("sr_ci_ai"))
+    checkAnswer(sql("select collate('aaa', 'SR_CI_AI')"), Row("aaa"))
+    assert(sql("select collate('aaa', 'SR_CI_AI')").schema(0).dataType ==
+      StringType(CollatorFactory.getInstance().collationNameToId("SR_CI_AI")))
 
     // Serbian case + accent insensitive ordering
-    var collationName = "sr_ci_ai"
+    var collationName = "SR_CI_AI"
     checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
     checkAnswer(
       sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"), Row(true))
@@ -79,7 +78,7 @@ class CollationSuite extends QueryTest
       Row(true))
 
     // Serbian case insensitive ordering but accent sensitive
-    collationName = "sr_ci_as"
+    collationName = "SR_CI_AS"
     checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
     checkAnswer(
       sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"),
@@ -101,7 +100,7 @@ class CollationSuite extends QueryTest
       Row(true))
 
     // Serbian case and accent sensitive ordering.
-    collationName = "sr_cs_as"
+    collationName = "SR_CS_AS"
     checkAnswer(sql(s"select collation(collate('aaa', '$collationName'))"), Row(collationName))
     checkAnswer(
       sql(s"select collate('aaa', '$collationName') = collate('AAA', '$collationName')"),
@@ -138,7 +137,7 @@ class CollationSuite extends QueryTest
       SELECT fruit FROM
       VALUES ('äpfel'), ('Äpfel'), ('Apfel'), ('apfel'), ('Banane'), ('banane')
        as data(fruit)
-      ORDER BY collate(fruit, 'de_cs_as')
+      ORDER BY collate(fruit, 'DE_CS_AS')
       """),
       Seq(
         Row("apfel"), Row("Apfel"),
@@ -149,7 +148,7 @@ class CollationSuite extends QueryTest
   test("agg simple") {
     checkAnswer(sql("""
       WITH t AS (
-        SELECT collate(col1, 'sr_ci_ai') as c
+        SELECT collate(col1, 'SR_CI_AI') as c
         FROM
         VALUES ('aaa'), ('bbb'), ('AAA'), ('BBB')
       )
@@ -163,7 +162,7 @@ class CollationSuite extends QueryTest
     checkAnswer(sql(
       """
       with t as (
-        SELECT collate(c, 'sr_ci_ai') as c
+        SELECT collate(c, 'SR_CI_AI') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
@@ -175,7 +174,7 @@ class CollationSuite extends QueryTest
     checkAnswer(sql(
       """
       with t as (
-        SELECT collate(c, 'sr_ci_as') as c
+        SELECT collate(c, 'SR_CI_AS') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
@@ -188,7 +187,7 @@ class CollationSuite extends QueryTest
     checkAnswer(sql(
       """
       with t as (
-        SELECT collate(c, 'sr_cs_as') as c
+        SELECT collate(c, 'SR_CS_AS') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
@@ -200,13 +199,13 @@ class CollationSuite extends QueryTest
   test("views should propagate collation") {
     sql(
       """
-        SELECT collate(c, 'sr_ci_ai') as c
+        SELECT collate(c, 'SR_CI_AI') as c
         FROM VALUES
           ('ććć'), ('ccc'), ('ččč'), ('ČČČ')
          as data(c)
       """).createOrReplaceTempView("V")
 
-    checkAnswer(sql("SELECT DISTINCT collation(c) FROM V"), Row("sr_ci_ai"))
+    checkAnswer(sql("SELECT DISTINCT collation(c) FROM V"), Row("SR_CI_AI"))
   }
 
   test("in operator") {
@@ -216,39 +215,39 @@ class CollationSuite extends QueryTest
       """).createOrReplaceTempView("V")
 
     // Case and accent insensitive
-    checkAnswer(sql("SELECT collate('CCC', 'sr_ci_ai') IN " +
-      "(SELECT collate(c, 'sr_ci_ai') FROM V)"), Row(true))
-    checkAnswer(sql("SELECT collate('ččč', 'sr_ci_ai') IN " +
-      "(SELECT collate(c, 'sr_ci_ai') FROM V)"), Row(true))
-    checkAnswer(sql("SELECT collate('xxx', 'sr_ci_ai') IN " +
-      "(SELECT collate(c, 'sr_ci_ai') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('CCC', 'SR_CI_AI') IN " +
+      "(SELECT collate(c, 'SR_CI_AI') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('ččč', 'SR_CI_AI') IN " +
+      "(SELECT collate(c, 'SR_CI_AI') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('xxx', 'SR_CI_AI') IN " +
+      "(SELECT collate(c, 'SR_CI_AI') FROM V)"), Row(false))
 
     // Case insensitive but accent sensitive
-    checkAnswer(sql("SELECT collate('CCC', 'sr_ci_as') IN " +
-      "(SELECT collate(c, 'sr_ci_as') FROM V)"), Row(true))
-    checkAnswer(sql("SELECT collate('ččč', 'sr_ci_as') IN " +
-      "(SELECT collate(c, 'sr_ci_as') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('CCC', 'SR_CI_AS') IN " +
+      "(SELECT collate(c, 'SR_CI_AS') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('ččč', 'SR_CI_AS') IN " +
+      "(SELECT collate(c, 'SR_CI_AS') FROM V)"), Row(false))
 
     // Case and accent sensitive
-    checkAnswer(sql("SELECT collate('CCC', 'sr_cs_as') IN " +
-      "(SELECT collate(c, 'sr_cs_as') FROM V)"), Row(false))
-    checkAnswer(sql("SELECT collate('ččč', 'sr_cs_as') IN " +
-      "(SELECT collate(c, 'sr_cs_as') FROM V)"), Row(false))
-    checkAnswer(sql("SELECT collate('ccc', 'sr_cs_as') IN " +
-      "(SELECT collate(c, 'sr_cs_as') FROM V)"), Row(true))
+    checkAnswer(sql("SELECT collate('CCC', 'SR_CS_AS') IN " +
+      "(SELECT collate(c, 'SR_CS_AS') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('ččč', 'SR_CS_AS') IN " +
+      "(SELECT collate(c, 'SR_CS_AS') FROM V)"), Row(false))
+    checkAnswer(sql("SELECT collate('ccc', 'SR_CS_AS') IN " +
+      "(SELECT collate(c, 'SR_CS_AS') FROM V)"), Row(true))
   }
 
   test("join operator") {
     // Ignore accents and casing.
     sql(
       """
-        SELECT collate(c, 'sr_ci_ai') as c FROM VALUES
+        SELECT collate(c, 'SR_CI_AI') as c FROM VALUES
         ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
         as data(c)
       """).createOrReplaceTempView("V1")
     sql(
       """
-        SELECT collate(c, 'sr_ci_ai') as c FROM VALUES ('ccc'), ('CCC') as data(c)
+        SELECT collate(c, 'SR_CI_AI') as c FROM VALUES ('ccc'), ('CCC') as data(c)
       """).createOrReplaceTempView("V2")
 
     // Everyone is going to pair with everyone.
@@ -266,13 +265,13 @@ class CollationSuite extends QueryTest
     // Ignore casing but not accents
     sql(
       """
-        SELECT collate(c, 'sr_ci_as') as c FROM VALUES
+        SELECT collate(c, 'SR_CI_AS') as c FROM VALUES
         ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
         as data(c)
       """).createOrReplaceTempView("V1")
     sql(
       """
-        SELECT collate(c, 'sr_ci_as') as c FROM VALUES ('ććć'), ('CCC') as data(c)
+        SELECT collate(c, 'SR_CI_AS') as c FROM VALUES ('ććć'), ('CCC') as data(c)
       """).createOrReplaceTempView("V2")
 
     checkAnswer(sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c"),
@@ -283,13 +282,13 @@ class CollationSuite extends QueryTest
     // Respect casing and accents
     sql(
       """
-        SELECT collate(c, 'sr_cs_as') as c FROM VALUES
+        SELECT collate(c, 'SR_CS_AS') as c FROM VALUES
         ('ććć'), ('ĆĆĆ'), ('ččč'), ('ČČČ')
         as data(c)
       """).createOrReplaceTempView("V1")
     sql(
       """
-        SELECT collate(c, 'sr_cs_as') as c FROM VALUES ('ććć'), ('CCC') as data(c)
+        SELECT collate(c, 'SR_CS_AS') as c FROM VALUES ('ććć'), ('CCC') as data(c)
       """).createOrReplaceTempView("V2")
 
     checkAnswer(sql("SELECT * FROM V1 JOIN V2 ON V1.c = V2.c"),
@@ -299,12 +298,12 @@ class CollationSuite extends QueryTest
 
   test("create table support") {
     // TODO: Filter pushdown and partitioning are todos.
-    val tableName = "parquet_dummy_t1"
+    val tableName = "parquet_dummy_t"
     withTable(tableName) {
-      sql(s"CREATE TABLE IF NOT EXISTS $tableName (c1 STRING COLLATE 'sr_ci_ai') USING PARQUET")
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName (c1 STRING COLLATE 'SR_CI_AI') USING PARQUET")
       sql(s"INSERT INTO $tableName VALUES ('aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA')")
-      checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"), Seq(Row("sr_ci_ai")))
+      checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"), Seq(Row("SR_CI_AI")))
       checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
     }
   }

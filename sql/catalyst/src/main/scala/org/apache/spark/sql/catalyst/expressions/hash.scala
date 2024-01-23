@@ -491,10 +491,8 @@ abstract class HashExpression[E] extends Expression {
     case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
-    case st: StringType =>
-      // TODO: Fix this later, this doesn't make much sense to be like this.
-      val collatorId = CollatorFactory.getInstance().collationNameToId(st.collation)
-      val hash = CollatorFactory.getInfoForId(collatorId).hashFunction.apply(
+    case s: StringType =>
+      val hash = CollatorFactory.getInfoForId(s.collationId).hashFunction.apply(
         UTF8String.fromString(input))
       genHashLong(hash.toString, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)

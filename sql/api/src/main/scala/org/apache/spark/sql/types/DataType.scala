@@ -26,13 +26,13 @@ import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkThrowable
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
-import org.apache.spark.sql.catalyst.util.StringConcat
+import org.apache.spark.sql.catalyst.util.{CollatorFactory, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -117,7 +117,9 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
-  private val COLLATED_STRING_TYPE = """string\(\s*([\w-]+)\s*\)""".r
+  private val COLLATED_STRING_TYPE = """string\(\s*([\w_]+)\s*\)""".r
+
+  val DEFAULT_COLLATION_ID = 0
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -182,7 +184,9 @@ object DataType {
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
-      case COLLATED_STRING_TYPE(collation) => StringType(collation)
+      case COLLATED_STRING_TYPE(collation) =>
+        val collationId = CollatorFactory.getInstance().collationNameToId(collation)
+        StringType(collationId)
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)

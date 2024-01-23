@@ -1197,7 +1197,7 @@ case class Cast(
     case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
     case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
     case st: StringType => (c, evPrim, _) =>
-      castToStringCode(from, ctx, Some(st.collation)).apply(c, evPrim)
+      castToStringCode(from, ctx, st.collationId).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)

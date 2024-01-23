@@ -831,7 +831,7 @@ object FunctionRegistry {
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
     castAlias("binary", BinaryType),
-    castAlias("string", StringType), // TODO: What about casting and collations?
+    castAlias("string", StringType(DataType.DEFAULT_COLLATION_ID)),
 
     // mask functions
     expressionBuilder("mask", MaskExpressionBuilder),

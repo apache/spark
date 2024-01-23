@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.util.CollatorFactory
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -25,11 +26,17 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class StringType private(val collation: String) extends AtomicType with Serializable {
-  def isDefaultCollation: Boolean = collation == "UCS_BASIC"
+class StringType private(val collationId: Int) extends AtomicType with Serializable {
+  // TODO: When we implement session level collation it should be used here as the default.
+  def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
 
-  override def toString: String = if (this.isDefaultCollation) "String" else s"String($collation)"
-  override def typeName: String = if (this.isDefaultCollation) "string" else s"string($collation)"
+  override def toString: String =
+    if (this.isDefaultCollation) "String"
+    else s"String(${CollatorFactory.getInfoForId(collationId).collationName})"
+
+  override def typeName: String =
+    if (this.isDefaultCollation) "string"
+    else s"string(${CollatorFactory.getInfoForId(collationId).collationName})"
 
   /**
    * The default size of a value of the StringType is 20 bytes.
@@ -39,14 +46,15 @@ class StringType private(val collation: String) extends AtomicType with Serializ
   private[spark] override def asNullable: StringType = this
 
   override def equals(obj: Any): Boolean =
-    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collation == collation
+    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
 
-  override def hashCode(): Int = collation.hashCode
+  override def hashCode(): Int = collationId.hashCode()
 }
 /**
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType("UCS_BASIC") {
-  def apply(collation: String): StringType = new StringType(collation)
+case object StringType extends StringType(0) {
+  val DEFAULT_COLLATION_ID = 0
+  def apply(collationId: Int): StringType = new StringType(collationId)
 }

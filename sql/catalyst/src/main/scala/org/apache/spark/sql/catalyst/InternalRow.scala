@@ -140,9 +140,8 @@ object InternalRow {
         case PhysicalLongType => (input, ordinal) => input.getLong(ordinal)
         case PhysicalFloatType => (input, ordinal) => input.getFloat(ordinal)
         case PhysicalDoubleType => (input, ordinal) => input.getDouble(ordinal)
-        case PhysicalStringType(None) => (input, ordinal) => input.getUTF8String(ordinal)
-        case PhysicalStringType(Some(collation)) => (input, ordinal) =>
-          input.getUTF8String(ordinal).installCollationAwareComparator(collation)
+        case PhysicalStringType(collationId) => (input, ordinal) =>
+          input.getUTF8String(ordinal).installCollationAwareComparator(collationId)
         case PhysicalBinaryType => (input, ordinal) => input.getBinary(ordinal)
         case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
         case t: PhysicalDecimalType => (input, ordinal) =>
@@ -190,7 +189,7 @@ object InternalRow {
     case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
     case st: StringType => (input, v) =>
       val str = v.asInstanceOf[UTF8String].copy()
-      str.installCollationAwareComparator(st.collation)
+      str.installCollationAwareComparator(st.collationId)
       input.update(ordinal, str)
     case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
     case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())

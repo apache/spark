@@ -43,7 +43,7 @@ object PhysicalDataType {
     case VarcharType(_) => PhysicalStringType()
     case CharType(_) => PhysicalStringType()
     case StringType => PhysicalStringType()
-    case st: StringType => PhysicalStringType(st.collation)
+    case st: StringType => PhysicalStringType(st.collationId)
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType
     case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
@@ -259,7 +259,7 @@ class PhysicalShortType() extends PhysicalIntegralType with PhysicalPrimitiveTyp
 }
 case object PhysicalShortType extends PhysicalShortType
 
-case class PhysicalStringType(collation: Option[String]) extends PhysicalDataType {
+case class PhysicalStringType(collationId: Int) extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -268,11 +268,11 @@ case class PhysicalStringType(collation: Option[String]) extends PhysicalDataTyp
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 object PhysicalStringType {
-  def apply(collation: String): PhysicalStringType =
-    new PhysicalStringType(Some(collation))
+  def apply(collationId: Int): PhysicalStringType =
+    new PhysicalStringType(collationId)
 
   def apply(): PhysicalStringType =
-    new PhysicalStringType(None)
+    new PhysicalStringType(DataType.DEFAULT_COLLATION_ID)
 }
 
 case class PhysicalArrayType(

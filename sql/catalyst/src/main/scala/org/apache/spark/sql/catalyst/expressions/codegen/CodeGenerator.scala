@@ -1640,9 +1640,8 @@ object CodeGenerator extends Logging {
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
-        case PhysicalStringType(None) => s"$input.getUTF8String($ordinal)"
-        case PhysicalStringType(Some(collation)) =>
-          s"$input.getUTF8String($ordinal).installCollationAwareComparator(\"$collation\")"
+        case PhysicalStringType(collationId) =>
+          s"$input.getUTF8String($ordinal).installCollationAwareComparator($collationId)"
         case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"

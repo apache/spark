@@ -59,22 +59,6 @@ object UTF8StringBenchmark extends BenchmarkBase {
             sourceString.compare(targetString)
           })
         }
-
-        benchmark.addCase(s"Non default collation through name equality $description") { _ =>
-          1.to(10000).foreach(_ => {
-            sourceString.installCollationAwareComparator(collationName)
-            targetString.installCollationAwareComparator(collationName)
-            sourceString.equals(targetString)
-          })
-        }
-
-        benchmark.addCase(s"Non default collation through name comparison $description") { _ =>
-          1.to(10000).foreach(_ => {
-            sourceString.installCollationAwareComparator(collationName)
-            targetString.installCollationAwareComparator(collationName)
-            sourceString.compare(targetString)
-          })
-        }
       })
 
       benchmark.run()

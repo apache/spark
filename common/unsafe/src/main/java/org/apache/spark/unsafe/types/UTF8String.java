@@ -211,10 +211,10 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
     return this;
   }
 
-  public UTF8String installCollationAwareComparator(String collationName) {
-    this.comparatorId = CollatorFactory.getInstance().collationNameToId(collationName);
-    return this;
-  }
+  // public UTF8String installCollationAwareComparator(String collationName) {
+  //   this.comparatorId = CollatorFactory.getInstance().collationNameToId(collationName);
+  //   return this;
+  // }
 
   /**
    * Returns a {@link ByteBuffer} wrapping the base object if it is a byte array

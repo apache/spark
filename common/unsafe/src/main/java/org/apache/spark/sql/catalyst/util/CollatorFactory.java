@@ -2,12 +2,14 @@ package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.util.ULocale;
 
+import java.util.Dictionary;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.Comparator;
 import com.ibm.icu.text.Collator;
+import java.util.Hashtable;
 
 public class CollatorFactory {
   public class CollatorInfo {
@@ -38,6 +40,7 @@ public class CollatorFactory {
   }
 
   private final CollatorInfo[] collatorTable;
+  private final Hashtable<String, Integer> collationNameToIdMap = new Hashtable<>();
 
   private static Collator CollatorFromCollationName(String collationName) {
     // Expected format is <locale>_<ci/cs>_<ai/as>
@@ -88,20 +91,23 @@ public class CollatorFactory {
     collatorTable[6] = new CollatorInfo("SR_CS_AS", CollatorFromCollationName("sr_cs_as"), "153.120.0.0");
 
     // German
-    collatorTable[7] = new CollatorInfo("DE_CI_AI", CollatorFromCollationName("De_ci_ai"), "153.120.0.0");
-    collatorTable[8] = new CollatorInfo("DE_CI_AS", CollatorFromCollationName("De_ci_as"), "153.120.0.0");
-    collatorTable[9] = new CollatorInfo("DE_CS_AS", CollatorFromCollationName("De_cs_as"), "153.120.0.0");
+    collatorTable[7] = new CollatorInfo("DE_CI_AI", CollatorFromCollationName("de_ci_ai"), "153.120.0.0");
+    collatorTable[8] = new CollatorInfo("DE_CI_AS", CollatorFromCollationName("de_ci_as"), "153.120.0.0");
+    collatorTable[9] = new CollatorInfo("DE_CS_AS", CollatorFromCollationName("de_cs_as"), "153.120.0.0");
+
+    for (int i = 0; i < collatorTable.length; i++) {
+      this.collationNameToIdMap.put(collatorTable[i].collationName, i);
+    }
   }
 
   public int collationNameToId(String collationName) {
-    // TODO: Build map here.
-    for (int i = 0; i < collatorTable.length; i++) {
-      if (collatorTable[i].collationName.equalsIgnoreCase(collationName)) {
-        return i;
-      }
+    String normalizedName = collationName.toUpperCase();
+    if (collationNameToIdMap.containsKey(normalizedName)) {
+      return collationNameToIdMap.get(normalizedName);
+    } else {
+      // TODO: Proper error handling.
+      throw new IllegalArgumentException("Invalid collation name: " + collationName);
     }
-
-    throw new IllegalArgumentException("Invalid collation name: " + collationName);
   }
 
   // TODO: This probably should not be a singleton.
@@ -114,6 +120,4 @@ public class CollatorFactory {
   public static CollatorInfo getInfoForId(int id) {
     return instance.collatorTable[id];
   }
-
-  public static String DEFAULT_COLLATION_NAME = "UCS_BASIC";
 }

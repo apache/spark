@@ -60,7 +60,8 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.genCode(ctx)
-    val toStringCode = castToStringCode(child.dataType, ctx, None).apply(childCode.value, ev.value)
+    val toStringCode = castToStringCode(child.dataType, ctx, DataType.DEFAULT_COLLATION_ID)
+      .apply(childCode.value, ev.value)
     val finalCode =
       code"""
          |${childCode.code}

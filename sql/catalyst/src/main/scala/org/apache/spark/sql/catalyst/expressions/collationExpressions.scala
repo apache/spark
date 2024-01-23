@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.CollatorFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -28,8 +29,15 @@ case class Collate(inputString: Expression, collation: Expression)
   override def right: Expression = collation
 
   @transient
-  private lazy val collationEval = right.eval().asInstanceOf[UTF8String]
-  override def dataType: DataType = StringType(collationEval.toString)
+  private lazy val collationId = {
+    val collationName = right.eval().asInstanceOf[UTF8String].toString
+    CollatorFactory.getInstance().collationNameToId(collationName)
+  }
+
+  override def dataType: DataType = {
+    StringType(collationId)
+  }
+
   // TODO: Can this be foldable?
   override def foldable: Boolean = false
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
@@ -41,7 +49,7 @@ case class Collate(inputString: Expression, collation: Expression)
   override def eval(row: InternalRow): Any = {
     // TODO: Proper codegen here.
     val input = left.eval(row).asInstanceOf[UTF8String]
-    input.installCollationAwareComparator(collationEval.toString)
+    input.installCollationAwareComparator(collationId)
     input
   }
 }
@@ -52,7 +60,9 @@ case class Collation(child: Expression) extends UnaryExpression with CodegenFall
   override protected def withNewChildInternal(newChild: Expression): Expression = copy(newChild)
 
   override def eval(input: InternalRow): Any = child.dataType match {
-    case st: StringType => UTF8String.fromString(st.collation)
+    case st: StringType =>
+      val collationName = CollatorFactory.getInfoForId(st.collationId).collationName
+      UTF8String.fromString(collationName)
     case _ => throw new IllegalArgumentException("Collation expects StringType")
   }
 }
