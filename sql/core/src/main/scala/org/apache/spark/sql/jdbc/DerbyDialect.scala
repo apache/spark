@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Statement, Types}
+import java.sql.Types
 import java.util.Locale
 
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcOptionsInWrite
 import org.apache.spark.sql.types._
 
 
-private object DerbyDialect extends JdbcDialect with MergeByTempTable {
+private object DerbyDialect extends JdbcDialect {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
@@ -56,17 +55,6 @@ private object DerbyDialect extends JdbcDialect with MergeByTempTable {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
-
-  override def createTempTableName(): String = "SESSION." + super.createTempTableName()
-
-  override def createTempTable(
-      statement: Statement,
-      tableName: String,
-      strSchema: String,
-      options: JdbcOptionsInWrite): Unit = {
-    statement.executeUpdate(s"DECLARE GLOBAL TEMPORARY TABLE $tableName ($strSchema) " +
-      s"ON COMMIT DELETE ROWS NOT LOGGED ON ROLLBACK DELETE ROWS")
-  }
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
   override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
