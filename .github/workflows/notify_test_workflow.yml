@@ -115,12 +115,33 @@ jobs:
               }
 
               // Here we get check run ID to provide Check run view instead of Actions view, see also SPARK-37879.
-              const check_runs = await github.request(check_run_endpoint, check_run_params)
-              const check_run_head = check_runs.data.check_runs.filter(r => r.name === "Run / Check changes")[0]
+              let retryCount = 0;
+              let check_run_head;
+              const fetchCheckRuns = async () => {
+                const check_runs = await github.request(check_run_endpoint, check_run_params);
+                return check_runs.data.check_runs.find(r => r.name === "Run / Check changes");
+              };
+              const retryWithDelay = async () => {
+                while (retryCount < 3) {
+                  check_run_head = await fetchCheckRuns();
+                  if (check_run_head) {
+                    break;
+                  }
+                  retryCount++;
+                  if (retryCount < 3) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                  }
+                }
 
-              if (check_run_head.head_sha != context.payload.pull_request.head.sha) {
-                throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
-              }
+                if (!check_run_head) {
+                  throw new Error('Failed to retrieve check_run_head after 3 attempts');
+                }
+
+                if (check_run_head.head_sha != context.payload.pull_request.head.sha) {
+                  throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
+                }
+              };
+              retryWithDelay();
 
               const check_run_url = 'https://github.com/'
                 + context.payload.pull_request.head.repo.full_name
