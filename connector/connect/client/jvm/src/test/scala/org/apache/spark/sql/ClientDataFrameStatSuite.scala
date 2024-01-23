@@ -248,19 +248,19 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
 
   test("Bloom filter test invalid inputs") {
     val df = spark.range(1000).toDF("id")
-    val message1 = intercept[AnalysisException] {
+    val error1 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", -1000, 100)
-    }.getMessage
-    assert(message1.contains("VALUE_OUT_OF_RANGE"))
+    }
+    assert(error1.getErrorClass === "VALUE_OUT_OF_RANGE")
 
-    val message2 = intercept[AnalysisException] {
+    val error2 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -100)
-    }.getMessage
-    assert(message2.contains("VALUE_OUT_OF_RANGE"))
+    }
+    assert(error2.getErrorClass === "VALUE_OUT_OF_RANGE")
 
-    val message3 = intercept[AnalysisException] {
+    val error3 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -1.0)
-    }.getMessage
-    assert(message3.contains("VALUE_OUT_OF_RANGE"))
+    }
+    assert(error3.getErrorClass === "VALUE_OUT_OF_RANGE")
   }
 }
