@@ -232,7 +232,7 @@ private[kinesis] object KinesisTestUtils {
     val kinesisServiceMetadata = new KinesisServiceMetadata()
     kinesisServiceMetadata.regions
       .asScala
-      .find(r => kinesisServiceMetadata.endpointFor(r).equals(uri))
+      .find(r => kinesisServiceMetadata.endpointFor(r).toString.equals(uri.getHost))
       .map(_.id)
       .getOrElse(
         throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
@@ -285,6 +285,13 @@ private[kinesis] object KinesisTestUtils {
              |can find the credentials.
            """.stripMargin)
     }
+  }
+
+  def main(args: Array[String]): Unit = {
+    // scalastyle:off println
+    val endpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+    println(s"Result: ${getRegionNameByEndpoint(endpointUrl)}")
+    // scalastyle:on println
   }
 }
 
