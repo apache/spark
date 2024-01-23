@@ -214,7 +214,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -225,7 +225,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -397,7 +397,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -408,7 +408,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -515,7 +515,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -526,7 +526,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -635,7 +635,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -646,14 +646,14 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docs-coursier-
     - name: Cache Maven local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: docs-maven-${{ hashFiles('**/pom.xml') }}
@@ -816,7 +816,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -827,7 +827,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Maven local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -871,7 +871,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -882,7 +882,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -895,7 +895,7 @@ jobs:
         java-version: ${{ inputs.java }}
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ./tpcds-sf-1
         key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
@@ -978,7 +978,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -989,7 +989,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1038,7 +1038,7 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache Scala, SBT and Maven
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             build/apache-maven-*
@@ -1049,7 +1049,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Coursier local repository
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/coursier
           key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1063,9 +1063,7 @@ jobs:
       - name: start minikube
         run: |
           # See more in "Installation" https://minikube.sigs.k8s.io/docs/start/
-          # curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-          # TODO(SPARK-44495): Resume to use the latest minikube for k8s-integration-tests.
-          curl -LO https://storage.googleapis.com/minikube/releases/v1.30.1/minikube-linux-amd64
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
           sudo install minikube-linux-amd64 /usr/local/bin/minikube
           rm minikube-linux-amd64
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
@@ -1074,7 +1072,7 @@ jobs:
         run: |
           kubectl get pods -A
           kubectl describe node
-      - name: Run Spark on K8S integration test (With driver cpu 0.5, executor cpu 0.2 limited)
+      - name: Run Spark on K8S integration test
         run: |
           # Prepare PV test
           PVC_TMP_DIR=$(mktemp -d)
@@ -1082,9 +1080,9 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.1/installer/volcano-development.yaml || true
+          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
-          build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
+          build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
         uses: actions/upload-artifact@v4

@@ -34,4 +34,11 @@ class InMemoryRelationSuite extends SparkFunSuite with SharedSparkSessionBase {
     assert(!relationCachedPlan.eq(clonedCachedPlan))
     assert(relationCachedPlan === clonedCachedPlan)
   }
+
+  test("SPARK-46779: InMemoryRelations with the same cached plan are semantically equivalent") {
+    val d = spark.range(1)
+    val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+    val r2 = r1.withOutput(r1.output.map(_.newInstance()))
+    assert(r1.sameResult(r2))
+  }
 }

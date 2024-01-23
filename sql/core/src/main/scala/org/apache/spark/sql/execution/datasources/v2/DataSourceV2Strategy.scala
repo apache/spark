@@ -147,7 +147,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         StoragePartitionJoinParams(relation.keyGroupedPartitioning))
       withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
-    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
 
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
@@ -157,7 +157,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Add a Project here to make sure we produce unsafe rows.
       withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-    case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
       val continuousStream = r.stream.asInstanceOf[ContinuousStream]

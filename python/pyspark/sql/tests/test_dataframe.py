@@ -69,6 +69,16 @@ class DataFrameTestsMixin:
         self.assertEqual(self.spark.range(-2).count(), 0)
         self.assertEqual(self.spark.range(3).count(), 3)
 
+    def test_table(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.table(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "tableName", "arg_type": "NoneType"},
+        )
+
     def test_dataframe_star(self):
         df1 = self.spark.createDataFrame([{"a": 1}])
         df2 = self.spark.createDataFrame([{"a": 1, "b": "v"}])
