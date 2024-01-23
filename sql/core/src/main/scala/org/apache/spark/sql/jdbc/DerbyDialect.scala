@@ -63,6 +63,8 @@ private case class DerbyDialect() extends JdbcDialect with MergeByTempTable with
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
+  override def createTempTableName(): String = "SESSION." + super.createTempTableName()
+
   override def createTempTable(
       statement: Statement,
       tableName: String,
