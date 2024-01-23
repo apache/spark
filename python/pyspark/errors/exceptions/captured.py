@@ -59,6 +59,8 @@ class CapturedException(PySparkException):
         )
 
         self._desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
+        if self._desc is None:
+            self._desc = ""
         assert SparkContext._jvm is not None
         self._stackTrace = (
             stackTrace

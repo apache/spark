@@ -47,7 +47,7 @@ Filter (sum(coalesce(int_col1, int_col0))#xL > cast((coalesce(int_col1, int_col0
       :           +- SubqueryAlias t1
       :              +- LocalRelation [int_col1#x]
       +- SubqueryAlias t2
-         +- View (`t2`, [int_col0#x,int_col1#x])
+         +- View (`t2`, [int_col0#x, int_col1#x])
             +- Project [cast(int_col0#x as int) AS int_col0#x, cast(int_col1#x as int) AS int_col1#x]
                +- Project [int_col0#x, int_col1#x]
                   +- SubqueryAlias t2

@@ -1092,6 +1092,34 @@ setMethod("dayofyear",
           })
 
 #' @details
+#' \code{monthname}: Extracts the three-letter abbreviated month name from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases monthname monthname,Column-method
+#' @note monthname since 4.0.0
+setMethod("monthname",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "monthname", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{dayname}: Extracts the three-letter abbreviated day name from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases dayname dayname,Column-method
+#' @note dayname since 4.0.0
+setMethod("dayname",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "dayname", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{decode}: Computes the first argument into a string from a binary using the provided
 #' character set.
 #'

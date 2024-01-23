@@ -324,6 +324,12 @@
     ],
     "sqlState" : "0AKD0"
   },
+  "CANNOT_RESOLVE_DATAFRAME_COLUMN" : {
+    "message" : [
+      "Cannot resolve dataframe column <name>. It's probably because of illegal references like `df1.select(df2.col(\"a\"))`."
+    ],
+    "sqlState" : "42704"
+  },
   "CANNOT_RESOLVE_STAR_EXPAND" : {
     "message" : [
       "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."
@@ -499,6 +505,24 @@
       "To revert to deprecated behavior where NULL is treated as 0 (equal), you must set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
     ],
     "sqlState" : "22004"
+  },
+  "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT" : {
+    "message" : [
+      "Cannot process input data types for the expression: <expression>."
+    ],
+    "subClass" : {
+      "MISMATCHED_TYPES" : {
+        "message" : [
+          "All input types must be the same except nullable, containsNull, valueContainsNull flags, but found the input types <inputTypes>."
+        ]
+      },
+      "NO_INPUTS" : {
+        "message" : [
+          "The collection of input data types must not be empty."
+        ]
+      }
+    },
+    "sqlState" : "42K09"
   },
   "CONCURRENT_QUERY" : {
     "message" : [
@@ -875,6 +899,12 @@
     ],
     "sqlState" : "42K01"
   },
+  "DATA_SOURCE_ALREADY_EXISTS" : {
+    "message" : [
+      "Data source '<provider>' already exists. Please choose a different name for the new data source."
+    ],
+    "sqlState" : "42710"
+  },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
       "Data source '<provider>' not found. Please make sure the data source is registered."
@@ -883,7 +913,7 @@
   },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
-      "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
+      "Failed to find the data source: <provider>. Make sure the provider name is correct and the package is properly registered and compatible with your Spark version."
     ],
     "sqlState" : "42K02"
   },
@@ -1178,6 +1208,11 @@
       "TABLE_EXISTS" : {
         "message" : [
           "Check that the table <tableName> exists."
+        ]
+      },
+      "UNCLASSIFIED" : {
+        "message" : [
+          "<message>"
         ]
       }
     },
@@ -1974,7 +2009,7 @@
         ]
       }
     },
-    "sqlState" : "ID001"
+    "sqlState" : "42K0K"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2238,6 +2273,12 @@
       "Parameterized query must either use positional, or named parameters, but not both."
     ],
     "sqlState" : "42613"
+  },
+  "INVALID_SAVE_MODE" : {
+    "message" : [
+      "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_SCHEMA" : {
     "message" : [
@@ -2637,6 +2678,12 @@
       "Cannot specify time travel in both the time travel clause and options."
     ],
     "sqlState" : "42K0E"
+  },
+  "MULTIPLE_XML_DATA_SOURCE" : {
+    "message" : [
+      "Detected multiple data sources with the name <provider> (<sourceNames>). Please specify the fully qualified class name or remove <externalSource> from the classpath."
+    ],
+    "sqlState" : "42710"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
@@ -3563,6 +3610,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_CALL" : {
+    "message" : [
+      "Cannot call the method \"<methodName>\" of the class \"<className>\"."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
     "message" : [
       "The char/varchar type can't be used in the table schema.",
@@ -3579,6 +3632,12 @@
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATA_SOURCE_SAVE_MODE" : {
+    "message" : [
+      "The data source \"<source>\" cannot be written in the <createMode> mode. Please use either the \"Append\" or \"Overwrite\" mode instead."
     ],
     "sqlState" : "0A000"
   },
@@ -5397,11 +5456,6 @@
       "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1308" : {
-    "message" : [
-      "TableProvider implementation <source> cannot be written with <createMode> mode, please use Append or Overwrite modes instead."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1309" : {
     "message" : [
       "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
@@ -6825,11 +6879,6 @@
       "Cannot modify the value of a static config: <k>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3051" : {
-    "message" : [
-      "When resolving <u>, fail to find subplan with plan_id=<planId> in <q>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3052" : {
     "message" : [
       "Unexpected resolved action: <other>"
@@ -7108,16 +7157,6 @@
       "Cannot bind a V1 function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3111" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3112" : {
-    "message" : [
-      "Operation unsupported for <class>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3113" : {
     "message" : [
       "UnresolvedTableSpec doesn't have a data type"
@@ -7128,74 +7167,9 @@
       "UnresolvedTableSpec doesn't have a data type"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3115" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3116" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3117" : {
-    "message" : [
-      "Cannot modify <class>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3118" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3119" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3120" : {
-    "message" : [
-      ""
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3121" : {
     "message" : [
       "A HllSketch instance cannot be updates with a Spark <dataType> type"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3122" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3123" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3124" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3125" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3126" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3127" : {
-    "message" : [
-      "Not supported on UnsafeArrayData."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3128" : {
-    "message" : [
-      ""
     ]
   },
   "_LEGACY_ERROR_TEMP_3129" : {
@@ -7308,24 +7282,9 @@
       "Cannot create columnar reader."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3151" : {
-    "message" : [
-      ""
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3152" : {
     "message" : [
       "Datatype not supported <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3153" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3154" : {
-    "message" : [
-      ""
     ]
   },
   "_LEGACY_ERROR_TEMP_3155" : {
@@ -7333,92 +7292,7 @@
       "Datatype not supported <dataType>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3156" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3157" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3158" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3159" : {
-    "message" : [
-      ""
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3160" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3161" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3162" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3163" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3164" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3165" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3166" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3167" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3168" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3169" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3170" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3171" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3172" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3173" : {
     "message" : [
       ""
     ]

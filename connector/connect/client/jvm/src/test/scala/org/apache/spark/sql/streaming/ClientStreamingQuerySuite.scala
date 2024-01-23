@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.io.{File, FileWriter}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually.eventually
@@ -32,7 +31,7 @@ import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf, window}
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.util.SparkFileUtils
 
@@ -354,9 +353,15 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
   }
 
   test("streaming query listener") {
+    testStreamingQueryListener(new EventCollectorV1, "_v1")
+    testStreamingQueryListener(new EventCollectorV2, "_v2")
+  }
+
+  private def testStreamingQueryListener(
+      listener: StreamingQueryListener,
+      tablePostfix: String): Unit = {
     assert(spark.streams.listListeners().length == 0)
 
-    val listener = new EventCollector
     spark.streams.addListener(listener)
 
     val q = spark.readStream
@@ -370,11 +375,21 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       q.processAllAvailable()
       eventually(timeout(30.seconds)) {
         assert(q.isActive)
-        checkAnswer(spark.table("my_listener_table").toDF(), Seq(Row(1, 2), Row(4, 5)))
+
+        assert(!spark.table(s"listener_start_events$tablePostfix").toDF().isEmpty)
+        assert(!spark.table(s"listener_progress_events$tablePostfix").toDF().isEmpty)
       }
     } finally {
       q.stop()
-      spark.sql("DROP TABLE IF EXISTS my_listener_table")
+
+      eventually(timeout(30.seconds)) {
+        assert(!q.isActive)
+        assert(!spark.table(s"listener_terminated_events$tablePostfix").toDF().isEmpty)
+      }
+
+      spark.sql(s"DROP TABLE IF EXISTS listener_start_events$tablePostfix")
+      spark.sql(s"DROP TABLE IF EXISTS listener_progress_events$tablePostfix")
+      spark.sql(s"DROP TABLE IF EXISTS listener_terminated_events$tablePostfix")
     }
 
     // List listeners after adding a new listener, length should be 1.
@@ -382,7 +397,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
     assert(listeners.length == 1)
 
     // Add listener1 as another instance of EventCollector and validate
-    val listener1 = new EventCollector
+    val listener1 = new EventCollectorV2
     spark.streams.addListener(listener1)
     assert(spark.streams.listListeners().length == 2)
     spark.streams.removeListener(listener1)
@@ -462,35 +477,56 @@ case class TestClass(value: Int) {
   override def toString: String = value.toString
 }
 
-class EventCollector extends StreamingQueryListener {
-  @volatile var startEvent: QueryStartedEvent = null
-  @volatile var terminationEvent: QueryTerminatedEvent = null
-  @volatile var idleEvent: QueryIdleEvent = null
+abstract class EventCollector extends StreamingQueryListener {
+  private lazy val spark = SparkSession.builder().getOrCreate()
 
-  private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
+  protected def tablePostfix: String
 
-  def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
-    _progressEvents.clone().toSeq
+  protected def handleOnQueryStarted(event: QueryStartedEvent): Unit = {
+    val df = spark.createDataFrame(Seq((event.json, 0)))
+    df.write.mode("append").saveAsTable(s"listener_start_events$tablePostfix")
   }
 
-  override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
-    startEvent = event
-    val spark = SparkSession.builder().getOrCreate()
-    val df = spark.createDataFrame(Seq((1, 2), (4, 5)))
-    df.write.saveAsTable("my_listener_table")
+  protected def handleOnQueryProgress(event: QueryProgressEvent): Unit = {
+    val df = spark.createDataFrame(Seq((event.json, 0)))
+    df.write.mode("append").saveAsTable(s"listener_progress_events$tablePostfix")
   }
 
-  override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
-    _progressEvents += event.progress
+  protected def handleOnQueryTerminated(event: QueryTerminatedEvent): Unit = {
+    val df = spark.createDataFrame(Seq((event.json, 0)))
+    df.write.mode("append").saveAsTable(s"listener_terminated_events$tablePostfix")
   }
+}
 
-  override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {
-    idleEvent = event
-  }
+/**
+ * V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
+ * `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
+ */
+class EventCollectorV1 extends EventCollector {
+  override protected def tablePostfix: String = "_v1"
 
-  override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
-    terminationEvent = event
-  }
+  override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+  override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+  override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+    handleOnQueryTerminated(event)
+}
+
+/**
+ * V2: The interface after the method `onQueryIdle` is added. It is Spark 3.5+.
+ */
+class EventCollectorV2 extends EventCollector {
+  override protected def tablePostfix: String = "_v2"
+
+  override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+  override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+  override def onQueryIdle(event: QueryIdleEvent): Unit = {}
+
+  override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+    handleOnQueryTerminated(event)
 }
 
 class ForeachBatchFn(val viewName: String)

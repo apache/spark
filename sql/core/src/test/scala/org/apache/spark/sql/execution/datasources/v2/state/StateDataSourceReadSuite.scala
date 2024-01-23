@@ -687,7 +687,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     }
   }
 
-  test("metadata column") {
+  test("partition_id column") {
     withTempDir { tempDir =>
       import testImplicits._
       val stream = MemoryStream[Int]
@@ -712,14 +712,11 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         // skip version and operator ID to test out functionalities
         .load()
 
-      assert(!stateReadDf.schema.exists(_.name == "_partition_id"),
-      "metadata column should not be exposed until it is explicitly specified!")
-
       val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
 
       val resultDf = stateReadDf
-        .selectExpr("key.value AS key_value", "value.count AS value_count", "_partition_id")
-        .where("_partition_id % 2 = 0")
+        .selectExpr("key.value AS key_value", "value.count AS value_count", "partition_id")
+        .where("partition_id % 2 = 0")
 
       // NOTE: This is a hash function of distribution for stateful operator.
       val hash = HashPartitioning(
@@ -738,16 +735,11 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     }
   }
 
-  test("metadata column with stream-stream join") {
+  test("partition_id column with stream-stream join") {
     val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
 
     withTempDir { tempDir =>
       runStreamStreamJoinQueryWithOneThousandInputs(tempDir.getAbsolutePath)
-
-      def assertPartitionIdColumnIsNotExposedByDefault(df: DataFrame): Unit = {
-        assert(!df.schema.exists(_.name == "_partition_id"),
-          "metadata column should not be exposed until it is explicitly specified!")
-      }
 
       def assertPartitionIdColumn(df: DataFrame): Unit = {
         // NOTE: This is a hash function of distribution for stateful operator.
@@ -759,8 +751,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           numShufflePartitions)
         val partIdExpr = hash.partitionIdExpression
 
-        val dfWithPartition = df.selectExpr("key.field0 As key_0", "_partition_id")
-          .where("_partition_id % 2 = 0")
+        val dfWithPartition = df.selectExpr("key.field0 As key_0", "partition_id")
+          .where("partition_id % 2 = 0")
 
         checkAnswer(dfWithPartition,
           Range.inclusive(2, 1000, 2).map { idx =>
@@ -778,8 +770,6 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
           .option(StateSourceOptions.JOIN_SIDE, side)
           .load()
-
-        assertPartitionIdColumnIsNotExposedByDefault(stateReaderForLeft)
         assertPartitionIdColumn(stateReaderForLeft)
 
         val stateReaderForKeyToNumValues = spark.read
@@ -789,7 +779,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
             s"$side-keyToNumValues")
           .load()
 
-        assertPartitionIdColumnIsNotExposedByDefault(stateReaderForKeyToNumValues)
+
         assertPartitionIdColumn(stateReaderForKeyToNumValues)
 
         val stateReaderForKeyWithIndexToValue = spark.read
@@ -799,7 +789,6 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
             s"$side-keyWithIndexToValue")
           .load()
 
-        assertPartitionIdColumnIsNotExposedByDefault(stateReaderForKeyWithIndexToValue)
         assertPartitionIdColumn(stateReaderForKeyWithIndexToValue)
       }
 

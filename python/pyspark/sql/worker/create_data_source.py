@@ -29,7 +29,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource
+from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
@@ -120,7 +120,7 @@ def main(infile: IO, outfile: IO) -> None:
                 )
 
         # Receive the options.
-        options = dict()
+        options = CaseInsensitiveDict()
         num_options = read_int(infile)
         for _ in range(num_options):
             key = utf8_deserializer.loads(infile)
@@ -129,7 +129,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate a data source.
         try:
-            data_source = data_source_cls(options=options)
+            data_source = data_source_cls(options=options)  # type: ignore
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",

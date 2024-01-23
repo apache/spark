@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.collection.immutable.HashSet
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -2706,6 +2707,12 @@ class DatasetSuite extends QueryTest
       assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
     }
   }
+
+  test("SPARK-46791: Dataset with set field") {
+    val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
+    checkDataset(ds.map(t => t),
+      WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2758,6 +2765,8 @@ case class TripleData(id: Int, val1: String, val2: Long)
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
 case class WithMapInOption(m: Option[scala.collection.Map[Int, Int]])
+
+case class WithSet(id: Int, values: Set[String])
 
 case class Generic[T](id: T, value: Double)
 

@@ -24,6 +24,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
@@ -806,7 +807,11 @@ class BooleanExtensionOpsTest(OpsTestBase):
         self.check_extension(pser >= pser, psser >= psser)
 
 
-class BooleanOpsTests(BooleanOpsTestsMixin, OpsTestBase):
+class BooleanOpsTests(
+    BooleanOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

@@ -62,6 +62,7 @@ from pyspark.sql.connect.plan import (
     CachedRelation,
     CachedRemoteRelation,
 )
+from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
@@ -286,6 +287,12 @@ class SparkSession:
     active.__doc__ = PySparkSession.active.__doc__
 
     def table(self, tableName: str) -> DataFrame:
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return self.read.table(tableName)
 
     table.__doc__ = PySparkSession.table.__doc__
@@ -346,7 +353,7 @@ class SparkSession:
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         _schema: Optional[Union[AtomicType, StructType]] = None
@@ -918,6 +925,15 @@ class SparkSession:
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def _profiler_collector(self) -> ProfilerCollector:
+        return self._client._profiler_collector
+
+    def showPerfProfiles(self, id: Optional[int] = None) -> None:
+        self._profiler_collector.show_perf_profiles(id)
+
+    showPerfProfiles.__doc__ = PySparkSession.showPerfProfiles.__doc__
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

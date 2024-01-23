@@ -451,6 +451,33 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(countAttempted == 7)
   }
 
+  test("ArtifactManager retries errors") {
+    var attempt = 0
+
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .interceptor(new ClientInterceptor {
+        override def interceptCall[ReqT, RespT](
+            methodDescriptor: MethodDescriptor[ReqT, RespT],
+            callOptions: CallOptions,
+            channel: Channel): ClientCall[ReqT, RespT] = {
+          attempt += 1;
+          if (attempt <= 3) {
+            throw Status.UNAVAILABLE.withDescription("").asRuntimeException()
+          }
+
+          channel.newCall(methodDescriptor, callOptions)
+        }
+      })
+      .build()
+
+    val session = SparkSession.builder().client(client).create()
+    val artifactFilePath = commonResourcePath.resolve("artifact-tests")
+    session.addArtifact(artifactFilePath.resolve("smallClassFile.class").toString)
+  }
+
   test("SPARK-45871: Client execute iterator.toSeq consumes the reattachable iterator") {
     startDummyServer(0)
     client = SparkConnectClient

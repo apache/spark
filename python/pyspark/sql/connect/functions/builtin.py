@@ -59,7 +59,14 @@ from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
+from pyspark.sql.types import (
+    _from_numpy_type,
+    DataType,
+    LongType,
+    StructType,
+    ArrayType,
+    StringType,
+)
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -74,15 +81,6 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
-
-
-def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
-    if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
-    elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
-    else:
-        return Column(ColumnReference(unparsed_identifier=col, plan_id=plan_id))
 
 
 def _to_col(col: "ColumnOrName") -> Column:
@@ -224,7 +222,12 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    return _to_col_with_plan_id(col=col, plan_id=None)
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -1014,6 +1017,8 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
+    if isinstance(col, Column) and isinstance(col._expr, UnresolvedStar):
+        col = lit(1)
     return _invoke_function_over_columns("count", col)
 
 
@@ -2118,7 +2123,11 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function("shuffle", _to_col(col), lit(random.randint(0, sys.maxsize)))
+    return _invoke_function(
+        "shuffle",
+        _to_col(col),
+        LiteralExpression(random.randint(0, sys.maxsize), LongType()),
+    )
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__
@@ -2978,6 +2987,20 @@ def weekday(col: "ColumnOrName") -> Column:
 
 
 weekday.__doc__ = pysparkfuncs.weekday.__doc__
+
+
+def monthname(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("monthname", col)
+
+
+monthname.__doc__ = pysparkfuncs.monthname.__doc__
+
+
+def dayname(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("dayname", col)
+
+
+dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:

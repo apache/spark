@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
@@ -317,7 +318,7 @@ case class HllUnionAgg(
             union.update(sketch)
             Some(union)
           } catch {
-            case _: java.lang.Error =>
+            case _: SketchesArgumentException | _: java.lang.Error =>
               throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
           }
         case _ =>
