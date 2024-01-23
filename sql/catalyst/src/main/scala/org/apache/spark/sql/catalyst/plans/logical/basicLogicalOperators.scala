@@ -895,7 +895,6 @@ case class CTERelationRef(
  * @param cteDefs The CTE definitions.
  */
 case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends LogicalPlan {
-  assert(plan.find(_.isInstanceOf[WithCTE]).isEmpty, "Spark didn't support nested WithCTE.")
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
@@ -919,7 +918,10 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
     def canonicalizeCTE(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUpWithPruning(
         _.containsAnyPattern(CTE, PLAN_EXPRESSION)) {
-        case ref: CTERelationRef =>
+
+        // For nested WithCTE, if defIndex didn't contain the cteId,
+        // means it's not current WithCTE's ref.
+        case ref: CTERelationRef if defIndex.contains(ref.cteId) =>
           ref.copy(cteId = defIndex(ref.cteId).toLong)
 
         case other =>
