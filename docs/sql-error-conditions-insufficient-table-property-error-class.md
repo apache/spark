@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: XXKUC](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+[SQLSTATE: XXKUC](sql-error-conditions-sqlstates.html#class-xx-internal-error)
 
 Can't find table property:
 
@@ -32,5 +32,3 @@ This error class has the following derived error classes:
 ## MISSING_KEY_PART
 
 `<key>`, `<totalAmountOfParts>` parts are expected.
-
-

@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-xx-internal-error)
 
 Resolved attribute(s) `<missingAttributes>` missing from `<input>` in operator `<operator>`.
 
@@ -31,7 +31,3 @@ Attribute(s) with the same name appear in the operation: `<operation>`.
 Please check if the right attribute(s) are used.
 
 ## RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT
-
-
-
-
