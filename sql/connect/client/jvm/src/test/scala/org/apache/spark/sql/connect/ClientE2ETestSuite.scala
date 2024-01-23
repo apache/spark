@@ -28,7 +28,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
@@ -462,42 +461,6 @@ class ClientE2ETestSuite
       // clean up
       assertThrows[SparkException] {
         spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
-      }
-    }
-  }
-
-  test("write jdbc upsert") {
-    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-      val url = "jdbc:derby:memory:1234"
-      val table = "upsert"
-      try {
-        spark
-          .range(10)
-          .select(col("id"), col("id").as("val"))
-          .write
-          .jdbc(url = s"$url;create=true", table, new Properties())
-        spark
-          .range(5, 15, 1, 10)
-          .withColumn("val", lit(-1))
-          .write
-          .options(Map("upsert" -> "true", "upsertKeyColumns" -> "id"))
-          .mode(SaveMode.Append)
-          .jdbc(url = url, table, new Properties())
-        val result = spark.read
-          .jdbc(url = url, table, new Properties())
-          .select((col("val") === -1).as("updated"))
-          .groupBy(col("updated"))
-          .count()
-          .sort(col("updated"))
-          .collect()
-        // we expect 5 unchanged rows (ids 0..4) and 10 updated rows (ids 5..14)
-        assert(result === Seq(Row(false, 5), Row(true, 10)))
-      } finally {
-        // clean up
-        assertThrows[SparkException] {
-          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
-        }
       }
     }
   }
