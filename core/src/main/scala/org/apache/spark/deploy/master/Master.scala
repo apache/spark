@@ -112,6 +112,8 @@ private[deploy] class Master(
 
   private var checkForWorkerTimeOutTask: ScheduledFuture[_] = _
 
+  private val spreadOutDrivers = conf.get(SPREAD_OUT_DRIVERS)
+
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
@@ -918,31 +920,49 @@ private[deploy] class Master(
       return
     }
     // Drivers take strict precedence over executors
-    val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
-    val numWorkersAlive = shuffledAliveWorkers.size
-    var curPos = 0
-    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
-      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
-      // start from the last worker that was assigned a driver, and continue onwards until we have
-      // explored all alive workers.
-      var launched = (drivers.size - waitingDrivers.size) >= maxDrivers
-      var isClusterIdle = !launched
-      var numWorkersVisited = 0
-      while (numWorkersVisited < numWorkersAlive && !launched) {
-        val worker = shuffledAliveWorkers(curPos)
-        isClusterIdle = worker.drivers.isEmpty && worker.executors.isEmpty
-        numWorkersVisited += 1
-        if (canLaunchDriver(worker, driver.desc)) {
-          val allocated = worker.acquireResources(driver.desc.resourceReqs)
-          driver.withResources(allocated)
-          launchDriver(worker, driver)
-          waitingDrivers -= driver
-          launched = true
+    if (spreadOutDrivers) {
+      val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
+      val numWorkersAlive = shuffledAliveWorkers.size
+      var curPos = 0
+      for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+        // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+        // start from the last worker that was assigned a driver, and continue onwards until we have
+        // explored all alive workers.
+        var launched = (drivers.size - waitingDrivers.size) >= maxDrivers
+        var isClusterIdle = !launched
+        var numWorkersVisited = 0
+        while (numWorkersVisited < numWorkersAlive && !launched) {
+          val worker = shuffledAliveWorkers(curPos)
+          isClusterIdle = worker.drivers.isEmpty && worker.executors.isEmpty
+          numWorkersVisited += 1
+          if (canLaunchDriver(worker, driver.desc)) {
+            val allocated = worker.acquireResources(driver.desc.resourceReqs)
+            driver.withResources(allocated)
+            launchDriver(worker, driver)
+            waitingDrivers -= driver
+            launched = true
+          }
+          curPos = (curPos + 1) % numWorkersAlive
         }
-        curPos = (curPos + 1) % numWorkersAlive
+        if (!launched && isClusterIdle) {
+          logWarning(s"Driver ${driver.id} requires more resource than any of Workers could have.")
+        }
       }
-      if (!launched && isClusterIdle) {
-        logWarning(s"Driver ${driver.id} requires more resource than any of Workers could have.")
+    } else {
+      // Sort by worker ID as a way to be deterministic
+      val aliveWorkers = workers.toSeq.filter(_.state == WorkerState.ALIVE).sortBy(_.id)
+      for (driver <- waitingDrivers.toList) {
+        if ((drivers.size - waitingDrivers.size) < maxDrivers) {
+          aliveWorkers.find(canLaunchDriver(_, driver.desc)) match {
+            case Some(worker) =>
+              driver.withResources(worker.acquireResources(driver.desc.resourceReqs))
+              launchDriver(worker, driver)
+              waitingDrivers -= driver
+            case _ =>
+              logWarning(
+                s"Driver ${driver.id} requires more resource than any of Workers could have.")
+          }
+        }
       }
     }
     startExecutorsOnWorkers()

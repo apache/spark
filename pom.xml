@@ -230,7 +230,7 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>14.0.2</arrow.version>
+    <arrow.version>15.0.0</arrow.version>
     <ammonite.version>2.5.11</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
