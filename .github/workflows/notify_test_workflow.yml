@@ -140,11 +140,13 @@ jobs:
                 + context.payload.pull_request.head.repo.full_name
                 + '/runs/'
                 + check_run_head.id
+              console.log('Check run URL: ' + check_run_url)
 
               const actions_url = 'https://github.com/'
                 + context.payload.pull_request.head.repo.full_name
                 + '/actions/runs/'
                 + run_id
+              console.log('Actions URL: ' + actions_url)
 
               github.rest.checks.create({
                 owner: context.repo.owner,
