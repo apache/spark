@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{SQLException, Statement, Types}
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcOptionsInWrite
 import org.apache.spark.sql.types._
 
 
-private case class DerbyDialect() extends JdbcDialect with MergeByTempTable with NoLegacyJDBCError {
+private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
@@ -72,17 +71,6 @@ private case class DerbyDialect() extends JdbcDialect with MergeByTempTable with
   // See https://db.apache.org/derby/docs/10.15/ref/rrefexcept71493.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
     Option(exception.getSQLState).exists(_.startsWith("42"))
-  }
-
-  override def createTempTableName(): String = "SESSION." + super.createTempTableName()
-
-  override def createTempTable(
-      statement: Statement,
-      tableName: String,
-      strSchema: String,
-      options: JdbcOptionsInWrite): Unit = {
-    statement.executeUpdate(s"DECLARE GLOBAL TEMPORARY TABLE $tableName ($strSchema) " +
-      s"ON COMMIT DELETE ROWS NOT LOGGED ON ROLLBACK DELETE ROWS")
   }
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
