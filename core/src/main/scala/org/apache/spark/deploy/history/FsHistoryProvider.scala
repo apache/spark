@@ -926,11 +926,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * UI lifecycle.
    */
   private def invalidateUI(appId: String, attemptId: Option[String]): Unit = {
-    synchronized {
-      activeUIs.get((appId, attemptId)).foreach { ui =>
-        ui.invalidate()
-        ui.ui.store.close()
-      }
+    val uiOption = synchronized {
+      activeUIs.get((appId, attemptId))
+    }
+    uiOption.foreach { ui =>
+      ui.invalidate()
+      ui.ui.store.close()
     }
   }
 

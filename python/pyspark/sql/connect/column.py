@@ -160,6 +160,7 @@ class Column:
 
     isNull = _unary_op("isnull", PySparkColumn.isNull.__doc__)
     isNotNull = _unary_op("isnotnull", PySparkColumn.isNotNull.__doc__)
+    isNaN = _unary_op("isNaN", PySparkColumn.isNaN.__doc__)
 
     def __ne__(  # type: ignore[override]
         self,

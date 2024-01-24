@@ -543,9 +543,58 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        with self.assertRaisesRegex(AnalysisException, "attribute.*missing"):
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
+
+        # Can not find the target plan node by plan id
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf1.select(cdf2.a).schema
+
+    def test_invalid_star(self):
+        data1 = [Row(a=1, b=2, c=3)]
+        cdf1 = self.connect.createDataFrame(data1)
+
+        data2 = [Row(a=2, b=0)]
+        cdf2 = self.connect.createDataFrame(data2)
+
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf3 = cdf1.select(cdf1.a)
+            cdf3.select(cdf1["*"]).schema
+
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            # column 'a has been replaced
+            cdf3 = cdf1.withColumn("a", CF.lit(0))
+            cdf3.select(cdf1["*"]).schema
+
+        # Can not find the target plan node by plan id
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf1.select(cdf2["*"]).schema
+
+        # cdf1["*"] exists on both side
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "AMBIGUOUS_COLUMN_REFERENCE",
+        ):
+            cdf1.join(cdf1).select(cdf1["*"]).schema
 
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)
@@ -1075,6 +1124,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_df_nullability(self):
+        data = [("asd", None)]
+        schema = StructType(
+            [
+                StructField("name", StringType(), nullable=True),
+                StructField("age", IntegerType(), nullable=False),
+            ]
+        )
+
+        with self.assertRaises(PySparkValueError):
+            self.spark.createDataFrame(data, schema)
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
@@ -2233,7 +2294,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "arg_name": "fractions",
                 "arg_type": "dict",
                 "allowed_types": "float, int, str",
-                "return_type": "NoneType",
+                "item_type": "NoneType",
             },
         )
 
@@ -3452,7 +3513,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.spark.stop()
         spark = (
             PySparkSession.builder.config(conf=self.conf())
-            .config("spark.connect.jvmStacktrace.maxSize", 128)
+            .config("spark.connect.grpc.maxMetadataSize", 128)
             .remote("local[4]")
             .getOrCreate()
         )
@@ -3485,6 +3546,17 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         with self.assertRaises(RuntimeError) as e:
             PySparkSession.builder.create()
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
+
+    def test_get_message_parameters_without_enriched_error(self):
+        with self.sql_conf({"spark.sql.connect.enrichError.enabled": False}):
+            exception = None
+            try:
+                self.spark.sql("""SELECT a""")
+            except AnalysisException as e:
+                exception = e
+
+            self.assertIsNotNone(exception)
+            self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
 
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):

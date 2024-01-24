@@ -24,7 +24,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import (
     have_tabulate,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     tabulate_requirement_message,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -145,7 +145,11 @@ class FrameIOMixin:
         self.assert_eq(pdf_io.getvalue().split("\n")[1:], psdf_io.getvalue().split("\n")[1:])
 
 
-class FrameIOTests(FrameIOMixin, ComparisonTestBase, SQLTestUtils):
+class FrameIOTests(
+    FrameIOMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

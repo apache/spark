@@ -29,7 +29,7 @@ import org.apache.parquet.io.ColumnIOFactory
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation._
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, FLOAT, INT32, INT64, INT96}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -313,6 +313,21 @@ private[parquet] class ParquetRowConverter(
           override def addInt(value: Int): Unit =
             this.updater.setLong(Integer.toUnsignedLong(value))
         }
+      case LongType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            this.updater.setLong(value)
+        }
+      case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            this.updater.setDouble(value)
+        }
+      case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == FLOAT =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addFloat(value: Float): Unit =
+            this.updater.setDouble(value)
+        }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
         _: AnsiIntervalType =>
         new ParquetPrimitiveConverter(updater)
@@ -435,6 +450,16 @@ private[parquet] class ParquetRowConverter(
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
             this.updater.setLong(micros)
+          }
+        }
+
+      // Allow upcasting INT32 date to timestampNTZ.
+      case TimestampNTZType if schemaConverter.isTimestampNTZEnabled() &&
+      parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
+      parquetType.getLogicalTypeAnnotation.isInstanceOf[DateLogicalTypeAnnotation] =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit = {
+            this.updater.set(DateTimeUtils.daysToMicros(dateRebaseFunc(value), ZoneOffset.UTC))
           }
         }
 

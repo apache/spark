@@ -19,11 +19,13 @@ import unittest
 
 from pyspark.pandas.tests.groupby.test_nlargest_nsmallest import NlargestNsmallestTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class NlargestNsmallestParityTests(
-    NlargestNsmallestTestsMixin, PandasOnSparkTestCase, ReusedConnectTestCase
+    NlargestNsmallestTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 

@@ -130,14 +130,14 @@ private[ui] class ExecutorThreadDumpPage(
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
     val js =
       s"""
-         |${formatImportJavaScript(request, "/static/flamegraph.js", "drawFlamegraph")}
+         |${formatImportJavaScript(request, "/static/flamegraph.js", "drawFlamegraph", "toggleFlamegraph")}
          |
          |drawFlamegraph();
+         |toggleFlamegraph();
          |""".stripMargin
     <div>
       <div>
-        <script type="module">{Unparsed(formatImportJavaScript(request, "/static/flamegraph.js", "toggleFlamegraph"))}</script>
-        <span style="cursor: pointer;" onclick="toggleFlamegraph();">
+        <span id="executor-flamegraph-header" style="cursor: pointer;">
           <h4>
             <span id="executor-flamegraph-arrow" class="arrow-open"></span>
             <a>Flame Graph</a>
@@ -147,8 +147,8 @@ private[ui] class ExecutorThreadDumpPage(
       <div id="executor-flamegraph-data" class="d-none">{FlamegraphNode(thread).toJsonString}</div>
       <div id="executor-flamegraph-chart">
         <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
-        <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+        <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script type="module" src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
         <script type="module">{Unparsed(js)}</script>
       </div>

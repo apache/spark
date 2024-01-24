@@ -95,7 +95,7 @@ object StructFilters {
   }
 
   private def zip[A, B](a: Option[A], b: Option[B]): Option[(A, B)] = {
-    a.zip(b).headOption
+    a.zip(b)
   }
 
   private def toLiteral(value: Any): Option[Literal] = {

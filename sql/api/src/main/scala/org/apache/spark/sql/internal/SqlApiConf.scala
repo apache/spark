@@ -17,7 +17,6 @@
 package org.apache.spark.sql.internal
 
 import java.util.TimeZone
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.util.Try
 
@@ -48,25 +47,14 @@ private[sql] trait SqlApiConf {
 
 private[sql] object SqlApiConf {
   // Shared keys.
-  val ANSI_ENABLED_KEY: String = "spark.sql.ansi.enabled"
-  val LEGACY_TIME_PARSER_POLICY_KEY: String = "spark.sql.legacy.timeParserPolicy"
-  val CASE_SENSITIVE_KEY: String = "spark.sql.caseSensitive"
-  val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
-  val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
+  val ANSI_ENABLED_KEY: String = SqlApiConfHelper.ANSI_ENABLED_KEY
+  val LEGACY_TIME_PARSER_POLICY_KEY: String = SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY
+  val CASE_SENSITIVE_KEY: String = SqlApiConfHelper.CASE_SENSITIVE_KEY
+  val SESSION_LOCAL_TIMEZONE_KEY: String = SqlApiConfHelper.SESSION_LOCAL_TIMEZONE_KEY
+  val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String =
+    SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
 
-  /**
-   * Defines a getter that returns the [[SqlApiConf]] within scope.
-   */
-  private val confGetter = new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)
-
-  /**
-   * Sets the active config getter.
-   */
-  private[sql] def setConfGetter(getter: () => SqlApiConf): Unit = {
-    confGetter.set(getter)
-  }
-
-  def get: SqlApiConf = confGetter.get()()
+  def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
   // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
   Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))

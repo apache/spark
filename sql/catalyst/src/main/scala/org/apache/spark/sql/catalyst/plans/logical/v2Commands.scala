@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -1438,7 +1439,7 @@ case class UnresolvedTableSpec(
     external: Boolean) extends UnaryExpression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
-    throw new UnsupportedOperationException("UnresolvedTableSpec doesn't have a data type")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3113")
 
   override def child: Expression = optionExpression
 

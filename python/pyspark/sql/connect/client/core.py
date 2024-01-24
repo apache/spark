@@ -54,11 +54,13 @@ import grpc
 from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
+from pyspark.accumulators import SpecialAccumulatorIds
 from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
 from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
 from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
@@ -587,7 +589,12 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool
             Enable reattachable execution.
         """
-        self.thread_local = threading.local()
+
+        class ClientThreadLocals(threading.local):
+            tags: set = set()
+            inside_error_handling: bool = False
+
+        self.thread_local = ClientThreadLocals()
 
         # Parse the connection string.
         self._builder = (
@@ -630,6 +637,8 @@ class SparkConnectClient(object):
         # Capture the server-side session ID and set it to None initially. It will
         # be updated on the first response received.
         self._server_session_id: Optional[str] = None
+
+        self._profiler_collector = ConnectProfilerCollector()
 
     def _retrying(self) -> "Retrying":
         return Retrying(self._retry_policies)
@@ -1164,7 +1173,14 @@ class SparkConnectClient(object):
             if b.observed_metrics:
                 logger.debug("Received observed metric batch.")
                 for observed_metrics in self._build_observed_metrics(b.observed_metrics):
-                    if observed_metrics.name in observations:
+                    if observed_metrics.name == "__python_accumulator__":
+                        from pyspark.worker_util import pickleSer
+
+                        for metric in observed_metrics.metrics:
+                            (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
+                            if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
+                                self._profiler_collector._update(update)
+                    elif observed_metrics.name in observations:
                         observation_result = observations[observed_metrics.name]._result
                         assert observation_result is not None
                         observation_result.update(
@@ -1497,14 +1513,24 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        if isinstance(error, grpc.RpcError):
-            self._handle_rpc_error(error)
-        elif isinstance(error, ValueError):
-            if "Cannot invoke RPC" in str(error) and "closed" in str(error):
-                raise SparkConnectException(
-                    error_class="NO_ACTIVE_SESSION", message_parameters=dict()
-                ) from None
-        raise error
+
+        if self.thread_local.inside_error_handling:
+            # We are already inside error handling routine,
+            # avoid recursive error processing (with potentially infinite recursion)
+            raise error
+
+        try:
+            self.thread_local.inside_error_handling = True
+            if isinstance(error, grpc.RpcError):
+                self._handle_rpc_error(error)
+            elif isinstance(error, ValueError):
+                if "Cannot invoke RPC" in str(error) and "closed" in str(error):
+                    raise SparkConnectException(
+                        error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                    ) from None
+            raise error
+        finally:
+            self.thread_local.inside_error_handling = False
 
     def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
         if "errorId" not in info.metadata:
@@ -1522,6 +1548,20 @@ class SparkConnectClient(object):
             return self._stub.FetchErrorDetails(req)
         except grpc.RpcError:
             return None
+
+    def _display_server_stack_trace(self) -> bool:
+        from pyspark.sql.connect.conf import RuntimeConf
+
+        conf = RuntimeConf(self)
+        try:
+            if conf.get("spark.sql.connect.serverStacktrace.enabled") == "true":
+                return True
+            return conf.get("spark.sql.pyspark.jvmStacktrace.enabled") == "true"
+        except Exception as e:  # noqa: F841
+            # Falls back to true if an exception occurs during reading the config.
+            # Otherwise, it will recursively try to get the conf when it consistently
+            # fails, ending up with `RecursionError`.
+            return True
 
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
@@ -1556,7 +1596,7 @@ class SparkConnectClient(object):
                         info,
                         status.message,
                         self._fetch_enriched_error(info),
-                        True,
+                        self._display_server_stack_trace(),
                     ) from None
 
             raise SparkConnectGrpcException(status.message) from None

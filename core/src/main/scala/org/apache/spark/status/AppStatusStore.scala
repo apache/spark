@@ -371,7 +371,7 @@ private[spark] class AppStatusStore(
               Double.NaN
             }
           }
-        }.toIndexedSeq
+        }
       }
     }
 

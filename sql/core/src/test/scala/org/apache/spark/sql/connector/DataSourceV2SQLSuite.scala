@@ -54,7 +54,7 @@ abstract class DataSourceV2SQLSuite
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
   with AdaptiveSparkPlanHelper {
 
-  protected val v2Source = classOf[FakeV2Provider].getName
+  protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   override protected val v2Format = v2Source
 
   protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
@@ -3342,7 +3342,8 @@ class DataSourceV2SQLSuiteV1Filter
             Row("# Column Default Values", "", ""),
             Row("# Metadata Columns", "", ""),
             Row("id", "bigint", "42"),
-            Row("id", "bigint", null)
+            Row("id", "bigint", null),
+            Row("Statistics", "0 bytes, 0 rows", null)
           ))
       }
     }

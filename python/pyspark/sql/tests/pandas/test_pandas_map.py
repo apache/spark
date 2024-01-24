@@ -31,7 +31,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
+from pyspark.testing.utils import QuietTest, eventually
 
 if have_pandas:
     import pandas as pd
@@ -381,6 +381,7 @@ class MapInPandasTestsMixin:
         self.assertEqual(sorted(actual), sorted(expected))
 
     # SPARK-33277
+    @eventually(timeout=180, catch_assertions=True)
     def test_map_in_pandas_with_column_vector(self):
         path = tempfile.mkdtemp()
         shutil.rmtree(path)

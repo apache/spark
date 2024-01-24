@@ -211,23 +211,36 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
-    test(s"error framework parameters - $name") {
-      val testParams = GrpcExceptionConverter.ErrorParams(
-        message = "Found duplicate keys `abc`",
-        cause = None,
-        errorClass = Some("DUPLICATE_KEY"),
-        messageParameters = Map("keyColumn" -> "`abc`"),
-        queryContext = Array.empty)
-      val error = constructor(testParams)
-      assert(error.getMessage.contains(testParams.message))
-      assert(error.getCause == null)
-      error match {
-        case sparkThrowable: SparkThrowable =>
-          assert(sparkThrowable.getErrorClass == testParams.errorClass.get)
-          assert(sparkThrowable.getMessageParameters.asScala == testParams.messageParameters)
-          assert(sparkThrowable.getQueryContext.isEmpty)
-        case _ =>
+  test("error framework parameters") {
+    val errors = GrpcExceptionConverter.errorFactory
+    for ((name, constructor) <- errors if name.startsWith("org.apache.spark")) {
+      withClue(name) {
+        val testParams = GrpcExceptionConverter.ErrorParams(
+          message = "",
+          cause = None,
+          errorClass = Some("DUPLICATE_KEY"),
+          messageParameters = Map("keyColumn" -> "`abc`"),
+          queryContext = Array.empty)
+        val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
+        assert(error.getMessage.contains(testParams.message))
+        assert(error.getCause == null)
+        assert(error.getErrorClass == testParams.errorClass.get)
+        assert(error.getMessageParameters.asScala == testParams.messageParameters)
+        assert(error.getQueryContext.isEmpty)
+      }
+    }
+
+    for ((name, constructor) <- errors if !name.startsWith("org.apache.spark")) {
+      withClue(name) {
+        val testParams = GrpcExceptionConverter.ErrorParams(
+          message = "Found duplicate keys `abc`",
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          queryContext = Array.empty)
+        val error = constructor(testParams)
+        assert(error.getMessage.contains(testParams.message))
+        assert(error.getCause == null)
       }
     }
   }
@@ -436,6 +449,33 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       }))
 
     assert(countAttempted == 7)
+  }
+
+  test("ArtifactManager retries errors") {
+    var attempt = 0
+
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .interceptor(new ClientInterceptor {
+        override def interceptCall[ReqT, RespT](
+            methodDescriptor: MethodDescriptor[ReqT, RespT],
+            callOptions: CallOptions,
+            channel: Channel): ClientCall[ReqT, RespT] = {
+          attempt += 1;
+          if (attempt <= 3) {
+            throw Status.UNAVAILABLE.withDescription("").asRuntimeException()
+          }
+
+          channel.newCall(methodDescriptor, callOptions)
+        }
+      })
+      .build()
+
+    val session = SparkSession.builder().client(client).create()
+    val artifactFilePath = commonResourcePath.resolve("artifact-tests")
+    session.addArtifact(artifactFilePath.resolve("smallClassFile.class").toString)
   }
 
   test("SPARK-45871: Client execute iterator.toSeq consumes the reattachable iterator") {

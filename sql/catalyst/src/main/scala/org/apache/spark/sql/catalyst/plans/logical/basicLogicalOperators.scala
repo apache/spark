@@ -101,9 +101,6 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 
 object Project {
   val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
-  // Project with this tag means it doesn't care about the data order of its input. We only set
-  // this tag when the Project was converted from grouping-only Aggregate.
-  val dataOrderIrrelevantTag: TreeNodeTag[Unit] = TreeNodeTag[Unit]("data_order_irrelevant")
 
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
     assert(plan.resolved)
@@ -739,7 +736,7 @@ case class View(
   override def metadataOutput: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
-    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+    s"View (${desc.identifier}, ${truncatedString(output, "[", ", ", "]", maxFields)})"
   }
 
   override def doCanonicalize(): LogicalPlan = child match {

@@ -21,12 +21,12 @@ import java.time.Duration
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.{Any => AnyProto, ByteString, DynamicMessage}
+import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import org.json4s.StringInput
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.functions.{lit, struct, typedLit}
+import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
@@ -1646,6 +1646,281 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+
+  test("well known types deserialization and round trip") {
+    val message = spark.range(1).select(
+      lit(WellKnownWrapperTypes
+        .newBuilder()
+        .setBoolVal(BoolValue.of(true))
+        .setInt32Val(Int32Value.of(100))
+        .setUint32Val(UInt32Value.of(200))
+        .setInt64Val(Int64Value.of(300))
+        .setUint64Val(UInt64Value.of(400))
+        .setStringVal(StringValue.of("string"))
+        .setBytesVal(BytesValue.of(ByteString.copyFromUtf8("bytes")))
+        .setFloatVal(FloatValue.of(1.23f))
+        .setDoubleVal(DoubleValue.of(4.56))
+        .addInt32List(Int32Value.of(1))
+        .addInt32List(Int32Value.of(2))
+        .putWktMap(1, StringValue.of("mapval"))
+        .build().toByteArray
+      ).as("raw_proto"))
+
+    // By default, well known wrapper types should come out as structs.
+    val expectedWithoutFlag = spark.range(1).select(
+      struct(
+        struct(lit(true) as ("value")).as("bool_val"),
+        struct(lit(100).as("value")).as("int32_val"),
+        struct(lit(200).as("value")).as("uint32_val"),
+        struct(lit(300).as("value")).as("int64_val"),
+        struct(lit(400).as("value")).as("uint64_val"),
+        struct(lit("string").as("value")).as("string_val"),
+        struct(lit("bytes".getBytes).as("value")).as("bytes_val"),
+        struct(lit(1.23f).as("value")).as("float_val"),
+        struct(lit(4.56).as("value")).as("double_val"),
+        array(struct(lit(1).as("value")), struct(lit(2).as("value"))).as("int32_list"),
+        map(lit(1), struct(lit("mapval").as("value"))).as("wkt_map")
+      ).as("proto")
+    )
+
+    // With the flag set, ensure that well known wrapper types get deserialized as primitives.
+    val expectedWithFlag = spark.range(1).select(
+      struct(
+        lit(true).as("bool_val"),
+        lit(100).as("int32_val"),
+        lit(200).as("uint32_val"),
+        lit(300).as("int64_val"),
+        lit(400).as("uint64_val"),
+        lit("string").as("string_val"),
+        lit("bytes".getBytes).as("bytes_val"),
+        lit(1.23f).as("float_val"),
+        lit(4.56).as("double_val"),
+        typedLit(List(1, 2)).as("int32_list"),
+        typedLit(Map(1 -> "mapval")).as("wkt_map")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      // With the option as false, ensure that deserialization works, and the
+      // value can be round-tripped.
+      List(Map.empty[String, String], Map("unwrap.primitive.wrapper.types" -> "false"))
+        .foreach(opts => {
+        val parsed = message.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          opts).as("parsed"))
+        checkAnswer(parsed, expectedWithoutFlag)
+
+        // Verify that round-tripping gives us the same parsed representation.
+        val reserialized = parsed.select(
+          to_protobuf_wrapper($"parsed", name, descFilePathOpt).as("reserialized"))
+        val reparsed = reserialized.select(
+          from_protobuf_wrapper($"reserialized", name, descFilePathOpt, opts).as("reparsed"))
+        checkAnswer(parsed, reparsed)
+      })
+
+      // Without the option not set or set as false, ensure that the deserialization is as
+      // expected and that round-tripping works.
+      val opt = Map("unwrap.primitive.wrapper.types" -> "true")
+      val parsed = message.select(from_protobuf_wrapper(
+        $"raw_proto",
+        name,
+        descFilePathOpt,
+        opt).as("parsed"))
+      checkAnswer(parsed, expectedWithFlag)
+
+      val reserialized = parsed.select(
+        to_protobuf_wrapper($"parsed", name, descFilePathOpt).as("reserialized"))
+      val reparsed = reserialized.select(
+        from_protobuf_wrapper($"reserialized", name, descFilePathOpt, opt).as("reparsed"))
+      checkAnswer(parsed, reparsed)
+    }
+  }
+
+  test("test well known wrappers with emit defaults") {
+    // Test that the emit defaults behavior and unwrap primitives behavior work correctly together.
+    // We'll go through when a well known wrapper type is not set, set to zero, or set to nonzero
+    // and show the behavior of deserialization under every combination of the
+    // "unwrap.primitive.wrapper.types" and "emit.default.values" flags.
+
+    // Setup test data for the three cases of unset, explicitly zero, and non-zero.
+    val unset = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder().build().toByteArray
+      ).as("raw_proto"))
+
+    val explicitZero = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder().setInt32Val(Int32Value.of(0)).build().toByteArray
+      ).as("raw_proto"))
+
+    val explicitNonzero = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder().setInt32Val(Int32Value.of(100)).build().toByteArray
+      ).as("raw_proto"))
+
+    val expectedEmpty = spark.range(1).select(lit(null).as("int32_val"))
+
+    // For all combinations of unwrap / emitDefaults, check that we get back the expected values.
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      for {
+        unwrap <- Seq("true", "false")
+        defaults <- Seq("true", "false")
+      } {
+        // For unset values, we'll always get back null.
+        checkAnswer(
+          unset.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("unwrap.primitive.wrapper.types" -> unwrap, "emit.default.values" -> defaults)
+            ).as("proto")
+          ).select("proto.int32_val"),
+          expectedEmpty
+        )
+
+        // For explicit zero, we should get back null or zero based on emit default values.
+        val parsedExplicitZero =
+          explicitZero.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("unwrap.primitive.wrapper.types" -> unwrap, "emit.default.values" -> defaults)
+            ).as("proto")
+          ).select("proto.int32_val")
+
+        if (unwrap == "false") {
+          if (defaults == "false") {
+            checkAnswer(
+              parsedExplicitZero,
+              spark.range(1).select(
+                struct(lit(null).as("value"))
+              ).as("int32_val")
+            )
+          } else {
+            checkAnswer(
+              parsedExplicitZero,
+              spark.range(1).select(
+                struct(lit(0).as("value"))
+              ).as("int32_val")
+            )
+          }
+        } else {
+          if (defaults == "false") {
+            checkAnswer(parsedExplicitZero, expectedEmpty)
+          } else {
+            checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
+          }
+        }
+
+        // For nonzero, we should get back the number or wrapped version regardless
+        // of the value of emit defaults.
+        val parsedNonzero =
+          explicitNonzero.select(
+            from_protobuf_wrapper(
+              $"raw_proto",
+              name,
+              descFilePathOpt,
+              Map("unwrap.primitive.wrapper.types" -> unwrap, "emit.default.values" -> defaults)
+            ).as("proto")
+          ).select("proto.int32_val")
+
+        if (unwrap == "true") {
+          checkAnswer(parsedNonzero, Seq((100)).toDF("int32_val"))
+        } else {
+          checkAnswer(
+            parsedNonzero,
+            spark.range(1).select(
+              struct(lit(100).as("value")).as("int32_val")
+            )
+          )
+        }
+      }
+    }
+  }
+
+  test("test well known wrappers with upcast ints") {
+    // Test that the unwrap primitives behavior and upcast uint64 work correctly together.
+    // We'll check the deserialization behavior under every combination of the
+    // "unwrap.primitive.wrapper.types" and "emit.default.values" flags.
+
+    // Set up an example df with negative integer/long values, which have 1 in the largest bit.
+    // When interpreted as unsigned instead, they'd be large numbers.
+    // Integer.MIN_VALUE + 4 = 1000 <28 0s> 0100 = -2147483644 = 2147483652
+    // Long.MinValue + 4 = 1000 <60 0s> 0100 = -9223372036854775804 = 9223372036854775812
+    val originalInt = Integer.MIN_VALUE + 4
+    val originalLong = Long.MinValue + 4
+    val unsignedInt = 2147483652L
+    val unsignedLong = BigDecimal("9223372036854775812")
+
+    val unsigned = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder()
+          .setUint32Val(UInt32Value.of(originalInt))
+          .setUint64Val(UInt64Value.of(originalLong))
+          .build().toByteArray
+      ).as("raw_proto"))
+
+
+    // For every combination of unwrap/upcast, check that we get the correct values back.
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      for {
+        unwrap <- Seq("true", "false")
+        upcast <- Seq("true", "false")
+      } {
+        val parsed = unsigned.select(
+          from_protobuf_wrapper(
+            $"raw_proto",
+            name,
+            descFilePathOpt,
+            Map("unwrap.primitive.wrapper.types" -> unwrap, "upcast.unsigned.ints" -> upcast)
+          ).as("proto")
+        ).select("proto.uint32_val", "proto.uint64_val")
+
+        if (unwrap == "false") {
+          if (upcast == "false") {
+            // unwrap=false, upcast=false should give back negative numbers in struct format.
+            checkAnswer(
+              parsed,
+              spark.range(1).select(
+                struct(lit(originalInt).as("value")).as("uint32_value"),
+                struct(lit(originalLong).as("value")).as("uint64_value")
+              ).as("int32_val")
+            )
+          } else {
+            // unwrap=false, upcast=true should give back large positive numbers in struct format.
+            checkAnswer(
+              parsed,
+              spark.range(1).select(
+                 struct(lit(unsignedInt).as("value")).as("uint32_value"),
+                 struct(lit(unsignedLong).as("value")).as("uint64_value")
+              ).as("int32_val")
+            )
+          }
+        }
+        else {
+          // unwrap=true, upcast=false should give back negative primitives.
+          if (upcast == "false") {
+            checkAnswer(parsed,
+              spark.range(1).select(
+                lit(originalInt).as("uint32_value"),
+                lit(originalLong).as("uint64_value")
+              ))
+          } else {
+            // unwrap=true, upcast=true should give back large positive primitives.
+            checkAnswer(parsed,
+              spark.range(1).select(
+                lit(unsignedInt).as("uint32_value"),
+                lit(unsignedLong).as("uint64_value")
+              ))
+          }
+        }
+      }
+    }
+  }
 
   def testFromProtobufWithOptions(
     df: DataFrame,

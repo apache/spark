@@ -47,6 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
+from pyspark.sql.profiler import AccumulatorProfilerCollector, ProfilerCollector
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -622,6 +623,8 @@ class SparkSession(SparkConversionMixin):
             assert self._jvm is not None
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+
+        self._profiler_collector = AccumulatorProfilerCollector()
 
     def _repr_html_(self) -> str:
         return """
@@ -1418,7 +1421,7 @@ class SparkSession(SparkConversionMixin):
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         if isinstance(schema, str):
@@ -1548,12 +1551,13 @@ class SparkSession(SparkConversionMixin):
         args : dict or list
             A dictionary of parameter names to Python objects or a list of Python objects
             that can be converted to SQL literal expressions. See
-            <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-            Supported Data Types</a> for supported value types in Python.
+            `Supported Data Types`_ for supported value types in Python.
             For example, dictionary keys: "rank", "name", "birthdate";
             dictionary or list values: 1, "Steven", datetime.date(2023, 4, 2).
             A value can be also a `Column` of a literal or collection constructor functions such
             as `map()`, `array()`, `struct()`, in that case it is taken as is.
+
+            .. _Supported Data Types: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
 
             .. versionadded:: 3.4.0
 
@@ -1631,7 +1635,7 @@ class SparkSession(SparkConversionMixin):
         |  3|  6|
         +---+---+
 
-        And substitude named parameters with the `:` prefix by SQL literals.
+        And substitute named parameters with the `:` prefix by SQL literals.
 
         >>> from pyspark.sql.functions import create_map
         >>> spark.sql(
@@ -1703,6 +1707,12 @@ class SparkSession(SparkConversionMixin):
         |  4|
         +---+
         """
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return DataFrame(self._jsparkSession.table(tableName), self)
 
     @property
@@ -2108,6 +2118,11 @@ class SparkSession(SparkConversionMixin):
             error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
             message_parameters={"feature": "SparkSession.clearTags"},
         )
+
+    def showPerfProfiles(self, id: Optional[int] = None) -> None:
+        self._profiler_collector.show_perf_profiles(id)
+
+    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
 
 
 def _test() -> None:

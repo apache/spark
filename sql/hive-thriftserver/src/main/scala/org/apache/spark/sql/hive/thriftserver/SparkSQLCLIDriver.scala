@@ -36,7 +36,6 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.thrift.transport.TSocket
 import org.slf4j.LoggerFactory
 import sun.misc.{Signal, SignalHandler}
 
@@ -47,7 +46,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
@@ -63,7 +61,6 @@ import org.apache.spark.util.SparkExitCode._
 private[hive] object SparkSQLCLIDriver extends Logging {
   private val prompt = "spark-sql"
   private val continuedPrompt = "".padTo(prompt.length, ' ')
-  private var transport: TSocket = _
   private final val SPARK_HADOOP_PROP_PREFIX = "spark.hadoop."
   private var exitCode = 0
 
@@ -77,14 +74,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
    */
   def installSignalHandler(): Unit = {
     HiveInterruptUtils.add(() => {
-      // Handle remote execution mode
       if (SparkSQLEnv.sparkContext != null) {
         SparkSQLEnv.sparkContext.cancelAllJobs()
-      } else {
-        if (transport != null) {
-          // Force closing of TCP connection upon session termination
-          transport.getSocket.close()
-        }
       }
     })
   }
@@ -102,9 +93,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val sparkConf = new SparkConf(loadDefaults = true)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
 
-    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf)
 
     val sessionState = new CliSessionState(cliConf)
 
@@ -270,15 +260,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         case _ =>
       }
     }
-
-    // TODO: missing
-/*
-    val clientTransportTSocketField = classOf[CliSessionState].getDeclaredField("transport")
-    clientTransportTSocketField.setAccessible(true)
-
-    transport = clientTransportTSocketField.get(sessionState).asInstanceOf[TSocket]
-*/
-    transport = null
 
     var ret = 0
     var prefix = ""

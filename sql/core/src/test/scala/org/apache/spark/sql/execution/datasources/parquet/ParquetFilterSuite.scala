@@ -2344,9 +2344,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
           checker(stripSparkFilter(query), expected)
 
-        case _ =>
-          throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_3078", messageParameters = Map.empty)
+        case _ => assert(false, "Can not match ParquetTable in the query.")
       }
     }
   }

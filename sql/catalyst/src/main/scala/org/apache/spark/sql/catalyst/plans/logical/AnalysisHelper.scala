@@ -177,10 +177,14 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
             self.markRuleAsIneffective(ruleId)
             self
           } else {
+            rewritten_plan.copyTagsFrom(self)
             rewritten_plan
           }
         } else {
-          afterRule.mapChildren(_.resolveOperatorsDownWithPruning(cond, ruleId)(rule))
+          val newPlan = afterRule
+            .mapChildren(_.resolveOperatorsDownWithPruning(cond, ruleId)(rule))
+          newPlan.copyTagsFrom(self)
+          newPlan
         }
       }
     } else {
