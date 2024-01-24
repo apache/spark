@@ -66,9 +66,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       }
     }
 
-    // Sub-plans under the Union operator can be coalesced independently, so we can divide them
-    // into independent "coalesce groups", and all shuffle stages within each group have to be
-    // coalesced together.
+    // Sub-plans under the Union/CartesianProduct/BroadcastHashJoin/BroadcastNestedLoopJoin
+    // operator can be coalesced independently, so we can divide them into independent
+    // "coalesce groups", and all shuffle stages within each group have to be coalesced together.
     val coalesceGroups = collectCoalesceGroups(plan)
 
     // Divide minimum task parallelism among coalesce groups according to their data sizes.
@@ -137,8 +137,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
   }
 
   /**
-   * Gather all coalesce-able groups such that the shuffle stages in each child of a Union operator
-   * are in their independent groups if:
+   * Gather all coalesce-able groups such that the shuffle stages in each child of a
+   * Union/CartesianProduct/BroadcastHashJoin/BroadcastNestedLoopJoin operator are in their
+   * independent groups if:
    * 1) all leaf nodes of this child are exchange stages; and
    * 2) all these shuffle stages support coalescing.
    */
