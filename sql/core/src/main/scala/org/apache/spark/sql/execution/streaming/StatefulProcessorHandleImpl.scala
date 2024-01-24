@@ -50,9 +50,7 @@ object StatefulProcessorHandleState extends Enumeration {
 class QueryInfoImpl(
     val queryId: UUID,
     val runId: UUID,
-    val batchId: Long,
-    val operatorId: Long,
-    val partitionId: Int) extends QueryInfo {
+    val batchId: Long) extends QueryInfo {
 
   override def getQueryId: UUID = queryId
 
@@ -60,13 +58,8 @@ class QueryInfoImpl(
 
   override def getBatchId: Long = batchId
 
-  override def getOperatorId: Long = operatorId
-
-  override def getPartitionId: Int = partitionId
-
   override def toString: String = {
-    s"QueryInfo(queryId=$queryId, runId=$runId, batchId=$batchId, operatorId=$operatorId, " +
-      s"partitionId=$partitionId)"
+    s"QueryInfo(queryId=$queryId, runId=$runId, batchId=$batchId)"
   }
 }
 
@@ -96,8 +89,7 @@ class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
       0
     }
 
-    new QueryInfoImpl(UUID.fromString(queryId), runId, batchId,
-      store.id.operatorId, store.id.partitionId)
+    new QueryInfoImpl(UUID.fromString(queryId), runId, batchId)
   }
 
   private lazy val currQueryInfo: QueryInfo = buildQueryInfo()

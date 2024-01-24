@@ -88,7 +88,6 @@ class ValueStateSuite extends SharedSparkSession
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
-      assert(handle.getQueryInfo().getPartitionId === 0)
 
       val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
         Encoders.STRING)
@@ -120,7 +119,6 @@ class ValueStateSuite extends SharedSparkSession
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
-      assert(handle.getQueryInfo().getPartitionId === 0)
 
       val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
         Encoders.STRING)
@@ -147,7 +145,6 @@ class ValueStateSuite extends SharedSparkSession
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
-      assert(handle.getQueryInfo().getPartitionId === 0)
 
       val testState1: ValueState[Long] = handle.getValueState[String, Long]("testState1",
         Encoders.STRING)

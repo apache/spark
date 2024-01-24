@@ -38,12 +38,6 @@ private[sql] trait QueryInfo extends Serializable {
   /** Returns the batch id associated with stateful operator */
   def getBatchId: Long
 
-  /** Returns the operator id associated with stateful operator */
-  def getOperatorId: Long
-
-  /** Returns the partition id associated with stateful operator */
-  def getPartitionId: Int
-
   /** Returns the string representation of QueryInfo object */
   def toString: String
 }

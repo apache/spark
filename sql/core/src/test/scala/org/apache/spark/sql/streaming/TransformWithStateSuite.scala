@@ -38,9 +38,6 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
-    assert(handle.getQueryInfo().getOperatorId == 0)
-    assert(handle.getQueryInfo().getPartitionId >= 0 &&
-      handle.getQueryInfo().getPartitionId < TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS)
     _countState = _processorHandle.getValueState[String, Long]("countState",
       Encoders.STRING)
   }
