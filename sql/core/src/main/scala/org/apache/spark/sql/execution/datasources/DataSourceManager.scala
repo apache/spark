@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.regex.Pattern
 
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.Logging
@@ -95,7 +96,8 @@ object DataSourceManager extends Logging {
   private lazy val shouldLoadPythonDataSources: Boolean = {
     Utils.checkCommandAvailable(PythonUtils.defaultPythonExec) &&
       // Make sure PySpark zipped files also exist.
-      PythonUtils.sparkPythonPaths.forall(new File(_).exists())
+      PythonUtils.sparkPythonPath
+        .split(Pattern.quote(File.separator)).forall(new File(_).exists())
   }
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
