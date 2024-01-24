@@ -154,7 +154,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing.
     executeHolder.sessionHolder.withSession { session =>
-      val debugString = requestString(executeHolder.request)
+      val debugString = requestString(executeHolder.request, executeHolder.request.getDebugMessage)
 
       // Set tag for query cancellation
       session.sparkContext.addJobTag(executeHolder.jobTag)
@@ -253,11 +253,17 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     planner.process(command = command, responseObserver = responseObserver)
   }
 
-  private def requestString(request: Message) = {
+  private def requestString(request: Message, debugMessage: String) = {
     try {
-      Utils.redact(
-        executeHolder.sessionHolder.session.sessionState.conf.stringRedactionPattern,
-        ProtoUtils.abbreviate(request).toString)
+      if (debugMessage.isEmpty) {
+        Utils.redact(
+          executeHolder.sessionHolder.session.sessionState.conf.stringRedactionPattern,
+          ProtoUtils.abbreviate(request).toString)
+      } else {
+        Utils.redact(
+          executeHolder.sessionHolder.session.sessionState.conf.stringRedactionPattern,
+          debugMessage)
+      }
     } catch {
       case NonFatal(e) =>
         logWarning("Fail to extract debug information", e)

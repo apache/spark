@@ -317,6 +317,10 @@ message ExecutePlanRequest {
   // Tags cannot contain ',' character and cannot be empty strings.
   // Used by Interrupt with interrupt.tag.
   repeated string tags = 7;
+
+  // (Optional) 
+  // Provide a debug message which will set the job description
+  optional string debug_message = 8;
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the
