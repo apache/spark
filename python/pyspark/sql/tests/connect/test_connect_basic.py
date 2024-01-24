@@ -1134,7 +1134,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ]
         )
 
-        with self.assertRaises(PySparkValueError) as pe:
+        with self.assertRaises(PySparkValueError):
             self.spark.createDataFrame(data, schema)
 
     def test_simple_explain_string(self):
