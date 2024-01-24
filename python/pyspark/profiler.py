@@ -19,6 +19,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -37,7 +38,7 @@ import sys
 import warnings
 
 try:
-    from memory_profiler import choose_backend, CodeMap, LineProfiler  # type: ignore[import]
+    from memory_profiler import CodeMap, LineProfiler  # type: ignore[import]
 
     has_memory_profiler = True
 except Exception:
@@ -179,7 +180,6 @@ if has_memory_profiler:
             *,
             sub_lines: Optional[List] = None,
             start_line: Optional[int] = None,
-            max_line: Optional[int] = None,
         ) -> None:
             if code in self:
                 return
@@ -187,14 +187,9 @@ if has_memory_profiler:
             if toplevel_code is None:
                 toplevel_code = code
                 filename = code.co_filename
-
-                if max_line is not None:  # SparkSession-based memory profiler
-                    linenos = range(1, max_line + 1)
-                else:
-                    if sub_lines is None or start_line is None:
-                        (sub_lines, start_line) = inspect.getsourcelines(code)
-                    linenos = range(start_line, start_line + len(sub_lines))
-
+                if sub_lines is None or start_line is None:
+                    (sub_lines, start_line) = inspect.getsourcelines(code)
+                linenos = range(start_line, start_line + len(sub_lines))
                 self._toplevel.append((filename, code, linenos))
                 self[code] = {}
             else:
@@ -202,17 +197,41 @@ if has_memory_profiler:
             for subcode in filter(inspect.iscode, code.co_consts):
                 self.add(subcode, toplevel_code=toplevel_code)
 
+    class CodeMapForUDFV2(CodeMap):
+        def add(
+            self,
+            code: Any,
+            toplevel_code: Optional[Any] = None,
+        ) -> None:
+            if code in self:
+                return
+
+            if toplevel_code is None:
+                toplevel_code = code
+                filename = code.co_filename
+                self._toplevel.append((filename, code))
+                self[code] = {}
+            else:
+                self[code] = self[toplevel_code]
+            for subcode in filter(inspect.iscode, code.co_consts):
+                self.add(subcode, toplevel_code=toplevel_code)
+
+        def items(self) -> Iterator[Tuple[str, Iterator[Tuple[int, Any]]]]:
+            """Iterate on the toplevel code blocks."""
+            for filename, code in self._toplevel:
+                measures = self[code]
+                if not measures:
+                    continue  # skip if no measurement
+                linenos = range(min(measures), max(measures) + 1)
+                line_iterator = ((line, measures.get(line)) for line in linenos)
+                yield (filename, line_iterator)
+
     class UDFLineProfiler(LineProfiler):
         def __init__(self, **kw: Any) -> None:
+            super().__init__(**kw)
             include_children = kw.get("include_children", False)
             backend = kw.get("backend", "psutil")
             self.code_map = CodeMapForUDF(include_children=include_children, backend=backend)
-            self.enable_count = 0
-            self.max_mem = kw.get("max_mem", None)
-            self.prevlines: List = []
-            self.backend = choose_backend(kw.get("backend", None))
-            self.prev_lineno = None
-            self.max_line = kw.get("max_line", None)
 
         def __call__(
             self,
@@ -251,9 +270,14 @@ if has_memory_profiler:
             except AttributeError:
                 warnings.warn("Could not extract a code object for the object %r" % func)
             else:
-                self.code_map.add(
-                    code, sub_lines=sub_lines, start_line=start_line, max_line=self.max_line
-                )
+                self.code_map.add(code, sub_lines=sub_lines, start_line=start_line)
+
+    class UDFLineProfilerV2(LineProfiler):
+        def __init__(self, **kw: Any) -> None:
+            super().__init__(**kw)
+            include_children = kw.get("include_children", False)
+            backend = kw.get("backend", "psutil")
+            self.code_map = CodeMapForUDFV2(include_children=include_children, backend=backend)
 
 
 class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
@@ -299,21 +323,22 @@ class MemUsageParam(AccumulatorParam[Optional[CodeMapDict]]):
             c1 = dict((k, v) for k, v in l1)
             c2 = dict((k, v) for k, v in l2)
             udf_code_map: Dict[int, Optional[MemoryTuple]] = {}
-            for lineno in c1:
-                if c1[lineno] and c2[lineno]:
+            all_line_numbers = set(c1.keys()) | set(c2.keys())
+            for lineno in all_line_numbers:
+                c1_line = c1.get(lineno)
+                c2_line = c2.get(lineno)
+                if c1_line and c2_line:
                     # c1, c2 should have same keys - line number
                     udf_code_map[lineno] = (
-                        cast(MemoryTuple, c1[lineno])[0]
-                        + cast(MemoryTuple, c2[lineno])[0],  # increment
-                        cast(MemoryTuple, c1[lineno])[1]
-                        + cast(MemoryTuple, c2[lineno])[1],  # mem_usage
-                        cast(MemoryTuple, c1[lineno])[2]
-                        + cast(MemoryTuple, c2[lineno])[2],  # occurrences
+                        cast(MemoryTuple, c1_line)[0] + cast(MemoryTuple, c2_line)[0],  # increment
+                        cast(MemoryTuple, c1_line)[1] + cast(MemoryTuple, c2_line)[1],  # mem_usage
+                        cast(MemoryTuple, c1_line)[2]
+                        + cast(MemoryTuple, c2_line)[2],  # occurrences
                     )
-                elif c1[lineno]:
-                    udf_code_map[lineno] = cast(MemoryTuple, c1[lineno])
-                elif c2[lineno]:
-                    udf_code_map[lineno] = cast(MemoryTuple, c2[lineno])
+                elif c1_line:
+                    udf_code_map[lineno] = cast(MemoryTuple, c1_line)
+                elif c2_line:
+                    udf_code_map[lineno] = cast(MemoryTuple, c2_line)
                 else:
                     udf_code_map[lineno] = None
             value1[filename] = [(k, v) for k, v in udf_code_map.items()]
@@ -440,7 +465,6 @@ class MemoryProfiler(Profiler):
         template = "{0:>6} {1:>12} {2:>12}  {3:>10}   {4:<}"
 
         for filename, lines in code_map.items():
-            lines = _find_full_range_of_non_none(lines)
             header = template.format(
                 "Line #", "Mem usage", "Increment", "Occurrences", "Line Contents"
             )
@@ -454,26 +478,21 @@ class MemoryProfiler(Profiler):
             float_format = "{0}.{1}f".format(precision + 4, precision)
             template_mem = "{0:" + float_format + "} MiB"
             for lineno, mem in lines:
-                if lineno <= len(all_lines):
-                    # The value of SQL conf `spark.sql.pyspark.udf.memoryProfiler.maxLine`
-                    # decides length of `lines`, which can be larger than `all_lines`.
-                    total_mem: Union[float, str]
-                    inc: Union[float, str]
-                    occurrences: Union[float, str]
-                    if mem:
-                        inc = mem[0]
-                        total_mem = mem[1]
-                        total_mem = template_mem.format(total_mem)
-                        occurrences = mem[2]
-                        inc = template_mem.format(inc)
-                    else:
-                        total_mem = ""
-                        inc = ""
-                        occurrences = ""
-                    tmp = template.format(
-                        lineno, total_mem, inc, occurrences, all_lines[lineno - 1]
-                    )
-                    stream.write(tmp)
+                total_mem: Union[float, str]
+                inc: Union[float, str]
+                occurrences: Union[float, str]
+                if mem:
+                    inc = mem[0]
+                    total_mem = mem[1]
+                    total_mem = template_mem.format(total_mem)
+                    occurrences = mem[2]
+                    inc = template_mem.format(inc)
+                else:
+                    total_mem = ""
+                    inc = ""
+                    occurrences = ""
+                tmp = template.format(lineno, total_mem, inc, occurrences, all_lines[lineno - 1])
+                stream.write(tmp)
             stream.write("\n\n")
 
     def show(self, id: int) -> None:
@@ -494,21 +513,6 @@ class MemoryProfiler(Profiler):
             p = os.path.join(path, "udf_%d_memory.txt" % id)
             with open(p, "w+") as f:
                 self._show_results(stats, stream=f)
-
-
-def _find_full_range_of_non_none(data):
-    first_index, last_index = None, None
-
-    for i, (_, v) in enumerate(data):
-        if v is not None:
-            last_index = i
-            if first_index is None:
-                first_index = i
-
-    if first_index is not None and last_index is not None:
-        return data[first_index : last_index + 1]
-    else:
-        return []
 
 
 if __name__ == "__main__":

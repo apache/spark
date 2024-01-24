@@ -33,7 +33,6 @@ abstract class BasePythonUDFRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
@@ -49,15 +48,6 @@ abstract class BasePythonUDFRunner(
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
-  protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
-    // Write config for the worker as a number of key -> value pairs of strings
-    stream.writeInt(workerConf.size)
-    for ((k, v) <- workerConf) {
-      PythonRDD.writeUTF(k, stream)
-      PythonRDD.writeUTF(v, stream)
-    }
-  }
-
   protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
@@ -67,7 +57,6 @@ abstract class BasePythonUDFRunner(
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        handleMetadataBeforeExec(dataOut)
         writeUDF(dataOut)
       }
 
@@ -126,12 +115,10 @@ class PythonUDFRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends BasePythonUDFRunner(
-    funcs, evalType, argOffsets, workerConf, pythonMetrics, jobArtifactUUID) {
+  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
@@ -142,12 +129,11 @@ class PythonUDFWithNamedArgumentsRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argMetas: Array[Array[ArgumentMetadata]],
-    workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
   extends BasePythonUDFRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), workerConf, pythonMetrics, jobArtifactUUID) {
+    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
@@ -216,11 +202,5 @@ object PythonUDFRunner {
         dataOut.writeLong(resultId)
       }
     }
-  }
-
-  def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
-    val arrowMemoryProfilerMaxLine = Seq(SQLConf.PYTHON_UDF_MEMORY_PROFILER_MAX_LINE.key ->
-      conf.pythonUDFMemoryProfilerMaxLine.toString)
-    Map(arrowMemoryProfilerMaxLine: _*)
   }
 }

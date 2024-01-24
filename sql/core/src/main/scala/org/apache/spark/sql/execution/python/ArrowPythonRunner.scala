@@ -116,8 +116,6 @@ object ArrowPythonRunner {
       conf.pandasGroupedMapAssignColumnsByName.toString)
     val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
       conf.arrowSafeTypeConversion.toString)
-    val arrowMemoryProfilerMaxLine = Seq(SQLConf.PYTHON_UDF_MEMORY_PROFILER_MAX_LINE.key ->
-      conf.pythonUDFMemoryProfilerMaxLine.toString)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++ arrowMemoryProfilerMaxLine: _*)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
   }
 }

@@ -2930,14 +2930,6 @@ object SQLConf {
       .checkValues(Set("perf", "memory"))
       .createOptional
 
-  val PYTHON_UDF_MEMORY_PROFILER_MAX_LINE =
-    buildConf("spark.sql.pyspark.udf.memoryProfiler.maxLine")
-      .doc("Set a limit on the number of lines within a Python/Pandas UDF that the memory " +
-        "profiler can profile. It is set to 100 by default.")
-      .version("4.0.0")
-      .intConf
-      .createWithDefault(100)
-
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
       .doc(
@@ -5328,8 +5320,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
-
-  def pythonUDFMemoryProfilerMaxLine: Int = getConf(PYTHON_UDF_MEMORY_PROFILER_MAX_LINE)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 

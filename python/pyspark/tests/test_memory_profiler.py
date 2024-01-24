@@ -27,7 +27,7 @@ from typing import cast, Iterator
 from unittest import mock
 
 from pyspark import SparkConf, SparkContext
-from pyspark.profiler import has_memory_profiler, _find_full_range_of_non_none
+from pyspark.profiler import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.testing.sqlutils import (
@@ -385,23 +385,6 @@ class MemoryProfiler2Tests(MemoryProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.spark._profiler_collector._accumulator._value = None
-
-    def test_find_full_range_of_non_none(self):
-        data = [(1, None), (2, None), (3, None)]
-        result = _find_full_range_of_non_none(data)
-        self.assertEqual(result, [])
-
-        data = [(1, "a"), (2, "b"), (3, "c")]
-        result = _find_full_range_of_non_none(data)
-        self.assertEqual(result, data)
-
-        data = [(1, None), (2, "a"), (3, None), (4, "b"), (5, None)]
-        result = _find_full_range_of_non_none(data)
-        self.assertEqual(result, [(2, "a"), (3, None), (4, "b")])
-
-        data = [(1, None), (2, "a"), (3, None), (4, None), (5, "b"), (6, None)]
-        result = _find_full_range_of_non_none(data)
-        self.assertEqual(result, [(2, "a"), (3, None), (4, None), (5, "b")])
 
 
 if __name__ == "__main__":

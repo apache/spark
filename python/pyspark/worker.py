@@ -732,16 +732,16 @@ def wrap_perf_profiler(f, result_id):
     return profiling_func
 
 
-def wrap_memory_profiler(f, result_id, max_line):
+def wrap_memory_profiler(f, result_id):
     from pyspark.sql.profiler import ProfileResultsParam
-    from pyspark.profiler import UDFLineProfiler
+    from pyspark.profiler import UDFLineProfilerV2
 
     accumulator = _deserialize_accumulator(
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
 
     def profiling_func(*args, **kwargs):
-        profiler = UDFLineProfiler(max_line=max_line)
+        profiler = UDFLineProfilerV2()
 
         wrapped = profiler(f)
         ret = wrapped(*args, **kwargs)
@@ -798,8 +798,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif profiler == "memory":
         result_id = read_long(infile)
         if _supports_profiler(eval_type) and has_memory_profiler:
-            max_line = int(runner_conf.get("spark.sql.pyspark.udf.memoryProfiler.maxLine", 100))
-            profiling_func = wrap_memory_profiler(chained_func, result_id, max_line)
+            profiling_func = wrap_memory_profiler(chained_func, result_id)
         else:
             profiling_func = chained_func
     else:
@@ -871,8 +870,8 @@ def assign_cols_by_name(runner_conf):
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type):
-    runner_conf = {}
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
+        runner_conf = {}
         # Load conf used for arrow evaluation.
         num_conf = read_int(infile)
         for i in range(num_conf):
@@ -888,11 +887,6 @@ def read_udtf(pickleSer, infile, eval_type):
         )
         ser = ArrowStreamPandasUDTFSerializer(timezone, safecheck)
     else:
-        num_conf = read_int(infile)
-        for i in range(num_conf):
-            k = utf8_deserializer.loads(infile)
-            v = utf8_deserializer.loads(infile)
-            runner_conf[k] = v
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
@@ -1490,14 +1484,6 @@ def read_udfs(pickleSer, infile, eval_type):
                 arrow_cast,
             )
     else:
-        num_conf = read_int(infile)
-        for i in range(num_conf):
-            k = utf8_deserializer.loads(infile)
-            v = utf8_deserializer.loads(infile)
-            runner_conf[k] = v
-
-        # Note: 'runner_conf' might include profiler confs,
-        # but these are currently not supported and are being ignored for now.
         ser = BatchedSerializer(CPickleSerializer(), 100)
 
     is_profiling = read_bool(infile)
