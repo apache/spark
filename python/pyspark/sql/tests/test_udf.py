@@ -39,13 +39,7 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
-    have_pyarrow,
-    test_compiled,
-    pyarrow_requirement_message,
-    test_not_compiled_message,
-)
+from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest, assertDataFrameEqual
 
 
@@ -923,7 +917,6 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row[1], {"a": "b"})
         self.assertEqual(row[2], Row(col1=1, col2=2))
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_named_arguments(self):
         @udf("int")
         def test_udf(a, b):
@@ -970,7 +963,6 @@ class BaseUDFTestsMixin(object):
         ):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_kwargs(self):
         @udf("int")
         def test_udf(**kwargs):
@@ -999,7 +991,6 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
             self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_named_arguments_and_defaults(self):
         @udf("int")
         def test_udf(a, b=0):
@@ -1033,7 +1024,6 @@ class BaseUDFTestsMixin(object):
             with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_raise_stop_iteration(self):
         @udf("int")
         def test_udf(a):
@@ -1049,7 +1039,6 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):
@@ -1057,7 +1046,6 @@ class BaseUDFTestsMixin(object):
 
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_err_udf_init(self):
         with QuietTest(self.sc):
             self.check_err_udf_init()

@@ -45,14 +45,9 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import (
-    have_pandas,
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
+from pyspark.testing.sqlutils import have_pandas
 
 
-@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class UtilsTestsMixin:
     def test_assert_equal_inttype(self):
         df1 = self.spark.createDataFrame(
