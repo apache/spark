@@ -3547,15 +3547,15 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
 
     def test_custom_channel_builder(self):
-        channel = self.spark._client._channel
+        # Access self.spark's DefaultChannelBuilder to reuse same endpoint
+        endpoint = self.spark._client._builder.endpoint
 
         class CustomChannelBuilder(ChannelBuilder):
             def toChannel(self):
-                return channel
+                return self._insecure_channel(endpoint)
 
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
         session.sql("select 1 + 1")
-        session.stop()
 
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
