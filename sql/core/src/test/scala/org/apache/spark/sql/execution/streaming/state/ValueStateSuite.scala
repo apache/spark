@@ -24,6 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ValueState
@@ -89,7 +90,8 @@ class ValueStateSuite extends SharedSparkSession
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
       assert(handle.getQueryInfo().getPartitionId === 0)
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
+        Encoders.STRING)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -120,7 +122,8 @@ class ValueStateSuite extends SharedSparkSession
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
       assert(handle.getQueryInfo().getPartitionId === 0)
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
+        Encoders.STRING)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -146,8 +149,10 @@ class ValueStateSuite extends SharedSparkSession
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
       assert(handle.getQueryInfo().getPartitionId === 0)
 
-      val testState1: ValueState[Long] = handle.getValueState[Long]("testState1")
-      val testState2: ValueState[Long] = handle.getValueState[Long]("testState2")
+      val testState1: ValueState[Long] = handle.getValueState[String, Long]("testState1",
+        Encoders.STRING)
+      val testState2: ValueState[Long] = handle.getValueState[String, Long]("testState2",
+        Encoders.STRING)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)

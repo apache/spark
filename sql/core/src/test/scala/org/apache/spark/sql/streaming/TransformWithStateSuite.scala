@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Encoders, SaveMode}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -41,7 +41,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
     assert(handle.getQueryInfo().getOperatorId == 0)
     assert(handle.getQueryInfo().getPartitionId >= 0 &&
       handle.getQueryInfo().getPartitionId < TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS)
-    _countState = _processorHandle.getValueState[Long]("countState")
+    _countState = _processorHandle.getValueState[String, Long]("countState",
+      Encoders.STRING)
   }
 
   override def handleInputRows(
@@ -69,7 +70,8 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = _processorHandle.getValueState[Long]("tempState")
+    _tempState = _processorHandle.getValueState[String, Long]("tempState",
+      Encoders.STRING)
     Iterator.empty
   }
 }

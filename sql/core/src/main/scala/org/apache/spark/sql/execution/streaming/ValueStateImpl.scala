@@ -21,7 +21,9 @@ import java.io.Serializable
 import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.ValueState
@@ -32,11 +34,14 @@ import org.apache.spark.sql.types._
  * variables used in the streaming transformWithState operator.
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
+ * @param keyEnc - Spark SQL encoder for key
+ * @tparam K - data type of key
  * @tparam S - data type of object that will be stored
  */
-class ValueStateImpl[S](
+class ValueStateImpl[K, S](
     store: StateStore,
-    stateName: String) extends ValueState[S] with Logging {
+    stateName: String,
+    keyEnc: Encoder[K]) extends ValueState[S] with Logging {
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
@@ -47,8 +52,12 @@ class ValueStateImpl[S](
         s"stateName=$stateName")
     }
 
+    val exprEnc: ExpressionEncoder[K] = encoderFor(keyEnc)
+    val toRow = exprEnc.createSerializer()
+    val keyByteArr = toRow
+      .apply(keyOption.get.asInstanceOf[K]).asInstanceOf[UnsafeRow].getBytes()
+
     val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-    val keyByteArr = SerializationUtils.serialize(keyOption.get.asInstanceOf[Serializable])
     val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
     val keyRow = keyEncoder(InternalRow(keyByteArr))
     keyRow
