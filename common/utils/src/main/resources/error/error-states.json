@@ -695,7 +695,7 @@
         "standard": "N",
         "used_by": ["DB2"]
     },
-    "01Hxx": {
+    "01HXX": {
         "description": "Valid warning SQLSTATEs returned by a user-defined function, external procedure CALL, or command invocation.",
         "origin": "DB2",
         "standard": "N",
