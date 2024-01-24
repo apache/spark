@@ -613,10 +613,6 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    * @since 3.5.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
-    if (fpp <= 0d || fpp >= 1d) {
-      throw new IllegalArgumentException(
-        "False positive probability must be within range (0.0, 1.0)")
-    }
     val numBits = BloomFilter.optimalNumOfBits(expectedNumItems, fpp)
     bloomFilter(col, expectedNumItems, numBits)
   }
