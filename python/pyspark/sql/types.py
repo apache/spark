@@ -2196,10 +2196,7 @@ def _make_type_verifier(
             if nullable:
                 return True
             else:
-                raise PySparkValueError(
-                    error_class="NULLABILITY_CHECK_FAILED",
-                    message_parameters={},
-                )
+                raise PySparkValueError(message=new_msg("This field is not nullable, but got None"))
         else:
             return False
 
@@ -2214,12 +2211,9 @@ def _make_type_verifier(
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
             raise PySparkTypeError(
-                error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
-                message_parameters={
-                    "data_type": str(dataType),
-                    "obj_name": str(obj),
-                    "obj_type": type(obj).__name__,
-                },
+                message=new_msg(
+                    "%s can not accept object %r in type %s" % (dataType, obj, type(obj))
+                )
             )
 
     if isinstance(dataType, (StringType, CharType, VarcharType)):
@@ -2233,11 +2227,7 @@ def _make_type_verifier(
         def verify_udf(obj: Any) -> None:
             if not (hasattr(obj, "__UDT__") and obj.__UDT__ == dataType):
                 raise PySparkValueError(
-                    error_class="NOT_INSTANCE_OF",
-                    message_parameters={
-                        "value": str(obj),
-                        "type": str(dataType),
-                    },
+                    message=new_msg("%r is not an instance of type %r" % (obj, dataType))
                 )
             verifier(dataType.toInternal(obj))
 
@@ -2250,13 +2240,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -128 or obj > 127:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
-                    message_parameters={
-                        "arg_name": "obj",
-                        "lower_bound": "127",
-                        "upper_bound": "-127",
-                        "actual": str(obj),
-                    },
+                    message=new_msg("object of ByteType out of range, got: %s" % obj)
                 )
 
         verify_value = verify_byte
@@ -2268,13 +2252,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -32768 or obj > 32767:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
-                    message_parameters={
-                        "arg_name": "obj",
-                        "lower_bound": "32767",
-                        "upper_bound": "-32768",
-                        "actual": str(obj),
-                    },
+                    message=new_msg("object of ShortType out of range, got: %s" % obj)
                 )
 
         verify_value = verify_short
@@ -2286,13 +2264,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -2147483648 or obj > 2147483647:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
-                    message_parameters={
-                        "arg_name": "obj",
-                        "lower_bound": "2147483647",
-                        "upper_bound": "-2147483648",
-                        "actual": str(obj),
-                    },
+                    message=new_msg("object of IntegerType out of range, got: %s" % obj)
                 )
 
         verify_value = verify_integer
@@ -2304,13 +2276,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -9223372036854775808 or obj > 9223372036854775807:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
-                    message_parameters={
-                        "arg_name": "obj",
-                        "lower_bound": "9223372036854775807",
-                        "upper_bound": "-9223372036854775808",
-                        "actual": str(obj),
-                    },
+                    message=new_msg("object of LongType out of range, got: %s" % obj)
                 )
 
         verify_value = verify_long
@@ -2358,13 +2324,10 @@ def _make_type_verifier(
             elif isinstance(obj, (tuple, list)):
                 if len(obj) != len(verifiers):
                     raise PySparkValueError(
-                        error_class="LENGTH_SHOULD_BE_THE_SAME",
-                        message_parameters={
-                            "arg1": "obj",
-                            "arg2": "fields",
-                            "arg1_length": str(len(obj)),
-                            "arg2_length": str(len(verifiers)),
-                        },
+                        message=new_msg(
+                            "Length of object (%d) does not match with "
+                            "length of fields (%d)" % (len(obj), len(verifiers))
+                        )
                     )
                 for v, (_, verifier) in zip(obj, verifiers):
                     verifier(v)
@@ -2374,12 +2337,9 @@ def _make_type_verifier(
                     verifier(d.get(f))
             else:
                 raise PySparkTypeError(
-                    error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
-                    message_parameters={
-                        "data_type": "StructType",
-                        "obj_name": str(obj),
-                        "obj_type": type(obj).__name__,
-                    },
+                    message=new_msg(
+                        "StructType can not accept object %r in type %s" % (obj, type(obj))
+                    )
                 )
 
         verify_value = verify_struct

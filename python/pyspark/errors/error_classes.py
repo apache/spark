@@ -612,11 +612,6 @@ ERROR_CLASSES_JSON = '''
       "<feature> is not implemented."
     ]
   },
-  "NOT_INSTANCE_OF": {
-    "message": [
-      "<value> is not an instance of type <type>."
-    ]
-  },
   "NOT_INT": {
     "message": [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -740,11 +735,6 @@ ERROR_CLASSES_JSON = '''
   "NO_SCHEMA_AND_DRIVER_DEFAULT_SCHEME": {
     "message": [
       "Only allows <arg_name> to be a path without scheme, and Spark Driver should use the default scheme to determine the destination file system."
-    ]
-  },
-  "NULLABILITY_CHECK_FAILED": {
-    "message": [
-      "The nullability check is failed. Make sure the parameter does not contain None."
     ]
   },
   "ONLY_ALLOWED_FOR_SINGLE_COLUMN": {
@@ -1106,11 +1096,6 @@ ERROR_CLASSES_JSON = '''
   "VALUE_NOT_TRUE": {
     "message": [
       "Value for `<arg_name>` must be True, got '<arg_value>'."
-    ]
-  },
-  "VALUE_OUT_OF_BOUND": {
-    "message": [
-      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {
