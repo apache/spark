@@ -61,9 +61,6 @@ private[history] class ApplicationCache(
       // Ensure old SparkUI has been detached before loading new one.
       val removalLatch = loadedApps.get(key)
       if (removalLatch != null) {
-        // Not set a timeout because:
-        // 1. ApplicationCache#removalListener ensures each removalLatch will be counted down
-        // 2. SparkUI detaching time is not predictable
         removalLatch.await()
       }
       val entry = loadApplicationEntry(key.appId, key.attemptId)
