@@ -58,8 +58,8 @@ LICENSE=$(cat <<'EOF'
 EOF)
 echo "$LICENSE" > /tmp/tmp_licence
 
-buf --version
-black --version
+echo "buf version: $(buf --version)"
+echo "black version: $(black --version)"
 
 # Delete the old generated protobuf files.
 rm -Rf gen
