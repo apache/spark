@@ -35,7 +35,9 @@ try:
 except ImportError as e:
     if os.environ.get("SPARK_TESTING"):
         warnings.warn(str(e))
-        sys.exit()
+        # Run test without pandas/pyarrow on PyPy
+        if not platform.python_implementation() == "PyPy":
+            sys.exit()
     else:
         raise
 
