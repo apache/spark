@@ -13447,15 +13447,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return psdf
 
-    @staticmethod
-    def _fall_back_frame(method: str):
-        def _internal_fall_back_function_(df: "DataFrame", *inputs: Any, **kwargs: Any):
+    def _fall_back_frame(self, method: str) -> Callable:
+        def _internal_fall_back_function_(*inputs: Any, **kwargs: Any):
             log_advice(
                 f"`{method}` is executed in fallback mode. It loads partial data into the driver's memory"
                 f" to infer the schema, and loads all data into one executor's memory to compute. "
                 "It should only be used if the pandas DataFrame is expected to be small."
             )
-            input_df = df.copy()
+            input_df = self.copy()
 
             uid = str(uuid.uuid4()).replace("-", "")
             tmp_agg_column_name = f"__tmp_aggregate_col_for_frame_{method}_{uid}__"
@@ -13464,6 +13463,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             input_df[tmp_agg_column_name] = 0
             input_df[tmp_idx_column_name] = input_df.index
 
+            # TODO: specify the return type if possible
             def compute_function(pdf: pd.DataFrame):  # type: ignore[no-untyped-def]
                 pdf = pdf.drop(columns=[tmp_agg_column_name])
                 pdf = pdf.set_index(tmp_idx_column_name, drop=True)
@@ -13474,7 +13474,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             output_df = input_df.groupby(tmp_agg_column_name).apply(compute_function)
             output_df = output_df.set_index(tmp_idx_column_name)
-            output_df.index.names = df.index.names
+            output_df.index.names = self.index.names
 
             return output_df
 
@@ -13484,10 +13484,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if key.startswith("__"):
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
-            if key in [
-                "asfreq",
-            ]:
-                return DataFrame._fall_back_frame(key)
+            if key in ["asfreq", "asof"] and get_option("compute.pandas_fallback"):
+                return self._fall_back_frame(key)
 
             property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):

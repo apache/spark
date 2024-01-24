@@ -274,6 +274,15 @@ _options: List[Option] = [
         ),
     ),
     Option(
+        key="compute.pandas_fallback",
+        doc=(
+            "'compute.pandas_fallback' sets whether or not to fallback automatically "
+            "to Pandas' implementation."
+        ),
+        default=False,
+        types=bool,
+    ),
+    Option(
         key="plotting.sample_ratio",
         doc=(
             "'plotting.sample_ratio' sets the proportion of data that will be plotted for sample-"
