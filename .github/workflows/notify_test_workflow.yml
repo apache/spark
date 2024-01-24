@@ -41,7 +41,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const endpoint = 'GET /repos/:owner/:repo/actions/workflows/:id/runs?&branch=:branch'
-            const check_run_endpoint = 'GET /repos/:owner/:repo/commits/:ref/check-runs'
+            const check_run_endpoint = 'GET /repos/:owner/:repo/commits/:ref/check-runs?per_page=100'
 
             // TODO: Should use pull_request.user and pull_request.user.repos_url?
             // If a different person creates a commit to another forked repo,
