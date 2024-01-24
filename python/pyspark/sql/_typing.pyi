@@ -19,6 +19,7 @@
 from typing import (
     Any,
     Callable,
+    Dict,
     List,
     Optional,
     Tuple,
@@ -29,8 +30,10 @@ from typing_extensions import Literal, Protocol
 
 import datetime
 import decimal
+import pstats
 
 from pyspark._typing import PrimitiveType
+from pyspark.profiler import CodeMapDict
 import pyspark.sql.types
 from pyspark.sql.column import Column
 
@@ -79,3 +82,5 @@ class UserDefinedFunctionLike(Protocol):
     def returnType(self) -> pyspark.sql.types.DataType: ...
     def __call__(self, *args: ColumnOrName) -> Column: ...
     def asNondeterministic(self) -> UserDefinedFunctionLike: ...
+
+ProfileResults = Dict[int, Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]

@@ -878,6 +878,31 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
   }
 
+  test("join with dataframe star") {
+    val left = spark.range(100)
+    val right = spark.range(100).select(col("id"), rand(12).as("a"))
+    val join1 = left.join(right, left("id") === right("id"))
+    assert(
+      join1.select(join1.col("*")).schema.catalogString ===
+        "struct<id:bigint,id:bigint,a:double>")
+    assert(join1.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join1.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+
+    val join2 = left.join(right)
+    assert(
+      join2.select(join2.col("*")).schema.catalogString ===
+        "struct<id:bigint,id:bigint,a:double>")
+    assert(join2.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join2.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+
+    val join3 = left.join(right, "id")
+    assert(
+      join3.select(join3.col("*")).schema.catalogString ===
+        "struct<id:bigint,a:double>")
+    assert(join3.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join3.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+  }
+
   test("SPARK-45509: ambiguous column reference") {
     val session = spark
     import session.implicits._

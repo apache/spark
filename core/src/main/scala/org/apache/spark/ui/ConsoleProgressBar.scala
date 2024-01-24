@@ -17,7 +17,9 @@
 
 package org.apache.spark.ui
 
-import java.util.{Timer, TimerTask}
+import java.util.concurrent.{Executors, TimeUnit}
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -46,12 +48,11 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   private var lastProgressBar = ""
 
   // Schedule a refresh thread to run periodically
-  private val timer = new Timer("refresh progress", true)
-  timer.schedule(new TimerTask {
-    override def run(): Unit = {
-      refresh()
-    }
-  }, firstDelayMSec, updatePeriodMSec)
+  private val threadFactory =
+    new ThreadFactoryBuilder().setDaemon(true).setNameFormat("refresh progress").build()
+  private val timer = Executors.newSingleThreadScheduledExecutor(threadFactory)
+  timer.scheduleAtFixedRate(
+    () => refresh(), firstDelayMSec, updatePeriodMSec, TimeUnit.MILLISECONDS)
 
   /**
    * Try to refresh the progress bar in every cycle
@@ -123,5 +124,5 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
    * SparkContext if it's not terminated.
    */
-  def stop(): Unit = timer.cancel()
+  def stop(): Unit = timer.shutdown()
 }

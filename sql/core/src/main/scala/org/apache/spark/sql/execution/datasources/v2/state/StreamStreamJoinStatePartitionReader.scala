@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
@@ -115,7 +115,8 @@ class StreamStreamJoinStatePartitionReader(
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
         formatVersion,
-        skippedNullValueCount = None
+        skippedNullValueCount = None,
+        useStateStoreCoordinator = false
       )
     }
 
@@ -148,18 +149,7 @@ class StreamStreamJoinStatePartitionReader(
     }
   }
 
-  private val joinedRow = new JoinedRow()
-
-  private def addMetadata(row: InternalRow): InternalRow = {
-    val metadataRow = new GenericInternalRow(
-      StateTable.METADATA_COLUMNS.map(_.name()).map {
-        case "_partition_id" => partition.partition.asInstanceOf[Any]
-      }.toArray
-    )
-    joinedRow.withLeft(row).withRight(metadataRow)
-  }
-
-  override def get(): InternalRow = addMetadata(current)
+  override def get(): InternalRow = current
 
   override def close(): Unit = {
     current = null
@@ -169,9 +159,10 @@ class StreamStreamJoinStatePartitionReader(
   }
 
   private def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow)): InternalRow = {
-    val row = new GenericInternalRow(2)
+    val row = new GenericInternalRow(3)
     row.update(0, pair._1)
     row.update(1, pair._2)
+    row.update(2, partition.partition)
     row
   }
 }

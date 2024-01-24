@@ -29,7 +29,6 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
-import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -122,8 +121,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   private def saveAsOrcTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression",
-      OrcCompressionCodec.SNAPPY.lowerCaseName()).orc(dir)
+    df.mode("overwrite").orc(dir)
     spark.read.orc(dir).createOrReplaceTempView("orcTable")
   }
 

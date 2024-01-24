@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -38,8 +39,7 @@ class RatePerMicroBatchStream(
   override def initialOffset(): Offset = RatePerMicroBatchStreamOffset(0L, startTimestamp)
 
   override def latestOffset(): Offset = {
-    throw new UnsupportedOperationException(
-      "latestOffset(Offset, ReadLimit) should be called instead of this method")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3166")
   }
 
   override def getDefaultReadLimit: ReadLimit = {

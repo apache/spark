@@ -434,22 +434,22 @@ case class StateStoreRestoreExec(
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
-        val hasInput = iter.hasNext
-        if (!hasInput && keyExpressions.isEmpty) {
-          // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
-          // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
-          // restore the value, so that we don't overwrite our state with a 0 value, but rather
-          // merge the 0 with existing state.
-          store.iterator().map(_.value)
-        } else {
-          iter.flatMap { row =>
-            val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
-            val restoredRow = stateManager.get(store, key)
-            val outputRows = Option(restoredRow).toSeq :+ row
-            numOutputRows += outputRows.size
-            outputRows
-          }
+      val hasInput = iter.hasNext
+      if (!hasInput && keyExpressions.isEmpty) {
+        // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
+        // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
+        // restore the value, so that we don't overwrite our state with a 0 value, but rather
+        // merge the 0 with existing state.
+        store.iterator().map(_.value)
+      } else {
+        iter.flatMap { row =>
+          val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
+          val restoredRow = stateManager.get(store, key)
+          val outputRows = Option(restoredRow).toSeq :+ row
+          numOutputRows += outputRows.size
+          outputRows
         }
+      }
     }
   }
 
@@ -1097,10 +1097,14 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   protected val extraOptionOnStateStore: Map[String, String] = Map.empty
 
-  private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
+  // Below three variables are defined as lazy, as evaluating these variables does not work with
+  // canonicalized plan. Specifically, attributes in child won't have an event time column in
+  // the canonicalized plan. These variables are NOT referenced in canonicalized plan, hence
+  // defining these variables as lazy would avoid such error.
+  private lazy val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
     allowMultipleEventTimeColumns = false).get
-  private val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
-  private val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
+  private lazy val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
+  private lazy val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
 
   protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = {
     val timeoutToUnsafeRow = UnsafeProjection.create(schemaForValueRow)

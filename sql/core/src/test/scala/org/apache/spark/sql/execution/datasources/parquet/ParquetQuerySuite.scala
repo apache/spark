@@ -1037,8 +1037,10 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       withAllParquetReaders {
         // We can read the decimal parquet field with a larger precision, if scale is the same.
-        val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
-        checkAnswer(readParquet(schema, path), df)
+        val schema1 = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(18, 1), b DECIMAL(38, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema2, path), df)
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
@@ -1067,10 +1069,12 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("a DECIMAL(11, 2)", path), sql("SELECT 1.00"))
         checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
         checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
         checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
         checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        checkAnswer(readParquet("c DECIMAL(22, 0)", path), df.select("c"))
         val e = intercept[SparkException] {
           readParquet("d DECIMAL(3, 2)", path).collect()
         }.getCause
