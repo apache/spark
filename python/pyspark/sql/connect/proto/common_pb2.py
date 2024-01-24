@@ -43,4 +43,4 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _STORAGELEVEL._serialized_end = 222
     _RESOURCEINFORMATION._serialized_start = 224
     _RESOURCEINFORMATION._serialized_end = 295
-# @@protoc_insertion_point(module_scope)å
+# @@protoc_insertion_point(module_scope)

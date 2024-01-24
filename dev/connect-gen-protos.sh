@@ -58,8 +58,6 @@ LICENSE=$(cat <<'EOF'
 EOF)
 echo "$LICENSE" > /tmp/tmp_licence
 
-echo "buf version: $(buf --version)"
-echo "black version: $(black --version)"
 
 # Delete the old generated protobuf files.
 rm -Rf gen
@@ -96,8 +94,6 @@ black --config $SPARK_HOME/dev/pyproject.toml gen/proto/python
 # Last step copy the result files to the destination module.
 for f in `find gen/proto/python -name "*.py*"`; do
   cp $f $OUTPUT_PATH
-  echo "content of $($f)"
-  echo "$(cat $f)"
 done
 
 # Clean up everything.
