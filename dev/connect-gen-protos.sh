@@ -96,6 +96,8 @@ black --config $SPARK_HOME/dev/pyproject.toml gen/proto/python
 # Last step copy the result files to the destination module.
 for f in `find gen/proto/python -name "*.py*"`; do
   cp $f $OUTPUT_PATH
+  echo "content of $($f)"
+  echo "$(cat $f)"
 done
 
 # Clean up everything.
