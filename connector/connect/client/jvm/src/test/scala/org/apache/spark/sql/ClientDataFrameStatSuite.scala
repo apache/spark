@@ -251,16 +251,16 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
     val error1 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", -1000, 100)
     }
-    assert(error1.getErrorClass === "VALUE_OUT_OF_RANGE")
+    assert(error1.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
 
     val error2 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -100)
     }
-    assert(error2.getErrorClass === "VALUE_OUT_OF_RANGE")
+    assert(error2.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
 
     val error3 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -1.0)
     }
-    assert(error3.getErrorClass === "VALUE_OUT_OF_RANGE")
+    assert(error3.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
   }
 }
