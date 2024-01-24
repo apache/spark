@@ -159,7 +159,7 @@ class ChannelBuilder:
         """
         raise PySparkNotImplementedError
 
-    def _insecure_channel(self, target, **kwargs) -> grpc.Channel:
+    def _insecure_channel(self, target: Any, **kwargs: Any) -> grpc.Channel:
         channel = grpc.insecure_channel(target, options=self._channel_options, **kwargs)
 
         if len(self._interceptors) > 0:
@@ -167,7 +167,7 @@ class ChannelBuilder:
             channel = grpc.intercept_channel(channel, *self._interceptors)
         return channel
 
-    def _secure_channel(self, target, credentials, **kwargs) -> grpc.Channel:
+    def _secure_channel(self, target: Any, credentials: Any, **kwargs: Any) -> grpc.Channel:
         channel = grpc.secure_channel(target, credentials, options=self._channel_options, **kwargs)
 
         if len(self._interceptors) > 0:
