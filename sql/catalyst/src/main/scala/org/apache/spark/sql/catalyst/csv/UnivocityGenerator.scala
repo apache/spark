@@ -164,15 +164,15 @@ class UnivocityGenerator(
         builder.append("{")
         if (row.numFields > 0) {
           val st = fields.map(_.dataType)
-          val converter = st.map(makeConverter)
+          val converters = st.map(makeConverter)
           if (row.isNullAt(0)) {
             if (nullAsQuotedEmptyString) {
-              builder.append(" " + options.nullValue)
+              builder.append(options.nullValue)
             } else {
-              builder.append(" " + null.asInstanceOf[String])
+              builder.append(null.asInstanceOf[String])
             }
           } else {
-            builder.append(converter(0)(row.get(0, st(0))))
+            builder.append(converters(0)(row.get(0, st(0))))
           }
           var i = 1
           while (i < row.numFields) {
@@ -185,7 +185,7 @@ class UnivocityGenerator(
               }
             } else {
               builder.append(" ")
-              builder.append(converter(i)(row.get(i, st(i))))
+              builder.append(converters(i)(row.get(i, st(i))))
             }
             i += 1
           }
