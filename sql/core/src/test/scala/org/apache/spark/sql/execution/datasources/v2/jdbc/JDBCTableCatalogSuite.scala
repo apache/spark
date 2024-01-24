@@ -608,7 +608,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-42916: Keep Char/Varchar meta information on the read-side 2") {
+  test("SPARK-46822: Respect charVarcharAsString when casting jdbc type to catalyst type in jdbc") {
     try {
       withConnection(
         _.prepareStatement("""CREATE TABLE "test"."char_tbl" (ID CHAR(5), deptno VARCHAR(10))""")
