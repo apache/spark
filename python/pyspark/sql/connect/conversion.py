@@ -307,14 +307,6 @@ class LocalDataToArrowConversion:
 
         assert schema is not None and isinstance(schema, StructType)
 
-        print()
-        print()
-        print("convert")
-        print(f"data={data}")
-        print(f"schema={schema}")
-        print()
-        print()
-
         column_names = schema.fieldNames()
 
         column_convs = [
