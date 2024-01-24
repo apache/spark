@@ -154,7 +154,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing.
     executeHolder.sessionHolder.withSession { session =>
-      val debugString = requestString(executeHolder.request, executeHolder.request.getDebugMessage)
+      val debugString =
+        requestString(executeHolder.request, executeHolder.request.getDebugMessage)
 
       // Set tag for query cancellation
       session.sparkContext.addJobTag(executeHolder.jobTag)
