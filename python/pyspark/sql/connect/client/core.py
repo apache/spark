@@ -143,7 +143,7 @@ class ChannelBuilder:
     def getDefault(self, key: str, default: Any) -> Any:
         return self._params.get(key, default)
 
-    def set(self, key: str, value: Any):
+    def set(self, key: str, value: Any) -> None:
         self._params[key] = value
 
     def add_interceptor(self, interceptor: grpc.UnaryStreamClientInterceptor) -> None:
@@ -159,7 +159,7 @@ class ChannelBuilder:
         """
         raise PySparkNotImplementedError
 
-    def _insecure_channel(self, target, **kwargs):
+    def _insecure_channel(self, target, **kwargs) -> grpc.Channel:
         channel = grpc.insecure_channel(target, options=self._channel_options, **kwargs)
 
         if len(self._interceptors) > 0:
@@ -167,7 +167,7 @@ class ChannelBuilder:
             channel = grpc.intercept_channel(channel, *self._interceptors)
         return channel
 
-    def _secure_channel(self, target, credentials, **kwargs):
+    def _secure_channel(self, target, credentials, **kwargs) -> grpc.Channel:
         channel = grpc.secure_channel(target, credentials, options=self._channel_options, **kwargs)
 
         if len(self._interceptors) > 0:
