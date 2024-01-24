@@ -58,7 +58,7 @@ case class CSVPartitionReaderFactory(
       actualReadDataSchema,
       options,
       filters)
-    val schema = if (options.columnPruning) actualReadDataSchema else actualDataSchema
+    val schema = if (options.isColumnPruningEnabled) actualReadDataSchema else actualDataSchema
     val isStartOfFile = file.start == 0
     val headerChecker = new CSVHeaderChecker(
       schema, options, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)
