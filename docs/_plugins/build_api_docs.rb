@@ -33,12 +33,27 @@ def print_header(text)
   puts banner_bar
 end
 
+def build_spark_if_necessary
+  if $spark_package_is_built
+    return
+  end
+
+  print_header "Building Spark."
+  cd(SPARK_PROJECT_ROOT)
+  command = "build/sbt -Phive -Pkinesis-asl clean package"
+  puts "Running '#{command}'; this may take a few minutes..."
+  system(command) || raise("Failed to build Spark")
+  $spark_package_is_built = true
+end
+
 def build_scala_and_java_docs
+  build_spark_if_necessary
+
   print_header "Building Scala and Java API docs."
   cd(SPARK_PROJECT_ROOT)
 
-  command = "build/sbt -Pkinesis-asl clean compile unidoc"
-  puts "Running '#{command}'; this may take a few minutes..."
+  command = "build/sbt -Pkinesis-asl unidoc"
+  puts "Running '#{command}'..."
   system(command) || raise("Unidoc generation failed")
 
   puts "Moving back into docs dir."
@@ -124,19 +139,8 @@ def build_scala_and_java_docs
   File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
 end
 
-def build_spark_package
-  print_header "Building Spark package."
-  cd(SPARK_PROJECT_ROOT)
-  command = "build/sbt clean package -Phive"
-  puts "Running '#{command}'; this may take a few minutes..."
-  system(command) || raise("Failed to build Spark")
-  $spark_package_is_built = true
-end
-
 def build_python_docs
-  if !$spark_package_is_built
-    build_spark_package
-  end
+  build_spark_if_necessary
 
   print_header "Building Python API docs."
   cd("#{SPARK_PROJECT_ROOT}/python/docs")
@@ -168,9 +172,7 @@ def build_r_docs
 end
 
 def build_sql_docs
-  if !$spark_package_is_built
-    build_spark_package
-  end
+  build_spark_if_necessary
 
   print_header "Building SQL API docs."
   cd("#{SPARK_PROJECT_ROOT}/sql")
