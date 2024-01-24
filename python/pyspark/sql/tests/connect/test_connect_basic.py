@@ -1125,6 +1125,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
 
+    def test_create_df_nullability(self):
+        data = [("asd", None)]
+        schema = StructType(
+            [
+                StructField("name", StringType(), nullable=True),
+                StructField("age", IntegerType(), nullable=False),
+            ]
+        )
+
+        with self.assertRaises(PySparkValueError):
+            self.spark.createDataFrame(data, schema)
+
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df._explain_string()
