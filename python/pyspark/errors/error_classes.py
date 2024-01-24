@@ -742,6 +742,11 @@ ERROR_CLASSES_JSON = '''
       "Only allows <arg_name> to be a path without scheme, and Spark Driver should use the default scheme to determine the destination file system."
     ]
   },
+  "NULLABILITY_CHECK_FAILED": {
+    "message": [
+      "The nullability check is failed. Make sure the parameter does not contain None."
+    ]
+  },
   "ONLY_ALLOWED_FOR_SINGLE_COLUMN": {
     "message": [
       "Argument `<arg_name>` can only be provided for a single column."

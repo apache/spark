@@ -2197,8 +2197,8 @@ def _make_type_verifier(
                 return True
             else:
                 raise PySparkValueError(
-                    error_class="CANNOT_BE_NONE",
-                    message_parameters={"arg_name": "obj"},
+                    error_class="NULLABILITY_CHECK_FAILED",
+                    message_parameters={},
                 )
         else:
             return False
