@@ -21,6 +21,7 @@
 """
 
 import os
+import platform
 import sys
 import warnings
 from typing import Any
