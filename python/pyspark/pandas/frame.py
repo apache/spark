@@ -13469,7 +13469,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             input_df[tmp_idx_column_name] = input_df.index
 
-            # TODO: specify the return type if possible
+            # TODO(SPARK-46859): specify the return type if possible
             def compute_function(pdf: pd.DataFrame):  # type: ignore[no-untyped-def]
                 pdf = pdf.drop(columns=[tmp_agg_column_name])
                 pdf = pdf.set_index(tmp_idx_column_name, drop=True)
