@@ -420,7 +420,7 @@ class StaxXmlParser(
                       row(index) = convertField(parser, dt, attributes)
                   }
                 } catch {
-                  case partialResultException: PartialValueException =>
+                  case partialValueException: PartialValueException =>
                     badRecordException =
                       badRecordException.orElse(Some(partialResultException.cause))
                     row.update(index, partialResultException.partialResult)
