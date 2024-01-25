@@ -362,6 +362,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
         case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
           assert(result.asInstanceOf[java.util.List[_]].asScala == expected)
+        case s if classOf[java.util.Set[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[java.util.Set[_]].asScala == expected.toSet)
         case a if classOf[mutable.ArraySeq[Int]].isAssignableFrom(a) =>
           assert(result == mutable.ArraySeq.make[Int](expected.toArray))
         case a if classOf[immutable.ArraySeq[Int]].isAssignableFrom(a) =>
@@ -379,7 +381,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
       classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
       classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
-      classOf[java.util.Stack[Int]], null)
+      classOf[java.util.Stack[Int]], null,
+      classOf[java.util.Set[Int]])
 
     val list = new java.util.ArrayList[Int]()
     list.add(1)

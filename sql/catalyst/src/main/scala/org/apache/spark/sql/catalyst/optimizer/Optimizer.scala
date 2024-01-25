@@ -2192,11 +2192,15 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case d @ Deduplicate(keys, child) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
+      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr
         } else {
-          Alias(new First(attr).toAggregateExpression(), attr.name)()
+          // Keep track of the generated aliases to avoid generating multiple aliases
+          // for the same attribute (in case the attribute is duplicated)
+          generatedAliasesMap.getOrElseUpdate(attr,
+            Alias(new First(attr).toAggregateExpression(), attr.name)())
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping

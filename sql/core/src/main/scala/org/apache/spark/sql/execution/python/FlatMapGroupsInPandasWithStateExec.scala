@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.{JobArtifactSet, SparkException, TaskContext}
+import org.apache.spark.{JobArtifactSet, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -138,7 +138,7 @@ case class FlatMapGroupsInPandasWithStateExec(
     override def processNewDataWithInitialState(
         childDataIter: Iterator[InternalRow],
         initStateIter: Iterator[InternalRow]): Iterator[InternalRow] = {
-      throw new UnsupportedOperationException("Should not reach here!")
+      throw SparkUnsupportedOperationException()
     }
 
     override def processTimedOutState(): Iterator[InternalRow] = {
@@ -232,7 +232,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateData: StateData,
         valueRowIter: Iterator[InternalRow],
         hasTimedOut: Boolean): Iterator[InternalRow] = {
-      throw new UnsupportedOperationException("Should not reach here!")
+      throw SparkUnsupportedOperationException()
     }
   }
 }

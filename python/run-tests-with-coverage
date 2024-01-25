@@ -44,9 +44,6 @@ export PYTHONPATH="$FWDIR:$PYTHONPATH"
 # Also, our sitecustomize.py and coverage_daemon.py are included in the path.
 export PYTHONPATH="$COVERAGE_DIR:$PYTHONPATH"
 
-# We use 'spark.python.daemon.module' configuration to insert the coverage supported workers.
-export SPARK_CONF_DIR="$COVERAGE_DIR/conf"
-
 # This environment variable enables the coverage.
 export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
 

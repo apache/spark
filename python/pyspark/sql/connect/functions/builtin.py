@@ -2996,6 +2996,13 @@ def monthname(col: "ColumnOrName") -> Column:
 monthname.__doc__ = pysparkfuncs.monthname.__doc__
 
 
+def dayname(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("dayname", col)
+
+
+dayname.__doc__ = pysparkfuncs.dayname.__doc__
+
+
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("extract", field, source)
 
