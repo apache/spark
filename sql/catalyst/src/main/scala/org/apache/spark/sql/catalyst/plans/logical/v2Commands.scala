@@ -456,13 +456,16 @@ trait V2CreateTablePlan extends LogicalPlan {
 
 /**
  * Create a new table with a v2 catalog.
+ * The [[defaults]] hold optional default value expressions to use when creating the table,
+ * mapping 1:1 with the fields in [[tableSchema]].
  */
 case class CreateTable(
     name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    ignoreIfExists: Boolean)
+    ignoreIfExists: Boolean,
+    defaults: Seq[Option[Expression]])
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -472,6 +475,19 @@ case class CreateTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+}
+
+/** This is a helper to build [[CreateTable]] instances with no column default expressions. */
+object CreateTable {
+  def apply(
+      name: LogicalPlan,
+      tableSchema: StructType,
+      partitioning: Seq[Transform],
+      tableSpec: TableSpecBase,
+      ignoreIfExists: Boolean): CreateTable = {
+    val defaults = tableSchema.fields.map(_ => None).toSeq
+    CreateTable(name, tableSchema, partitioning, tableSpec, ignoreIfExists, defaults)
   }
 }
 
