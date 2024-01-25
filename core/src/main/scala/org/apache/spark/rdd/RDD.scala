@@ -223,14 +223,17 @@ abstract class RDD[T: ClassTag](
    * not use `this` because RDDs are user-visible, so users might have added their own locking on
    * RDDs; sharing that could lead to a deadlock.
    *
-   * One thread might hold the lock on many of these, for a chain of RDD dependencies; but
-   * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
-   * chance of deadlock.
+   * One thread might hold the lock on many of these, for a chain of RDD dependencies. Deadlocks
+   * are possible if we try to lock another resource while holding the stateLock,
+   * and the lock acquisition sequence of these locks is not guaranteed to be the same.
+   * This can lead lead to a deadlock as one thread might first acquire the stateLock,
+   * and then the resource,
+   * while another thread might first acquire the resource, and then the stateLock.
    *
    * Executors may reference the shared fields (though they should never mutate them,
    * that only happens on the driver).
    */
-  private val stateLock = new Serializable {}
+  private[spark] val stateLock = new Serializable {}
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
