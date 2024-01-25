@@ -1076,8 +1076,8 @@ private[deploy] class Master(
         removeDriver(driver.id, DriverState.ERROR, None)
       }
     }
-    logInfo(s"Telling app of lost worker: " + worker.id)
     apps.filterNot(completedApps.contains(_)).foreach { app =>
+      logInfo(s"Telling app ${app.id} of lost worker: ${worker.id}")
       app.driver.send(WorkerRemoved(worker.id, worker.host, msg))
     }
     persistenceEngine.removeWorker(worker)
