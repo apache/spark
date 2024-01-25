@@ -1525,12 +1525,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def remoteOperationsUnsupportedError(): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2178",
-      messageParameters = Map.empty)
-  }
-
   def invalidKerberosConfigForHiveServer2Error(): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2179",

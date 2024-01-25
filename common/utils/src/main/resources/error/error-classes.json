@@ -6201,11 +6201,6 @@
       "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2178" : {
-    "message" : [
-      "Remote operations not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2179" : {
     "message" : [
       "HiveServer2 Kerberos principal or keytab is not correctly configured."

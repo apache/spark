@@ -720,6 +720,36 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Strategy to convert [[TransformWithState]] logical operator to physical operator
+   * in streaming plans.
+   */
+  object TransformWithStateStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case TransformWithState(
+        keyDeserializer, valueDeserializer, groupingAttributes,
+        dataAttributes, statefulProcessor, timeoutMode, outputMode,
+        outputAttr, child) =>
+        val execPlan = TransformWithStateExec(
+          keyDeserializer,
+          valueDeserializer,
+          groupingAttributes,
+          dataAttributes,
+          statefulProcessor,
+          timeoutMode,
+          outputMode,
+          outputAttr,
+          stateInfo = None,
+          batchTimestampMs = None,
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None,
+          planLater(child))
+        execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
    * Strategy to convert [[FlatMapGroupsInPandasWithState]] logical operator to physical operator
    * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
    */
