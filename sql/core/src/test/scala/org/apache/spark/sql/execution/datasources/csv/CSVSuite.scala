@@ -3215,6 +3215,26 @@ abstract class CSVSuite
     assert(CSVOptions.getAlternativeOption("codec").contains("compression"))
     assert(CSVOptions.getAlternativeOption("preferDate").isEmpty)
   }
+
+  test("SPARK-46862: column pruning in the multi-line mode") {
+    val data =
+      """"jobID","Name","City","Active"
+        |"1","DE","","Yes"
+        |"5",",","",","
+        |"3","SA","","No"
+        |"10","abcd""efgh"" \ndef","",""
+        |"8","SE","","No"""".stripMargin
+
+    withTempPath { path =>
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+      val df = spark.read
+        .option("multiline", "true")
+        .option("header", "true")
+        .option("escape", "\"")
+        .csv(path.getCanonicalPath)
+      assert(df.count() === 5)
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
