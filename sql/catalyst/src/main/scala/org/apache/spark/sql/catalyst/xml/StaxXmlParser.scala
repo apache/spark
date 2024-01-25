@@ -36,21 +36,7 @@ import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{
-  ArrayBasedMapData,
-  BadRecordException,
-  CaseInsensitiveMap,
-  DateFormatter,
-  DropMalformedMode,
-  FailureSafeParser,
-  GenericArrayData,
-  MapData,
-  ParseMode,
-  PartialResultArrayException,
-  PartialResultException,
-  PermissiveMode,
-  TimestampFormatter
-}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CaseInsensitiveMap, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialMapDataResultException, PartialResultException, PartialValueException, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -181,10 +167,10 @@ class StaxXmlParser(
           record = () => xmlRecord,
           partialResults = () => Array(row),
           cause)
-      case PartialResultArrayException(rows, cause) =>
+      case PartialMapDataResultException(mapData, cause) =>
         throw BadRecordException(
           record = () => xmlRecord,
-          partialResults = () => rows,
+          partialResults = () => Array(InternalRow(mapData)),
           cause)
     }
   }
@@ -272,6 +258,7 @@ class StaxXmlParser(
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
+    var badRecordException: Option[Throwable] = None
     attributes.foreach { attr =>
       kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
         -> convertTo(attr.getValue, valueType))
@@ -280,20 +267,45 @@ class StaxXmlParser(
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
-          kvPairs +=
-            (UTF8String.fromString(StaxXmlParserUtils.getName(e.asStartElement.getName, options)) ->
-            convertField(parser, valueType))
+          val key = UTF8String.fromString(
+            StaxXmlParserUtils.getName(e.asStartElement.getName, options))
+          try {
+            kvPairs += key -> convertField(parser, valueType)
+          } catch {
+            case partialValueException: PartialValueException =>
+              badRecordException = badRecordException.orElse(Some(partialValueException.cause))
+              StaxXmlParserUtils.skipChildren(parser)
+              kvPairs += key -> partialValueException.partialResult
+            case NonFatal(e) =>
+              badRecordException = badRecordException.orElse(Some(e))
+              StaxXmlParserUtils.skipChildren(parser)
+          }
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
-          kvPairs +=
+          val key = UTF8String.fromString(options.valueTag)
           // TODO: We don't support an array value tags in map yet.
-          (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
+          try {
+            kvPairs += (key -> convertTo(c.getData, valueType))
+          } catch {
+            case partialValueException: PartialValueException =>
+              badRecordException = badRecordException.orElse(Some(partialValueException.cause))
+              StaxXmlParserUtils.skipChildren(parser)
+              kvPairs += key -> partialValueException.partialResult
+            case NonFatal(e) =>
+              badRecordException = badRecordException.orElse(Some(e))
+              StaxXmlParserUtils.skipChildren(parser)
+          }
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)
         case _ => // do nothing
       }
     }
-    ArrayBasedMapData(kvPairs.toMap)
+    val mapData = ArrayBasedMapData(kvPairs.toMap)
+    if (badRecordException.isEmpty) {
+      mapData
+    } else {
+      throw PartialMapDataResultException(mapData, badRecordException.get)
+    }
   }
 
   /**
@@ -385,31 +397,41 @@ class StaxXmlParser(
           val attributes = e.getAttributes.asScala.toArray
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
 
-          nameToIndex.get(field) match {
-            case Some(index) => schema(index).dataType match {
-              case st: StructType =>
-                row(index) = convertObjectWithAttributes(parser, st, attributes)
+            nameToIndex.get(field) match {
+              case Some(index) =>
+                try {
+                  schema(index).dataType match {
+                    case st: StructType =>
+                      row(index) = convertObjectWithAttributes(parser, st, attributes)
 
-              case ArrayType(dt: DataType, _) =>
-                val values = Option(row(index))
-                  .map(_.asInstanceOf[ArrayBuffer[Any]])
-                  .getOrElse(ArrayBuffer.empty[Any])
-                val newValue = dt match {
-                  case st: StructType =>
-                    convertObjectWithAttributes(parser, st, attributes)
-                  case dt: DataType =>
-                    convertField(parser, dt)
+                    case ArrayType(dt: DataType, _) =>
+                      val values = Option(row(index))
+                        .map(_.asInstanceOf[ArrayBuffer[Any]])
+                        .getOrElse(ArrayBuffer.empty[Any])
+                      val newValue = dt match {
+                        case st: StructType =>
+                          convertObjectWithAttributes(parser, st, attributes)
+                        case dt: DataType =>
+                          convertField(parser, dt)
+                      }
+                      row(index) = values :+ newValue
+
+                    case dt: DataType =>
+                      row(index) = convertField(parser, dt, attributes)
+                  }
+                } catch {
+                  case partialResultException: PartialValueException =>
+                    badRecordException =
+                      badRecordException.orElse(Some(partialResultException.cause))
+                    row.update(index, partialResultException.partialResult)
                 }
-                row(index) = values :+ newValue
-
-              case dt: DataType =>
-                row(index) = convertField(parser, dt, attributes)
-            }
 
             case None =>
               if (hasWildcard) {
                 // Special case: there's an 'any' wildcard element that matches anything else
                 // as a string (or array of strings, to parse multiple ones)
+                // As the wildcard column field is of string type,
+                // It won't throw partialValueException
                 val newValue = convertField(parser, StringType)
                 val anyIndex = schema.fieldIndex(wildcardColName)
                 schema(wildcardColName).dataType match {
@@ -429,6 +451,7 @@ class StaxXmlParser(
           case e: SparkUpgradeException => throw e
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
+            StaxXmlParserUtils.skipChildren(parser)
         }
 
         case c: Characters if !c.isWhiteSpace =>

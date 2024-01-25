@@ -21,17 +21,14 @@ import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
-
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
-
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
@@ -44,6 +41,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+import java.io.File
 
 class XmlSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -2684,5 +2683,41 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       Row(1.0E-39D, BigDecimal("0.01")) ::
         Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
     )
+  }
+
+  test("return partial results for bad records") {
+    withTempDir { dir =>
+      val xmlBadRecord1 =
+        s"""<ROW>
+         |    <double>0.1</double>
+         |    <array>0</array>
+         |    <array>mismatch</array>
+         |    <array>2</array>
+         |    <map>
+         |        <key1>1</key1>
+         |        <key2>2</key2>
+         |    </map>
+         |</ROW>""".stripMargin
+      val xmlBadRecord2 =
+        s"""<ROW>
+           |    <double>mismatch</double>
+           |    <array>mismatch</array>
+           |    <array>1</array>
+           |    <array>2</array>
+           |    <map>
+           |        <key1>mismatch</key1>
+           |        <key2>2</key2>
+           |    </map>
+           |</ROW>""".stripMargin
+      Files.write(new File(dir, "f0").toPath, (xmlBadRecord1 ++ xmlBadRecord2).getBytes)
+      val schema = "double double, array array<int>, map map<string, int>, _corrupt_record string"
+      val df = spark.read.schema(schema).option("rowTag", "ROW").xml(dir.getCanonicalPath)
+      checkAnswer(
+        df,
+        Row(0.1, Array(0, 2), Map("key1" -> 1, "key2" -> 2), xmlBadRecord1) ::
+        Row(null, Array(1, 2), Map("key2" -> 2), xmlBadRecord2) :: Nil)
+    }
+
+
   }
 }
