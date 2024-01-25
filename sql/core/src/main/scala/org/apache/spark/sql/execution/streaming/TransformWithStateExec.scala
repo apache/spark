@@ -136,7 +136,7 @@ case class TransformWithStateExec(
       ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttributes)
 
     val keyObj = getKeyObj(keyRow) // convert key to objects
-    ImplicitKeyTracker.setImplicitKey(keyObj)
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val initStateObjIter = initStateIter.map(getStateValueObj.apply)
 
     initStateObjIter.foreach { initState =>
@@ -144,7 +144,7 @@ case class TransformWithStateExec(
         .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
         .handleInitialState(keyObj, initState)
     }
-    ImplicitKeyTracker.removeImplicitKey()
+    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
   private def processNewData(dataIter: Iterator[InternalRow]): Iterator[InternalRow] = {

@@ -266,11 +266,13 @@ class IncrementalExecution(
         )
 
       case t: TransformWithStateExec =>
+        val hasInitialState = (isFirstBatch && t.hasInitialState)
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None
+          eventTimeWatermarkForEviction = None,
+          hasInitialState = hasInitialState
         )
 
       case m: FlatMapGroupsInPandasWithStateExec =>

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, KeyValueGroupedDataset, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Encoders, KeyValueGroupedDataset, SaveMode}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
@@ -39,7 +39,7 @@ class StatefulProcessorWithInitialStateTestClass
   override def init(processorHandle: StatefulProcessorHandle,
      operatorOutputMode: OutputMode): Unit = {
     _processorHandle = processorHandle
-    _valState = _processorHandle.getValueState[Double]("testInit")
+    _valState = _processorHandle.getValueState[String, Double]("testInit", Encoders.STRING)
   }
 
   override def close(): Unit = {}
