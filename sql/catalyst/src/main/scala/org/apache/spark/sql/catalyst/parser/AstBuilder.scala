@@ -3999,19 +3999,20 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       serdeInfo, external)
 
     // Parse column defaults from the table into separate expressions in the CREATE TABLE operator.
-    val defaultsSpecified: mutable.Map[Int, Expression] = mutable.Map.empty
+    val specifiedDefaults: mutable.Map[Int, Expression] = mutable.Map.empty
     Option(ctx.createOrReplaceTableColTypeList()).foreach {
       _.createOrReplaceTableColType().asScala.zipWithIndex.foreach { case (typeContext, index) =>
         typeContext.colDefinitionOption().asScala.foreach { option =>
           Option(option.defaultExpression()).foreach { defaultExprContext =>
-            defaultsSpecified.update(index, expression(defaultExprContext.expression()))
+            specifiedDefaults.update(index, expression(defaultExprContext.expression()))
           }
         }
       }
     }
-    val defaults: Seq[Option[Expression]] = columns.zipWithIndex.map { case (_, index: Int) =>
-      defaultsSpecified.get(index)
-    }
+    val defaultValueExpressions: Seq[Option[Expression]] =
+      (0 until columns.size).map { index: Int =>
+        specifiedDefaults.get(index)
+      }
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -4034,7 +4035,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         // with data type.
         val schema = StructType(columns ++ partCols)
         CreateTable(withIdentClause(identifierContext, UnresolvedIdentifier(_)),
-          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists, defaults)
+          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists, defaultValueExpressions)
     }
   }
 

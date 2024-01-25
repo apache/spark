@@ -174,7 +174,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
-        tableSpec: TableSpec, ifNotExists, defaults) =>
+        tableSpec: TableSpec, ifNotExists, defaultValueExpressions) =>
       ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
       val statementType = "CREATE TABLE"
       val newSchema: StructType =
@@ -183,8 +183,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         newSchema, catalog.asTableCatalog, ident, statementType)
 
       CreateTableExec(catalog.asTableCatalog, ident,
-        structTypeToV2ColumnsWithDefaults(newSchema, defaults, statementType), partitioning,
-        qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
+        structTypeToV2ColumnsWithDefaults(newSchema, defaultValueExpressions, statementType),
+        partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
         options, ifNotExists, true) =>

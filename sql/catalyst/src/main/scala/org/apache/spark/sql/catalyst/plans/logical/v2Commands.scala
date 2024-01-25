@@ -456,8 +456,8 @@ trait V2CreateTablePlan extends LogicalPlan {
 
 /**
  * Create a new table with a v2 catalog.
- * The [[defaults]] hold optional default value expressions to use when creating the table,
- * mapping 1:1 with the fields in [[tableSchema]].
+ * The [[defaultValueExpressions]] hold optional default value expressions to use when creating the
+ * table, mapping 1:1 with the fields in [[tableSchema]].
  */
 case class CreateTable(
     name: LogicalPlan,
@@ -465,7 +465,7 @@ case class CreateTable(
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     ignoreIfExists: Boolean,
-    defaults: Seq[Option[Expression]])
+    defaultValueExpressions: Seq[Option[Expression]])
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -478,7 +478,7 @@ case class CreateTable(
   }
 }
 
-/** This is a helper to build [[CreateTable]] instances with no column default expressions. */
+/** This is a helper to build [[CreateTable]] instances with no column default value expressions. */
 object CreateTable {
   def apply(
       name: LogicalPlan,
@@ -486,8 +486,8 @@ object CreateTable {
       partitioning: Seq[Transform],
       tableSpec: TableSpecBase,
       ignoreIfExists: Boolean): CreateTable = {
-    val defaults = tableSchema.fields.map(_ => None).toSeq
-    CreateTable(name, tableSchema, partitioning, tableSpec, ignoreIfExists, defaults)
+    val defaultValueExpressions = tableSchema.fields.map(_ => None).toSeq
+    CreateTable(name, tableSchema, partitioning, tableSpec, ignoreIfExists, defaultValueExpressions)
   }
 }
 
