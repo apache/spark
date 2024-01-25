@@ -143,6 +143,18 @@ You can optionally configure the cluster further by setting environment variable
     </td>
   </tr>
   <tr>
+    <td><code>SPARK_LOG_DIR</code></td>
+    <td>Where log files are stored. (default: SPARK_HOME/logs).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_LOG_MAX_FILES</code></td>
+    <td>The maximum number of log files (default: 5).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_PID_DIR</code></td>
+    <td>Where pid files are stored. (default: /tmp).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_WORKER_CORES</code></td>
     <td>Total number of cores to allow Spark applications to use on the machine (default: all available cores).</td>
   </tr>
@@ -267,7 +279,17 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.1.0</td>
 </tr>
 <tr>
-  <td><code>spark.deploy.spreadOut</code></td>
+  <td><code>spark.deploy.spreadOutDrivers</code></td>
+  <td>true</td>
+  <td>
+    Whether the standalone cluster manager should spread drivers out across nodes or try
+    to consolidate them onto as few nodes as possible. Spreading out is usually better for
+    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.deploy.spreadOutApps</code></td>
   <td>true</td>
   <td>
     Whether the standalone cluster manager should spread applications out across nodes or try

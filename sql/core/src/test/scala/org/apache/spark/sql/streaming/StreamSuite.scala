@@ -511,7 +511,7 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
       assert("BatchScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
@@ -521,7 +521,7 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithExtended).size === 3)
       assert("BatchScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
@@ -566,7 +566,7 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
 
       // `extended = false` only displays the physical plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
       assert("ContinuousScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
@@ -574,7 +574,7 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("StreamingDataSourceV2Relation".r
+      assert("StreamingDataSourceV2ScanRelation".r
         .findAllMatchIn(explainWithExtended).size === 3)
       assert("ContinuousScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
@@ -713,9 +713,7 @@ class StreamSuite extends StreamTest {
         "columnName" -> "`rn_col`",
         "windowSpec" ->
           ("(PARTITION BY COL1 ORDER BY COL2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
-          "AND CURRENT ROW)")),
-      queryContext = Array(
-        ExpectedContext(fragment = "withColumn", callSitePattern = getCurrentClassCallSitePattern)))
+          "AND CURRENT ROW)")))
   }
 
 
@@ -1418,6 +1416,7 @@ class TestStateStoreProvider extends StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     throw new Exception("Successfully instantiated")

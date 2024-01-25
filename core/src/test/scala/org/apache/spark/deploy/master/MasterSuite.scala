@@ -250,6 +250,42 @@ class MasterSuite extends SparkFunSuite
     CustomRecoveryModeFactory.instantiationAttempts should be > instantiationAttempts
   }
 
+  test("SPARK-46664: master should recover quickly in case of zero workers and apps") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "CUSTOM")
+    conf.set(RECOVERY_MODE_FACTORY, classOf[FakeRecoveryModeFactory].getCanonicalName)
+    conf.set(MASTER_REST_SERVER_ENABLED, false)
+
+    val fakeDriverInfo = new DriverInfo(
+      startTime = 0,
+      id = "test_driver",
+      desc = new DriverDescription(
+        jarUrl = "",
+        mem = 1024,
+        cores = 1,
+        supervise = false,
+        command = new Command("", Nil, Map.empty, Nil, Nil, Nil)),
+      submitDate = new Date())
+    FakeRecoveryModeFactory.persistentData.put(s"driver_${fakeDriverInfo.id}", fakeDriverInfo)
+
+    var master: Master = null
+    try {
+      master = makeMaster(conf)
+      master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        getState(master) should be(RecoveryState.ALIVE)
+      }
+      master.workers.size should be(0)
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+        FakeRecoveryModeFactory.persistentData.clear()
+      }
+    }
+  }
+
   test("master correctly recover the application") {
     val conf = new SparkConf(loadDefaults = false)
     conf.set(RECOVERY_MODE, "CUSTOM")
@@ -655,6 +691,44 @@ class MasterSuite extends SparkFunSuite
     assert(drivers.size === 6 && waitingDrivers.size === 2)
   }
 
+  test("SPARK-46800: schedule to spread out drivers") {
+    verifyDrivers(true, 1, 1, 1)
+  }
+
+  test("SPARK-46800: schedule not to spread out drivers") {
+    verifyDrivers(false, 3, 0, 0)
+  }
+
+  private def verifyDrivers(spreadOut: Boolean, answer1: Int, answer2: Int, answer3: Int): Unit = {
+    val master = makeMaster(new SparkConf().set(SPREAD_OUT_DRIVERS, spreadOut))
+    val worker1 = makeWorkerInfo(4096, 10)
+    val worker2 = makeWorkerInfo(4096, 10)
+    val worker3 = makeWorkerInfo(4096, 10)
+    master.state = RecoveryState.ALIVE
+    master.workers += worker1
+    master.workers += worker2
+    master.workers += worker3
+    val drivers = getDrivers(master)
+    val waitingDrivers = master.invokePrivate(_waitingDrivers())
+
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 0 && waitingDrivers.size === 0)
+
+    val command = Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    (1 to 3).foreach { i =>
+      val driver = new DriverInfo(0, "driver" + i, desc, new Date())
+      waitingDrivers += driver
+      drivers.add(driver)
+    }
+    assert(drivers.size === 3 && waitingDrivers.size === 3)
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 3 && waitingDrivers.size === 0)
+    assert(worker1.drivers.size === answer1)
+    assert(worker2.drivers.size === answer2)
+    assert(worker3.drivers.size === answer3)
+  }
+
   private def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
     val appInfo: ApplicationInfo = if (withMaxCores) {
       makeAppInfo(
@@ -921,7 +995,7 @@ class MasterSuite extends SparkFunSuite
 
     val desc = new ApplicationDescription(
       "test", maxCores, null, "", rp, None, None, initialExecutorLimit)
-    val appId = System.currentTimeMillis.toString
+    val appId = System.nanoTime().toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
@@ -930,7 +1004,7 @@ class MasterSuite extends SparkFunSuite
   }
 
   private def makeWorkerInfo(memoryMb: Int, cores: Int): WorkerInfo = {
-    val workerId = System.currentTimeMillis.toString
+    val workerId = System.nanoTime().toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)

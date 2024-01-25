@@ -112,6 +112,26 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testBeanWithSet() {
+    BeanWithSet bean = new BeanWithSet();
+    Set<Long> fields = asSet(1L, 2L, 3L);
+    bean.setFields(fields);
+    List<BeanWithSet> objects = Collections.singletonList(bean);
+
+    Dataset<BeanWithSet> ds = spark.createDataset(objects, Encoders.bean(BeanWithSet.class));
+    Dataset<Row> df = ds.toDF();
+
+    Dataset<BeanWithSet> mapped =
+            df.map((MapFunction<Row, BeanWithSet>) row -> {
+              BeanWithSet obj = new BeanWithSet();
+              obj.setFields(new HashSet<>(row.<Long>getList(row.fieldIndex("fields"))));
+              return obj;
+            }, Encoders.bean(BeanWithSet.class));
+
+    Assertions.assertEquals(objects, mapped.collectAsList());
+  }
+
+  @Test
   public void testCommonOperation() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
@@ -1987,6 +2007,31 @@ public class JavaDatasetSuite implements Serializable {
         .filter(col("a").geq(1));
     final List<Row> expected = Arrays.asList(create(1, "s1"), create(2, "s2"));
     Assertions.assertEquals(expected, df.collectAsList());
+  }
+
+  public static class BeanWithSet implements Serializable {
+    private Set<Long> fields;
+
+    public Set<Long> getFields() {
+      return fields;
+    }
+
+    public void setFields(Set<Long> fields) {
+      this.fields = fields;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      BeanWithSet that = (BeanWithSet) o;
+      return Objects.equal(fields, that.fields);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(fields);
+    }
   }
 
   public static class SpecificListsBean implements Serializable {

@@ -209,6 +209,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the three-letter abbreviated day name for the given number of days since 1970-01-01.
+   */
+  def getDayName(days: Int): UTF8String = {
+    val dayName = DayOfWeek
+      .of(getWeekDay(days) + 1)
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
+
+    UTF8String.fromString(dayName)
+  }
+
+  /**
    * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
    * timestamp at the given time zone, adds months, and converts the resulted local timestamp
    * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -517,11 +528,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Obtains the current instant as microseconds since the epoch at the UTC time zone.
-   */
-  def currentTimestamp(): Long = instantToMicros(Instant.now())
-
-  /**
    * Obtains the current date as days since the epoch in the specified time-zone.
    */
   def currentDate(zoneId: ZoneId): Int = localDateToDays(LocalDate.now(zoneId))
@@ -572,7 +578,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
     extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
-      case "now" => Some(currentTimestamp())
+      case "now" => Some(instantToMicros(Instant.now()))
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
       case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
       case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))

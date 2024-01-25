@@ -395,23 +395,23 @@ case class PrettyAttribute(
   override def sql: String = toString
 
   override def withNullability(newNullability: Boolean): Attribute =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def newInstance(): Attribute =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def withQualifier(newQualifier: Seq[String]): Attribute =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def withName(newName: String): Attribute =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def withMetadata(newMetadata: Metadata): Attribute =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def qualifier: Seq[String] =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def exprId: ExprId =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def withExprId(newExprId: ExprId): Attribute =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def withDataType(newType: DataType): Attribute =
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3125")
+    throw SparkUnsupportedOperationException()
   override def nullable: Boolean = true
 }
 

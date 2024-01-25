@@ -31,10 +31,12 @@ import scala.util.control.NonFatal
 
 import Artifact._
 import com.google.protobuf.ByteString
+import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
@@ -63,6 +65,7 @@ class ArtifactManager(
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
+  private[this] val stubState = stub.stubState
 
   /**
    * Register a [[ClassFinder]] for dynamically generated classes.
@@ -228,6 +231,17 @@ class ArtifactManager(
       return
     }
 
+    try {
+      stubState.retryHandler.retry {
+        addArtifactsImpl(artifacts)
+      }
+    } catch {
+      case ex: StatusRuntimeException =>
+        throw new SparkException(ex.toString, ex.getCause)
+    }
+  }
+
+  private[client] def addArtifactsImpl(artifacts: Iterable[Artifact]): Unit = {
     val promise = Promise[Seq[ArtifactSummary]]()
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
@@ -284,7 +298,10 @@ class ArtifactManager(
       writeBatch()
     }
     stream.onCompleted()
-    SparkThreadUtils.awaitResult(promise.future, Duration.Inf)
+    // Don't convert to SparkException yet for the sake of retrying.
+    // retryPolicies are designed around underlying grpc StatusRuntimeException's.
+    // Convert to sparkException only if retrying fails.
+    SparkThreadUtils.awaitResultNoSparkExceptionConversion(promise.future, Duration.Inf)
     // TODO(SPARK-42658): Handle responses containing CRC failures.
   }
 
