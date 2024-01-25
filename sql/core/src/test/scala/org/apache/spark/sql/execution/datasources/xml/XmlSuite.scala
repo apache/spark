@@ -2885,28 +2885,34 @@ class XmlSuite
     withTempDir { dir =>
       val xmlBadRecord1 =
         s"""<ROW>
+         |    3
          |    <double>0.1</double>
+         |    4
          |    <array>0</array>
          |    <array>mismatch</array>
          |    <array>2</array>
          |    <map>
          |        <key1>1</key1>
+         |        3
          |        <key2>2</key2>
          |    </map>
          |</ROW>""".stripMargin
       val xmlBadRecord2 =
         s"""<ROW>
+           |     3
            |    <double>mismatch</double>
+           |     mismatchValue
            |    <array>mismatch</array>
            |    <array>1</array>
            |    <array>2</array>
            |    <map>
+           |        mismatch1
            |        <key1>mismatch</key1>
            |        <key2>2</key2>
            |    </map>
            |</ROW>""".stripMargin
       Files.write(new File(dir, "f0").toPath, (xmlBadRecord1 ++ xmlBadRecord2).getBytes)
-      val schema = "double double, array array<int>, map map<string, int>, _corrupt_record string"
+      val schema = "_VALUE array<int>, double double, array array<int>, map map<string, int>, _corrupt_record string"
       val df = spark.read.schema(schema).option("rowTag", "ROW").xml(dir.getCanonicalPath)
       checkAnswer(
         df,
