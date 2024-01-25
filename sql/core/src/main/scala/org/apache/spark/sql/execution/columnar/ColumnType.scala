@@ -829,7 +829,7 @@ private[columnar] object ColumnType {
       case map: MapType => MAP(PhysicalMapType(map.keyType, map.valueType, map.valueContainsNull))
       case struct: StructType => STRUCT(PhysicalStructType(struct.fields))
       case udt: UserDefinedType[_] => ColumnType(udt.sqlType)
-      case other => throw ExecutionErrors.unsupportedDataTypeError(dataType)
+      case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
     }
   }
 }
