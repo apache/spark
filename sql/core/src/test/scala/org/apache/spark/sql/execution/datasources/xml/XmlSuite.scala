@@ -2702,7 +2702,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |</ROW>""".stripMargin
       val xmlBadRecord2 =
         s"""<ROW>
+           |     3
            |    <double>mismatch</double>
+           |     mismatchValue
            |    <array>mismatch</array>
            |    <array>1</array>
            |    <array>2</array>
