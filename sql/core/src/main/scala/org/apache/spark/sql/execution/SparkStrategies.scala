@@ -893,7 +893,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
-      dataAttributes, statefulProcessor, timeoutMode, outputMode, outputObjAttr, child) =>
+          dataAttributes, statefulProcessor, timeoutMode, outputMode, outputObjAttr, child) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
           groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
           outputObjAttr, planLater(child)) :: Nil
