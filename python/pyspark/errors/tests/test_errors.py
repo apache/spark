@@ -36,7 +36,7 @@ class ErrorsTest(unittest.TestCase):
                 f"after [{error_class_names[i + 1]}]."
                 "\n\nRun 'cd $SPARK_HOME; bin/pyspark' and "
                 "'from pyspark.errors.exceptions import _write_self; _write_self()' "
-                "to automatically sort them."
+                "to automatically sort them.",
             )
 
     def test_error_classes_duplicated(self):
