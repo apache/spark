@@ -13447,7 +13447,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return psdf
 
     def _fall_back_frame(self, method: str) -> Callable:
-        def _internal_fall_back_function(*inputs: Any, **kwargs: Any):
+        def _internal_fall_back_function(*inputs: Any, **kwargs: Any) -> "DataFrame":
             log_advice(
                 f"`{method}` is executed in fallback mode. It loads partial data into the "
                 f"driver's memory to infer the schema, and loads all data into one executor's "
