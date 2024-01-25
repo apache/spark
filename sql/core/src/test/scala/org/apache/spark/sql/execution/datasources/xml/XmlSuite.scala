@@ -2712,7 +2712,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
            |    </map>
            |</ROW>""".stripMargin
       Files.write(new File(dir, "f0").toPath, (xmlBadRecord1 ++ xmlBadRecord2).getBytes)
-      val schema = "double double, array array<int>, map map<string, int>, _corrupt_record string"
+      val schema = "_VALUE array<int>, double double, array array<int>, map map<string, int>, _corrupt_record string"
       val df = spark.read.schema(schema).option("rowTag", "ROW").xml(dir.getCanonicalPath)
       checkAnswer(
         df,
