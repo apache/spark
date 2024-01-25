@@ -3230,12 +3230,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
-    "message" : [
-      "Static partition column <staticName> is also specified in the column list."
-    ],
-    "sqlState" : "42713"
-  },
   "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
     "message" : [
       "Creating multiple column families with <stateStoreProvider> is not supported"
@@ -3253,6 +3247,12 @@
       "<operationType> operation not supported with <entity>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
+    "message" : [
+      "Static partition column <staticName> is also specified in the column list."
+    ],
+    "sqlState" : "42713"
   },
   "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
     "message" : [
