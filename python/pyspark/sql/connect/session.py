@@ -50,7 +50,7 @@ import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
+from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import (
@@ -110,7 +110,7 @@ class SparkSession:
 
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
-            self._channel_builder: Optional[ChannelBuilder] = None
+            self._channel_builder: Optional[DefaultChannelBuilder] = None
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -144,7 +144,7 @@ class SparkSession:
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
 
-        def channelBuilder(self, channelBuilder: ChannelBuilder) -> "SparkSession.Builder":
+        def channelBuilder(self, channelBuilder: DefaultChannelBuilder) -> "SparkSession.Builder":
             """Uses custom :class:`ChannelBuilder` implementation, when there is a need
             to customize the behavior for creation of GRPC connections.
 
@@ -232,7 +232,7 @@ class SparkSession:
 
     builder.__doc__ = PySparkSession.builder.__doc__
 
-    def __init__(self, connection: Union[str, ChannelBuilder], userId: Optional[str] = None):
+    def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):
         """
         Creates a new SparkSession for the Spark Connect interface.
 
