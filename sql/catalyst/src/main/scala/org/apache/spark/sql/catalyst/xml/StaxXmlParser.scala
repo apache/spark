@@ -287,10 +287,6 @@ class StaxXmlParser(
           try {
             kvPairs += (key -> convertTo(c.getData, valueType))
           } catch {
-            case partialValueException: PartialValueException =>
-              badRecordException = badRecordException.orElse(Some(partialValueException.cause))
-              StaxXmlParserUtils.skipChildren(parser)
-              kvPairs += key -> partialValueException.partialResult
             case NonFatal(e) =>
               badRecordException = badRecordException.orElse(Some(e))
               StaxXmlParserUtils.skipChildren(parser)
