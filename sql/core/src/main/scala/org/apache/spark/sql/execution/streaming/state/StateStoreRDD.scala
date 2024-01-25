@@ -77,6 +77,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     numColsPrefixKey: Int,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
@@ -89,7 +90,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
-      storeConf, hadoopConfBroadcast.value.value)
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeReadFunction(store, inputIter)
   }
 }
@@ -111,6 +112,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     numColsPrefixKey: Int,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
@@ -123,7 +125,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.get(
       storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
-      storeConf, hadoopConfBroadcast.value.value)
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeUpdateFunction(store, inputIter)
   }
 }
