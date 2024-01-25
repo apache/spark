@@ -3236,6 +3236,24 @@
     ],
     "sqlState" : "42713"
   },
+  "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
+    "message" : [
+      "Creating multiple column families with <stateStoreProvider> is not supported"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
+    "message" : [
+      "Store does not support multiple values per key"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STDS_COMMITTED_BATCH_UNAVAILABLE" : {
     "message" : [
       "No committed batch found, checkpoint location: <checkpointLocation>. Ensure that the query has run and committed any microbatch before stopping."
@@ -3382,6 +3400,18 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TWS_IMPLICIT_KEY_NOT_FOUND" : {
+    "message" : [
+      "Implicit key not found for operation on stateName=<stateName>"
+    ],
+    "sqlState" : "55019"
+  },
+  "TWS_VALUE_SHOULD_BE_NONNULL" : {
+    "message" : [
+      "New value should be non-null for <typeOfState>"
+    ],
+    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [

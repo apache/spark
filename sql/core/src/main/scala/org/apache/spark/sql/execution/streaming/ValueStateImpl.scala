@@ -25,7 +25,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.types._
 
@@ -48,8 +48,7 @@ class ValueStateImpl[K, S](
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw new UnsupportedOperationException("Implicit key not found for operation on" +
-        s"stateName=$stateName")
+      throw StateStoreErrors.implicitKeyNotFound(stateName = stateName)
     }
 
     val exprEnc: ExpressionEncoder[K] = encoderFor(keyEnc)

@@ -137,8 +137,8 @@ class StateStoreChangelogWriterV1(
   }
 
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v1")
+    throw StateStoreErrors.unsupportedOperationException(
+      operationName = "Put", entity = "changelog writer v1")
   }
 
   override def delete(key: Array[Byte]): Unit = {
@@ -151,8 +151,8 @@ class StateStoreChangelogWriterV1(
   }
 
   override def delete(key: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v1")
+    throw StateStoreErrors.unsupportedOperationException(
+      operationName = "Delete", entity = "changelog writer v1")
   }
 
   override def commit(): Unit = {
@@ -189,8 +189,8 @@ class StateStoreChangelogWriterV2(
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v2")
+    throw StateStoreErrors.unsupportedOperationException(
+      operationName = "Put", entity = "changelog writer v2")
   }
 
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
@@ -206,8 +206,8 @@ class StateStoreChangelogWriterV2(
   }
 
   override def delete(key: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v2")
+    throw StateStoreErrors.unsupportedOperationException(
+      operationName = "Delete", entity = "changelog writer v2")
   }
 
   override def delete(key: Array[Byte], colFamilyName: String): Unit = {
