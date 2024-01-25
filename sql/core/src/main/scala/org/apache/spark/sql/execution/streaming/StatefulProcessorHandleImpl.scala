@@ -67,6 +67,8 @@ class QueryInfoImpl(
  * Class that provides a concrete implementation of a StatefulProcessorHandle. Note that we keep
  * track of valid transitions as various functions are invoked to track object lifecycle.
  * @param store - instance of state store
+ * @param runId - unique id for the current run
+ * @param isStreaming - defines whether the query is streaming or batch
  */
 class StatefulProcessorHandleImpl(store: StateStore, runId: UUID, isStreaming: Boolean = true)
   extends StatefulProcessorHandle with Logging {

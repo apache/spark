@@ -43,6 +43,7 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  * @param batchTimestampMs processing timestamp of the current batch.
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
+ * @param isStreaming defines whether the query is streaming or batch
  * @param child the physical plan for the underlying data
  */
 case class TransformWithStateExec(
