@@ -131,26 +131,22 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       )
     }
   }
+
+  test("transformWithState - batch should succeed") {
+    val inputData = Seq("a", "a", "b")
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Append())
+
+    val df = result.toDF()
+    checkAnswer(df, Seq(("a", "1"), ("b", "1")).toDF())
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   import testImplicits._
-
-  test("transformWithState - batch should fail") {
-    val ex = intercept[Exception] {
-      val df = Seq("a", "a", "b").toDS()
-        .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessor,
-          TimeoutMode.NoTimeouts(),
-          OutputMode.Append())
-        .write
-        .format("noop")
-        .mode(SaveMode.Append)
-        .save()
-    }
-    assert(ex.isInstanceOf[AnalysisException])
-    assert(ex.getMessage.contains("not supported"))
-  }
 
   test("transformWithState - streaming with hdfsStateStoreProvider should fail") {
     val inputData = MemoryStream[String]

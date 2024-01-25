@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
@@ -26,7 +27,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeoutMode}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -57,6 +58,7 @@ case class TransformWithStateExec(
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
+    isStreaming: Boolean = true,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
@@ -152,6 +154,7 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+    // populate stateInfo if this is a streaming query
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateInfo,
       schemaForKeyRow,
@@ -162,12 +165,54 @@ case class TransformWithStateExec(
       useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId)
+        val processorHandle = new StatefulProcessorHandleImpl(
+          store, getStateInfo.queryRunId, isStreaming)
         assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
         statefulProcessor.init(processorHandle, outputMode)
         processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
         val result = processDataWithPartition(singleIterator, store, processorHandle)
         result
     }
+  }
+}
+
+
+object TransformWithStateExec {
+
+  // Plan logical transformWithState for batch queries
+  def generateSparkPlanForBatchQueries(
+                                        keyDeserializer: Expression,
+                                        valueDeserializer: Expression,
+                                        groupingAttributes: Seq[Attribute],
+                                        dataAttributes: Seq[Attribute],
+                                        statefulProcessor: StatefulProcessor[Any, Any, Any],
+                                        timeoutMode: TimeoutMode,
+                                        outputMode: OutputMode,
+                                        outputObjAttr: Attribute,
+                                        child: SparkPlan): SparkPlan = {
+    val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
+    val statefulOperatorStateInfo = StatefulOperatorStateInfo(
+      Utils.createTempDir().getAbsolutePath,
+      queryRunId = UUID.randomUUID(),
+      operatorId = 0,
+      storeVersion = 0,
+      numPartitions = shufflePartitions
+    )
+
+    new TransformWithStateExec(
+      keyDeserializer,
+      valueDeserializer,
+      groupingAttributes,
+      dataAttributes,
+      statefulProcessor,
+      timeoutMode,
+      outputMode,
+      outputObjAttr,
+      Some(statefulOperatorStateInfo),
+      Some(System.currentTimeMillis),
+      None,
+      None,
+      isStreaming = false,
+      child)
   }
 }

@@ -68,28 +68,34 @@ class QueryInfoImpl(
  * track of valid transitions as various functions are invoked to track object lifecycle.
  * @param store - instance of state store
  */
-class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
+class StatefulProcessorHandleImpl(store: StateStore, runId: UUID, isStreaming: Boolean = true)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
   private def buildQueryInfo(): QueryInfo = {
-    val taskCtxOpt = Option(TaskContext.get())
-    // Task context is not available in tests, so we generate a random query id and batch id here
-    val queryId = if (taskCtxOpt.isDefined) {
-      taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY)
-    } else {
-      assert(Utils.isTesting, "Failed to find query id in task context")
-      UUID.randomUUID().toString
-    }
 
-    val batchId = if (taskCtxOpt.isDefined) {
-      taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong
+    if (!isStreaming) {
+      val queryId = "00000000-0000-0000-0000-000000000000"
+      val batchId = 0L
+      new QueryInfoImpl(UUID.fromString(queryId), runId, batchId)
     } else {
-      assert(Utils.isTesting, "Failed to find batch id in task context")
-      0
-    }
+      val taskCtxOpt = Option(TaskContext.get())
+      // Task context is not available in tests, so we generate a random query id and batch id here
+      val queryId = if (taskCtxOpt.isDefined) {
+        taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+      } else {
+        assert(Utils.isTesting, "Failed to find query id in task context")
+        UUID.randomUUID().toString
+      }
 
-    new QueryInfoImpl(UUID.fromString(queryId), runId, batchId)
+      val batchId = if (taskCtxOpt.isDefined) {
+        taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong
+      } else {
+        assert(Utils.isTesting, "Failed to find batch id in task context")
+        0
+      }
+      new QueryInfoImpl(UUID.fromString(queryId), runId, batchId)
+    }
   }
 
   private lazy val currQueryInfo: QueryInfo = buildQueryInfo()

@@ -742,6 +742,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
+          isStreaming = true,
           planLater(child))
         execPlan :: Nil
       case _ =>
@@ -891,6 +892,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
+      case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
+      dataAttributes, statefulProcessor, timeoutMode, outputMode, outputObjAttr, child) =>
+        TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
+          groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
+          outputObjAttr, planLater(child)) :: Nil
+
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
         throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3176")
