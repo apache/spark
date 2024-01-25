@@ -620,7 +620,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val coalescedRDD = rdd.coalesce(2)
     val executionContext = ThreadUtils.newDaemonFixedThreadPool(
       nThreads = 2, "test-getCacheLocs")
-    // Used to only make progress on getCacheLocks after we acquired the lock to the RDD.
+    // Used to only make progress on getCacheLocs after we acquired the lock to the RDD.
     val rddLock = new java.util.concurrent.Semaphore(0)
     val partitionsFuture = executionContext.submit(new Runnable {
       override def run(): Unit = {
