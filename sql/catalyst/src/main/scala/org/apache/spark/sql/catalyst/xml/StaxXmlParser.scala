@@ -398,17 +398,15 @@ class StaxXmlParser(
                         convertField(parser, dt, field)
                     }
                     row(index) = values :+ newValue
-
                   case dt: DataType =>
                     row(index) = convertField(parser, dt, field, attributes)
-                }
+                  }
               } catch {
-                  case partialValueException: PartialValueException =>
-                    badRecordException =
-                      badRecordException.orElse(Some(partialValueException.cause))
-                    row.update(index, partialValueException.partialResult)
+                case partialValueException: PartialValueException =>
+                  badRecordException =
+                    badRecordException.orElse(Some(partialValueException.cause))
+                  row.update(index, partialValueException.partialResult)
               }
-
             case None =>
               if (hasWildcard) {
                 // Special case: there's an 'any' wildcard element that matches anything else
