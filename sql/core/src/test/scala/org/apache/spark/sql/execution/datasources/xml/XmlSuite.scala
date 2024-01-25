@@ -2710,6 +2710,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
            |    <array>1</array>
            |    <array>2</array>
            |    <map>
+           |        mismatch1
            |        <key1>mismatch</key1>
            |        <key2>2</key2>
            |    </map>
