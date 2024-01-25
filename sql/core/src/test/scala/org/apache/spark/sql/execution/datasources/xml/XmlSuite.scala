@@ -2689,7 +2689,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val xmlBadRecord1 =
         s"""<ROW>
+         |    3
          |    <double>0.1</double>
+         |    4
          |    <array>0</array>
          |    <array>mismatch</array>
          |    <array>2</array>
