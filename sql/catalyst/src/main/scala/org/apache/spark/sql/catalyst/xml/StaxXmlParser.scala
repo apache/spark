@@ -403,10 +403,10 @@ class StaxXmlParser(
                     row(index) = convertField(parser, dt, field, attributes)
                 }
               } catch {
-                  case partialResultException: PartialValueException =>
+                  case partialValueException: PartialValueException =>
                     badRecordException =
-                      badRecordException.orElse(Some(partialResultException.cause))
-                    row.update(index, partialResultException.partialResult)
+                      badRecordException.orElse(Some(partialValueException.cause))
+                    row.update(index, partialValueException.partialResult)
               }
 
             case None =>
@@ -416,7 +416,6 @@ class StaxXmlParser(
                 val newValue = convertField(parser, StringType, field)
                 // As the wildcard column field is of string type,
                 // It won't throw partialValueException
-                val newValue = convertField(parser, StringType)
                 val anyIndex = schema.fieldIndex(wildcardColName)
                 schema(wildcardColName).dataType match {
                   case StringType =>
