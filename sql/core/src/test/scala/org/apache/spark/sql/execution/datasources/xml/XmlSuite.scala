@@ -2893,7 +2893,6 @@ class XmlSuite
          |    <array>2</array>
          |    <map>
          |        <key1>1</key1>
-         |        3
          |        <key2>2</key2>
          |    </map>
          |</ROW>""".stripMargin
@@ -2906,20 +2905,28 @@ class XmlSuite
            |    <array>1</array>
            |    <array>2</array>
            |    <map>
-           |        mismatch1
            |        <key1>mismatch</key1>
            |        <key2>2</key2>
            |    </map>
            |</ROW>""".stripMargin
       Files.write(new File(dir, "f0").toPath, (xmlBadRecord1 ++ xmlBadRecord2).getBytes)
-      val schema = "_VALUE array<int>, double double, array array<int>, map map<string, int>, _corrupt_record string"
+      val schema = "_VALUE array<int>, double double," +
+        " array array<int>, map map<string, int>, _corrupt_record string"
       val df = spark.read.schema(schema).option("rowTag", "ROW").xml(dir.getCanonicalPath)
       checkAnswer(
         df,
-        Row(0.1, Array(0, 2), Map("key1" -> 1, "key2" -> 2), xmlBadRecord1) ::
-        Row(null, Array(1, 2), Map("key2" -> 2), xmlBadRecord2) :: Nil)
+        Row(
+          Array(3, 4),
+          0.1,
+          Array(0, 2),
+          Map("key1" -> 1, "key2" -> 2),
+          xmlBadRecord1) ::
+        Row(
+          Array(3),
+          null,
+          Array(1, 2),
+          Map("key2" -> 2),
+          xmlBadRecord2) :: Nil)
     }
-
-
   }
 }

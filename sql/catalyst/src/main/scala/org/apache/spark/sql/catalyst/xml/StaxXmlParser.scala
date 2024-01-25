@@ -246,6 +246,7 @@ class StaxXmlParser(
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
     var badRecordException: Option[Throwable] = None
+    // TODO
     attributes.foreach { attr =>
       kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
         -> convertTo(attr.getValue, valueType))
@@ -262,17 +263,18 @@ class StaxXmlParser(
             case partialValueException: PartialValueException =>
               badRecordException = badRecordException.orElse(Some(partialValueException.cause))
               StaxXmlParserUtils.skipChildren(parser)
+              StaxXmlParserUtils.skipNextEndElement(parser, key, options)
               kvPairs += UTF8String.fromString(key) -> partialValueException.partialResult
             case NonFatal(e) =>
               badRecordException = badRecordException.orElse(Some(e))
               StaxXmlParserUtils.skipChildren(parser)
+              StaxXmlParserUtils.skipNextEndElement(parser, key, options)
           }
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
-          val key = UTF8String.fromString(options.valueTag)
           // TODO: We don't support an array value tags in map yet.
           try {
-            kvPairs += (key -> convertTo(c.getData, valueType))
+            kvPairs += (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
           } catch {
             case NonFatal(e) =>
               // value tags are primitive types. they don't have children
@@ -362,23 +364,29 @@ class StaxXmlParser(
       rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
     val nameToIndex = getFieldNameToIndex(schema)
+    var badRecordException: Option[Throwable] = None
     // If there are attributes, then we process them first.
-    convertAttributes(rootAttributes, schema).toSeq.foreach {
-      case (f, v) =>
-        nameToIndex.get(f).foreach { row(_) = v }
+    try {
+      convertAttributes(rootAttributes, schema).toSeq.foreach {
+        case (f, v) =>
+          nameToIndex.get(f).foreach { row(_) = v }
+      }
+    } catch {
+      case NonFatal(e) =>
+        badRecordException = badRecordException.orElse(Some(e))
     }
 
     val wildcardColName = options.wildcardColName
     val hasWildcard = schema.exists(_.name == wildcardColName)
 
-    var badRecordException: Option[Throwable] = None
-
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
-        case e: StartElement => try {
-          val attributes = e.getAttributes.asScala.toArray
+        case e: StartElement =>
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+          try {
+          val attributes = e.getAttributes.asScala.toArray
+
 
           nameToIndex.get(field) match {
             case Some(index) =>
@@ -434,10 +442,17 @@ class StaxXmlParser(
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
             StaxXmlParserUtils.skipChildren(parser)
+            StaxXmlParserUtils.skipNextEndElement(parser, field, options)
         }
 
         case c: Characters if !c.isWhiteSpace =>
-          addOrUpdate(row, schema, options.valueTag, c.getData)
+          try {
+            addOrUpdate(row, schema, options.valueTag, c.getData)
+          } catch {
+            case NonFatal(e) =>
+              badRecordException = badRecordException.orElse(Some(e))
+          }
+
 
         case _: EndElement | _: EndDocument =>
           shouldStop = true
