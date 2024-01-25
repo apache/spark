@@ -69,6 +69,16 @@ class DataFrameTestsMixin:
         self.assertEqual(self.spark.range(-2).count(), 0)
         self.assertEqual(self.spark.range(3).count(), 3)
 
+    def test_table(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.table(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "tableName", "arg_type": "NoneType"},
+        )
+
     def test_dataframe_star(self):
         df1 = self.spark.createDataFrame([{"a": 1}])
         df2 = self.spark.createDataFrame([{"a": 1, "b": "v"}])
@@ -1101,7 +1111,7 @@ class DataFrameTestsMixin:
         # observation requires name (if given) to be non empty string
         with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):
             Observation(123)
-        with self.assertRaisesRegex(ValueError, "`name` must be a non empty string, got ''."):
+        with self.assertRaisesRegex(ValueError, "`name` must be a non-empty string, got ''."):
             Observation("")
 
         # dataframe.observe requires at least one expr
@@ -2034,7 +2044,7 @@ class DataFrameTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+            message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
         )
 
 

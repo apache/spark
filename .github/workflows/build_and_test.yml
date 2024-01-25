@@ -214,7 +214,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -225,7 +225,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -397,7 +397,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -408,7 +408,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -515,7 +515,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -526,7 +526,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -635,7 +635,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -646,14 +646,14 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docs-coursier-
     - name: Cache Maven local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: docs-maven-${{ hashFiles('**/pom.xml') }}
@@ -687,14 +687,14 @@ jobs:
         # SPARK-44554: Copy from https://github.com/apache/spark/blob/a05c27e85829fe742c1828507a1fd180cdc84b54/.github/workflows/build_and_test.yml#L571-L578
         # Should delete this section after SPARK 3.4 EOL.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
-        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
+        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.48.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python linter dependencies for branch-3.5
       if: inputs.branch == 'branch-3.5'
       run: |
         # SPARK-45212: Copy from https://github.com/apache/spark/blob/555c8def51e5951c7bf5165a332795e9e330ec9d/.github/workflows/build_and_test.yml#L631-L638
         # Should delete this section after SPARK 3.5 EOL.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
-        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
+        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python dependencies for python linter and documentation generation
       if: inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
       run: |
@@ -816,7 +816,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -827,7 +827,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Maven local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -871,7 +871,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -882,7 +882,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -895,7 +895,7 @@ jobs:
         java-version: ${{ inputs.java }}
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ./tpcds-sf-1
         key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
@@ -978,7 +978,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           build/apache-maven-*
@@ -989,7 +989,7 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/coursier
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
@@ -1038,7 +1038,7 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache Scala, SBT and Maven
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             build/apache-maven-*
@@ -1049,7 +1049,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Coursier local repository
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/coursier
           key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
