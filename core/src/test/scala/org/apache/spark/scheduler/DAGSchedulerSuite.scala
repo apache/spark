@@ -48,7 +48,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -587,6 +587,42 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeShuffleMapStageSuccessfully(2, 0, 1)
     completeAndCheckAnswer(taskSets(3), Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
+  }
+
+  // Note that this test is NOT perfectly reproducible when there is a deadlock as it uses
+  // Thread.sleep, but it should never fail / flake when there is no deadlock.
+  // If this test starts to flake, this shows that there is a deadlock!
+  test("No Deadlock between getCacheLocs and CoalescedRDD") {
+    val rdd = sc.parallelize(1 to 10, numSlices = 10)
+    val coalescedRDD = rdd.coalesce(2)
+    val executionContext = ThreadUtils.newDaemonFixedThreadPool(
+      nThreads = 2, "test-getCacheLocs")
+    // Used to only make progress on getCacheLocs after we acquired the lock to the RDD.
+    val rddLock = new java.util.concurrent.Semaphore(0)
+    val partitionsFuture = executionContext.submit(new Runnable {
+      override def run(): Unit = {
+        coalescedRDD.stateLock.synchronized {
+          rddLock.release(1)
+          // Try to access the partitions of the coalescedRDD. This will cause a call to
+          // getCacheLocs internally.
+          Thread.sleep(5000)
+          coalescedRDD.partitions
+        }
+      }
+    })
+    val getCacheLocsFuture = executionContext.submit(new Runnable {
+      override def run(): Unit = {
+        rddLock.acquire()
+        // Access the cache locations.
+        // If the partition location cache is locked before the stateLock is locked,
+        // we'll run into a deadlock.
+        sc.dagScheduler.getCacheLocs(coalescedRDD)
+      }
+    })
+    // If any of the futures throw a TimeOutException, this shows that there is a deadlock between
+    // getCacheLocs and accessing partitions of an RDD.
+    getCacheLocsFuture.get(120, TimeUnit.SECONDS)
+    partitionsFuture.get(120, TimeUnit.SECONDS)
   }
 
   test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
