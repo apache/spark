@@ -30,7 +30,7 @@ class DictionaryEncodingSuite extends SparkFunSuite {
   val nullValue = -1
   testDictionaryEncoding(new IntColumnStats, INT)
   testDictionaryEncoding(new LongColumnStats, LONG)
-  testDictionaryEncoding(new StringColumnStats, STRING, false)
+  testDictionaryEncoding(new StringColumnStats(0), STRING(0), false)
 
   def testDictionaryEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,

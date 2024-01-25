@@ -137,10 +137,10 @@ private[sql] class AvroSerializer(
           decimalConversions.toBytes(decimal.toJavaBigDecimal, avroType,
             LogicalTypes.decimal(d.precision, d.scale))
 
-      case (StringType, ENUM) =>
+      case (st: StringType, ENUM) =>
         val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
         (getter, ordinal) =>
-          val data = getter.getUTF8String(ordinal).toString
+          val data = getter.getUTF8String(ordinal, st.collationId).toString
           if (!enumSymbols.contains(data)) {
             throw new IncompatibleSchemaException(errorPrefix +
               s""""$data" cannot be written since it's not defined in enum """ +
@@ -148,8 +148,8 @@ private[sql] class AvroSerializer(
           }
           new EnumSymbol(avroType, data)
 
-      case (StringType, STRING) =>
-        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
+      case (st: StringType, STRING) =>
+        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal, st.collationId).getBytes)
 
       case (BinaryType, FIXED) =>
         val size = avroType.getFixedSize
@@ -241,7 +241,8 @@ private[sql] class AvroSerializer(
           val valueArray = mapData.valueArray()
           var i = 0
           while (i < len) {
-            val key = keyArray.getUTF8String(i).toString
+            // TODO: Map kt to get collation
+            val key = keyArray.getUTF8String(i, 0).toString
             if (valueContainsNull && valueArray.isNullAt(i)) {
               result.put(key, null)
             } else {

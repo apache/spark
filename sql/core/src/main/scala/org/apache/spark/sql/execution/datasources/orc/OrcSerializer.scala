@@ -130,8 +130,8 @@ class OrcSerializer(dataSchema: StructType) {
 
 
     // Don't reuse the result object for string and binary as it would cause extra data copy.
-    case StringType => (getter, ordinal) =>
-      new Text(getter.getUTF8String(ordinal).getBytes)
+    case st: StringType => (getter, ordinal) =>
+      new Text(getter.getUTF8String(ordinal, st.collationId).getBytes)
 
     case BinaryType => (getter, ordinal) =>
       new BytesWritable(getter.getBinary(ordinal))

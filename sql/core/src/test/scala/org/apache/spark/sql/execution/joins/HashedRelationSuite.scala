@@ -299,7 +299,7 @@ class HashedRelationSuite extends SharedSparkSession {
     map.optimize()
 
     val resultRow = new UnsafeRow(1)
-    assert(map.getValue(key, resultRow).getUTF8String(0) === bigStr)
+    assert(map.getValue(key, resultRow).getUTF8String(0, 0) === bigStr)
     map.free()
   }
 

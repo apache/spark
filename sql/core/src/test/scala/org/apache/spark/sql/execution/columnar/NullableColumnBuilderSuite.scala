@@ -41,7 +41,7 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
 
   Seq(
     BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
-    STRING, BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
+    STRING(0), BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
     STRUCT(PhysicalStructType(Array(StructField("a", StringType)))),
     ARRAY(PhysicalArrayType(IntegerType, true)),
     MAP(PhysicalMapType(IntegerType, StringType, true)),

@@ -62,7 +62,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     // This currently doesn't work because the generic getter throws an exception.
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
-    assert(row.getString(0) === unsafeRow.getUTF8String(0).toString)
+    assert(row.getString(0) === unsafeRow.getUTF8String(0, 0).toString)
     assert(row.getInt(1) === unsafeRow.getInt(1))
   }
 

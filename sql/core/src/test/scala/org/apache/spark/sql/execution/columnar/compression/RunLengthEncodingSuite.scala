@@ -31,7 +31,7 @@ class RunLengthEncodingSuite extends SparkFunSuite {
   testRunLengthEncoding(new ShortColumnStats, SHORT)
   testRunLengthEncoding(new IntColumnStats, INT)
   testRunLengthEncoding(new LongColumnStats, LONG)
-  testRunLengthEncoding(new StringColumnStats, STRING, false)
+  testRunLengthEncoding(new StringColumnStats(0), STRING(0), false)
 
   def testRunLengthEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,

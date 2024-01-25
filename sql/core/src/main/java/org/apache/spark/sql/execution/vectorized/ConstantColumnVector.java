@@ -262,8 +262,8 @@ public class ConstantColumnVector extends ColumnVector {
   }
 
   @Override
-  public UTF8String getUTF8String(int rowId) {
-    return stringData;
+  public UTF8String getUTF8String(int rowId, int collationId) {
+    return stringData.installCollationAwareComparator(collationId);
   }
 
   /**

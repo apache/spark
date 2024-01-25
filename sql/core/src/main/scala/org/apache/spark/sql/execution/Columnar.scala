@@ -332,7 +332,7 @@ private object RowToColumnConverter {
 
   private object StringConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      val data = row.getUTF8String(column).getBytes
+      val data = row.getUTF8String(column, StringType.DEFAULT_COLLATION_ID).getBytes
       cv.appendByteArray(data, 0, data.length)
     }
   }

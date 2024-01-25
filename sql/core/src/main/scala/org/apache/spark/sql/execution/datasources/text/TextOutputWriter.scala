@@ -21,7 +21,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class TextOutputWriter(
     val path: String,
@@ -34,7 +34,7 @@ class TextOutputWriter(
 
   override def write(row: InternalRow): Unit = {
     if (!row.isNullAt(0)) {
-      val utf8string = row.getUTF8String(0)
+      val utf8string = row.getUTF8String(0, StringType.DEFAULT_COLLATION_ID)
       utf8string.writeTo(writer)
     }
     writer.write(lineSeparator)

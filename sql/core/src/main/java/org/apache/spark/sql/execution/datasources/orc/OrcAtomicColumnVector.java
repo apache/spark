@@ -128,11 +128,11 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
   }
 
   @Override
-  public UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId, int collationId) {
     if (isNullAt(rowId)) return null;
     int index = getRowIndex(rowId);
     BytesColumnVector col = bytesData;
-    return UTF8String.fromBytes(col.vector[index], col.start[index], col.length[index]);
+    return UTF8String.fromBytes(col.vector[index], col.start[index], col.length[index], collationId);
   }
 
   @Override

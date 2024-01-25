@@ -266,7 +266,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Note that the returned {@link UTF8String} may point to the data of this column vector,
    * please copy it if you want to keep it after this column vector is freed.
    */
-  public abstract UTF8String getUTF8String(int rowId);
+  public abstract UTF8String getUTF8String(int rowId, int collationId);
 
   /**
    * Returns the binary type value for {@code rowId}. If the slot for {@code rowId} is null, it

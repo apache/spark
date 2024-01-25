@@ -49,7 +49,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       case FloatType => col.putFloats(0, batchSize, row.getFloat(fieldIdx))
       case DoubleType => col.putDoubles(0, batchSize, row.getDouble(fieldIdx))
       case StringType =>
-        val v = row.getUTF8String(fieldIdx)
+        val v = row.getUTF8String(fieldIdx, 0)
         val bytes = v.getBytes
         (0 until batchSize).foreach { i =>
           col.putByteArray(i, bytes)
@@ -68,7 +68,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
       case DoubleType =>
         (0 until batchSize).foreach(i => vector.getDouble(i))
       case StringType =>
-        (0 until batchSize).foreach(i => vector.getUTF8String(i))
+        (0 until batchSize).foreach(i => vector.getUTF8String(i, 0))
     }
   }
 
@@ -83,7 +83,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     val constantColumnVector = new ConstantColumnVector(batchSize, dataType)
 
     val other = if (dataType == StringType) {
-      s", row length = ${row.getUTF8String(0).toString.length}"
+      s", row length = ${row.getUTF8String(0, 0).toString.length}"
     } else {
       ""
     }
@@ -136,7 +136,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     ColumnVectorUtils.populate(constantColumnVector, row, 0)
 
     val other = if (dataType == StringType) {
-      s", row length = ${row.getUTF8String(0).toString.length}"
+      s", row length = ${row.getUTF8String(0, 0).toString.length}"
     } else {
       ""
     }
@@ -181,7 +181,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
     val constantColumnVector = new ConstantColumnVector(batchSize, dataType)
 
     val other = if (dataType == StringType) {
-      s", row length = ${row.getUTF8String(0).toString.length}"
+      s", row length = ${row.getUTF8String(0, 0).toString.length}"
     } else {
       ""
     }

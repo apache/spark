@@ -674,7 +674,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
                   val rowIterator = batch.rowIterator()
                   while (rowIterator.hasNext) {
                     val row = rowIterator.next()
-                    val value = row.getUTF8String(0)
+                    val value = row.getUTF8String(0, 0)
                     if (!row.isNullAt(0) && !row.isNullAt(1)) sum += value.numBytes()
                   }
                 }

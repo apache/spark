@@ -437,10 +437,11 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   @Override
-  public UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId, int collationId) {
     if (isNullAt(rowId)) return null;
     if (dictionary == null) {
-      return arrayData().getBytesAsUTF8String(getArrayOffset(rowId), getArrayLength(rowId));
+      var str = arrayData().getBytesAsUTF8String(getArrayOffset(rowId), getArrayLength(rowId));
+      return str.installCollationAwareComparator(collationId);
     } else {
       byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return UTF8String.fromBytes(bytes);

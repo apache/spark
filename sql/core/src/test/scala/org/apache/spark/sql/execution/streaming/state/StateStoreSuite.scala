@@ -1555,7 +1555,7 @@ object StateStoreTestsHelper {
   }
 
   def keyRowToData(row: UnsafeRow): (String, Int) = {
-    (row.getUTF8String(0).toString, row.getInt(1))
+    (row.getUTF8String(0, 0).toString, row.getInt(1))
   }
 
   def valueRowToData(row: UnsafeRow): Int = {

@@ -199,10 +199,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addDouble(row.getDouble(ordinal))
 
-      case _: StringType =>
+      case st: StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(
-            Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
+            Binary.fromReusedByteArray(row.getUTF8String(ordinal, st.collationId).getBytes))
 
       case TimestampType =>
         outputTimestampType match {

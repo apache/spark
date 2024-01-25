@@ -245,11 +245,13 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val unsafeProj = UnsafeProjection.create(schema)
     val unsafeRow: UnsafeRow = unsafeProj(internalRow)
-    assert(unsafeRow.getUTF8String(0) === UTF8String.fromString("a"))
+    assert(unsafeRow.getUTF8String(0, StringType.DEFAULT_COLLATION_ID)
+      === UTF8String.fromString("a"))
     assert(unsafeRow.getInt(1) === 1)
-    assert(unsafeRow.getStruct(2, 2).getUTF8String(0) === UTF8String.fromString("b"))
+    assert(unsafeRow.getStruct(2, 2).getUTF8String(
+      0, StringType.DEFAULT_COLLATION_ID) === UTF8String.fromString("b"))
     assert(unsafeRow.getStruct(2, 2).getInt(1) === 2)
-    assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getUTF8String(0) ===
+    assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getUTF8String(0, 0) ===
       UTF8String.fromString("c"))
     assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getInt(1) === 3)
 

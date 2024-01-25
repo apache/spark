@@ -73,8 +73,8 @@ public class ColumnVectorUtils {
         col.setFloat(row.getFloat(fieldIdx));
       } else if (pdt instanceof PhysicalDoubleType) {
         col.setDouble(row.getDouble(fieldIdx));
-      } else if (pdt instanceof PhysicalStringType) {
-        UTF8String v = row.getUTF8String(fieldIdx);
+      } else if (pdt instanceof PhysicalStringType dt) {
+        UTF8String v = row.getUTF8String(fieldIdx, dt.collationId());
         col.setUtf8String(v);
       } else if (pdt instanceof PhysicalDecimalType dt) {
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());

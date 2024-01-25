@@ -220,7 +220,7 @@ class ApplyInPandasWithStatePythonRunner(
 
         // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
         // for the schema.
-        val propertiesAsJson = parse(row.getUTF8String(0).toString)
+        val propertiesAsJson = parse(row.getUTF8String(0, StringType.DEFAULT_COLLATION_ID).toString)
         val keyRowAsUnsafeAsBinary = row.getBinary(1)
         val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
         keyRowAsUnsafe.pointTo(keyRowAsUnsafeAsBinary, keyRowAsUnsafeAsBinary.length)

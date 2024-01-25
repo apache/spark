@@ -375,12 +375,12 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   @Override
-  public UTF8String getUTF8String(int ordinal) {
+  public UTF8String getUTF8String(int ordinal, int collationId) {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+    return UTF8String.fromAddress(baseObject, baseOffset + offset, size, collationId);
   }
 
   @Override

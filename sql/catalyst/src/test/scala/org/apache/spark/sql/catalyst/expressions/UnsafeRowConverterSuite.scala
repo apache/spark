@@ -195,7 +195,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(createdFromNull.getLong(5) === 0)
     assert(createdFromNull.getFloat(6) === 0.0f)
     assert(createdFromNull.getDouble(7) === 0.0d)
-    assert(createdFromNull.getUTF8String(8) === null)
+    assert(createdFromNull.getUTF8String(8, StringType.DEFAULT_COLLATION_ID) === null)
     assert(createdFromNull.getBinary(9) === null)
     assert(createdFromNull.getDecimal(10, 10, 0) === null)
     assert(createdFromNull.getDecimal(11, 38, 18) === null)

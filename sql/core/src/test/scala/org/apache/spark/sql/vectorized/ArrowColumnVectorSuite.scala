@@ -242,7 +242,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
-      assert(columnVector.getUTF8String(i) === UTF8String.fromString(s"str$i"))
+      assert(columnVector.getUTF8String(i, 0) === UTF8String.fromString(s"str$i"))
     }
     assert(columnVector.isNullAt(10))
 
@@ -269,7 +269,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     assert(columnVector.numNulls === 1)
 
     (0 until 10).foreach { i =>
-      assert(columnVector.getUTF8String(i) === UTF8String.fromString(s"str$i"))
+      assert(columnVector.getUTF8String(i, 0) === UTF8String.fromString(s"str$i"))
     }
     assert(columnVector.isNullAt(10))
 

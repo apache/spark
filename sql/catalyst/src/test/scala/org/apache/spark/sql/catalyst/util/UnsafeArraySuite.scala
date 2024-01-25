@@ -111,7 +111,7 @@ class UnsafeArraySuite extends SparkFunSuite {
 
     val unsafeString = toUnsafeArray(stringArray)
     stringArray.zipWithIndex.map { case (e, i) =>
-      assert(unsafeString.getUTF8String(i).toString().equals(e))
+      assert(unsafeString.getUTF8String(i, 0).toString().equals(e))
     }
 
     val unsafeDate = toUnsafeArray(dateArray)

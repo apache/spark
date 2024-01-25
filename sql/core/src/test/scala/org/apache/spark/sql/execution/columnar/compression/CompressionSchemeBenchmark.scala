@@ -231,8 +231,8 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     }
     testData.rewind()
 
-    runEncodeBenchmark("STRING Encode", iters, count, STRING, testData)
-    runDecodeBenchmark("STRING Decode", iters, count, STRING, testData)
+    runEncodeBenchmark("STRING Encode", iters, count, STRING(0), testData)
+    runDecodeBenchmark("STRING Decode", iters, count, STRING(0), testData)
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {

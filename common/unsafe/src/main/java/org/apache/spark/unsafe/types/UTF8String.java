@@ -138,11 +138,23 @@ public class UTF8String implements Comparable<UTF8String>, Externalizable, KryoS
     }
   }
 
+  public static UTF8String fromBytes(byte[] bytes, int offset, int numBytes, int collatorId) {
+    if (bytes != null) {
+      return new UTF8String(bytes, BYTE_ARRAY_OFFSET + offset, numBytes, collatorId);
+    } else {
+      return null;
+    }
+  }
+
   /**
    * Creates an UTF8String from given address (base and offset) and length.
    */
   public static UTF8String fromAddress(Object base, long offset, int numBytes) {
     return new UTF8String(base, offset, numBytes, DefaultCollationId);
+  }
+
+  public static UTF8String fromAddress(Object base, long offset, int numBytes, int collationId) {
+    return new UTF8String(base, offset, numBytes, collationId);
   }
 
   /**

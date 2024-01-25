@@ -1641,7 +1641,7 @@ object CodeGenerator extends Logging {
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
         case PhysicalStringType(collationId) =>
-          s"$input.getUTF8String($ordinal).installCollationAwareComparator($collationId)"
+          s"$input.getUTF8String($ordinal, $collationId)"
         case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"

@@ -91,7 +91,7 @@ public class OrcArrayColumnVector extends OrcColumnVector {
   }
 
   @Override
-  public UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId, int collationId) {
     throw new UnsupportedOperationException();
   }
 

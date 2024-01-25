@@ -58,7 +58,7 @@ class ComplexDataSuite extends SparkFunSuite {
     val project = GenerateUnsafeProjection.generate(Seq(BoundReference(0, StringType, true)))
     val unsafeRow = project.apply(InternalRow(utf8("a")))
 
-    val genericRow = new GenericInternalRow(Array[Any](unsafeRow.getUTF8String(0)))
+    val genericRow = new GenericInternalRow(Array[Any](unsafeRow.getUTF8String(0, 0)))
     val copiedGenericRow = genericRow.copy()
     assert(copiedGenericRow.getString(0) == "a")
     project.apply(InternalRow(UTF8String.fromString("b")))
@@ -71,7 +71,7 @@ class ComplexDataSuite extends SparkFunSuite {
     val unsafeRow = project.apply(InternalRow(utf8("a")))
 
     val mutableRow = new SpecificInternalRow(Seq(StringType))
-    mutableRow(0) = unsafeRow.getUTF8String(0)
+    mutableRow(0) = unsafeRow.getUTF8String(0, 0)
     val copiedMutableRow = mutableRow.copy()
     assert(copiedMutableRow.getString(0) == "a")
     project.apply(InternalRow(UTF8String.fromString("b")))
@@ -83,24 +83,24 @@ class ComplexDataSuite extends SparkFunSuite {
     val project = GenerateUnsafeProjection.generate(Seq(BoundReference(0, StringType, true)))
     val unsafeRow = project.apply(InternalRow(utf8("a")))
 
-    val genericArray = new GenericArrayData(Array[Any](unsafeRow.getUTF8String(0)))
+    val genericArray = new GenericArrayData(Array[Any](unsafeRow.getUTF8String(0, 0)))
     val copiedGenericArray = genericArray.copy()
-    assert(copiedGenericArray.getUTF8String(0).toString == "a")
+    assert(copiedGenericArray.getUTF8String(0, 0).toString == "a")
     project.apply(InternalRow(UTF8String.fromString("b")))
     // The copied array data should not be changed externally.
-    assert(copiedGenericArray.getUTF8String(0).toString == "a")
+    assert(copiedGenericArray.getUTF8String(0, 0).toString == "a")
   }
 
   test("copy on nested complex type") {
     val project = GenerateUnsafeProjection.generate(Seq(BoundReference(0, StringType, true)))
     val unsafeRow = project.apply(InternalRow(utf8("a")))
 
-    val arrayOfRow = new GenericArrayData(Array[Any](InternalRow(unsafeRow.getUTF8String(0))))
+    val arrayOfRow = new GenericArrayData(Array[Any](InternalRow(unsafeRow.getUTF8String(0, 0))))
     val copied = arrayOfRow.copy()
-    assert(copied.getStruct(0, 1).getUTF8String(0).toString == "a")
+    assert(copied.getStruct(0, 1).getUTF8String(0, 0).toString == "a")
     project.apply(InternalRow(UTF8String.fromString("b")))
     // The copied data should not be changed externally.
-    assert(copied.getStruct(0, 1).getUTF8String(0).toString == "a")
+    assert(copied.getStruct(0, 1).getUTF8String(0, 0).toString == "a")
   }
 
   test("SPARK-24659: GenericArrayData.equals should respect element type differences") {

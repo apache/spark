@@ -255,14 +255,15 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
     Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[columnar] final class StringColumnStats extends ColumnStats {
+private[columnar] final case class StringColumnStats(collationId: Int) extends ColumnStats {
   protected var upper: UTF8String = null
   protected var lower: UTF8String = null
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
-      val value = row.getUTF8String(ordinal)
-      val size = STRING.actualSize(row, ordinal)
+      // TODO: Stats work without collation concept.
+      val value = row.getUTF8String(ordinal, StringType.DEFAULT_COLLATION_ID)
+      val size = value.numBytes() + 4;
       gatherValueStats(value, size)
     } else {
       gatherNullStats()

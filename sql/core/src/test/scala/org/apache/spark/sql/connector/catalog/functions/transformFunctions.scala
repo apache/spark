@@ -100,7 +100,7 @@ object StringSelfFunction extends ScalarFunction[UTF8String] {
   override def canonicalName(): String = name()
   override def toString: String = name()
   override def produceResult(input: InternalRow): UTF8String = {
-    input.getUTF8String(0)
+    input.getUTF8String(0, 0)
   }
 }
 
@@ -117,7 +117,7 @@ object TruncateFunction extends ScalarFunction[UTF8String] {
   override def canonicalName(): String = name()
   override def toString: String = name()
   override def produceResult(input: InternalRow): UTF8String = {
-    val str = input.getUTF8String(0)
+    val str = input.getUTF8String(0, 0)
     val length = input.getInt(1)
     str.substring(0, length)
   }

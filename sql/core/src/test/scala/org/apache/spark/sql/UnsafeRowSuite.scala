@@ -145,7 +145,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     emptyRow.copyFrom(unsafeRow)
     assert(emptyRow.getSizeInBytes() === unsafeRow.getSizeInBytes)
     assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
-    assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
+    assert(emptyRow.getUTF8String(1, 0) === unsafeRow.getUTF8String(1, 0))
     // make sure we reuse the buffer.
     assert(emptyRow.getBaseObject === buffer)
 
@@ -161,7 +161,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     emptyRow.copyFrom(unsafeRow2)
     assert(emptyRow.getSizeInBytes() === unsafeRow2.getSizeInBytes)
     assert(emptyRow.getInt(0) === 3)
-    assert(emptyRow.getUTF8String(1) === longString)
+    assert(emptyRow.getUTF8String(1, 0) === longString)
     // make sure we really resized.
     assert(emptyRow.getBaseObject != buffer)
 
@@ -169,7 +169,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     emptyRow.copyFrom(unsafeRow)
     assert(emptyRow.getSizeInBytes() === unsafeRow.getSizeInBytes)
     assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
-    assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
+    assert(emptyRow.getUTF8String(1, 0) === unsafeRow.getUTF8String(1, 0))
   }
 
   test("calling hashCode on unsafe array returned by getArray(ordinal)") {

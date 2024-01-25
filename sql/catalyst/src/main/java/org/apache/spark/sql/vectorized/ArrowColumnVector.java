@@ -109,9 +109,9 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId, int collationId) {
     if (isNullAt(rowId)) return null;
-    return accessor.getUTF8String(rowId);
+    return accessor.getUTF8String(rowId, collationId);
   }
 
   @Override
@@ -261,7 +261,7 @@ public class ArrowColumnVector extends ColumnVector {
       throw new UnsupportedOperationException();
     }
 
-    UTF8String getUTF8String(int rowId) {
+    UTF8String getUTF8String(int rowId, int collationId) {
       throw new UnsupportedOperationException();
     }
 
@@ -410,14 +410,14 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     @Override
-    final UTF8String getUTF8String(int rowId) {
+    final UTF8String getUTF8String(int rowId, int collationId) {
       accessor.get(rowId, stringResult);
       if (stringResult.isSet == 0) {
         return null;
       } else {
         return UTF8String.fromAddress(null,
           stringResult.buffer.memoryAddress() + stringResult.start,
-          stringResult.end - stringResult.start);
+          stringResult.end - stringResult.start, collationId);
       }
     }
   }
@@ -433,7 +433,7 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     @Override
-    final UTF8String getUTF8String(int rowId) {
+    final UTF8String getUTF8String(int rowId, int collationId) {
       accessor.get(rowId, stringResult);
       if (stringResult.isSet == 0) {
         return null;
@@ -441,7 +441,7 @@ public class ArrowColumnVector extends ColumnVector {
         return UTF8String.fromAddress(null,
           stringResult.buffer.memoryAddress() + stringResult.start,
           // A single string cannot be larger than the max integer size, so the conversion is safe
-          (int)(stringResult.end - stringResult.start));
+          (int)(stringResult.end - stringResult.start), collationId);
       }
     }
   }

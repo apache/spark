@@ -147,7 +147,7 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
   testVector("utf8string", 10, StringType) { vector =>
     vector.setUtf8String(UTF8String.fromString("hello"))
     (0 until 10).foreach { i =>
-      assert(vector.getUTF8String(i) == UTF8String.fromString("hello"))
+      assert(vector.getUTF8String(i, 0) == UTF8String.fromString("hello"))
     }
   }
 
@@ -175,7 +175,7 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
     assert(vector.getChild(0) == nameVector)
     assert(vector.getChild(1) == ageVector)
     (0 until 10).foreach { i =>
-      assert(vector.getChild(0).getUTF8String(i) == UTF8String.fromString("jack"))
+      assert(vector.getChild(0).getUTF8String(i, 0) == UTF8String.fromString("jack"))
       assert(vector.getChild(1).getInt(i) == 27)
     }
 

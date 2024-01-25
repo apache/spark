@@ -113,7 +113,7 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
     val string = UTF8String.fromString("hello")
     ColumnVectorUtils.populate(vector, InternalRow(string), 0)
     (0 until 10).foreach { i =>
-      assert(vector.getUTF8String(i) == string)
+      assert(vector.getUTF8String(i, 0) == string)
     }
   }
 

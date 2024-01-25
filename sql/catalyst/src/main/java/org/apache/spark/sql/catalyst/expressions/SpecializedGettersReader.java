@@ -54,8 +54,8 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalDoubleType) {
       return obj.getDouble(ordinal);
     }
-    if (physicalDataType instanceof PhysicalStringType) {
-      return obj.getUTF8String(ordinal);
+    if (physicalDataType instanceof PhysicalStringType st) {
+      return obj.getUTF8String(ordinal, st.collationId());
     }
     if (physicalDataType instanceof PhysicalDecimalType dt) {
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());

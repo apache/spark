@@ -70,8 +70,8 @@ public final class MutableColumnarRow extends InternalRow {
           row.setFloat(i, getFloat(i));
         } else if (dt instanceof DoubleType) {
           row.setDouble(i, getDouble(i));
-        } else if (dt instanceof StringType) {
-          row.update(i, getUTF8String(i).copy());
+        } else if (dt instanceof StringType st) {
+          row.update(i, getUTF8String(i, st.collationId()).copy());
         } else if (dt instanceof BinaryType) {
           row.update(i, getBinary(i));
         } else if (dt instanceof DecimalType t) {
@@ -129,8 +129,8 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
-  public UTF8String getUTF8String(int ordinal) {
-    return columns[ordinal].getUTF8String(rowId);
+  public UTF8String getUTF8String(int ordinal, int collationId) {
+    return columns[ordinal].getUTF8String(rowId, collationId);
   }
 
   @Override
@@ -179,8 +179,8 @@ public final class MutableColumnarRow extends InternalRow {
       return getFloat(ordinal);
     } else if (dataType instanceof DoubleType) {
       return getDouble(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
+    } else if (dataType instanceof StringType st) {
+      return getUTF8String(ordinal, st.collationId());
     } else if (dataType instanceof BinaryType) {
       return getBinary(ordinal);
     } else if (dataType instanceof DecimalType t) {

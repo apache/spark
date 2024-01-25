@@ -28,7 +28,7 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[LongColumnStats], LONG, Array(Long.MaxValue, Long.MinValue, 0))
   testColumnStats(classOf[FloatColumnStats], FLOAT, Array(Float.MaxValue, Float.MinValue, 0))
   testColumnStats(classOf[DoubleColumnStats], DOUBLE, Array(Double.MaxValue, Double.MinValue, 0))
-  testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0))
+  testColumnStats(classOf[StringColumnStats], STRING(0), Array(null, null, 0))
   testDecimalColumnStats(Array(null, null, 0))
   testIntervalColumnStats(Array(null, null, 0))
 
