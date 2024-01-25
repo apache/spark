@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
-import org.apache.spark.sql.connector.catalog.CatalogV2Util.{structTypeToV2Columns, structTypeToV2ColumnsWithDefaults}
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.{structTypeToV2ColumnsWithDefaults}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -201,15 +201,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(
-        ResolvedIdentifier(catalog, ident), schema, parts, tableSpec: TableSpec, orCreate) =>
+        ResolvedIdentifier(catalog, ident), schema, parts, tableSpec: TableSpec, orCreate,
+        defaultValueExpressions) =>
       ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
+      val statementType = "CREATE TABLE"
       val newSchema: StructType =
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, "CREATE TABLE")
+        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(schema, statementType)
       GeneratedColumn.validateGeneratedColumns(
-        newSchema, catalog.asTableCatalog, ident, "CREATE TABLE")
+        newSchema, catalog.asTableCatalog, ident, statementType)
 
-      val v2Columns = structTypeToV2Columns(newSchema)
+      val v2Columns =
+        structTypeToV2ColumnsWithDefaults(newSchema, defaultValueExpressions, statementType)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,

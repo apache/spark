@@ -3999,20 +3999,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       serdeInfo, external)
 
     // Parse column defaults from the table into separate expressions in the CREATE TABLE operator.
-    val specifiedDefaults: mutable.Map[Int, Expression] = mutable.Map.empty
-    Option(ctx.createOrReplaceTableColTypeList()).foreach {
-      _.createOrReplaceTableColType().asScala.zipWithIndex.foreach { case (typeContext, index) =>
-        typeContext.colDefinitionOption().asScala.foreach { option =>
-          Option(option.defaultExpression()).foreach { defaultExprContext =>
-            specifiedDefaults.update(index, expression(defaultExprContext.expression()))
-          }
-        }
-      }
-    }
     val defaultValueExpressions: Seq[Option[Expression]] =
-      (0 until columns.size).map { index: Int =>
-        specifiedDefaults.get(index)
-      }
+      parseColumnDefaultValueExpressions(ctx.createOrReplaceTableColTypeList(), columns.size)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -4087,6 +4075,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
       serdeInfo, external = false)
 
+    // Parse column defaults from the table into separate expressions in the CREATE TABLE operator.
+    val defaultValueExpressions: Seq[Option[Expression]] =
+      parseColumnDefaultValueExpressions(ctx.createOrReplaceTableColTypeList(), columns.size)
+
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
         operationNotAllowed(
@@ -4110,7 +4102,25 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         val schema = StructType(columns ++ partCols)
         ReplaceTable(
           withIdentClause(ctx.replaceTableHeader.identifierReference(), UnresolvedIdentifier(_)),
-          schema, partitioning, tableSpec, orCreate = orCreate)
+          schema, partitioning, tableSpec, orCreate, defaultValueExpressions)
+    }
+  }
+
+  /** Parses column defaults into separate expressions from a CREATE/REPLACE TABLE operator. */
+  private def parseColumnDefaultValueExpressions(
+      ctx: CreateOrReplaceTableColTypeListContext, numColumns: Int): Seq[Option[Expression]] = {
+    val specifiedDefaults: mutable.Map[Int, Expression] = mutable.Map.empty
+    Option(ctx).foreach {
+      _.createOrReplaceTableColType().asScala.zipWithIndex.foreach { case (typeContext, index) =>
+        typeContext.colDefinitionOption().asScala.foreach { option =>
+          Option(option.defaultExpression()).foreach { defaultExprContext =>
+            specifiedDefaults.update(index, expression(defaultExprContext.expression()))
+          }
+        }
+      }
+    }
+    (0 until numColumns).map { index: Int =>
+      specifiedDefaults.get(index)
     }
   }
 

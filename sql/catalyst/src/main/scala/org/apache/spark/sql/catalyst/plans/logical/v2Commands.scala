@@ -519,6 +519,8 @@ case class CreateTableAsSelect(
 
 /**
  * Replace a table with a v2 catalog.
+ * The [[defaultValueExpressions]] hold optional default value expressions to use when creating the
+ * table, mapping 1:1 with the fields in [[tableSchema]].
  *
  * If the table does not exist, and orCreate is true, then it will be created.
  * If the table does not exist, and orCreate is false, then an exception will be thrown.
@@ -530,7 +532,8 @@ case class ReplaceTable(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    orCreate: Boolean)
+    orCreate: Boolean,
+    defaultValueExpressions: Seq[Option[Expression]])
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -540,6 +543,20 @@ case class ReplaceTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+}
+
+/** This is a helper to build [[ReplaceTable]] instances with no column default expressions. */
+object ReplaceTable {
+  def apply(
+      name: LogicalPlan,
+      tableSchema: StructType,
+      partitioning: Seq[Transform],
+      tableSpec: TableSpecBase,
+      ignoreIfExists: Boolean): ReplaceTable = {
+    val defaultValueExpressions = tableSchema.fields.map(_ => None).toSeq
+    ReplaceTable(
+      name, tableSchema, partitioning, tableSpec, ignoreIfExists, defaultValueExpressions)
   }
 }
 
