@@ -2697,6 +2697,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
          |    <array>2</array>
          |    <map>
          |        <key1>1</key1>
+         |        3
          |        <key2>2</key2>
          |    </map>
          |</ROW>""".stripMargin
