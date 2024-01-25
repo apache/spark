@@ -579,6 +579,8 @@ jobs:
       uses: bufbuild/buf-setup-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Print Buf version
+      run: buf --version
     - name: Protocol Buffers Linter
       uses: bufbuild/buf-lint-action@v1
       with:
@@ -714,7 +716,7 @@ jobs:
       if: inputs.branch == 'branch-3.5'
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.29.0/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         rm buf-Linux-x86_64.tar.gz
