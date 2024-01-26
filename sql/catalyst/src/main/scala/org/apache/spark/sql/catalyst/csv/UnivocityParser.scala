@@ -30,12 +30,11 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, Gen
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 /**
  * Constructs a parser for a given schema that translates CSV data to an [[InternalRow]].
@@ -273,8 +272,7 @@ class UnivocityParser(
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
-    // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
+    case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
   }
 
   private def nullSafeDatum(

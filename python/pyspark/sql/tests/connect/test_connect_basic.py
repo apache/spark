@@ -73,7 +73,7 @@ if should_test_connect:
     import numpy as np
     from pyspark.sql.connect.proto import Expression as ProtoExpression
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark.sql.connect.client import DefaultChannelBuilder, ChannelBuilder
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
@@ -1124,6 +1124,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_df_nullability(self):
+        data = [("asd", None)]
+        schema = StructType(
+            [
+                StructField("name", StringType(), nullable=True),
+                StructField("age", IntegerType(), nullable=False),
+            ]
+        )
+
+        with self.assertRaises(PySparkValueError):
+            self.spark.createDataFrame(data, schema)
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
@@ -3546,6 +3558,17 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.assertIsNotNone(exception)
             self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
 
+    def test_custom_channel_builder(self):
+        # Access self.spark's DefaultChannelBuilder to reuse same endpoint
+        endpoint = self.spark._client._builder.endpoint
+
+        class CustomChannelBuilder(ChannelBuilder):
+            def toChannel(self):
+                return self._insecure_channel(endpoint)
+
+        session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
+        session.sql("select 1 + 1")
+
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -3715,65 +3738,71 @@ class ChannelBuilderTests(unittest.TestCase):
             "sc://host/;parm1;param2",
         ]
         for i in invalid:
-            self.assertRaises(PySparkValueError, ChannelBuilder, i)
+            self.assertRaises(PySparkValueError, DefaultChannelBuilder, i)
 
     def test_sensible_defaults(self):
-        chan = ChannelBuilder("sc://host")
+        chan = DefaultChannelBuilder("sc://host")
         self.assertFalse(chan.secure, "Default URL is not secure")
 
-        chan = ChannelBuilder("sc://host/;token=abcs")
+        chan = DefaultChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
         self.assertRegex(
             chan.userAgent, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
         )
-        chan = ChannelBuilder("sc://host/;use_ssl=abcs")
+        chan = DefaultChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_user_agent(self):
-        chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
+        chan = DefaultChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
         self.assertIn("Agent123 /3.4", chan.userAgent)
 
     def test_user_agent_len(self):
         user_agent = "x" * 2049
-        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        chan = DefaultChannelBuilder(f"sc://host/;user_agent={user_agent}")
         with self.assertRaises(SparkConnectException) as err:
             chan.userAgent
         self.assertRegex(err.exception._message, "'user_agent' parameter should not exceed")
 
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341
-        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        chan = DefaultChannelBuilder(f"sc://host/;user_agent={user_agent}")
         self.assertIn(expected, chan.userAgent)
 
     def test_valid_channel_creation(self):
-        chan = ChannelBuilder("sc://host").toChannel()
+        chan = DefaultChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
         # Sets up a channel without tokens because ssl is not used.
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").toChannel()
+        chan = DefaultChannelBuilder("sc://host/;use_ssl=true;token=abc").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
-        chan = ChannelBuilder("sc://host/;use_ssl=true").toChannel()
+        chan = DefaultChannelBuilder("sc://host/;use_ssl=true").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
+        chan = DefaultChannelBuilder(
+            "sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021"
+        )
         self.assertEqual("host:15002", chan.endpoint)
         self.assertIn("foo", chan.userAgent.split(" "))
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
     def test_metadata(self):
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
+        chan = DefaultChannelBuilder(
+            "sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd"
+        )
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
     def test_metadata(self):
         id = str(uuid.uuid4())
-        chan = ChannelBuilder(f"sc://host/;session_id={id}")
+        chan = DefaultChannelBuilder(f"sc://host/;session_id={id}")
         self.assertEqual(id, chan.session_id)
 
-        chan = ChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        chan = DefaultChannelBuilder(
+            f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true"
+        )
         md = chan.metadata()
         for kv in md:
             self.assertNotIn(
@@ -3789,11 +3818,11 @@ class ChannelBuilderTests(unittest.TestCase):
             )
 
         with self.assertRaises(ValueError) as ve:
-            chan = ChannelBuilder("sc://host/;session_id=abcd")
+            chan = DefaultChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
         self.assertIn("Parameter value session_id must be a valid UUID format", str(ve.exception))
 
-        chan = ChannelBuilder("sc://host/")
+        chan = DefaultChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)
 
 
