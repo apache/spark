@@ -2701,7 +2701,7 @@ class DDLParserSuite extends AnalysisTest {
     val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-         OptionList(Seq.empty), None, None, None, false), false)
+         OptionList(Seq.empty), None, None, None, false), false, Seq(None, Some(Literal("abc"))))
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
     comparePlans(parsePlan(

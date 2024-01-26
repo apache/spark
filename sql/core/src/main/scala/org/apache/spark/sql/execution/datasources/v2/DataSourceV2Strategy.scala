@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
-import org.apache.spark.sql.connector.catalog.CatalogV2Util.structTypeToV2Columns
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.{structTypeToV2Columns, structTypeToV2ColumnsWithDefaults}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -174,16 +174,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
-        tableSpec: TableSpec, ifNotExists) =>
+        tableSpec: TableSpec, ifNotExists, defaultValueExpressions) =>
       ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
+      val statementType = "CREATE TABLE"
       val newSchema: StructType =
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, "CREATE TABLE")
+        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(schema, statementType)
       GeneratedColumn.validateGeneratedColumns(
-        newSchema, catalog.asTableCatalog, ident, "CREATE TABLE")
+        newSchema, catalog.asTableCatalog, ident, statementType)
 
-      CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
-        partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
+      val columns =
+        structTypeToV2ColumnsWithDefaults(newSchema, defaultValueExpressions, statementType)
+      CreateTableExec(catalog.asTableCatalog, ident, columns, partitioning,
+        qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
         options, ifNotExists, true) =>
