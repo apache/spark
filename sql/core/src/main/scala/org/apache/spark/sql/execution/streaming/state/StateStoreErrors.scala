@@ -73,7 +73,7 @@ class TransformWithStateUnsupportedOperation(operationType: String, entity: Stri
 // Used for ListState
 class TransformWithStateValueShouldBeNonNull(typeOfState: String)
   extends SparkRuntimeException(
-    errorClass = "TWS_VALUE_SHOULD_BE_NONNULL",
+    errorClass = "TWS_VALUE_SHOULD_NOT_BE_NULL",
     Map("typeOfState" -> typeOfState),
     cause = null
   )

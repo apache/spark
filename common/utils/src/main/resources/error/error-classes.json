@@ -3401,7 +3401,7 @@
     ],
     "sqlState" : "428EK"
   },
-  "TWS_VALUE_SHOULD_BE_NONNULL" : {
+  "TWS_VALUE_SHOULD_NOT_BE_NULL" : {
     "message" : [
       "New value should be non-null for <typeOfState>"
     ],

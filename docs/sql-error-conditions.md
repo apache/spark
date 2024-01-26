@@ -2175,7 +2175,7 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
 
-### TWS_VALUE_SHOULD_BE_NONNULL
+### TWS_VALUE_SHOULD_NOT_BE_NULL
 
 [SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
