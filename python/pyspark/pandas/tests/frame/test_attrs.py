@@ -36,11 +36,13 @@ class FrameAttrsMixin:
         )
 
     @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    def df_pair(self):
+        pdf = self.pdf
+        psdf = ps.from_pandas(pdf)
+        return pdf, psdf
 
     def test_column_names(self):
-        pdf, psdf = self.pdf, self.psdf
+        pdf, psdf = self.df_pair
 
         self.assert_eq(psdf.columns, pdf.columns)
         self.assert_eq(psdf[["b", "a"]].columns, pdf[["b", "a"]].columns)
@@ -170,7 +172,7 @@ class FrameAttrsMixin:
         self.assert_eq(pdf.axes, psdf.axes)
 
     def test_inplace(self):
-        pdf, psdf = self.pdf, self.psdf
+        pdf, psdf = self.df_pair
 
         pser = pdf.a
         psser = psdf.a
@@ -268,7 +270,7 @@ class FrameAttrsMixin:
         self.assertEqual(df._repr_html_(), df._to_pandas()._repr_html_())
 
     def test_assign(self):
-        pdf, psdf = self.pdf, self.psdf
+        pdf, psdf = self.df_pair
 
         psdf["w"] = 1.0
         pdf["w"] = 1.0
