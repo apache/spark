@@ -22,7 +22,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityStringOpsAdvTests(
-    SeriesStringOpsAdvMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    SeriesStringOpsAdvMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
