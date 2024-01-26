@@ -3401,12 +3401,6 @@
     ],
     "sqlState" : "428EK"
   },
-  "TWS_IMPLICIT_KEY_NOT_FOUND" : {
-    "message" : [
-      "Implicit key not found for operation on stateName=<stateName>"
-    ],
-    "sqlState" : "55019"
-  },
   "TWS_VALUE_SHOULD_BE_NONNULL" : {
     "message" : [
       "New value should be non-null for <typeOfState>"

@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
  *
- * ERROR_CLASS has a prefix of "STV2_" representing State API V2.
+ * ERROR_CLASS has a prefix of "TWS_" representing State API V2.
  */
 object StateStoreErrors {
   def implicitKeyNotFound(
-                           stateName: String): TransformWithStateImplicitKeyNotFound = {
-    new TransformWithStateImplicitKeyNotFound(stateName)
+    stateName: String): SparkException = {
+    SparkException.internalError(
+      msg = s"Implicit key not found in state store for stateName=$stateName",
+      category = "TWS"
+    )
   }
 
   def multipleColumnFamilies(stateStoreProvider: String):
@@ -47,11 +50,6 @@ object StateStoreErrors {
     new TransformWithStateValueShouldBeNonNull(typeOfState)
   }
 }
-class TransformWithStateImplicitKeyNotFound(stateName: String)
-  extends SparkUnsupportedOperationException(
-    errorClass = "TWS_IMPLICIT_KEY_NOT_FOUND",
-    messageParameters = Map("stateName" -> stateName)
-  )
 
 class TransformWithStateMultipleColumnFamilies(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
