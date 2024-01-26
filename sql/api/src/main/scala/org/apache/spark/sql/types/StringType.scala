@@ -23,6 +23,7 @@ import org.apache.spark.annotation.Stable
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
  *
  * @since 1.3.0
+ * @param collationId The id of collation for this StringType.
  */
 @Stable
 class StringType private(val collationId: Int) extends AtomicType {
