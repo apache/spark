@@ -489,7 +489,9 @@ private[sql] object CatalogV2Util {
       schema: StructType,
       defaults: Seq[Option[Expression]],
       statementType: String): Array[Column] = {
-    schema.fields.zip(defaults).map { case (field, default) =>
+    // Extend 'defaults' to be the same length as 'schema.fields' by filling in None.
+    val defaultsWithNones = defaults ++ Seq.fill(schema.fields.length - defaults.length)(None)
+    schema.fields.zip(defaultsWithNones).map { case (field, default) =>
       structFieldToV2Column(field, default, statementType)
     }
   }

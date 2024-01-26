@@ -182,9 +182,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       GeneratedColumn.validateGeneratedColumns(
         newSchema, catalog.asTableCatalog, ident, statementType)
 
-      CreateTableExec(catalog.asTableCatalog, ident,
-        structTypeToV2ColumnsWithDefaults(newSchema, defaultValueExpressions, statementType),
-        partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
+      val columns =
+        structTypeToV2ColumnsWithDefaults(newSchema, defaultValueExpressions, statementType)
+      CreateTableExec(catalog.asTableCatalog, ident, columns, partitioning,
+        qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
         options, ifNotExists, true) =>
