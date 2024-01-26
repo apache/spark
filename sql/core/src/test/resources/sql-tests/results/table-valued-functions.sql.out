@@ -192,6 +192,54 @@ struct<i:bigint>
 
 
 -- !query
+select * from range(0, (select 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`range`",
+    "paramName" : "`end`",
+    "paramType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 34,
+    "fragment" : "range(0, (select 1))"
+  } ]
+}
+
+
+-- !query
+select * from values (0, 1) t(c1, c2), lateral range(0, c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`range`",
+    "paramName" : "`end`",
+    "paramType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 59,
+    "fragment" : "range(0, c2)"
+  } ]
+}
+
+
+-- !query
 select * from explode(array(1, 2))
 -- !query schema
 struct<col:int>
