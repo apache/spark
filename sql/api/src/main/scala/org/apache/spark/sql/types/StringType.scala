@@ -25,18 +25,13 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class StringType private(val collationId: Int) extends AtomicType with Serializable {
+class StringType private(val collationId: Int) extends AtomicType {
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
   override def defaultSize: Int = 20
 
   private[spark] override def asNullable: StringType = this
-
-  override def equals(obj: Any): Boolean =
-    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
-
-  override def hashCode(): Int = collationId.hashCode()
 }
 
 /**
@@ -47,4 +42,3 @@ case object StringType extends StringType(0) {
   val DEFAULT_COLLATION_ID = 0
   def apply(collationId: Int): StringType = new StringType(collationId)
 }
-
