@@ -412,7 +412,8 @@ class UISuite extends SparkFunSuite {
 
       assert(TestUtils.httpResponseCode(new URL(urlStr + "/")) === HttpServletResponse.SC_OK)
 
-      // In the case of trailing slash, 302 should be return and the redirect URL shouuld be part of the header.
+      // In the case of trailing slash,
+      // 302 should be return and the redirect URL shouuld be part of the header.
       assert(TestUtils.redirectUrl(new URL(urlStr)) === proxyRoot + "/ctx/");
       assert(TestUtils.httpResponseCode(new URL(urlStr)) === HttpServletResponse.SC_FOUND)
     } finally {
