@@ -65,10 +65,11 @@ class RunningCountStatefulProcessorWithDeletion
   @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
-                     handle: StatefulProcessorHandle,
-                     outputMode: OutputMode) : Unit = {
+     handle: StatefulProcessorHandle,
+     outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
+    _processorHandle.deleteIfExists("countState")
     _countState = _processorHandle.getValueState[String, Long]("countState",
       Encoders.STRING)
   }
@@ -79,7 +80,6 @@ class RunningCountStatefulProcessorWithDeletion
       timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
-      _processorHandle.deleteIfExists("countState")
       Iterator.empty
     } else {
       _countState.update(count)
@@ -181,8 +181,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", "2"), ("b", "1")),
         StopStream,
         StartStream(),
-        AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
-        CheckNewAnswer(),
+        AddData(inputData, "a", "b"), // after restarting stream, previous state should be deleted
+        CheckNewAnswer(("a", "1"), ("b", "1")),
         StopStream
       )
     }
