@@ -310,21 +310,16 @@ class UISuite extends SparkFunSuite {
       val httpPort = serverInfo.boundPort
 
       val tests = Seq(
-//        ("http", serverInfo.boundPort, HttpServletResponse.SC_FOUND))
-      // Failed on HTTPS
       ("http", serverInfo.boundPort, HttpServletResponse.SC_FOUND),
       ("https", serverInfo.securePort.get, HttpServletResponse.SC_OK))
 
       tests.foreach { case (scheme, port, expected) =>
         val urls = Seq(
-//          s"$scheme://$localhost:$port/test3")
           s"$scheme://$localhost:$port/root",
           s"$scheme://$localhost:$port/test1/root",
           s"$scheme://$localhost:$port/test2/root")
         urls.foreach { url =>
 
-//          val message = TestUtils.httpResponseMessage(new URL(url))
-//          assert(message === "test")
           val rc = TestUtils.httpResponseCode(new URL(url))
           assert(rc === expected, s"Unexpected status $rc for $url")
         }
@@ -403,28 +398,28 @@ class UISuite extends SparkFunSuite {
       stopServer(serverInfo)
     }
   }
-//
-//  test("SPARK-34449: Jetty 9.4.35.v20201120 and later no longer return status code 302 " +
-//       " and handle internally when request URL ends with a context path without trailing '/'") {
-//    val proxyRoot = "https://proxy.example.com:443/prefix"
-//    val (conf, securityMgr, sslOptions) = sslDisabledConf()
-//    conf.set(UI.PROXY_REDIRECT_URI, proxyRoot)
-//    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
-//
-//    try {
-//      val (_, ctx) = newContext("/ctx")
-//      serverInfo.addHandler(ctx, securityMgr)
-//      val urlStr = s"http://$localhost:${serverInfo.boundPort}/ctx"
-//
-//      assert(TestUtils.httpResponseCode(new URL(urlStr + "/")) === HttpServletResponse.SC_OK)
-//
-//      // In the case of trailing slash, 302 should be return and the redirect URL shouuld be part of the header.
-//      assert(TestUtils.redirectUrl(new URL(urlStr)) === proxyRoot + "/ctx/");
-//      assert(TestUtils.httpResponseCode(new URL(urlStr)) === HttpServletResponse.SC_FOUND)
-//    } finally {
-//      stopServer(serverInfo)
-//    }
-//  }
+
+  test("SPARK-45522: Jetty 10 and above shouuld return status code 302 with correct redirect url" +
+    " when request URL ends with a context path without trailing '/'") {
+    val proxyRoot = "https://proxy.example.com:443/prefix"
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    conf.set(UI.PROXY_REDIRECT_URI, proxyRoot)
+    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+
+    try {
+      val (_, ctx) = newContext("/ctx")
+      serverInfo.addHandler(ctx, securityMgr)
+      val urlStr = s"http://$localhost:${serverInfo.boundPort}/ctx"
+
+      assert(TestUtils.httpResponseCode(new URL(urlStr + "/")) === HttpServletResponse.SC_OK)
+
+      // In the case of trailing slash, 302 should be return and the redirect URL shouuld be part of the header.
+      assert(TestUtils.redirectUrl(new URL(urlStr)) === proxyRoot + "/ctx/");
+      assert(TestUtils.httpResponseCode(new URL(urlStr)) === HttpServletResponse.SC_FOUND)
+    } finally {
+      stopServer(serverInfo)
+    }
+  }
 
   test("SPARK-34449: default thread pool size of different jetty servers") {
     val (conf, _, sslOptions) = sslDisabledConf()
