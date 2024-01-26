@@ -4075,7 +4075,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
       serdeInfo, external = false)
 
-    // Parse column defaults from the table into separate expressions in the CREATE TABLE operator.
+    // Parse column defaults from the table into separate expressions in the REPLACE TABLE operator.
     val defaultValueExpressions: Seq[Option[Expression]] =
       parseColumnDefaultValueExpressions(ctx.createOrReplaceTableColTypeList(), columns.size)
 
