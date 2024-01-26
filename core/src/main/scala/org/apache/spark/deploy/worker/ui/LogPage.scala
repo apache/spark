@@ -75,7 +75,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       case (None, None, Some(d), None) =>
         (s"${workDir.getPath}/$d/", s"driverId=$d", d)
       case (None, None, None, Some(_)) =>
-        (s"${sys.env.getOrElse("SPARK_LOG_DIR", workDir.getPath)}/", "self", "")
+        (s"${sys.env.getOrElse("SPARK_LOG_DIR", workDir.getPath)}/", "self", "worker")
       case _ =>
         throw new Exception("Request must specify either application or driver identifiers")
     }
