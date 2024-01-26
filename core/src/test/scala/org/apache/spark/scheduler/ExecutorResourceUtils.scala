@@ -19,13 +19,10 @@ package org.apache.spark.scheduler
 
 trait ExecutorResourceUtils {
 
-  def compareMaps(lhsMap: Map[String, Double], rhsMap: Map[String, Double],
+  def compareMaps(lhs: Map[String, Double], rhs: Map[String, Double],
                   eps: Double = 0.00000001): Boolean = {
-    val lhs = lhsMap.toSeq.sorted
-    val rhs = rhsMap.toSeq.sorted
-    lhs.size == rhs.size &&
-      lhs.zip(rhs).forall { case ((lName, lAmount), (rName, rAmount)) =>
-        lName == rName && (lAmount - rAmount).abs < eps
-      }
+    lhs.size == rhs.size && lhs.forall { case (lName, lAmount) =>
+      rhs.get(lName).exists(rAmount => (lAmount - rAmount).abs < eps)
+    }
   }
 }
