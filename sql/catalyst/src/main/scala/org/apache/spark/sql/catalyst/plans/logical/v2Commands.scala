@@ -486,7 +486,7 @@ object CreateTable {
       partitioning: Seq[Transform],
       tableSpec: TableSpecBase,
       ignoreIfExists: Boolean): CreateTable = {
-    val defaultValueExpressions = tableSchema.fields.map(_ => None).toSeq
+    val defaultValueExpressions = Seq.fill(tableSchema.fields.length)(None)
     CreateTable(name, tableSchema, partitioning, tableSpec, ignoreIfExists, defaultValueExpressions)
   }
 }
