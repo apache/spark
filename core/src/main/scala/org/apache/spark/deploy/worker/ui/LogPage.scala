@@ -143,15 +143,14 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       return ("Error: invalid log directory " + logDirectory, 0, 0, 0)
     }
 
-    // Find a log file name
-    val fileName = if (logType.equals("out")) {
-      normalizedLogDir.listFiles.map(_.getName).filter(_.endsWith(".out"))
-        .headOption.getOrElse(logType)
-    } else {
-      logType
-    }
-
     try {
+      // Find a log file name
+      val fileName = if (logType.equals("out")) {
+        normalizedLogDir.listFiles.map(_.getName).filter(_.endsWith(".out"))
+          .headOption.getOrElse(logType)
+      } else {
+        logType
+      }
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, fileName)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
 
