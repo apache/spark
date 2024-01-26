@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -36,13 +36,11 @@ class FrameAttrsMixin:
         )
 
     @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_column_names(self):
-        pdf, psdf = self.df_pair
+        pdf, psdf = self.pdf, self.psdf
 
         self.assert_eq(psdf.columns, pdf.columns)
         self.assert_eq(psdf[["b", "a"]].columns, pdf[["b", "a"]].columns)
@@ -172,7 +170,7 @@ class FrameAttrsMixin:
         self.assert_eq(pdf.axes, psdf.axes)
 
     def test_inplace(self):
-        pdf, psdf = self.df_pair
+        pdf, psdf = self.pdf, self.psdf
 
         pser = pdf.a
         psser = psdf.a
@@ -270,7 +268,7 @@ class FrameAttrsMixin:
         self.assertEqual(df._repr_html_(), df._to_pandas()._repr_html_())
 
     def test_assign(self):
-        pdf, psdf = self.df_pair
+        pdf, psdf = self.pdf, self.psdf
 
         psdf["w"] = 1.0
         pdf["w"] = 1.0
@@ -341,7 +339,11 @@ class FrameAttrsMixin:
         self.assert_eq(psdf[psdf["t"] != psdf["t"]].dtypes, pdf[pdf["t"] != pdf["t"]].dtypes)
 
 
-class FrameAttrsTests(FrameAttrsMixin, ComparisonTestBase, SQLTestUtils):
+class FrameAttrsTests(
+    FrameAttrsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 
