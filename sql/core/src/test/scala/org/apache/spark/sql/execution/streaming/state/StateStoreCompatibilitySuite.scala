@@ -32,8 +32,8 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.util.Utils
 
 class StateStoreCompatibilitySuite extends StreamTest with StateStoreCodecsTest {
-   testWithAllCodec(
-      "SPARK-33263: Recovery from checkpoint before codec config introduced") {
+   testWithAllCodec("SPARK-33263: Recovery from checkpoint before codec config introduced") {
+     colFamiliesEnabled =>
      val resourceUri = this.getClass.getResource(
        "/structured-streaming/checkpoint-version-3.0.0-streaming-statestore-codec/").toURI
      val checkpointDir = Utils.createTempDir().getCanonicalFile
@@ -64,19 +64,21 @@ trait StateStoreCodecsTest extends SparkFunSuite with PlanTestBase {
   protected val codecsInShortName =
     CompressionCodec.ALL_COMPRESSION_CODECS.map { c => CompressionCodec.getShortName(c) }
 
-  protected def testWithAllCodec(name: String)(func: => Any): Unit = {
-    codecsInShortName.foreach { codecShortName =>
-      test(s"$name - with codec $codecShortName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-          func
+  protected def testWithAllCodec(name: String)(func: Boolean => Any): Unit = {
+    Seq(true, false).foreach { colFamiliesEnabled =>
+      codecsInShortName.foreach { codecShortName =>
+        test(s"$name - with codec $codecShortName - with colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
-    }
 
-    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
-      test(s"$name - with codec $codecShortName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-          func
+      CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
+        test(s"$name - with codec $codecShortName - with colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
     }

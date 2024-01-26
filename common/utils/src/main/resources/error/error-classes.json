@@ -5966,11 +5966,6 @@
       "Not support non-primitive type now."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2102" : {
-    "message" : [
-      "Unsupported type: <catalogString>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2103" : {
     "message" : [
       "Dictionary encoding should not be used because of dictionary overflow."
@@ -6199,11 +6194,6 @@
   "_LEGACY_ERROR_TEMP_2176" : {
     "message" : [
       "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2178" : {
-    "message" : [
-      "Remote operations not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2179" : {
@@ -7295,6 +7285,156 @@
   "_LEGACY_ERROR_TEMP_3160" : {
     "message" : [
       ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3161" : {
+    "message" : [
+      "Uploading artifact file to local file system destination path is not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3162" : {
+    "message" : [
+      "Unsupported physical type <type>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3163" : {
+    "message" : [
+      "Unsupported number of children: <num>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3165" : {
+    "message" : [
+      "Cannot merge <classA> with <classB>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3166" : {
+    "message" : [
+      "latestOffset(Offset, ReadLimit) should be called instead of this method"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3167" : {
+    "message" : [
+      "continuous mode is not supported!"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3168" : {
+    "message" : [
+      "hasTimedOut is true however there's no timeout configured"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3169" : {
+    "message" : [
+      "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: <unsupportedSources>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3170" : {
+    "message" : [
+      "SortAggregate code-gen does not support grouping keys"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3171" : {
+    "message" : [
+      "Number of nulls not set for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3172" : {
+    "message" : [
+      "No min/max found for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3173" : {
+    "message" : [
+      "Cannot specify 'USING index_type' in 'CREATE INDEX'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3175" : {
+    "message" : [
+      "Index Type <v> is not supported. The supported Index Types are: <supportedIndexTypeList>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3176" : {
+    "message" : [
+      "applyInPandasWithState is unsupported in batch query. Use applyInPandas instead."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3177" : {
+    "message" : [
+      "<class> does not support function: <funcName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3178" : {
+    "message" : [
+      "<class> does not support inverse distribution function: <funcName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3179" : {
+    "message" : [
+      "createIndex is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3180" : {
+    "message" : [
+      "indexExists is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3181" : {
+    "message" : [
+      "dropIndex is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3182" : {
+    "message" : [
+      "listIndexes is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3183" : {
+    "message" : [
+      "TableSample is not supported by this data source"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3184" : {
+    "message" : [
+      "<class> does not support aggregate function: <funcName> with DISTINCT"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3185" : {
+    "message" : [
+      "Schema evolution not supported."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3186" : {
+    "message" : [
+      "Boolean is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3187" : {
+    "message" : [
+      "only readInts is valid."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3188" : {
+    "message" : [
+      "only skipIntegers is valid"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3189" : {
+    "message" : [
+      "Unsupported encoding: <encoding>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3190" : {
+    "message" : [
+      "RLE encoding is not supported for values of type: <typeName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3191" : {
+    "message" : [
+      "Dictionary encoding does not support String"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3192" : {
+    "message" : [
+      "Datatype not supported <dt>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

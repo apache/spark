@@ -18,6 +18,7 @@ package org.apache.spark.sql.util
 
 import java.{lang => jl}
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.util.AccumulatorV2
 
 /**
@@ -77,8 +78,11 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Integer
     case o: MapperRowCounter =>
       this.synchronized(getOrCreate.addAll(o.value))
     case _ =>
-      throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3165",
+        messageParameters = Map(
+          "classA" -> this.getClass.getName,
+          "classB" -> other.getClass.getName))
   }
 
   override def value: java.util.List[(jl.Integer, jl.Long)] = this.synchronized(getOrCreate)

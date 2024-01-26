@@ -49,6 +49,7 @@ class MasterWebUI(
   def initialize(): Unit = {
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
+    attachPage(new LogPage(this))
     attachPage(masterPage)
     addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler(

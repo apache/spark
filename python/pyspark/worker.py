@@ -1175,7 +1175,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     raise PySparkTypeError(
                         error_class="INVALID_ARROW_UDTF_RETURN_TYPE",
                         message_parameters={
-                            "type_name": type(result).__name__,
+                            "return_type": type(result).__name__,
                             "value": str(result),
                             "func": f.__name__,
                         },

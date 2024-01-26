@@ -64,7 +64,8 @@ trait ReadStateStore {
    * Get the current value of a non-null key.
    * @return a non-null row if the key exists in the store, otherwise null.
    */
-  def get(key: UnsafeRow): UnsafeRow
+  def get(key: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
    * Return an iterator containing all the key-value pairs which are matched with
@@ -77,10 +78,11 @@ trait ReadStateStore {
    * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
    * to the greater than 0.
    */
-  def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair]
+  def prefixScan(prefixKey: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
-  def iterator(): Iterator[UnsafeRowPair]
+  def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
 
   /**
    * Clean up the resource.
@@ -101,17 +103,23 @@ trait ReadStateStore {
  * double resource cleanup.
  */
 trait StateStore extends ReadStateStore {
+  /**
+   * Create column family with given name, if absent.
+   */
+  def createColFamilyIfAbsent(colFamilyName: String): Unit
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
    * in the params can be reused, and must make copies of the data as needed for persistence.
    */
-  def put(key: UnsafeRow, value: UnsafeRow): Unit
+  def put(key: UnsafeRow, value: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
    * Remove a single non-null key.
    */
-  def remove(key: UnsafeRow): Unit
+  def remove(key: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
    * Commit all the updates that have been made to the store, and return the new version.
@@ -134,7 +142,8 @@ trait StateStore extends ReadStateStore {
    * performed after initialization of the iterator. Callers should perform all updates before
    * calling this method if all updates should be visible in the returned iterator.
    */
-  override def iterator(): Iterator[UnsafeRowPair]
+  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+    Iterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -151,14 +160,18 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
   override def version: Long = store.version
 
-  override def get(key: UnsafeRow): UnsafeRow = store.get(key)
+  override def get(key: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
+    colFamilyName)
 
-  override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
+  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+    Iterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
 
-  override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] =
-    store.prefixScan(prefixKey)
+  override def prefixScan(prefixKey: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] =
+    store.prefixScan(prefixKey, colFamilyName)
 }
 
 /**
@@ -264,6 +277,8 @@ trait StateStoreProvider {
    * @param numColsPrefixKey The number of leftmost columns to be used as prefix key.
    *                         A value not greater than 0 means the operator doesn't activate prefix
    *                         key, and the operator should not call prefixScan method in StateStore.
+   * @param useColumnFamilies Whether the underlying state store uses a single or multiple column
+   *                          families
    * @param storeConfs Configurations used by the StateStores
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
    */
@@ -272,6 +287,7 @@ trait StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit
 
@@ -325,11 +341,12 @@ object StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, numColsPrefixKey,
-      storeConf, hadoopConf)
+      useColumnFamilies, storeConf, hadoopConf)
     provider
   }
 
@@ -435,6 +452,8 @@ object StateStore extends Logging {
 
   val PARTITION_ID_TO_CHECK_SCHEMA = 0
 
+  val DEFAULT_COL_FAMILY_NAME = "default"
+
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 
@@ -518,13 +537,14 @@ object StateStore extends Logging {
       valueSchema: StructType,
       numColsPrefixKey: Int,
       version: Long,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): ReadStateStore = {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, storeConf, hadoopConf)
+      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf)
     storeProvider.getReadStore(version)
   }
 
@@ -535,13 +555,14 @@ object StateStore extends Logging {
       valueSchema: StructType,
       numColsPrefixKey: Int,
       version: Long,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, storeConf, hadoopConf)
+      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf)
     storeProvider.getStore(version)
   }
 
@@ -550,6 +571,7 @@ object StateStore extends Logging {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     loadedProviders.synchronized {
@@ -584,7 +606,8 @@ object StateStore extends Logging {
         loadedProviders.getOrElseUpdate(
           storeProviderId,
           StateStoreProvider.createAndInit(
-            storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeConf, hadoopConf)
+            storeProviderId, keySchema, valueSchema, numColsPrefixKey,
+            useColumnFamilies, storeConf, hadoopConf)
         )
       }
 

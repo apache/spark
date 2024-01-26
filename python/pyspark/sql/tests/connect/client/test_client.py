@@ -27,7 +27,7 @@ if should_test_connect:
     import grpc
     import pandas as pd
     import pyarrow as pa
-    from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
+    from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
@@ -72,7 +72,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsNone(client.token)
 
     def test_channel_builder(self):
-        class CustomChannelBuilder(ChannelBuilder):
+        class CustomChannelBuilder(DefaultChannelBuilder):
             @property
             def userId(self) -> Optional[str]:
                 return "abc"
@@ -129,7 +129,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
     def test_channel_builder_with_session(self):
         dummy = str(uuid.uuid4())
-        chan = ChannelBuilder(f"sc://foo/;session_id={dummy}")
+        chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
         client = SparkConnectClient(chan)
         self.assertEqual(client._session_id, chan.session_id)
 

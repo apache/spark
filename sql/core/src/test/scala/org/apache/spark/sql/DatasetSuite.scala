@@ -29,7 +29,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -2797,11 +2797,11 @@ case class DataSeqOptSeq(a: Seq[Option[Seq[Int]]])
  */
 case class NonSerializableCaseClass(value: String) extends Externalizable {
   override def readExternal(in: ObjectInput): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def writeExternal(out: ObjectOutput): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 

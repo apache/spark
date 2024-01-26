@@ -224,13 +224,13 @@
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
-    <netty.version>4.1.100.Final</netty.version>
+    <netty.version>4.1.106.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>14.0.2</arrow.version>
+    <arrow.version>15.0.0</arrow.version>
     <ammonite.version>2.5.11</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
