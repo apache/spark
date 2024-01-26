@@ -1128,11 +1128,9 @@ class XmlSuite
     assert(valid.toSeq.toArray.take(schema.length - 1) ===
       Array(Row(10, 10), Row(10, "Ten"), 10.0, 10.0, true,
         "Ten", Array(1, 2), Map("a" -> 123, "b" -> 345)))
-    // TODO: we don't support partial results
     assert(
       invalid.toSeq.toArray.take(schema.length - 1) ===
-        Array(null, null, null, null, null,
-          null, null, null))
+        Array(Row(null, null), Row(null, "10"), null, null, null, "Ten", Array(2), Map("b" -> 345)))
 
     assert(valid.toSeq.toArray.last === null)
     assert(invalid.toSeq.toArray.last.toString.contains(
@@ -2895,6 +2893,16 @@ class XmlSuite
          |        <key1>1</key1>
          |        <key2>2</key2>
          |    </map>
+         |    <struct>
+         |        <a>1</a>
+         |        <b>mismatch</b>
+         |        2
+         |    </struct>
+         |    <nested_array>
+         |      <array><c>1</c></array>
+         |      2
+         |      <array><c>mismatch</c></array>
+         |    </nested_array>
          |</ROW>""".stripMargin
       val xmlBadRecord2 =
         s"""<ROW>
@@ -2908,10 +2916,32 @@ class XmlSuite
            |        <key1>mismatch</key1>
            |        <key2>2</key2>
            |    </map>
+           |    <struct>
+           |        mismatch
+           |        <a>mismatch</a>
+           |        <b>2</b>
+           |    </struct>
+           |    <nested_array>
+           |      <array><c>1</c></array>
+           |      mismatch
+           |      <array><c>3</c></array>
+           |    </nested_array>
            |</ROW>""".stripMargin
       Files.write(new File(dir, "f0").toPath, (xmlBadRecord1 ++ xmlBadRecord2).getBytes)
-      val schema = "_VALUE array<int>, double double," +
-        " array array<int>, map map<string, int>, _corrupt_record string"
+      val schema = new StructType()
+        .add("_VALUE", ArrayType(IntegerType))
+        .add("double", DoubleType)
+        .add("array", ArrayType(IntegerType))
+        .add("map", MapType(StringType, IntegerType))
+        .add("struct",
+          new StructType()
+            .add("a", IntegerType)
+            .add("b", IntegerType)
+            .add("_VALUE", IntegerType))
+        .add("nested_array", new StructType()
+            .add("_VALUE", IntegerType)
+            .add("array", ArrayType(new StructType().add("c", IntegerType))))
+        .add("_corrupt_record", StringType)
       val df = spark.read.schema(schema).option("rowTag", "ROW").xml(dir.getCanonicalPath)
       checkAnswer(
         df,
@@ -2920,13 +2950,46 @@ class XmlSuite
           0.1,
           Array(0, 2),
           Map("key1" -> 1, "key2" -> 2),
+          Row(1, null, 2),
+          Row(2, Array(Row(1), Row(null))),
           xmlBadRecord1) ::
         Row(
           Array(3),
           null,
           Array(1, 2),
           Map("key2" -> 2),
+          Row(null, 2, null),
+          Row(null, Array(Row(1), Row(3))),
           xmlBadRecord2) :: Nil)
+    }
+  }
+
+  test("return partial results for bad records - attributes") {
+    val xmlCorrectRecord = """<ROW><struct attr="3.0">4.0<b>5.0</b></struct></ROW>"""
+    val xmlBadRecord1 = """<ROW><struct attr="mismatch1">4.0<b>5.0</b></struct></ROW>"""
+    val xmlBadRecord2 = """<ROW><struct attr="3.0">4.0<b>mismatch3</b></struct></ROW>"""
+    val xmlBadRecord3 = """<ROW><struct attr="3.0">mismatch2<b>5.0</b></struct></ROW>"""
+    val xmlBadRecord4 = """<ROW><map attr1="1" attr2="mismatch"><key1>1</key1></map></ROW>"""
+    val xmlBadRecord5 = """<ROW><map attr1="mismatch" attr2="1"><key1>mismatch</key1></map></ROW>"""
+    withTempDir { dir =>
+      Files.write(
+        new File(dir, "f0").toPath,
+        (xmlCorrectRecord ++ xmlBadRecord1
+          ++ xmlBadRecord2 ++ xmlBadRecord3
+          ++ xmlBadRecord4 ++ xmlBadRecord5).getBytes)
+      val schema = "struct struct< _attr double, _VALUE double, b double>," +
+        " map map<string, integer>," +
+        " _corrupt_record string"
+      val df = spark.read.schema(schema).option("rowTag", "ROW").xml(dir.getCanonicalPath)
+      checkAnswer(
+        df,
+        Row(Row(3.0, 4.0, 5.0), null, null) ::
+        Row(Row(null, 4.0, 5.0), null, xmlBadRecord1) ::
+        Row(Row(3.0, 4.0, null), null, xmlBadRecord2) ::
+        Row(Row(3.0, null, 5.0), null, xmlBadRecord3) ::
+        Row(null, Map("_attr1" -> 1, "key1" -> 1), xmlBadRecord4) ::
+        Row(null, Map("_attr2" -> 1), xmlBadRecord5) ::
+          Nil)
     }
   }
 }

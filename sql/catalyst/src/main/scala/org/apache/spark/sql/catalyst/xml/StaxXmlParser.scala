@@ -173,6 +173,7 @@ class StaxXmlParser(
 
   /**
    * Parse the current token (and related children) according to a desired schema
+   * @throws PartialValueException partial results exception for bad records
    */
   private[xml] def convertField(
       parser: XMLEventReader,
@@ -246,11 +247,18 @@ class StaxXmlParser(
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
     var badRecordException: Option[Throwable] = None
-    // TODO
+
     attributes.foreach { attr =>
-      kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
+      try {
+        kvPairs +=
+        (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
         -> convertTo(attr.getValue, valueType))
+      } catch {
+        case NonFatal(e) =>
+          badRecordException = badRecordException.orElse(Some(e))
+      }
     }
+
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
@@ -322,35 +330,57 @@ class StaxXmlParser(
       attributes: Array[Attribute] = Array.empty): InternalRow = {
     // TODO: This method might have to be removed. Some logics duplicate `convertObject()`
     val row = new Array[Any](schema.length)
+    var badRecordException: Option[Throwable] = None
+    var attributesMap = Map.empty[String, Any]
+    var valuesMap = Map.empty[String, Any]
+    var fieldsMap = Map.empty[String, Any]
 
     // Read attributes first.
-    val attributesMap = convertAttributes(attributes, schema)
+    try {
+      attributesMap = convertAttributes(attributes, schema)
+    } catch {
+      case NonFatal(e) =>
+        badRecordException = Some(e)
+    }
 
-    // Then, we read elements here.
-    val fieldsMap = convertField(parser, schema, startElementName) match {
-      case internalRow: InternalRow =>
-        Map(schema.map(_.name).zip(internalRow.toSeq(schema)): _*)
-      case v if schema.fieldNames.contains(options.valueTag) =>
-        // If this is the element having no children, then it wraps attributes
-        // with a row So, we first need to find the field name that has the real
-        // value and then push the value.
-        val valuesMap = schema.fieldNames.map((_, null)).toMap
-        valuesMap + (options.valueTag -> v)
-      case _ => Map.empty
+    try {
+      // Then, we read elements here.
+      fieldsMap = convertField(parser, schema, startElementName) match {
+        case internalRow: InternalRow =>
+          Map(schema.map(_.name).zip(internalRow.toSeq(schema)): _*)
+        case v if schema.fieldNames.contains(options.valueTag) =>
+          // If this is the element having no children, then it wraps attributes
+          // with a row So, we first need to find the field name that has the real
+          // value and then push the value.
+          val valueTagsMap = schema.fieldNames.map((_, null)).toMap
+          valueTagsMap + (options.valueTag -> v)
+        case _ => Map.empty
+      }
+    } catch {
+      // As `convertObjectWithAttributes` is called to convert nested objects,
+      // the inner elements can only be objects
+      case PartialResultException(rowWExceptions, cause) =>
+        badRecordException = badRecordException.orElse(Some(cause))
+        rowWExceptions.toSeq(schema).zipWithIndex.foreach {
+          case (value, i) => row.update(i, value)
+        }
+      case NonFatal(e) =>
+        badRecordException = badRecordException.orElse(Some(e))
     }
 
     // Here we merge both to a row.
-    val valuesMap = fieldsMap ++ attributesMap
+    valuesMap = fieldsMap ++ attributesMap
     valuesMap.foreach { case (f, v) =>
       val nameToIndex = getFieldNameToIndex(schema)
       nameToIndex.get(f).foreach { row(_) = v }
     }
 
-    if (valuesMap.isEmpty) {
-      // Return an empty row with all nested elements by the schema set to null.
-      InternalRow.fromSeq(Seq.fill(schema.fieldNames.length)(null))
+    val internalRow = InternalRow.fromSeq(row.toIndexedSeq)
+
+    if (badRecordException.isEmpty) {
+      internalRow
     } else {
-      InternalRow.fromSeq(row.toIndexedSeq)
+      throw PartialResultException(internalRow, badRecordException.get)
     }
   }
 
@@ -385,58 +415,72 @@ class StaxXmlParser(
         case e: StartElement =>
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
           try {
-          val attributes = e.getAttributes.asScala.toArray
+            val attributes = e.getAttributes.asScala.toArray
+            nameToIndex.get(field) match {
+              case Some(index) =>
+                  schema(index).dataType match {
+                    case st: StructType =>
+                      try {
+                        row(index) = convertObjectWithAttributes(parser, st, field, attributes)
+                      } catch {
+                        case partialValueException: PartialValueException =>
+                          badRecordException =
+                            badRecordException.orElse(Some(partialValueException.cause))
+                          row.update(index, partialValueException.partialResult)
+                      }
 
 
-          nameToIndex.get(field) match {
-            case Some(index) =>
-              try {
-                schema(index).dataType match {
-                  case st: StructType =>
-                    row(index) = convertObjectWithAttributes(parser, st, field, attributes)
+                    case ArrayType(dt: DataType, _) =>
+                      val values = Option(row(index))
+                        .map(_.asInstanceOf[ArrayBuffer[Any]])
+                        .getOrElse(ArrayBuffer.empty[Any])
+                      try {
+                        val newValue = dt match {
+                          case st: StructType =>
+                            convertObjectWithAttributes(parser, st, field, attributes)
+                          case dt: DataType =>
+                            convertField(parser, dt, field)
+                        }
+                        row(index) = values :+ newValue
+                      } catch {
+                        case partialValueException: PartialValueException =>
+                          badRecordException =
+                            badRecordException.orElse(Some(partialValueException.cause))
+                          row.update(index, values :+ partialValueException.partialResult)
+                      }
 
-                  case ArrayType(dt: DataType, _) =>
-                    val values = Option(row(index))
-                      .map(_.asInstanceOf[ArrayBuffer[Any]])
-                      .getOrElse(ArrayBuffer.empty[Any])
-                    val newValue = dt match {
-                      case st: StructType =>
-                        convertObjectWithAttributes(parser, st, field, attributes)
-                      case dt: DataType =>
-                        convertField(parser, dt, field)
+                    case dt: DataType =>
+                      try {
+                        row(index) = convertField(parser, dt, field, attributes)
+                      } catch {
+                        case partialValueException: PartialValueException =>
+                          badRecordException =
+                            badRecordException.orElse(Some(partialValueException.cause))
+                          row.update(index, partialValueException.partialResult)
+                      }
                     }
-                    row(index) = values :+ newValue
-                  case dt: DataType =>
-                    row(index) = convertField(parser, dt, field, attributes)
+              case None =>
+                if (hasWildcard) {
+                  // Special case: there's an 'any' wildcard element that matches anything else
+                  // as a string (or array of strings, to parse multiple ones)
+                  val newValue = convertField(parser, StringType, field)
+                  // As the wildcard column field is of string type,
+                  // It won't throw partialValueException
+                  val anyIndex = schema.fieldIndex(wildcardColName)
+                  schema(wildcardColName).dataType match {
+                    case StringType =>
+                      row(anyIndex) = newValue
+                    case ArrayType(StringType, _) =>
+                      val values = Option(row(anyIndex))
+                        .map(_.asInstanceOf[ArrayBuffer[String]])
+                        .getOrElse(ArrayBuffer.empty[String])
+                      row(anyIndex) = values :+ newValue
                   }
-              } catch {
-                case partialValueException: PartialValueException =>
-                  badRecordException =
-                    badRecordException.orElse(Some(partialValueException.cause))
-                  row.update(index, partialValueException.partialResult)
-              }
-            case None =>
-              if (hasWildcard) {
-                // Special case: there's an 'any' wildcard element that matches anything else
-                // as a string (or array of strings, to parse multiple ones)
-                val newValue = convertField(parser, StringType, field)
-                // As the wildcard column field is of string type,
-                // It won't throw partialValueException
-                val anyIndex = schema.fieldIndex(wildcardColName)
-                schema(wildcardColName).dataType match {
-                  case StringType =>
-                    row(anyIndex) = newValue
-                  case ArrayType(StringType, _) =>
-                    val values = Option(row(anyIndex))
-                      .map(_.asInstanceOf[ArrayBuffer[String]])
-                      .getOrElse(ArrayBuffer.empty[String])
-                    row(anyIndex) = values :+ newValue
+                } else {
+                  StaxXmlParserUtils.skipChildren(parser)
+                  StaxXmlParserUtils.skipNextEndElement(parser, field, options)
                 }
-              } else {
-                StaxXmlParserUtils.skipChildren(parser)
-                StaxXmlParserUtils.skipNextEndElement(parser, field, options)
-              }
-          }
+            }
         } catch {
           case e: SparkUpgradeException => throw e
           case NonFatal(e) =>
