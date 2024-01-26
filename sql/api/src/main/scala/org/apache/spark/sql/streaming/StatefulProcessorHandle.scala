@@ -41,8 +41,8 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo
 
-  /** Function to delete and purge state variable if defined previously
+  /** Function to delete state info if it exists and return state that was previously there
    * @param stateName - name of the state variable
-   */
+   * */
   def deleteIfExists(stateName: String): Unit
 }

@@ -123,10 +123,13 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  /** Function to delete and purge state variable if defined previously
+  /** Function to delete state info if it exists and return state that was previously there
    *
-   * @param stateName - name of the state variable
-   */
+   * @param stateName  - name of the state variable
+   * @param keyEncoder - Spark SQL Encoder for key
+   * @param K          - type of key
+   * @return - instance of ValueState of type T that can be used to store state persistently
+   * */
   override def deleteIfExists(stateName: String): Unit = {
     verify(currState == CREATED, s"Cannot delete state variable with name=$stateName after " +
       "initialization is complete")
