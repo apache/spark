@@ -762,15 +762,12 @@ def assertDataFrameEqual(
         from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
         has_pandas = True
-        if has_pandas:
-            # Only import pyspark.pandas when Pandas is available to prevent test stopping
-            # when Pandas is not installed.
-            import pyspark.pandas as ps
     except ImportError:
         # no pandas, so we won't call pandasutils functions
         pass
 
     if has_pandas:
+        import pyspark.pandas as ps
         if (
             isinstance(actual, pd.DataFrame)
             or isinstance(expected, pd.DataFrame)
