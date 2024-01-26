@@ -247,7 +247,8 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield
 
-        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=None)])
+        if have_pyarrow:
+            assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=None)])
 
     def test_udtf_with_none_output(self):
         @udtf(returnType="a: int")
@@ -259,9 +260,10 @@ class BaseUDTFTestsMixin:
         self.assertEqual(TestUDTF(lit(1)).collect(), [Row(a=1), Row(a=None)])
         df = self.spark.createDataFrame([(0, 1), (1, 2)], schema=["a", "b"])
         self.assertEqual(TestUDTF(lit(1)).join(df, "a", "inner").collect(), [Row(a=1, b=2)])
-        assertDataFrameEqual(
-            TestUDTF(lit(1)).join(df, "a", "left"), [Row(a=None, b=None), Row(a=1, b=2)]
-        )
+        if have_pyarrow:
+            assertDataFrameEqual(
+                TestUDTF(lit(1)).join(df, "a", "left"), [Row(a=None, b=None), Row(a=1, b=2)]
+            )
 
     def test_udtf_with_none_input(self):
         @udtf(returnType="a: int")
@@ -555,9 +557,11 @@ class BaseUDTFTestsMixin:
                 yield a + int(random.random()),
 
         random_udtf = udtf(RandomUDTF, returnType="x: int")
-        assertDataFrameEqual(random_udtf(lit(1)), [Row(x=1)])
+        if have_pyarrow:
+            assertDataFrameEqual(random_udtf(lit(1)), [Row(x=1)])
         self.spark.udtf.register("random_udtf", random_udtf)
-        assertDataFrameEqual(self.spark.sql("select * from random_udtf(1)"), [Row(x=1)])
+        if have_pyarrow:
+            assertDataFrameEqual(self.spark.sql("select * from random_udtf(1)"), [Row(x=1)])
 
     def test_udtf_with_nondeterministic_input(self):
         from pyspark.sql.functions import rand
@@ -567,7 +571,8 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield 1 if a > 100 else 0,
 
-        assertDataFrameEqual(TestUDTF(rand(0) * 100), [Row(x=0)])
+        if have_pyarrow:
+            assertDataFrameEqual(TestUDTF(rand(0) * 100), [Row(x=0)])
 
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")
@@ -669,14 +674,16 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield tuple()
 
-        assertDataFrameEqual(TestUDTF(), [Row()])
+        if have_pyarrow:
+            assertDataFrameEqual(TestUDTF(), [Row()])
 
     def _check_result_or_exception(
         self, func_handler, ret_type, expected, *, err_type=PythonException
     ):
         func = udtf(func_handler, returnType=ret_type)
         if not isinstance(expected, str):
-            assertDataFrameEqual(func(), expected)
+            if have_pyarrow:
+                assertDataFrameEqual(func(), expected)
         else:
             with self.assertRaisesRegex(err_type, expected):
                 func().collect()
@@ -904,7 +911,8 @@ class BaseUDTFTestsMixin:
             ("x: array<int>", [Row(x=None), Row(x=[1, 2])]),
         ]:
             with self.subTest(ret_type=ret_type):
-                assertDataFrameEqual(udtf(TestUDTF, returnType=ret_type)(), expected)
+                if have_pyarrow:
+                    assertDataFrameEqual(udtf(TestUDTF, returnType=ret_type)(), expected)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_udtf_with_pandas_input_type(self):
@@ -1236,8 +1244,9 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", func)
 
         expected = [Row(c1="hello", c2="world")]
-        assertDataFrameEqual(func(), expected)
-        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
+        if have_pyarrow:
+            assertDataFrameEqual(func(), expected)
+            assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
 
     def test_udtf_with_analyze(self):
         class TestUDTF:
@@ -1295,7 +1304,8 @@ class BaseUDTFTestsMixin:
         ):
             with self.subTest(query_no=i):
                 assertSchemaEqual(df.schema, expected_schema)
-                assertDataFrameEqual(df, expected_results)
+                if have_pyarrow:
+                    assertDataFrameEqual(df, expected_results)
 
     def test_udtf_with_analyze_decorator(self):
         @udtf
@@ -1310,8 +1320,9 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
 
         expected = [Row(c1="hello", c2="world")]
-        assertDataFrameEqual(TestUDTF(), expected)
-        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
+        if have_pyarrow:
+            assertDataFrameEqual(TestUDTF(), expected)
+            assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
 
     def test_udtf_with_analyze_decorator_parens(self):
         @udtf()
@@ -1326,8 +1337,9 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
 
         expected = [Row(c1="hello", c2="world")]
-        assertDataFrameEqual(TestUDTF(), expected)
-        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
+        if have_pyarrow:
+            assertDataFrameEqual(TestUDTF(), expected)
+            assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
 
     def test_udtf_with_analyze_multiple_arguments(self):
         class TestUDTF:
@@ -1357,7 +1369,8 @@ class BaseUDTFTestsMixin:
         ):
             with self.subTest(query_no=i):
                 assertSchemaEqual(df.schema, expected_schema)
-                assertDataFrameEqual(df, expected_results)
+                if have_pyarrow:
+                    assertDataFrameEqual(df, expected_results)
 
     def test_udtf_with_analyze_arbitary_number_arguments(self):
         class TestUDTF:
@@ -1390,7 +1403,8 @@ class BaseUDTFTestsMixin:
         ):
             with self.subTest(query_no=i):
                 assertSchemaEqual(df.schema, expected_schema)
-                assertDataFrameEqual(df, expected_results)
+                if have_pyarrow:
+                    assertDataFrameEqual(df, expected_results)
 
     def test_udtf_with_analyze_table_argument(self):
         class TestUDTF:
@@ -1411,7 +1425,8 @@ class BaseUDTFTestsMixin:
 
         df = self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))")
         assertSchemaEqual(df.schema, StructType().add("a", LongType()))
-        assertDataFrameEqual(df, [Row(a=6), Row(a=7)])
+        if have_pyarrow:
+            assertDataFrameEqual(df, [Row(a=6), Row(a=7)])
 
     def test_udtf_with_analyze_table_argument_adding_columns(self):
         class TestUDTF:
@@ -1432,15 +1447,16 @@ class BaseUDTFTestsMixin:
             df.schema,
             StructType().add("id", LongType(), nullable=False).add("is_even", BooleanType()),
         )
-        assertDataFrameEqual(
-            df,
-            [
-                Row(a=0, is_even=True),
-                Row(a=1, is_even=False),
-                Row(a=2, is_even=True),
-                Row(a=3, is_even=False),
-            ],
-        )
+        if have_pyarrow:
+            assertDataFrameEqual(
+                df,
+                [
+                    Row(a=0, is_even=True),
+                    Row(a=1, is_even=False),
+                    Row(a=2, is_even=True),
+                    Row(a=3, is_even=False),
+                ],
+            )
 
     def test_udtf_with_analyze_table_argument_repeating_rows(self):
         class TestUDTF:
@@ -1483,7 +1499,8 @@ class BaseUDTFTestsMixin:
         ):
             with self.subTest(query_no=i):
                 assertSchemaEqual(df.schema, expected_schema)
-                assertDataFrameEqual(df, expected_results)
+                if have_pyarrow:
+                    assertDataFrameEqual(df, expected_results)
 
         with self.assertRaisesRegex(
             AnalysisException, "The first argument must be a scalar integer between 1 and 10"
@@ -1614,7 +1631,8 @@ class BaseUDTFTestsMixin:
 
         df = func(lit(None))
         assertSchemaEqual(df.schema, StructType().add("a", NullType()))
-        assertDataFrameEqual(df, [Row(a=None)])
+        if have_pyarrow:
+            assertDataFrameEqual(df, [Row(a=None)])
 
     def test_udtf_with_analyze_taking_wrong_number_of_arguments(self):
         class TestUDTF:
@@ -1646,9 +1664,10 @@ class BaseUDTFTestsMixin:
         self.spark.udtf.register("test_udtf", TestUDTF)
 
         expected = [Row(c1="hello", c2="world")]
-        assertDataFrameEqual(TestUDTF(), expected)
-        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
-        assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf(a=>1)"), expected)
+        if have_pyarrow:
+            assertDataFrameEqual(TestUDTF(), expected)
+            assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf()"), expected)
+            assertDataFrameEqual(self.spark.sql("SELECT * FROM test_udtf(a=>1)"), expected)
 
         with self.assertRaisesRegex(
             AnalysisException, BaseUDTFTestsMixin.tooManyPositionalArguments
@@ -1682,7 +1701,8 @@ class BaseUDTFTestsMixin:
         for i, df in enumerate([TestUDTF(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]):
             with self.subTest(query_no=i):
                 assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
-                assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
     def test_udtf_with_analyze_using_accumulator(self):
         test_accum = self.sc.accumulator(0)
@@ -1707,7 +1727,8 @@ class BaseUDTFTestsMixin:
         for i, df in enumerate([TestUDTF(lit(10)), self.spark.sql("SELECT * FROM test_udtf(10)")]):
             with self.subTest(query_no=i):
                 assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
-                assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
         self.assertEqual(test_accum.value, 222)
 
@@ -1749,7 +1770,8 @@ class BaseUDTFTestsMixin:
             ):
                 with self.subTest(query_no=i):
                     assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
-                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+                    if have_pyarrow:
+                        assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
     def test_udtf_with_analyze_using_zipped_package(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1789,7 +1811,8 @@ class BaseUDTFTestsMixin:
             ):
                 with self.subTest(query_no=i):
                     assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
-                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+                    if have_pyarrow:
+                        assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
     def _add_archive(self, path):
         self.sc.addArchive(path)
@@ -1836,7 +1859,8 @@ class BaseUDTFTestsMixin:
             ):
                 with self.subTest(query_no=i):
                     assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
-                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+                    if have_pyarrow:
+                        assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
     def _add_file(self, path):
         self.sc.addFile(path)
@@ -1877,7 +1901,8 @@ class BaseUDTFTestsMixin:
             ):
                 with self.subTest(query_no=i):
                     assertSchemaEqual(df.schema, StructType().add("col1", IntegerType()))
-                    assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
+                    if have_pyarrow:
+                        assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
     def test_udtf_with_named_arguments(self):
         @udtf(returnType="a: int")
@@ -1896,7 +1921,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(a=10)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(a=10)])
 
     def test_udtf_with_named_arguments_negative(self):
         @udtf(returnType="a: int")
@@ -1938,7 +1964,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(a=10, b="x")])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(a=10, b="x")])
 
         # negative
         with self.assertRaisesRegex(
@@ -1981,7 +2008,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(a=10, b="x")])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(a=10, b="x")])
 
     def test_udtf_with_named_arguments_lateral_join(self):
         @udtf
@@ -2009,7 +2037,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(a=0), Row(a=1)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(a=0), Row(a=1)])
 
     def test_udtf_with_named_arguments_and_defaults(self):
         @udtf
@@ -2044,7 +2073,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(with_b=False, query_no=i):
-                assertDataFrameEqual(df, [Row(a=10, b=100)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(a=10, b=100)])
 
         # with "b"
         for i, df in enumerate(
@@ -2058,7 +2088,8 @@ class BaseUDTFTestsMixin:
             ]
         ):
             with self.subTest(with_b=True, query_no=i):
-                assertDataFrameEqual(df, [Row(a=10, b="z")])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(a=10, b="z")])
 
     def test_udtf_with_table_argument_and_partition_by(self):
         class TestUDTF:
@@ -2104,10 +2135,11 @@ class BaseUDTFTestsMixin:
             "row => TABLE(t) PARTITION BY partition_col - 1",
         ]:
             with self.subTest(table_arg=table_arg):
-                assertDataFrameEqual(
-                    self.spark.sql(base_query.format(table_arg=table_arg)),
-                    [Row(partition_col=x, total=3) for x in range(1, 21)],
-                )
+                if have_pyarrow:
+                    assertDataFrameEqual(
+                        self.spark.sql(base_query.format(table_arg=table_arg)),
+                        [Row(partition_col=x, total=3) for x in range(1, 21)],
+                    )
 
         base_query = """
             WITH t AS (
@@ -2130,17 +2162,18 @@ class BaseUDTFTestsMixin:
                 "row => TABLE(t) PARTITION BY partition_col",
             ]:
                 with self.subTest(str_first=str_first, str_second=str_second, table_arg=table_arg):
-                    assertDataFrameEqual(
-                        self.spark.sql(
-                            base_query.format(
-                                str_first=str_first, str_second=str_second, table_arg=table_arg
-                            )
-                        ),
-                        [
-                            Row(partition_col=result_first, total=1),
-                            Row(partition_col=result_second, total=1),
-                        ],
-                    )
+                    if have_pyarrow:
+                        assertDataFrameEqual(
+                            self.spark.sql(
+                                base_query.format(
+                                    str_first=str_first, str_second=str_second, table_arg=table_arg
+                                )
+                            ),
+                            [
+                                Row(partition_col=result_first, total=1),
+                                Row(partition_col=result_second, total=1),
+                            ],
+                        )
 
         # Combine a lateral join with a TABLE argument with PARTITION BY .
         func = udtf(TestUDTF, returnType="partition_col: int, total: int")
@@ -2163,13 +2196,14 @@ class BaseUDTFTestsMixin:
             "row => TABLE(t) PARTITION BY partition_col - 1",
         ]:
             with self.subTest(func_call=table_arg):
-                assertDataFrameEqual(
-                    self.spark.sql(base_query.format(table_arg=table_arg)),
-                    [
-                        Row(a=0, b=1, partition_col=1, total=3),
-                        Row(a=0, b=1, partition_col=2, total=3),
-                    ],
-                )
+                if have_pyarrow:
+                    assertDataFrameEqual(
+                        self.spark.sql(base_query.format(table_arg=table_arg)),
+                        [
+                            Row(a=0, b=1, partition_col=1, total=3),
+                            Row(a=0, b=1, partition_col=2, total=3),
+                        ],
+                    )
 
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
         class TestUDTF:
@@ -2222,10 +2256,11 @@ class BaseUDTFTestsMixin:
                 f"row => TABLE(t) PARTITION BY partition_col - 1 ORDER BY {order_by_str}",
             ]:
                 with self.subTest(table_arg=table_arg):
-                    assertDataFrameEqual(
-                        self.spark.sql(base_query.format(table_arg=table_arg)),
-                        [Row(partition_col=x, last=result_val) for x in range(1, 21)],
-                    )
+                    if have_pyarrow:
+                        assertDataFrameEqual(
+                            self.spark.sql(base_query.format(table_arg=table_arg)),
+                            [Row(partition_col=x, last=result_val) for x in range(1, 21)],
+                        )
 
     def test_udtf_with_table_argument_with_single_partition(self):
         class TestUDTF:
@@ -2266,10 +2301,11 @@ class BaseUDTFTestsMixin:
             "row => TABLE(t) WITH SINGLE PARTITION ORDER BY (input, partition_col)",
         ]:
             with self.subTest(table_arg=table_arg):
-                assertDataFrameEqual(
-                    self.spark.sql(base_query.format(table_arg=table_arg)),
-                    [Row(count=40, total=60, last=2)],
-                )
+                if have_pyarrow:
+                    assertDataFrameEqual(
+                        self.spark.sql(base_query.format(table_arg=table_arg)),
+                        [Row(count=40, total=60, last=2)],
+                    )
 
     def test_udtf_with_table_argument_with_single_partition_from_analyze(self):
         @udtf
@@ -2318,10 +2354,11 @@ class BaseUDTFTestsMixin:
 
         for table_arg in ["TABLE(t)", "row => TABLE(t)"]:
             with self.subTest(table_arg):
-                assertDataFrameEqual(
-                    self.spark.sql(base_query.format(table_arg=table_arg)),
-                    [Row(count=40, total=60, last=2)],
-                )
+                if have_pyarrow:
+                    assertDataFrameEqual(
+                        self.spark.sql(base_query.format(table_arg=table_arg)),
+                        [Row(count=40, total=60, last=2)],
+                    )
 
     def test_udtf_with_table_argument_with_partition_by_and_order_by_from_analyze(self):
         @udtf
@@ -2397,11 +2434,12 @@ class BaseUDTFTestsMixin:
 
         for table_arg in ["TABLE(t)", "row => TABLE(t)"]:
             with self.subTest(table_arg=table_arg):
-                assertDataFrameEqual(
-                    self.spark.sql(base_query.format(table_arg=table_arg)),
-                    [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)]
-                    + [Row(partition_col=42, count=3, total=3, last=None)],
-                )
+                if have_pyarrow:
+                    assertDataFrameEqual(
+                        self.spark.sql(base_query.format(table_arg=table_arg)),
+                        [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)]
+                        + [Row(partition_col=42, count=3, total=3, last=None)],
+                    )
 
     def test_udtf_with_prepare_string_from_analyze(self):
         @dataclass
@@ -2442,18 +2480,19 @@ class BaseUDTFTestsMixin:
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
-        assertDataFrameEqual(
-            self.spark.sql(
-                """
-                WITH t AS (
-                  SELECT id FROM range(1, 21)
-                )
-                SELECT total, buffer
-                FROM test_udtf("abc", TABLE(t))
-                """
-            ),
-            [Row(count=20, buffer="abc")],
-        )
+        if have_pyarrow:
+            assertDataFrameEqual(
+                self.spark.sql(
+                    """
+                    WITH t AS (
+                      SELECT id FROM range(1, 21)
+                    )
+                    SELECT total, buffer
+                    FROM test_udtf("abc", TABLE(t))
+                    """
+                ),
+                [Row(count=20, buffer="abc")],
+            )
 
     def test_udtf_with_skip_rest_of_input_table_exception(self):
         @udtf(returnType="current: int, total: int")
@@ -2473,37 +2512,38 @@ class BaseUDTFTestsMixin:
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
-        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
-        # SkipRestOfInputTableException stops scanning rows after the fourth input row is consumed.
-        assertDataFrameEqual(
-            self.spark.sql(
-                """
-                WITH t AS (
-                  SELECT id FROM range(1, 21)
-                )
-                SELECT current, total
-                FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY id)
-                """
-            ),
-            [Row(current=4, total=4)],
-        )
+        if have_pyarrow:
+            # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+            # SkipRestOfInputTableException stops scanning rows after the fourth input row is consumed.
+            assertDataFrameEqual(
+                self.spark.sql(
+                    """
+                    WITH t AS (
+                      SELECT id FROM range(1, 21)
+                    )
+                    SELECT current, total
+                    FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY id)
+                    """
+                ),
+                [Row(current=4, total=4)],
+            )
 
-        # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
-        # SkipRestOfInputTableException stops scanning rows for each of the two partitions
-        # separately.
-        assertDataFrameEqual(
-            self.spark.sql(
-                """
-                WITH t AS (
-                  SELECT id FROM range(1, 21)
-                )
-                SELECT current, total
-                FROM test_udtf(TABLE(t) PARTITION BY floor(id / 10) ORDER BY id)
-                ORDER BY ALL
-                """
-            ),
-            [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
-        )
+            # Run a test case including WITH SINGLE PARTITION on the UDTF call. The
+            # SkipRestOfInputTableException stops scanning rows for each of the two partitions
+            # separately.
+            assertDataFrameEqual(
+                self.spark.sql(
+                    """
+                    WITH t AS (
+                      SELECT id FROM range(1, 21)
+                    )
+                    SELECT current, total
+                    FROM test_udtf(TABLE(t) PARTITION BY floor(id / 10) ORDER BY id)
+                    ORDER BY ALL
+                    """
+                ),
+                [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
+            )
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

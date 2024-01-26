@@ -39,7 +39,12 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pyarrow,
+    test_compiled,
+    test_not_compiled_message,
+)
 from pyspark.testing.utils import QuietTest, assertDataFrameEqual
 
 
@@ -935,7 +940,8 @@ class BaseUDFTestsMixin(object):
             ]
         ):
             with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
     def test_named_arguments_negative(self):
         @udf("int")
@@ -979,7 +985,8 @@ class BaseUDFTestsMixin(object):
             ]
         ):
             with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
         # negative
         with self.assertRaisesRegex(
@@ -1008,7 +1015,8 @@ class BaseUDFTestsMixin(object):
             ]
         ):
             with self.subTest(with_b=False, query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(1)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(0), Row(1)])
 
         # with "b"
         for i, df in enumerate(
@@ -1022,7 +1030,8 @@ class BaseUDFTestsMixin(object):
             ]
         ):
             with self.subTest(with_b=True, query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+                if have_pyarrow:
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
     def test_raise_stop_iteration(self):
         @udf("int")
@@ -1032,9 +1041,10 @@ class BaseUDFTestsMixin(object):
             else:
                 raise StopIteration()
 
-        assertDataFrameEqual(
-            self.spark.range(5).select(test_udf(col("id"))), [Row(i) for i in range(5)]
-        )
+        if have_pyarrow:
+            assertDataFrameEqual(
+                self.spark.range(5).select(test_udf(col("id"))), [Row(i) for i in range(5)]
+            )
 
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
