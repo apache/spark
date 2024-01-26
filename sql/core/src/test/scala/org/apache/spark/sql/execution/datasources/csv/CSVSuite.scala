@@ -348,6 +348,13 @@ abstract class CSVSuite
     }
   }
 
+  test("mode is null") {
+    val df = spark.read.schema("a DOUBLE")
+      .option("mode", null)
+      .csv(Seq("10u12").toDS())
+    assert(df.collect() sameElements Array(Row(null)))
+  }
+
   test("test for blank column names on read and select columns") {
     val cars = spark.read
       .format("csv")
