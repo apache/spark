@@ -30,19 +30,8 @@ import org.apache.spark.util.logging.RollingFileAppender
 private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with Logging {
   private val defaultBytes = 100 * 1024
 
-  def renderLog(request: HttpServletRequest): String = {
-    val logDir = sys.env.getOrElse("SPARK_LOG_DIR", "logs/")
-    val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
-      .getOrElse(defaultBytes)
-    val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
-    val pre = s"==== Bytes $startByte-$endByte of $logLength of $logDir$logType ====\n"
-    pre + logText
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
-    val logDir = sys.env.getOrElse("SPARK_LOG_DIR", ".")
+    val logDir = sys.env.getOrElse("SPARK_LOG_DIR", "logs/")
     val logType = request.getParameter("logType")
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
