@@ -294,6 +294,12 @@ class StreamingTestsMixin:
         self.assertIsInstance(exception, StreamingQueryException)
         self._assert_exception_tree_contains_msg(exception, "ZeroDivisionError")
 
+    # [SPARK-46873] There should only be one StreamingQueryManager for the same spark session.
+    # There should not be a new manager created every time spark.streams is called.
+    def test_query_manager_no_recreation(self):
+        for i in range(5):
+            self.assertTrue(self.spark.streams == self.spark.streams)
+
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()
         for q in self.spark.streams.active:
