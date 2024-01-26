@@ -317,7 +317,8 @@ class UISuite extends SparkFunSuite {
 
       tests.foreach { case (scheme, port, expected) =>
         val urls = Seq(
-//          s"$scheme://$localhost:$port/root",
+//          s"$scheme://$localhost:$port/test3")
+          s"$scheme://$localhost:$port/root",
           s"$scheme://$localhost:$port/test1/root",
           s"$scheme://$localhost:$port/test2/root")
         urls.foreach { url =>
