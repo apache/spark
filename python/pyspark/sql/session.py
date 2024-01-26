@@ -1827,7 +1827,7 @@ class SparkSession(SparkConversionMixin):
 
         if hasattr(self, "_sqm"):
             return self._sqm
-        self._sqm = StreamingQueryManager(self._jsparkSession.streams())
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
         return self._sqm
 
     def stop(self) -> None:
