@@ -676,7 +676,7 @@ class MasterSuite extends SparkFunSuite
     (WORKER_ID, false, Seq("10001")))
 
   workerSelectionPolicyTestCases.foreach { case (policy, spreadOut, expected) =>
-    test(s"SPARK-XXX: scheduling with workerSelectionPolicy - $policy ($spreadOut)") {
+    test(s"SPARK-46881: scheduling with workerSelectionPolicy - $policy ($spreadOut)") {
       val conf = new SparkConf()
         .set(WORKER_SELECTION_POLICY.key, policy.toString)
         .set(SPREAD_OUT_APPS.key, spreadOut.toString)
