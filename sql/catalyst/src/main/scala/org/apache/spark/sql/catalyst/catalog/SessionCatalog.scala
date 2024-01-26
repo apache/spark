@@ -1619,8 +1619,8 @@ class SessionCatalog(
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
     FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT)).orElse {
-      synchronized(lookupTempFuncWithViewContext(
-        name, FunctionRegistry.builtin.functionExists, functionRegistry.lookupFunction))
+      lookupTempFuncWithViewContext(
+        name, FunctionRegistry.builtin.functionExists, functionRegistry.lookupFunction)
     }
   }
 
