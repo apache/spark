@@ -58,6 +58,38 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def close(): Unit = {}
 }
 
+class RunningCountStatefulProcessorWithDeletion
+  extends StatefulProcessor[String, String, (String, String)]
+  with Logging {
+  @transient private var _countState: ValueState[Long] = _
+  @transient var _processorHandle: StatefulProcessorHandle = _
+
+  override def init(
+                     handle: StatefulProcessorHandle,
+                     outputMode: OutputMode) : Unit = {
+    _processorHandle = handle
+    assert(handle.getQueryInfo().getBatchId >= 0)
+    _countState = _processorHandle.getValueState[String, Long]("countState",
+      Encoders.STRING)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _processorHandle.deleteIfExists("countState")
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+
+  override def close(): Unit = {}
+}
+
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
   @transient private var _tempState: ValueState[Long] = _
 
@@ -126,6 +158,32 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         StartStream(),
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
+      )
+    }
+  }
+
+  test("transformWithState - test deleteIfExists operator") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorWithDeletion(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        CheckNewAnswer(("a", "1")),
+        AddData(inputData, "a", "b"),
+        CheckNewAnswer(("a", "2"), ("b", "1")),
+        StopStream,
+        StartStream(),
+        AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
+        CheckNewAnswer(),
+        StopStream
       )
     }
   }
