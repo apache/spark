@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -303,7 +303,11 @@ class GroupbyMissingDataMixin:
                 self.assert_eq(sorted_stats_psdf, sorted_stats_pdf)
 
 
-class GroupbyMissingDataTests(GroupbyMissingDataMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbyMissingDataTests(
+    GroupbyMissingDataMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 
