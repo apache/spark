@@ -2069,6 +2069,7 @@ abstract class CSVSuite
             .option("header", true)
             .option("enforceSchema", false)
             .option("multiLine", multiLine)
+            .option("columnPruning", true)
             .load(dir)
             .select("columnA"),
             Row("a"))
@@ -2079,6 +2080,7 @@ abstract class CSVSuite
             .option("header", true)
             .option("enforceSchema", false)
             .option("multiLine", multiLine)
+            .option("columnPruning", true)
             .load(dir)
             .count() === 1L)
         }
@@ -3102,7 +3104,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 38)
+    assert(CSVOptions.getAllOptions.size == 39)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3142,6 +3144,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("codec"))
     assert(CSVOptions.isValidOption("sep"))
     assert(CSVOptions.isValidOption("delimiter"))
+    assert(CSVOptions.isValidOption("columnPruning"))
     // Please add validation on any new parquet options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
@@ -3150,6 +3153,26 @@ abstract class CSVSuite
     assert(CSVOptions.getAlternativeOption("compression").contains("codec"))
     assert(CSVOptions.getAlternativeOption("codec").contains("compression"))
     assert(CSVOptions.getAlternativeOption("preferDate").isEmpty)
+  }
+
+  test("SPARK-46862: column pruning in the multi-line mode") {
+    val data =
+      """"jobID","Name","City","Active"
+        |"1","DE","","Yes"
+        |"5",",","",","
+        |"3","SA","","No"
+        |"10","abcd""efgh"" \ndef","",""
+        |"8","SE","","No"""".stripMargin
+
+    withTempPath { path =>
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+      val df = spark.read
+        .option("multiline", "true")
+        .option("header", "true")
+        .option("escape", "\"")
+        .csv(path.getCanonicalPath)
+      assert(df.count() === 5)
+    }
   }
 }
 

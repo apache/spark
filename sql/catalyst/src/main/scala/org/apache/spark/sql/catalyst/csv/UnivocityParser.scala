@@ -72,7 +72,7 @@ class UnivocityParser(
   // positions. Generally assigned by input configuration options, except when input column(s) have
   // default values, in which case we omit the explicit indexes in order to know how many tokens
   // were present in each line instead.
-  private def columnPruning: Boolean = options.columnPruning &&
+  private def columnPruning: Boolean = options.isColumnPruningEnabled &&
     !requiredSchema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
 
   // When column pruning is enabled, the parser only parses the required columns based on
