@@ -93,6 +93,7 @@ private[spark] object UI {
     .createWithDefault(true)
 
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
+    .doc("Whether to show a link for executor thread dumps in Stages and Executor pages.")
     .version("1.2.0")
     .booleanConf
     .createWithDefault(true)
@@ -104,6 +105,7 @@ private[spark] object UI {
     .createWithDefault(true)
 
   val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
+    .doc("Whether to show a link for executor heap histogram in Executor page.")
     .version("3.5.0")
     .booleanConf
     .createWithDefault(true)
