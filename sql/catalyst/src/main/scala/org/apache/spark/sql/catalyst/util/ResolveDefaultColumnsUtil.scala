@@ -295,6 +295,20 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
     // Perform implicit coercion from the provided expression type to the required column type.
+    coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
+  }
+
+  /**
+   * Returns the result of type coercion from [[analyzed]] to [[dataType]], or throws an error if
+   * the expression is not coercible.
+   */
+  def coerceDefaultValue(
+      analyzed: Expression,
+      dataType: DataType,
+      statementType: String,
+      colName: String,
+      defaultSQL: String): Expression = {
+    // Perform implicit coercion from the provided expression type to the required column type.
     if (dataType == analyzed.dataType) {
       analyzed
     } else if (Cast.canUpCast(analyzed.dataType, dataType)) {
@@ -327,6 +341,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       }
     }
   }
+
   /**
    * Normalizes a schema field name suitable for use in looking up into maps keyed by schema field
    * names.

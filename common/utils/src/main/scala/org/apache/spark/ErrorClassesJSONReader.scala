@@ -153,3 +153,17 @@ private case class ErrorSubInfo(message: Seq[String]) {
   @JsonIgnore
   val messageTemplate: String = message.mkString("\n")
 }
+
+/**
+ * Information associated with an error state / SQLSTATE.
+ *
+ * @param description What the error state means.
+ * @param origin The DBMS where this error state was first defined.
+ * @param standard Whether this error state is part of the SQL standard.
+ * @param usedBy What database systems use this error state.
+ */
+private case class ErrorStateInfo(
+    description: String,
+    origin: String,
+    standard: String,
+    usedBy: List[String])

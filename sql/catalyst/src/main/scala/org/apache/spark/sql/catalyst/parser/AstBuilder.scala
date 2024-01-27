@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
@@ -3997,6 +3998,22 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
       serdeInfo, external)
 
+    // Parse column defaults from the table into separate expressions in the CREATE TABLE operator.
+    val specifiedDefaults: mutable.Map[Int, Expression] = mutable.Map.empty
+    Option(ctx.createOrReplaceTableColTypeList()).foreach {
+      _.createOrReplaceTableColType().asScala.zipWithIndex.foreach { case (typeContext, index) =>
+        typeContext.colDefinitionOption().asScala.foreach { option =>
+          Option(option.defaultExpression()).foreach { defaultExprContext =>
+            specifiedDefaults.update(index, expression(defaultExprContext.expression()))
+          }
+        }
+      }
+    }
+    val defaultValueExpressions: Seq[Option[Expression]] =
+      (0 until columns.size).map { index: Int =>
+        specifiedDefaults.get(index)
+      }
+
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
         operationNotAllowed(
@@ -4018,7 +4035,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         // with data type.
         val schema = StructType(columns ++ partCols)
         CreateTable(withIdentClause(identifierContext, UnresolvedIdentifier(_)),
-          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists)
+          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists, defaultValueExpressions)
     }
   }
 
