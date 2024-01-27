@@ -348,6 +348,16 @@ abstract class CSVSuite
     }
   }
 
+  test("when mode is null, will fall back to PermissiveMode mode") {
+    val cars = spark.read
+      .format("csv")
+      .options(Map("header" -> "true", "mode" -> null))
+      .load(testFile(carsFile))
+    assert(cars.collect().length == 3)
+    assert(cars.select("make").collect() sameElements
+      Array(Row("Tesla"), Row("Ford"), Row("Chevy")))
+  }
+
   test("test for blank column names on read and select columns") {
     val cars = spark.read
       .format("csv")
