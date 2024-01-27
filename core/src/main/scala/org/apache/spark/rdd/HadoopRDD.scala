@@ -18,10 +18,10 @@
 package org.apache.spark.rdd
 
 import java.io.{FileNotFoundException, IOException}
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
 
-import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -302,7 +302,7 @@ class HadoopRDD[K, V](
       private var reader: RecordReader[K, V] = null
       private val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(
-        new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(createTime),
+        HadoopRDD.DATE_TIME_FORMATTER.format(createTime.toInstant),
         context.stageId(), theSplit.index, context.attemptNumber(), jobConf)
 
       reader =
@@ -425,6 +425,11 @@ private[spark] object HadoopRDD extends Logging {
    * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
    */
   val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyyMMddHHmmss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of

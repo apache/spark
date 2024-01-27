@@ -22,6 +22,8 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
+import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -50,13 +52,15 @@ import org.apache.spark.util.{NextIterator, Utils}
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
+ * @param useColumnFamilies Used to determine whether a single or multiple column families are used
  */
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
-    loggingId: String = "") extends Logging {
+    loggingId: String = "",
+    useColumnFamilies: Boolean = false) extends Logging {
 
   case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
     def close(): Unit = {
@@ -118,6 +122,11 @@ class RocksDB(
     dbOptions.setWriteBufferManager(writeBufferManager)
   }
 
+  // Maintain mapping of column family name to handle
+  @GuardedBy("acquireLock")
+  private val colFamilyNameToHandleMap =
+    scala.collection.mutable.Map[String, ColumnFamilyHandle]()
+
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
   dbOptions.setStatistics(new Statistics())
   private val nativeStats = dbOptions.statistics()
@@ -162,6 +171,8 @@ class RocksDB(
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
 
+        // reset last snapshot version
+        lastSnapshotVersion = 0L
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
@@ -192,7 +203,7 @@ class RocksDB(
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
+      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     this
   }
@@ -202,14 +213,21 @@ class RocksDB(
    */
   private def replayChangelog(endVersion: Long): Unit = {
     for (v <- loadedVersion + 1 to endVersion) {
+      logInfo(s"replaying changelog from version $loadedVersion -> $endVersion")
       var changelogReader: StateStoreChangelogReader = null
       try {
-        changelogReader = fileManager.getChangelogReader(v)
-        changelogReader.foreach { case (key, value) =>
-          if (value != null) {
-            put(key, value)
-          } else {
-            remove(key)
+        changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
+        changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
+          if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
+            createColFamilyIfAbsent(colFamilyName)
+          }
+
+          recordType match {
+            case RecordType.PUT_RECORD =>
+              put(key, value, colFamilyName)
+
+            case RecordType.DELETE_RECORD =>
+              remove(key, colFamilyName)
           }
         }
       } finally {
@@ -219,49 +237,98 @@ class RocksDB(
     loadedVersion = endVersion
   }
 
+  private def checkColFamilyExists(colFamilyName: String): Boolean = {
+    colFamilyNameToHandleMap.contains(colFamilyName)
+  }
+
+  private def verifyColFamilyExists(colFamilyName: String): Unit = {
+    if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
+      throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+    }
+  }
+
+  /**
+   * Create RocksDB column family, if not created already
+   */
+  def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+    if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+      throw new UnsupportedOperationException("Failed to create column family with reserved " +
+        s"name=$colFamilyName")
+    }
+
+    if (!checkColFamilyExists(colFamilyName)) {
+      assert(db != null)
+      val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
+      val handle = db.createColumnFamily(descriptor)
+      colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
+    }
+  }
+
   /**
    * Get the value for the given key if present, or null.
    * @note This will return the last written value even if it was uncommitted.
    */
-  def get(key: Array[Byte]): Array[Byte] = {
-    db.get(readOptions, key)
+  def get(
+      key: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
+    verifyColFamilyExists(colFamilyName)
+    db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
   }
 
   /**
    * Put the given value for the given key.
    * @note This update is not committed to disk until commit() is called.
    */
-  def put(key: Array[Byte], value: Array[Byte]): Unit = {
+  def put(
+      key: Array[Byte],
+      value: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    verifyColFamilyExists(colFamilyName)
     if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(readOptions, key)
+      val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
       if (oldValue == null) {
         numKeysOnWritingVersion += 1
       }
     }
-    db.put(writeOptions, key, value)
-    changelogWriter.foreach(_.put(key, value))
+
+    db.put(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
+    if (useColumnFamilies) {
+      changelogWriter.foreach(_.put(key, value, colFamilyName))
+    } else {
+      changelogWriter.foreach(_.put(key, value))
+    }
   }
 
   /**
    * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte]): Unit = {
+  def remove(
+      key: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    verifyColFamilyExists(colFamilyName)
     if (conf.trackTotalNumberOfRows) {
-      val value = db.get(readOptions, key)
+      val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
       if (value != null) {
         numKeysOnWritingVersion -= 1
       }
     }
-    db.delete(writeOptions, key)
-    changelogWriter.foreach(_.delete(key))
+    db.delete(colFamilyNameToHandleMap(colFamilyName), writeOptions, key)
+    if (useColumnFamilies) {
+      changelogWriter.foreach(_.delete(key, colFamilyName))
+    } else {
+      changelogWriter.foreach(_.delete(key))
+    }
   }
 
   /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
-  def iterator(): Iterator[ByteArrayPair] = {
-    val iter = db.newIterator()
+  def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+    Iterator[ByteArrayPair] = {
+    verifyColFamilyExists(colFamilyName)
+
+    val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
     logInfo(s"Getting iterator from version $loadedVersion")
     iter.seekToFirst()
 
@@ -287,8 +354,10 @@ class RocksDB(
     }
   }
 
-  private def countKeys(): Long = {
-    val iter = db.newIterator()
+  private def countKeys(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Long = {
+    verifyColFamilyExists(colFamilyName)
+    val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+
     try {
       logInfo(s"Counting keys - getting iterator from version $loadedVersion")
 
@@ -306,8 +375,10 @@ class RocksDB(
     }
   }
 
-  def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
-    val iter = db.newIterator()
+  def prefixScan(prefix: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+    Iterator[ByteArrayPair] = {
+    verifyColFamilyExists(colFamilyName)
+    val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
     iter.seek(prefix)
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
@@ -351,11 +422,21 @@ class RocksDB(
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
         logInfo(s"Flushing updates for $newVersion")
-        flushTimeMs = timeTakenMs { db.flush(flushOptions) }
+        flushTimeMs = timeTakenMs {
+          // Flush updates to all available column families
+          assert(!colFamilyNameToHandleMap.isEmpty)
+          db.flush(flushOptions, colFamilyNameToHandleMap.values.toSeq.asJava)
+        }
+
         if (conf.compactOnCommit) {
           logInfo("Compacting")
-          compactTimeMs = timeTakenMs { db.compactRange() }
+          compactTimeMs = timeTakenMs {
+            // Perform compaction on all available column families
+            assert(!colFamilyNameToHandleMap.isEmpty)
+            colFamilyNameToHandleMap.values.foreach(db.compactRange(_))
+          }
         }
+
         checkpointTimeMs = timeTakenMs {
           val checkpointDir = createTempDir("checkpoint")
           logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
@@ -605,17 +686,48 @@ class RocksDB(
   }
 
   private def getDBProperty(property: String): Long = {
-    db.getProperty(property).toLong
+    // get cumulative sum across all available column families
+    assert(!colFamilyNameToHandleMap.isEmpty)
+    colFamilyNameToHandleMap
+      .values
+      .map(handle => db.getProperty(handle, property).toLong)
+      .sum
   }
 
   private def openDB(): Unit = {
     assert(db == null)
-    db = NativeRocksDB.open(dbOptions, workingDir.toString)
+    val colFamilies = NativeRocksDB.listColumnFamilies(dbOptions, workingDir.toString)
+
+    var colFamilyDescriptors = new ArrayBuffer[ColumnFamilyDescriptor]
+    // populate the list of available col family descriptors
+    colFamilies.asScala.toList.foreach { family =>
+      val descriptor = new ColumnFamilyDescriptor(family, columnFamilyOptions)
+      colFamilyDescriptors += descriptor
+    }
+
+    if (colFamilyDescriptors.isEmpty) {
+      colFamilyDescriptors += new ColumnFamilyDescriptor(NativeRocksDB.DEFAULT_COLUMN_FAMILY,
+        columnFamilyOptions)
+    }
+
+    val colFamilyHandles = new java.util.ArrayList[ColumnFamilyHandle]()
+    db = NativeRocksDB.open(new DBOptions(dbOptions), workingDir.toString,
+      colFamilyDescriptors.asJava, colFamilyHandles)
+
+    // Store the mapping of names to handles in the internal map
+    colFamilyHandles.asScala.toList.foreach { handle =>
+      colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
+    }
     logInfo(s"Opened DB with conf ${conf}")
   }
 
   private def closeDB(): Unit = {
     if (db != null) {
+      // Close the column family handles in case multiple column families are used
+      colFamilyNameToHandleMap.values.map(handle => handle.close)
+      colFamilyNameToHandleMap.clear()
+
+      // Close the DB instance
       db.close()
       db = null
     }

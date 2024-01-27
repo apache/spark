@@ -21,7 +21,11 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameParityCombineTests(FrameCombineMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
+class FrameParityCombineTests(
+    FrameCombineMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedAttribute, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -3952,19 +3952,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "expectedSchema" -> toSQLType(expectedSchema)))
   }
 
-  def cannotResolveColumn(u: UnresolvedAttribute): Throwable = {
+  def cannotResolveDataFrameColumn(e: Expression): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
-      messageParameters = Map("name" -> toSQLId(u.nameParts)),
-      origin = u.origin
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
     )
   }
 
-  def ambiguousColumnReferences(u: UnresolvedAttribute): Throwable = {
+  def ambiguousColumnReferences(e: Expression): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
-      messageParameters = Map("name" -> toSQLId(u.nameParts)),
-      origin = u.origin
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
     )
   }
 }

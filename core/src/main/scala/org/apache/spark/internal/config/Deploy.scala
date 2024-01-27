@@ -97,10 +97,34 @@ private[spark] object Deploy {
     .intConf
     .createWithDefault(10)
 
-  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOut")
-    .version("0.6.1")
+  val SPREAD_OUT_DRIVERS = ConfigBuilder("spark.deploy.spreadOutDrivers")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOutApps")
+    .version("0.6.1")
+    .withAlternative("spark.deploy.spreadOut")
+    .booleanConf
+    .createWithDefault(true)
+
+  object WorkerSelectionPolicy extends Enumeration {
+    val CORES_FREE_ASC, CORES_FREE_DESC, MEMORY_FREE_ASC, MEMORY_FREE_DESC, WORKER_ID = Value
+  }
+
+  val WORKER_SELECTION_POLICY = ConfigBuilder("spark.deploy.workerSelectionPolicy")
+    .doc("A policy to assign executors on one of the assignable workers; " +
+      "CORES_FREE_ASC to choose a worker with the least free cores, " +
+      "CORES_FREE_DESC to choose a worker with the most free cores, " +
+      "MEMORY_FREE_ASC to choose a worker with the least free memory, " +
+      "MEMORY_FREE_DESC to choose a worker with the most free memory, " +
+      "WORKER_ID to choose a worker with the smallest worker id. " +
+      "CORES_FREE_DESC is the default behavior.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(WorkerSelectionPolicy.values.map(_.toString))
+    .createWithDefault(WorkerSelectionPolicy.CORES_FREE_DESC.toString)
 
   val DEFAULT_CORES = ConfigBuilder("spark.deploy.defaultCores")
     .version("0.9.0")

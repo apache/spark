@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -325,8 +326,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: $funcName")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
 
@@ -335,8 +339,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction(funcName)) {
         super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
 
@@ -349,9 +356,11 @@ abstract class JdbcDialect extends Serializable with Logging {
         super.visitInverseDistributionFunction(
           dialectFunctionName(funcName), isDistinct, inputs, orderingWithinGroups)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support " +
-            s"inverse distribution function: $funcName")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3178",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
 
@@ -361,8 +370,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction("OVERLAY")) {
         super.visitOverlay(inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> "OVERLAY"))
       }
     }
 
@@ -370,8 +382,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction("TRIM")) {
         super.visitTrim(direction, inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: TRIM")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> "TRIM"))
       }
     }
   }
@@ -602,7 +617,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
-    throw new UnsupportedOperationException("createIndex is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3179")
   }
 
   /**
@@ -619,7 +634,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       indexName: String,
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
-    throw new UnsupportedOperationException("indexExists is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3180")
   }
 
   /**
@@ -630,7 +645,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return the SQL statement to use for dropping the index.
    */
   def dropIndex(indexName: String, tableIdent: Identifier): String = {
-    throw new UnsupportedOperationException("dropIndex is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3181")
   }
 
   /**
@@ -640,7 +655,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       conn: Connection,
       tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
-    throw new UnsupportedOperationException("listIndexes is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3182")
   }
 
   /**
@@ -716,7 +731,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =
-    throw new UnsupportedOperationException("TableSample is not supported by this data source")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   /**
    * Return the DB-specific quoted and fully qualified table name

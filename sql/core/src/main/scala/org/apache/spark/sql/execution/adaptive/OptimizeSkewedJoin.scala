@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
@@ -260,7 +261,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 // caused by skew join optimization. However, this shouldn't apply to the sub-plan under skew join,
 // as it's guaranteed to satisfy distribution requirement.
 case class SkewJoinChildWrapper(plan: SparkPlan) extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = plan.outputOrdering

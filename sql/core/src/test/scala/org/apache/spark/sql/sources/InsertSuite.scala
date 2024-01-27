@@ -2077,7 +2077,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             "colName" -> "`s`",
             "expectedType" -> "\"STRUCT<x: BOOLEAN, y: STRING>\"",
             "defaultValue" -> "struct(42, 56)",
-            "actualType" -> "\"STRUCT<col1: INT, col2: INT>\""))
+            "actualType" -> "\"STRUCT<col1: INT NOT NULL, col2: INT NOT NULL>\""))
       }
     }
   }
