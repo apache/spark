@@ -222,8 +222,7 @@ if has_memory_profiler:
                 measures = self[code]
                 if not measures:
                     continue  # skip if no measurement
-                linenos = range(min(measures), max(measures) + 1)
-                line_iterator = ((line, measures.get(line)) for line in linenos)
+                line_iterator = ((line, measures[line]) for line in measures.keys())
                 yield (filename, line_iterator)
 
     class UDFLineProfiler(LineProfiler):
@@ -477,10 +476,14 @@ class MemoryProfiler(Profiler):
 
             float_format = "{0}.{1}f".format(precision + 4, precision)
             template_mem = "{0:" + float_format + "} MiB"
-            for lineno, mem in lines:
+
+            lines_dict = {line[0]: line[1] for line in lines}
+            linenos = range(min(lines_dict), max(lines_dict) + 1)
+            for lineno in linenos:
                 total_mem: Union[float, str]
                 inc: Union[float, str]
                 occurrences: Union[float, str]
+                mem = lines_dict.get(lineno)
                 if mem:
                     inc = mem[0]
                     total_mem = mem[1]
