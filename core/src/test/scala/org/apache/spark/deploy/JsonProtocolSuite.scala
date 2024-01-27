@@ -105,6 +105,20 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
   }
 
+  test("SPARK-46883: writeClusterUtilization") {
+    val workers = Array(createWorkerInfo(), createWorkerInfo())
+    val activeApps = Array(createAppInfo())
+    val completedApps = Array.empty[ApplicationInfo]
+    val activeDrivers = Array(createDriverInfo())
+    val completedDrivers = Array(createDriverInfo())
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, workers, activeApps, completedApps,
+      activeDrivers, completedDrivers, RecoveryState.ALIVE)
+    val output = JsonProtocol.writeClusterUtilization(stateResponse)
+    assertValidJson(output)
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.clusterUtilizationJsonStr))
+  }
+
   def assertValidJson(json: JValue): Unit = {
     try {
       JsonMethods.parse(JsonMethods.compact(json))
@@ -206,4 +220,11 @@ object JsonConstants {
       |"executors":[],
       |"finishedexecutors":[%s,%s]}
     """.format(executorRunnerJsonStr, executorRunnerJsonStr).stripMargin
+
+  val clusterUtilizationJsonStr =
+    """
+      |{"waitingDrivers":1,
+      |"cores":8,"coresused":0,"coresutilization":0,
+      |"memory":2468,"memoryused":0,"memoryutilization":0}
+    """.stripMargin
 }
