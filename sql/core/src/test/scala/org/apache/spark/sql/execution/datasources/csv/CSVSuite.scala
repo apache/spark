@@ -3166,12 +3166,15 @@ abstract class CSVSuite
 
     withTempPath { path =>
       Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
-      val df = spark.read
-        .option("multiline", "true")
-        .option("header", "true")
-        .option("escape", "\"")
-        .csv(path.getCanonicalPath)
-      assert(df.count() === 5)
+      Seq(true, false).foreach { enforceSchema =>
+        val df = spark.read
+          .option("multiLine", true)
+          .option("header", true)
+          .option("escape", "\"")
+          .option("enforceSchema", enforceSchema)
+          .csv(path.getCanonicalPath)
+        assert(df.count() === 5)
+      }
     }
   }
 }
