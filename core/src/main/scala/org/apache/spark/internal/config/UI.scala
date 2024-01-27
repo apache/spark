@@ -114,7 +114,7 @@ private[spark] object UI {
       "For master/worker/driver metrics, you need to configure `conf/metrics.properties`.")
     .version("3.0.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
     .doc("Value for HTTP X-XSS-Protection response header")
