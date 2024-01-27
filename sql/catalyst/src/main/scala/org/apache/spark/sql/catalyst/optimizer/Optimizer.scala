@@ -1836,6 +1836,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
     case _: Expand => true
+    case _: TypedFilter => true
     case _ => false
   }
 
