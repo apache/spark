@@ -88,10 +88,14 @@ val sc = new SparkContext(new SparkConf())
 {% endhighlight %}
 
 Then, you can supply configuration values at runtime:
-{% highlight bash %}
-./bin/spark-submit --name "My app" --master local[4] --conf spark.eventLog.enabled=false
-  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" myApp.jar
-{% endhighlight %}
+```sh
+./bin/spark-submit \
+  --name "My app" \
+  --master local[4] \
+  --conf spark.eventLog.enabled=false \
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
+  myApp.jar
+```
 
 The Spark shell and [`spark-submit`](submitting-applications.html)
 tool support two ways to load configurations dynamically. The first is command line options,
@@ -3708,9 +3712,9 @@ Also, you can modify or add configurations at runtime:
 GPUs and other accelerators have been widely used for accelerating special workloads, e.g.,
 deep learning and signal processing. Spark now supports requesting and scheduling generic resources, such as GPUs, with a few caveats. The current implementation requires that the resource have addresses that can be allocated by the scheduler. It requires your cluster manager to support and be properly configured with the resources.
 
-There are configurations available to request resources for the driver: <code>spark.driver.resource.{resourceName}.amount</code>, request resources for the executor(s): <code>spark.executor.resource.{resourceName}.amount</code> and specify the requirements for each task: <code>spark.task.resource.{resourceName}.amount</code>. The <code>spark.driver.resource.{resourceName}.discoveryScript</code> config is required on YARN, Kubernetes and a client side Driver on Spark Standalone. <code>spark.executor.resource.{resourceName}.discoveryScript</code> config is required for YARN and Kubernetes. Kubernetes also requires <code>spark.driver.resource.{resourceName}.vendor</code> and/or <code>spark.executor.resource.{resourceName}.vendor</code>. See the config descriptions above for more information on each.
+There are configurations available to request resources for the driver: `spark.driver.resource.{resourceName}.amount`, request resources for the executor(s): `spark.executor.resource.{resourceName}.amount` and specify the requirements for each task: `spark.task.resource.{resourceName}.amount`. The `spark.driver.resource.{resourceName}.discoveryScript` config is required on YARN, Kubernetes and a client side Driver on Spark Standalone. `spark.executor.resource.{resourceName}.discoveryScript` config is required for YARN and Kubernetes. Kubernetes also requires `spark.driver.resource.{resourceName}.vendor` and/or `spark.executor.resource.{resourceName}.vendor`. See the config descriptions above for more information on each.
 
-Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
+Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the `TaskContext.get().resources` api. On the driver, the user can see the resources assigned with the SparkContext `resources` call. It's then up to the user to use the assigned addresses to do the processing they want or pass those into the ML/AI framework they are using.
 
 See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with local mode. And please also note that local-cluster mode with multiple workers is not supported(see Standalone documentation).
 
