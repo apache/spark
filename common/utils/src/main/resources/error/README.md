@@ -16,7 +16,7 @@ The error state / SQLSTATE itself is comprised of two parts:
 2. Error sub-class
 
 Acceptable values for these various error parts are defined in the following files:
-* `error-categories.json`
+* `error-classes.json`
 * `error-states.json`
 * `error-conditions.json`
 
