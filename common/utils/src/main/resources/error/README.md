@@ -1,46 +1,62 @@
 # Guidelines for Throwing User-Facing Errors
 
-To throw a standardized user-facing error or exception, developers should specify the error class, a SQLSTATE,
-and message parameters rather than an arbitrary error message.
+To throw a user-facing error or exception, developers should specify a standardized SQLSTATE, an error condition, and message parameters rather than an arbitrary error message.
 
-## Terminology
+This guide will describe how to do this.
 
-Though we will mainly talk about "error classes" in front of users, user-facing errors having many parts.
+## Error Hierarchy and Terminology
 
-The hierarchy is as follows:
-1. Error category
-2. Error sub-category
-3. Error state / SQLSTATE
-4. Error class
-5. Error sub-class
+The error hierarchy is as follows:
+1. Error state / SQLSTATE
+2. Error condition
+3. Error sub-condition
 
-The 5-character error state is simply the concatenation of the 2-character category with the 3-character sub-category.
+The error state / SQLSTATE itself is comprised of two parts:
+1. Error class
+2. Error sub-class
 
-Here is an example:
-* Error category: `42` - "Syntax Error or Access Rule Violation"
-* Error sub-category: `K01`
-* Error state / SQLSTATE: `42K01` - "data type not fully specified"
-  * Error class: `INCOMPLETE_TYPE_DEFINITION`
-    * Error sub-class: `ARRAY`
-    * Error sub-class: `MAP`
-    * Error sub-class: `STRUCT`
-  * Error class: `DATATYPE_MISSING_SIZE`
+Acceptable values for these various error parts are defined in the following files:
+* `error-categories.json`
+* `error-states.json`
+* `error-classes.json`
 
+### Illustrative Example
+* Error state / SQLSTATE: `42K01` (Class: `42`; Sub-class: `K01`)
+  * Error condition: `DATATYPE_MISSING_SIZE`
+  * Error condition: `INCOMPLETE_TYPE_DEFINITION`
+    * Error sub-condition: `ARRAY`
+    * Error sub-condition: `MAP`
+    * Error sub-condition: `STRUCT`
+* Error state / SQLSTATE: `42604` (Class: `42`; Sub-class: `604`)
+  * Error condition: `INVALID_ESCAPE_CHAR`
+  * Error condition: `AS_OF_JOIN`
+    * Error sub-condition: `TOLERANCE_IS_NON_NEGATIVE`
+    * Error sub-condition: `TOLERANCE_IS_UNFOLDABLE`
+
+### Inconsistent Use of the Term "Error Class"
+
+Unfortunately, we have historically used the term "error class" inconsistently to refer both to a proper error class like `42` and also to an error condition like `DATATYPE_MISSING_SIZE`.
+
+Fixing this would require renaming `SparkException.errorClass` to `SparkException.errorCondition` and making similar changes to `ErrorClassesJsonReader` and other parts of the codebase. This may not be practical or even possible, depending on the impact of such a change on Spark's public API.
+
+Unless and until we refactor the codebase to bring it in line with the proper error terminology, we will have to live with the fact that a string like `DATATYPE_MISSING_SIZE` is called an "error condition" in our user-facing documentation but an "error class" in the code.
+
+For more details, please see [SPARK-46810][SPARK-46810].
+
+[SPARK-46810]: https://issues.apache.org/jira/browse/SPARK-46810
 
 ## Usage
 
 1. Check if the error is an internal error.
    Internal errors are bugs in the code that we do not expect users to encounter; this does not include unsupported operations.
-   If true, use the error class `INTERNAL_ERROR` and skip to step 4.
-2. Check if an appropriate error class already exists in `error-classes.json`.
-   If true, use the error class and skip to step 4.
-3. Add a new class with a new or existing SQLSTATE to `error-classes.json`; keep in mind the invariants below, which are also [checked here][error-invariants].
+   If true, use the error condition `INTERNAL_ERROR` and skip to step 4.
+2. Check if an appropriate error condition already exists in `error-classes.json`.
+   If true, use the error condition and skip to step 4.
+3. Add a new condition to `error-classes.json`. If the new condition requires a new error state, add the new error state to `error-states.json`.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
-6. Throw the exception with the error class and message parameters. If the same exception is thrown in several places, create an util function in a central place such as `QueryCompilationErrors.scala` to instantiate the exception.
-
-[error-invariants]: https://github.com/apache/spark/blob/40574bb36647a35d7ac1fe8b7b1efcb98b058065/core/src/test/scala/org/apache/spark/SparkThrowableSuite.scala#L138-L141
+6. Throw the exception with the error condition and message parameters. If the same exception is thrown in several places, create an util function in a central place such as `QueryCompilationErrors.scala` to instantiate the exception.
 
 ### Before
 
@@ -77,16 +93,16 @@ class SparkTestException(
 }
 ```
 
-Throw with error class and message parameters:
+Throw with error condition and message parameters:
 
 ```scala
 throw new SparkTestException("PROBLEM_BECAUSE", Map("problem" -> "A", "cause" -> "B"))
 ```
 
-## Access fields
+### Access fields
 
 To access error fields, catch exceptions that extend `org.apache.spark.SparkThrowable` and access
-  - Error class with `getErrorClass`
+  - Error condition with `getErrorClass`
   - SQLSTATE with `getSqlState`
 
 ```scala
@@ -100,13 +116,15 @@ try {
 
 ## Fields
 
-### Error class
+### Error condition
 
-Error classes are a succinct, human-readable representation of the error category.
+Error conditions are a succinct, human-readable representation of the error category.
 
-An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
+An uncategorized errors can be assigned to a legacy error condition with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
 You should not introduce new uncategorized errors. Instead, convert them to proper errors whenever encountering them in new code.
+
+**Note:** Though the proper term for this field is an "error condition", it is called `errorClass` in the codebase due to an unfortunate accident of history. For more details, please refer to [SPARK-46810].
 
 #### Invariants
 
@@ -131,13 +149,13 @@ The quality of the error message should match the
 
 ### SQLSTATE
 
-SQLSTATE is an mandatory portable error identifier across SQL engines.
-SQLSTATE comprises a 2-character category followed by a 3-character sub-category.
+SQLSTATE is a mandatory portable error identifier across SQL engines.
+SQLSTATE comprises a 2-character class followed by a 3-character sub-class.
 Spark prefers to re-use existing SQLSTATEs, preferably used by multiple vendors.
-For extension Spark claims the `K**` sub-category range.
-If a new category is needed it will also claim the `K0` category.
+For extension Spark claims the `K**` sub-class range.
+If a new class is needed it will also claim the `K0` class.
 
-Internal errors should use the `XX` category. You can subdivide internal errors by component.
+Internal errors should use the `XX` class. You can subdivide internal errors by component.
 For example: The existing `XXKD0` is used for an internal analyzer error.
 
 #### Invariants
