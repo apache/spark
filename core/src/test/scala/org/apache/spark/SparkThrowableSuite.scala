@@ -168,7 +168,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     checkIfUnique(messageFormats)
   }
 
-  // TODO: Delete
   test("Error classes match with document") {
     val errors = errorReader.errorInfoMap
 
