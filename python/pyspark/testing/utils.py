@@ -768,6 +768,7 @@ def assertDataFrameEqual(
 
     if has_pandas:
         import pyspark.pandas as ps
+
         if (
             isinstance(actual, pd.DataFrame)
             or isinstance(expected, pd.DataFrame)
