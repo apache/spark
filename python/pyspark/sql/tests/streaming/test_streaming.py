@@ -314,6 +314,11 @@ class StreamingTestsMixin:
             e = e.cause
             contains = msg in e.desc
         self.assertTrue(contains, "Exception tree doesn't contain the expected message: %s" % msg)
+    def test_query_manager_no_recreation(self):
+        # SPARK-46873: There should not be a new StreamingQueryManager created every time
+        # spark.streams is called.
+        for i in range(5):
+            self.assertTrue(self.spark.streams == self.spark.streams)
 
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()

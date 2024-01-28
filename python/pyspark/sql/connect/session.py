@@ -683,7 +683,10 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        return StreamingQueryManager(self)
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self)
+        return self._sqm
 
     streams.__doc__ = PySparkSession.streams.__doc__
 

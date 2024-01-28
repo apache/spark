@@ -1776,7 +1776,10 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        return StreamingQueryManager(self._jsparkSession.streams())
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
+        return self._sqm
 
     def stop(self) -> None:
         """
