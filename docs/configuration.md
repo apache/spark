@@ -1426,6 +1426,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.groupSQLSubExecutionEnabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to group sub executions together in SQL UI when they belong to the same root execution
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.enabled</code></td>
   <td>true</td>
   <td>
@@ -1449,6 +1457,30 @@ Apart from these, the following properties are also available, and may be useful
     Allows jobs and stages to be killed from the web UI.
   </td>
   <td>1.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.threadDumpsEnabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to show a link for executor thread dumps in Stages and Executor pages.
+  </td>
+  <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.threadDump.flamegraphEnabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to render the Flamegraph for executor thread dumps.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.heapHistogramEnabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to show a link for executor heap histogram in Executor page.
+  </td>
+  <td>3.5.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.liveUpdate.period</code></td>
@@ -1569,6 +1601,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.2.1</td>
 </tr>
 <tr>
+  <td><code>spark.ui.consoleProgress.update.interval</code></td>
+  <td>200</td>
+  <td>
+    An interval in milliseconds to update the progress bar in the console.
+  </td>
+  <td>2.1.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.custom.executor.log.url</code></td>
   <td>(none)</td>
   <td>
@@ -1581,6 +1621,14 @@ Apart from these, the following properties are also available, and may be useful
     permanent, otherwise you might have dead link for executor log urls.
     <p/>
     For now, only YARN mode supports this configuration
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.prometheus.enabled</code></td>
+  <td>true</td>
+  <td>
+    Expose executor metrics at /metrics/executors/prometheus at driver web page. 
   </td>
   <td>3.0.0</td>
 </tr>

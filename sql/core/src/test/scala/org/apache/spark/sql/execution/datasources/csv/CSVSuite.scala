@@ -348,6 +348,16 @@ abstract class CSVSuite
     }
   }
 
+  test("when mode is null, will fall back to PermissiveMode mode") {
+    val cars = spark.read
+      .format("csv")
+      .options(Map("header" -> "true", "mode" -> null))
+      .load(testFile(carsFile))
+    assert(cars.collect().length == 3)
+    assert(cars.select("make").collect() sameElements
+      Array(Row("Tesla"), Row("Ford"), Row("Chevy")))
+  }
+
   test("test for blank column names on read and select columns") {
     val cars = spark.read
       .format("csv")
@@ -3227,12 +3237,15 @@ abstract class CSVSuite
 
     withTempPath { path =>
       Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
-      val df = spark.read
-        .option("multiline", "true")
-        .option("header", "true")
-        .option("escape", "\"")
-        .csv(path.getCanonicalPath)
-      assert(df.count() === 5)
+      Seq(true, false).foreach { enforceSchema =>
+        val df = spark.read
+          .option("multiLine", true)
+          .option("header", true)
+          .option("escape", "\"")
+          .option("enforceSchema", enforceSchema)
+          .csv(path.getCanonicalPath)
+        assert(df.count() === 5)
+      }
     }
   }
 }
