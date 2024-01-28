@@ -24,7 +24,10 @@ import org.apache.spark.{ErrorClassesJsonReader, SparkException}
 object KafkaExceptions {
   private val errorClassesJsonReader: ErrorClassesJsonReader =
     new ErrorClassesJsonReader(
-      Seq(getClass.getClassLoader.getResource("error/kafka-error-classes.json")))
+      // Note that though we call them "error classes" here, the proper name is "error conditions",
+      // hence why the name of the JSON file different.
+      // For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
+      Seq(getClass.getClassLoader.getResource("error/kafka-error-conditions.json")))
 
   def mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
       tpsForPrefetched: Set[TopicPartition],

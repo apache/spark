@@ -56,7 +56,10 @@ class SparkThrowableSuite extends SparkFunSuite {
    }}}
    */
   private val errorJsonFilePath = getWorkspaceFilePath(
-    "common", "utils", "src", "main", "resources", "error", "error-classes.json")
+    // Note that though we call them "error classes" here, the proper name is "error conditions",
+    // hence why the name of the JSON file different.
+    // For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
+    "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
 
   private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
 
@@ -162,6 +165,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     checkIfUnique(messageFormats)
   }
 
+  // TODO: Delete
   test("Error classes match with document") {
     val errors = errorReader.errorInfoMap
 

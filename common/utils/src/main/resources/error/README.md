@@ -18,7 +18,7 @@ The error state / SQLSTATE itself is comprised of two parts:
 Acceptable values for these various error parts are defined in the following files:
 * `error-categories.json`
 * `error-states.json`
-* `error-classes.json`
+* `error-conditions.json`
 
 ### Illustrative Example
 * Error state / SQLSTATE: `42K01` (Class: `42`; Sub-class: `K01`)
@@ -50,9 +50,9 @@ For more details, please see [SPARK-46810][SPARK-46810].
 1. Check if the error is an internal error.
    Internal errors are bugs in the code that we do not expect users to encounter; this does not include unsupported operations.
    If true, use the error condition `INTERNAL_ERROR` and skip to step 4.
-2. Check if an appropriate error condition already exists in `error-classes.json`.
+2. Check if an appropriate error condition already exists in `error-conditions.json`.
    If true, use the error condition and skip to step 4.
-3. Add a new condition to `error-classes.json`. If the new condition requires a new error state, add the new error state to `error-states.json`.
+3. Add a new condition to `error-conditions.json`. If the new condition requires a new error state, add the new error state to `error-states.json`.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
@@ -68,7 +68,7 @@ throw new TestException("Problem A because B")
 
 ### After
 
-`error-classes.json`
+`error-conditions.json`
 
 ```json
 "PROBLEM_BECAUSE" : {
