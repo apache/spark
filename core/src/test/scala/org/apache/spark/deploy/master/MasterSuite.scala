@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.IOException
+import java.net.{HttpURLConnection, URL}
 import java.util.Date
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
@@ -447,16 +447,18 @@ class MasterSuite extends SparkFunSuite
 
   test("SPARK-46888: master should reject worker kill request if decommision is disabled") {
     implicit val formats = org.json4s.DefaultFormats
-    val conf = new SparkConf().set(DECOMMISSION_ENABLED, false)
-    val localCluster = LocalSparkCluster(2, 2, 512, conf)
+    val conf = new SparkConf()
+      .set(DECOMMISSION_ENABLED, false)
+      .set(MASTER_UI_DECOMMISSION_ALLOW_MODE, "ALLOW")
+    val localCluster = LocalSparkCluster(1, 1, 512, conf)
     localCluster.start()
     val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
     try {
-      eventually(timeout(50.seconds), interval(100.milliseconds)) {
-        val m = intercept[IOException] {
-          Source.fromURL(s"$masterUrl/workers/kill/?host=127.0.0.1")
-        }.getMessage
-        m should include ("Server returned HTTP response code: 405")
+      eventually(timeout(30.seconds), interval(100.milliseconds)) {
+        val url = new URL(s"$masterUrl/workers/kill/?host=${Utils.localHostNameForURI()}")
+        val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+        conn.setRequestMethod("POST")
+        assert(conn.getResponseCode === 405)
       }
     } finally {
       localCluster.stop()
