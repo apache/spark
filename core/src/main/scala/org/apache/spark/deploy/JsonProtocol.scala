@@ -315,6 +315,6 @@ private[deploy] object JsonProtocol {
     ("coresutilization" -> (if (cores == 0) 100 else 100 * coresUsed / cores)) ~
     ("memory" -> memory) ~
     ("memoryused" -> memoryUsed) ~
-    ("memoryutilization" -> (if (cores == 0) 100 else 100 * memoryUsed / memory))
+    ("memoryutilization" -> (if (memory == 0) 100 else 100 * memoryUsed / memory))
   }
 }
