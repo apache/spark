@@ -126,7 +126,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Error class and error state / SQLSTATE invariants") {
-    // Unlike in the rest of the codebase, the term "error class" is used as it is in our
+    // Unlike in the rest of the codebase, the term "error class" is used here as it is in our
     // documentation as well as in the SQL standard.
     // For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
     val errorClassesJson = Utils.getSparkClassLoader.getResource("error/error-classes.json")

@@ -20,6 +20,8 @@ Acceptable values for these various error parts are defined in the following fil
 * `error-states.json`
 * `error-conditions.json`
 
+The terms error class, state, and condition come from the SQL standard.
+
 ### Illustrative Example
 * Error state / SQLSTATE: `42K01` (Class: `42`; Sub-class: `K01`)
   * Error condition: `DATATYPE_MISSING_SIZE`
