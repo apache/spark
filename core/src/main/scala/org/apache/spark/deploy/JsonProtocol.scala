@@ -312,9 +312,9 @@ private[deploy] object JsonProtocol {
     ("waitingDrivers" -> obj.activeDrivers.count(_.state == DriverState.SUBMITTED)) ~
     ("cores" -> cores) ~
     ("coresused" -> coresUsed) ~
-    ("coresutilization" -> 100 * coresUsed / cores) ~
+    ("coresutilization" -> (if (cores == 0) 100 else 100 * coresUsed / cores)) ~
     ("memory" -> memory) ~
     ("memoryused" -> memoryUsed) ~
-    ("memoryutilization" -> 100 * memoryUsed / memory)
+    ("memoryutilization" -> (if (memory == 0) 100 else 100 * memoryUsed / memory))
   }
 }
