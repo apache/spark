@@ -555,7 +555,6 @@ class BaseUDTFTestsMixin:
                 yield a + int(random.random()),
 
         random_udtf = udtf(RandomUDTF, returnType="x: int")
-
         assertDataFrameEqual(random_udtf(lit(1)), [Row(x=1)])
         self.spark.udtf.register("random_udtf", random_udtf)
         assertDataFrameEqual(self.spark.sql("select * from random_udtf(1)"), [Row(x=1)])
