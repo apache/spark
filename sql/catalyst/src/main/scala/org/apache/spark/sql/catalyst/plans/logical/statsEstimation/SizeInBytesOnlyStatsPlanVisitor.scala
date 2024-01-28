@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 /**
  * An [[LogicalPlanVisitor]] that computes a single dimension for plan stats: size in bytes.
  */
-object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
+case class SizeInBytesOnlyStatsPlanVisitor() extends LogicalPlanStatisticsVisitor {
 
   /**
    * A default, commonly used estimation for unary nodes. We assume the input row number is the
