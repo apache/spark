@@ -241,6 +241,7 @@ private[spark] object UI {
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(Set("ALLOW", "LOCAL", "DENY"))
     .createWithDefault("LOCAL")
 
   val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
