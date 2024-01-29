@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Encoders, SaveMode}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, MemoryStateStore, RocksDBStateStoreProvider, TransformWithStateMultipleColumnFamilies}
 import org.apache.spark.sql.internal.SQLConf
 
 object TransformWithStateSuiteUtils {
@@ -166,5 +166,15 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         (t: Throwable) => { assert(t.getCause.getMessage.contains("not supported")) }
       }
     )
+  }
+
+  test("transformWithState - creating colFamily with MemoryStateStore should fail") {
+    val stateStore = new MemoryStateStore()
+    val ex = intercept[TransformWithStateMultipleColumnFamilies] {
+      stateStore.createColFamilyIfAbsent("testColFamily")
+    }
+
+    assert(ex.getMessage.contains("Creating multiple column families with" +
+      " MemoryStateStoreProvider is not supported"))
   }
 }
