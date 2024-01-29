@@ -1127,7 +1127,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   test("Retain empty proto fields when retain.empty.message.types=true") {
     // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained as
     // a field by inserting a dummy column as sub column.
-    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
+    val options = Map("retain.empty.message.types" -> "true")
 
     // EmptyProto at the top level. It will be an empty struct.
     checkWithFileAndClassName("EmptyProto") {

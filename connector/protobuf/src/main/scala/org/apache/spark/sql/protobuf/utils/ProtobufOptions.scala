@@ -221,7 +221,7 @@ private[sql] class ProtobufOptions(
   // By default, in the spark schema field a will be dropped, which result in schema
   // b struct<name: string>
   // If retain.empty.message.types=true, field a will be retained by inserting a dummy column.
-  // b struct<name: string, a struct<__dummy_field_in_empty_struct: string>>
+  // b struct<a struct<__dummy_field_in_empty_struct: string>, name: string>
   val retainEmptyMessage: Boolean =
     parameters.getOrElse("retain.empty.message.types", false.toString).toBoolean
 }
