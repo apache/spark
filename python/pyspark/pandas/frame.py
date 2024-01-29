@@ -25,6 +25,7 @@ import warnings
 import inspect
 import json
 import types
+import base64
 from functools import partial, reduce
 import sys
 from itertools import zip_longest, chain
@@ -67,7 +68,7 @@ from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
 
 from pyspark.errors import PySparkValueError
-from pyspark import StorageLevel
+from pyspark import StorageLevel, cloudpickle
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
@@ -13486,12 +13487,80 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return _internal_fall_back_function
 
+    def _fall_back_frame_with_inferred_schema(self, method: str) -> Callable:
+        def _internal_fall_back_function(*inputs: Any, **kwargs: Any) -> "DataFrame":
+            log_advice(
+                f"`{method}` is executed in fallback mode. It first loads all the data into one"
+                f"executor's memory to infer the schema, and then loads all data into one executor's "
+                f"memory again to compute. It should only be used if the pandas DataFrame is expected "
+                f"to be small."
+            )
+
+            input_df = self.copy()
+            index_names = input_df.index.names
+
+            sdf = input_df._internal.spark_frame
+            tmp_agg_column_name = verify_temp_column_name(
+                sdf, f"__tmp_aggregate_col_for_frame_{method}__"
+            )
+            input_df[tmp_agg_column_name] = 0
+
+            tmp_idx_column_name = verify_temp_column_name(
+                sdf, f"__tmp_index_col_for_frame_{method}__"
+            )
+            input_df[tmp_idx_column_name] = input_df.index
+
+            def infer_schema(pdf: pd.DataFrame) -> ps.DataFrame[zip(["schema"], [str])]:
+                pdf = pdf.drop(columns=[tmp_agg_column_name])
+                pdf = pdf.set_index(tmp_idx_column_name, drop=True)
+                pdf = pdf.sort_index()
+                pdf = getattr(pdf, method)(*inputs, **kwargs)
+                pdf[tmp_idx_column_name] = pdf.index
+                pdf = pdf.reset_index(drop=True)
+                schema = (pdf.columns, pdf.dtypes)
+                schema_bytes = cloudpickle.dumps(schema)
+                schema_str = base64.b64encode(schema_bytes)
+                return pd.DataFrame(data=[schema_str], columns=["schema"])
+
+            output_df = input_df.groupby(tmp_agg_column_name).apply(infer_schema)
+
+            # note that the inferred schema may contain 'object' and fail following computation
+            schema_str = output_df["schema"].iloc[0]
+            schema_bytes = base64.b64decode(schema_str)
+            (inferred_columns, inferred_dtypes) = cloudpickle.loads(schema_bytes)
+
+            def compute_function(
+                pdf: pd.DataFrame,
+            ) -> ps.DataFrame[zip(inferred_columns, inferred_dtypes)]:
+                pdf = pdf.drop(columns=[tmp_agg_column_name])
+                pdf = pdf.set_index(tmp_idx_column_name, drop=True)
+                pdf = pdf.sort_index()
+                pdf = getattr(pdf, method)(*inputs, **kwargs)
+                pdf[tmp_idx_column_name] = pdf.index
+                return pdf.reset_index(drop=True)
+
+            output_df = input_df.groupby(tmp_agg_column_name).apply(compute_function)
+            output_df = output_df.set_index(tmp_idx_column_name)
+            output_df.index.names = index_names
+
+            return output_df
+
+        return _internal_fall_back_function
+
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
-            if key in ["asfreq", "asof"] and get_option("compute.pandas_fallback"):
-                return self._fall_back_frame(key)
+            if key in [
+                "asfreq",
+                "asof",
+                "convert_dtypes",
+                "infer_objects",
+            ] and get_option("compute.pandas_fallback"):
+                if key in ["asfreq", "asof"]:
+                    return self._fall_back_frame(key)
+                else:
+                    return self._fall_back_frame_with_inferred_schema(key)
 
             property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):

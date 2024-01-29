@@ -822,6 +822,8 @@ pyspark_pandas = Module(
         # fallback
         "pyspark.pandas.tests.frame.test_asfreq",
         "pyspark.pandas.tests.frame.test_asof",
+        "pyspark.pandas.tests.frame.test_convert_dtypes",
+        "pyspark.pandas.tests.frame.test_infer_objects",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1207,6 +1209,8 @@ pyspark_pandas_connect_part1 = Module(
         # fallback
         "pyspark.pandas.tests.connect.frame.test_parity_asfreq",
         "pyspark.pandas.tests.connect.frame.test_parity_asof",
+        "pyspark.pandas.tests.connect.frame.test_parity_convert_dtypes",
+        "pyspark.pandas.tests.connect.frame.test_parity_infer_objects",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
