@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletResponse.SC_METHOD_NOT_ALLOWED
+
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -55,19 +57,19 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
   test("/app/kill POST method is not allowed") {
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/kill/"
     val body = convPostDataToString(Map(("id", "1"), ("terminate", "true")))
-    assert(sendHttpRequest(url, "POST", body).getResponseCode === 405)
+    assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_METHOD_NOT_ALLOWED)
   }
 
   test("/driver/kill POST method is not allowed") {
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/driver/kill/"
     val body = convPostDataToString(Map(("id", "driver-0"), ("terminate", "true")))
-    assert(sendHttpRequest(url, "POST", body).getResponseCode === 405)
+    assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_METHOD_NOT_ALLOWED)
   }
 
   test("/workers/kill POST method is not allowed") {
     val hostnames = Seq(s"${Utils.localHostNameForURI()}")
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/workers/kill/"
     val body = convPostDataToString(hostnames.map(("host", _)))
-    assert(sendHttpRequest(url, "POST", body).getResponseCode === 405)
+    assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_METHOD_NOT_ALLOWED)
   }
 }
