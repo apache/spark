@@ -92,16 +92,16 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
     if should_test_connect:
         from pyspark.sql.connect.dataframe import DataFrame
 
-    class MockDF(DataFrame):
-        """Helper class that must only be used for the mock plan tests."""
+        class MockDF(DataFrame):
+            """Helper class that must only be used for the mock plan tests."""
 
-        def __init__(self, plan: LogicalPlan, session: SparkSession):
-            super().__init__(plan, session)
+            def __init__(self, plan: LogicalPlan, session: SparkSession):
+                super().__init__(plan, session)
 
-        def __getattr__(self, name):
-            """All attributes are resolved to columns, because none really exist in the
-            mocked DataFrame."""
-            return self[name]
+            def __getattr__(self, name):
+                """All attributes are resolved to columns, because none really exist in the
+                mocked DataFrame."""
+                return self[name]
 
     @classmethod
     def _read_table(cls, table_name):
