@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -100,7 +100,11 @@ class FrameCovMixin:
         self.assert_eq(pdf.cov(numeric_only=True), psdf.cov())
 
 
-class FrameCovTests(FrameCovMixin, ComparisonTestBase, SQLTestUtils):
+class FrameCovTests(
+    FrameCovMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 
