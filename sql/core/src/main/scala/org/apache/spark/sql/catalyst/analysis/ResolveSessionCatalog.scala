@@ -160,7 +160,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, tableSpec: TableSpec, _) =>
+    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, tableSpec: TableSpec, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)

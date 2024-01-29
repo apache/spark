@@ -1321,8 +1321,9 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected_multi, df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        self._test_mixed_udf_and_sql(Column)
 
+    def _test_mixed_udf_and_sql(self, col_type):
         df = self.spark.range(0, 1).toDF("v")
 
         # Test mixture of UDFs, Pandas UDFs and SQL expression.
@@ -1333,7 +1334,7 @@ class ScalarPandasUDFTestsMixin:
             return x + 1
 
         def f2(x):
-            assert type(x) in (Column, ConnectColumn)
+            assert type(x) == col_type
             return x + 10
 
         @pandas_udf("int")
