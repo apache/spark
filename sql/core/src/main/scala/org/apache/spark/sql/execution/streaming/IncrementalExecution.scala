@@ -29,12 +29,13 @@ import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Express
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataWriter
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -181,6 +182,41 @@ class IncrementalExecution(
         // completely) to LocalLimitExec (does not consume the iterator) when the child plan has
         // no stateful operator (i.e., consuming the iterator is not needed).
         LocalLimitExec(limit, child)
+    }
+  }
+
+  /**
+   * Read from existing operator state metadata that contains the same operator id
+   * with current operator id. Check if they contains the same operator name.
+   * Throw errors if not match.
+   */
+  object checkOperatorInMetadata extends SparkPlanPartialRule {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
+        val opId = stateStoreWriter.getStateInfo.operatorId
+        try {
+          val metadataPathToCheck = new Path(checkpointLocation, opId.toString)
+          logInfo("Reading from operator metadata, check if stateful operator with " +
+            "the same id from committed batch is the same operator of current stateful operator. " +
+            s"Stateful operator metadata path to check: ${metadataPathToCheck.toString}")
+          val operatorMetadata: OperatorStateMetadataV1 = new OperatorStateMetadataReader(
+            metadataPathToCheck, hadoopConf).read().asInstanceOf[OperatorStateMetadataV1]
+          val operatorInMetadata = operatorMetadata.operatorInfo.operatorName
+          if (operatorMetadata.operatorInfo.operatorName != stateStoreWriter.shortName) {
+            throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
+              opId, stateStoreWriter.shortName, operatorInMetadata)
+          }
+        } catch {
+          case e: java.io.FileNotFoundException =>
+            // no need to throw fatal error
+            logWarning("Error reading metadata path for stateful operator. " +
+              "This may due to no prior committed batch, or previously run on lower versions. " +
+              "Trying to read operator metadata for stateful operator " +
+              s"$opId: ${e.toString}")
+          case e: Exception =>
+            throw e
+        }
+        stateStoreWriter
     }
   }
 
@@ -389,6 +425,9 @@ class IncrementalExecution(
 
     override def apply(plan: SparkPlan): SparkPlan = {
       val planWithStateOpId = plan transform composedRule
+      // Check operator name, fail the query if operator changes;
+      // Will not change rule
+      planWithStateOpId transform checkOperatorInMetadata.rule
       // The rule doesn't change the plan but cause the side effect that metadata is written
       // in the checkpoint directory of stateful operator.
       planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule

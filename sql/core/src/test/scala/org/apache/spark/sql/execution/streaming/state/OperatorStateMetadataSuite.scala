@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
-import org.apache.spark.sql.streaming.OutputMode.Complete
+import org.apache.spark.sql.streaming.OutputMode.{Complete, Update}
 import org.apache.spark.sql.test.SharedSparkSession
 
 
@@ -214,5 +216,94 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     }
     checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
       Map("optionName" -> StateSourceOptions.PATH))
+  }
+
+  test("Operator metadata path non-existence should not fail query") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val aggregated =
+        inputData.toDF()
+          .groupBy($"value")
+          .agg(count("*"))
+          .as[(Int, Long)]
+
+      testStream(aggregated, Complete)(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 1)),
+        StopStream
+      )
+
+      // Delete operator metadata path
+      val metadataPath = new Path(checkpointDir.toString, s"state/0/_metadata/metadata")
+      val fm = CheckpointFileManager.create(new Path(checkpointDir.getCanonicalPath), hadoopConf)
+      fm.delete(metadataPath)
+
+      // Restart the query
+      testStream(aggregated, Complete)(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 3),
+        CheckLastBatch((3, 2)),
+        StopStream
+      )
+    }
+  }
+
+  test("Restarting query - " +
+    "checking operator name of the same operator id is the same in the metadata") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val stream = inputData.toDF().withColumn("eventTime", timestamp_seconds($"value"))
+
+      testStream(stream
+        .withWatermark("eventTime", "10 seconds")
+        .dropDuplicatesWithinWatermark())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 1),
+        ProcessAllAvailable(),
+        StopStream
+      )
+
+      def checkOpChangeError(opName: String, ex: Throwable): Unit = {
+        checkError(ex.asInstanceOf[SparkRuntimeException],
+          "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA", "55019",
+          Map("operatorId" -> 0.toString,
+            "currentOperatorName" -> opName,
+            "stateMetadataOperatorName" -> "dedupeWithinWatermark")
+        )
+      }
+
+      testStream(stream.dropDuplicates(), Append)(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 2),
+        ExpectFailure[SparkRuntimeException] {
+          (t: Throwable) => {
+            checkOpChangeError("dedupe", t)
+          }
+        }
+      )
+
+      testStream(stream.groupBy("value").count(), Update)(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 3),
+        ExpectFailure[SparkRuntimeException] {
+          (t: Throwable) => {
+            checkOpChangeError("stateStoreSave", t)
+          }
+        }
+      )
+
+      testStream(stream
+        .groupBy(session_window($"eventTime", "10 seconds").as("session"), $"value")
+        .agg(count("*").as("numEvents")), Complete)(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 3),
+        ExpectFailure[SparkRuntimeException] {
+          (t: Throwable) => {
+            checkOpChangeError("sessionWindowStateStoreSaveExec", t)
+          }
+        }
+      )
+    }
   }
 }

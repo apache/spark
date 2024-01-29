@@ -1702,6 +1702,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       new NoSuchElementException("State is either not defined or has already been removed")
   }
 
+  def statefulOperatorNotMatchInStateMetadataError(
+      operatorId: Long,
+      currentOperatorName: String, stateMetadataOperatorName: String):
+    SparkRuntimeException = {
+      new SparkRuntimeException(
+        errorClass = "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
+        messageParameters = Map(
+          "operatorId" -> operatorId.toString,
+          "currentOperatorName" -> currentOperatorName,
+          "stateMetadataOperatorName" -> stateMetadataOperatorName)
+      )
+  }
+
   def cannotSetTimeoutDurationError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2203")
   }
