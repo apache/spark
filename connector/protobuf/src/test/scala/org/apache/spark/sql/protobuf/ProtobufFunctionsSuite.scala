@@ -1256,8 +1256,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
         )
         assert(df.schema == expectedSchema)
-        logError("asdfunc")
-        df.printSchema()
     }
   }
 
