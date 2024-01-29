@@ -1656,6 +1656,19 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_TWS" : {
+    "message" : [
+      "Internal error using TransformWithStateOperator"
+    ],
+    "subClass" : {
+      "IMPLICIT_KEY_NOT_FOUND" : {
+        "message" : [
+          "Implicit key not found in state store for stateName=<stateName>"
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"

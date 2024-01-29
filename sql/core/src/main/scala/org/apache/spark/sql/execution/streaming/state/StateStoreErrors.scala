@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
  *
- * ERROR_CLASS has a prefix of "TWS_" representing State API V2.
+ * ERROR_CLASS has a prefix of "TWS_" or "STATE_STORE_" to indicate where the error is from
  */
 object StateStoreErrors {
   def implicitKeyNotFound(
     stateName: String): SparkException = {
     SparkException.internalError(
       msg = s"Implicit key not found in state store for stateName=$stateName",
-      category = "TWS"
+      category = "TWS.IMPLICIT_KEY_NOT_FOUND"
     )
   }
 
@@ -38,42 +38,21 @@ object StateStoreErrors {
     new TransformWithStateMultipleColumnFamilies(stateStoreProvider)
   }
 
-  def multipleValuesPerKey(): TransformWithStateMultipleValuesPerKey = {
-    new TransformWithStateMultipleValuesPerKey()
-  }
-
   def unsupportedOperationException(operationName: String, entity: String):
   TransformWithStateUnsupportedOperation = {
     new TransformWithStateUnsupportedOperation(operationName, entity)
   }
-  def valueShouldBeNonNull(typeOfState: String): TransformWithStateValueShouldBeNonNull = {
-    new TransformWithStateValueShouldBeNonNull(typeOfState)
-  }
+
 }
 
 class TransformWithStateMultipleColumnFamilies(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STAT_STORE_MULTIPLE_COLUMN_FAMILIES",
+    errorClass = "STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
-  )
-
-// Used for ListState
-class TransformWithStateMultipleValuesPerKey()
-  extends SparkRuntimeException(
-    errorClass = "STATE_STORE_STORE_MULTIPLE_VALUES_PER_KEY",
-    messageParameters = Map.empty
   )
 
 class TransformWithStateUnsupportedOperation(operationType: String, entity: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
-  )
-
-// Used for ListState
-class TransformWithStateValueShouldBeNonNull(typeOfState: String)
-  extends SparkRuntimeException(
-    errorClass = "TWS_VALUE_SHOULD_NOT_BE_NULL",
-    Map("typeOfState" -> typeOfState),
-    cause = null
   )

@@ -998,6 +998,14 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 `<message>`
 
+### [INTERNAL_ERROR_TWS](sql-error-conditions-internal-error-tws-error-class.html)
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+Internal error using TransformWithStateOperator
+
+For more details see [INTERNAL_ERROR_TWS](sql-error-conditions-internal-error-tws-error-class.html)
+
 ### INTERVAL_ARITHMETIC_OVERFLOW
 
 [SQLSTATE: 22015](sql-error-conditions-sqlstates.html#class-22-data-exception)

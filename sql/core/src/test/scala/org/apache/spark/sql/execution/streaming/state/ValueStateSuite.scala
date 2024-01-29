@@ -24,6 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
@@ -96,7 +97,7 @@ class ValueStateSuite extends SharedSparkSession
         testState.update(123)
       }
 
-      assert(ex.isInstanceOf[UnsupportedOperationException])
+      assert(ex.isInstanceOf[SparkException])
       assert(ex.getMessage.contains("Implicit key not found"))
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
@@ -110,7 +111,7 @@ class ValueStateSuite extends SharedSparkSession
         testState.update(123)
       }
 
-      assert(ex1.isInstanceOf[UnsupportedOperationException])
+      assert(ex1.isInstanceOf[SparkException])
       assert(ex1.getMessage.contains("Implicit key not found"))
     }
   }
