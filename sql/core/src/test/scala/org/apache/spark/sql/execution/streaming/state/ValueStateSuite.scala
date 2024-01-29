@@ -187,4 +187,19 @@ class ValueStateSuite extends SharedSparkSession
       assert(testState2.get() === null)
     }
   }
+
+
+  test("Creating colFamily with HDFS should fail") {
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val provider = new HDFSBackedStateStoreProvider()
+    val storeConf = new StateStoreConf(new SQLConf())
+    val ex = intercept[TransformWithStateMultipleColumnFamilies] {
+      provider.init(
+        storeId, keySchema, valueSchema, 0, useColumnFamilies = true,
+        storeConf, new Configuration)
+    }
+    assert(ex.getMessage.contains("Creating multiple column families" +
+      " with HDFSStateStoreProvider is not supported"))
+    assert(ex.getMessage.contains("[STATE_STORE_MULTIPLE_COLUMN_FAMILIES]"))
+  }
 }

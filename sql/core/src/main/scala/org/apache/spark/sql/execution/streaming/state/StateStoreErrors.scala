@@ -33,15 +33,15 @@ object StateStoreErrors {
     )
   }
 
-  def multipleColumnFamilies(stateStoreProvider: String):
-  TransformWithStateMultipleColumnFamilies = {
-    new TransformWithStateMultipleColumnFamilies(stateStoreProvider)
-  }
+  def multipleColumnFamiliesNotSupported(stateStoreProvider: String):
+    TransformWithStateMultipleColumnFamilies = {
+      new TransformWithStateMultipleColumnFamilies(stateStoreProvider)
+    }
 
   def unsupportedOperationException(operationName: String, entity: String):
-  TransformWithStateUnsupportedOperation = {
-    new TransformWithStateUnsupportedOperation(operationName, entity)
-  }
+    TransformWithStateUnsupportedOperation = {
+      new TransformWithStateUnsupportedOperation(operationName, entity)
+    }
 
 }
 

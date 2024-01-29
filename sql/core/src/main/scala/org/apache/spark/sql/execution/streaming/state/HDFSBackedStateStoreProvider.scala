@@ -256,7 +256,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
     if (useColumnFamilies) {
-      throw StateStoreErrors.multipleColumnFamilies("HDFSStateStoreProvider")
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
     }
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||

@@ -48,7 +48,7 @@ class ValueStateImpl[K, S](
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw StateStoreErrors.implicitKeyNotFound(stateName = stateName)
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
     val exprEnc: ExpressionEncoder[K] = encoderFor(keyEnc)
