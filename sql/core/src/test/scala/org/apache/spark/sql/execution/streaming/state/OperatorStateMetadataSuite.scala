@@ -266,7 +266,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
       def checkOpChangeError(opName: String, ex: Throwable): Unit = {
         checkError(ex.asInstanceOf[SparkRuntimeException],
-          "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA", "55019",
+          "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA", "42K03",
           Map("operatorId" -> 0.toString,
             "currentOperatorName" -> opName,
             "stateMetadataOperatorName" -> "dedupeWithinWatermark")

@@ -3321,7 +3321,7 @@
     "message" : [
       "Streaming stateful operator name does not match with the operator in state metadata with the same operator id (id: <operatorId>). Stateful Operator name for current batch: <currentOperatorName>; Operator name in the state metadata: <stateMetadataOperatorName>."
     ],
-    "sqlState" : "55019"
+    "sqlState" : "42K03"
   },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
