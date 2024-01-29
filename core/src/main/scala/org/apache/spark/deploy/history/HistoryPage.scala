@@ -86,7 +86,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       </div>
 
     val pageLink =
-      <div>
+      <div class="container-fluid">
         <a href={makePageLink(request, !requestedIncomplete)}>
           {
             if (requestedIncomplete) {
