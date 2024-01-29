@@ -56,6 +56,7 @@ abstract class CSVSuite
   override protected def dataSourceFormat = "csv"
 
   protected val carsFile = "test-data/cars.csv"
+  protected val productsFile = "test-data/products.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
   private val carsFile8859 = "test-data/cars_iso-8859-1.csv"
   private val carsTsvFile = "test-data/cars.tsv"
@@ -3233,6 +3234,58 @@ abstract class CSVSuite
         .option("escape", "\"")
         .csv(path.getCanonicalPath)
       assert(df.count() === 5)
+    }
+  }
+
+  test("SPARK-46890: CSV fails on a column with default and without enforcing schema") {
+    withTable("CarsTable") {
+      spark.sql(
+        s"""
+           |CREATE TABLE CarsTable(
+           |  year INT,
+           |  make STRING,
+           |  model STRING,
+           |  comment STRING DEFAULT '',
+           |  blank STRING DEFAULT '')
+           |USING csv
+           |OPTIONS (
+           |  header "true",
+           |  inferSchema "false",
+           |  enforceSchema "false",
+           |  path "${testFile(carsFile)}"
+           |)
+       """.stripMargin)
+      checkAnswer(
+        spark.table("CarsTable"),
+        Seq(
+          Row(2012, "Tesla", "S", "No comment", null),
+          Row(1997, "Ford", "E350", "Go get one now they are going fast", null),
+          Row(2015, "Chevy", "Volt", "", "")
+        ))
+    }
+    withTable("Products") {
+      spark.sql(
+        s"""
+           |CREATE TABLE IF NOT EXISTS Products (
+           |  product_id INT,
+           |  name STRING,
+           |  price FLOAT default 0.0,
+           |  quantity INT default 0
+           |)
+           |USING CSV
+           |OPTIONS (
+           |  header 'true',
+           |  inferSchema 'false',
+           |  enforceSchema 'false',
+           |  path "${testFile(productsFile)}"
+           |)
+       """.stripMargin)
+      checkAnswer(
+        spark.table("Products"),
+        Seq(
+          Row(1, "Apple", 0.50, 100),
+          Row(2, "Banana", 0.25, 200),
+          Row(3, "Orange", 0.75, 50)))
     }
   }
 }
