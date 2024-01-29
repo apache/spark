@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -167,22 +168,30 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      val chkptDir = Utils.createTempDir("streaming.metadata").getCanonicalPath
       val inputData = MemoryStream[String]
-      val result = inputData.toDS()
+      val stream1 = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
+
+      val stream2 = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new RunningCountStatefulProcessorWithDeletion(),
           TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
-      testStream(result, OutputMode.Update())(
+      testStream(stream1, OutputMode.Update())(
+        StartStream(checkpointLocation = chkptDir),
         AddData(inputData, "a"),
         CheckNewAnswer(("a", "1")),
+        StopStream
+      )
+      testStream(stream2, OutputMode.Update())(
+        StartStream(checkpointLocation = chkptDir),
         AddData(inputData, "a", "b"),
-        CheckNewAnswer(("a", "2"), ("b", "1")),
-        StopStream,
-        StartStream(),
-        AddData(inputData, "a", "b"), // after restarting stream, previous state should be deleted
-        CheckNewAnswer(("a", "1"), ("b", "1")),
+        CheckNewAnswer(("a", "1"), ("b", "1")), // should not factor in previous state
         StopStream
       )
     }
