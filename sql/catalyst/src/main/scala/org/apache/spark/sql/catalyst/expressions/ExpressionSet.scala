@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
   /**
-   * Constructs a new [[ExpressionSet]] by applying [[Expression.canonicalized]] to `expressions`.
+   * Constructs a new [[ExpressionSet]] by applying [[Expression#canonicalized]] to `expressions`.
    */
   def apply(expressions: IterableOnce[Expression]): ExpressionSet = {
     val set = new ExpressionSet()
@@ -38,7 +38,7 @@ object ExpressionSet {
 /**
  * A [[Set]] where membership is determined based on determinacy and a canonical representation of
  * an [[Expression]] (i.e. one that attempts to ignore cosmetic differences).
- * See [[Expression.canonicalized]] for more details.
+ * See [[Expression#canonicalized]] for more details.
  *
  * Internally this set uses the canonical representation, but keeps also track of the original
  * expressions to ease debugging.  Since different expressions can share the same canonical
@@ -170,7 +170,7 @@ class ExpressionSet protected(
   override def clone(): ExpressionSet = new ExpressionSet(baseSet.clone(), originals.clone())
 
   /**
-   * Returns a string containing both the post [[Expression.canonicalized]] expressions
+   * Returns a string containing both the post [[Expression#canonicalized]] expressions
    * and the original expressions in this set.
    */
   def toDebugString: String =
