@@ -87,6 +87,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               }
               }
             </a>
+            <p><a href={UIUtils.prependBaseUri(request, "/logPage/?self&logType=out")}>
+              Show server log</a></p>
           </div>
       </div>
     UIUtils.basicSparkPage(request, content, "History Server", true)
