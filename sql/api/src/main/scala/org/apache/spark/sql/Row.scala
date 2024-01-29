@@ -366,7 +366,7 @@ trait Row extends Serializable {
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
-   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws SparkUnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
    * @throws ClassCastException when data type does not match.
    */
@@ -375,7 +375,7 @@ trait Row extends Serializable {
   /**
    * Returns the index of a given field name.
    *
-   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws SparkUnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
@@ -387,7 +387,7 @@ trait Row extends Serializable {
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
-   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws SparkUnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
    * @throws ClassCastException when data type does not match.
    */
@@ -519,7 +519,7 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i.
    *
-   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws SparkUnsupportedOperationException when schema is not defined.
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
