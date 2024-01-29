@@ -85,7 +85,6 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
 from pyspark.pandas.internal import (
     InternalFrame,
-    DEFAULT_SERIES_NAME,
     HIDDEN_COLUMNS,
     SPARK_INDEX_NAME_FORMAT,
 )
@@ -2554,7 +2553,7 @@ def concat(
         if isinstance(obj, Series):
             num_series += 1
             series_names.add(obj.name)
-            new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
+            new_objs.append(obj.to_frame())
         else:
             assert isinstance(obj, DataFrame)
             new_objs.append(obj)
