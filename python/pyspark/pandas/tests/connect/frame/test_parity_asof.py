@@ -16,13 +16,13 @@
 #
 import unittest
 
-from pyspark.pandas.tests.computation.test_cov import FrameCovMixin
+from pyspark.pandas.tests.frame.test_asof import AsOfMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameParityCovTests(
-    FrameCovMixin,
+class AsOfParityTests(
+    AsOfMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
@@ -30,7 +30,7 @@ class FrameParityCovTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.computation.test_parity_cov import *  # noqa: F401
+    from pyspark.pandas.tests.connect.frame.test_parity_asof import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

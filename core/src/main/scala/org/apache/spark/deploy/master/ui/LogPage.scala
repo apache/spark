@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.worker.ui
+package org.apache.spark.deploy.master.ui
 
 import java.io.File
 import javax.servlet.http.HttpServletRequest
@@ -27,61 +27,16 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.RollingFileAppender
 
-private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
-  private val worker = parent.worker
-  private val workDir = new File(parent.workDir.toURI.normalize().getPath)
-  private val supportedLogTypes = Set("stderr", "stdout", "out")
+private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with Logging {
   private val defaultBytes = 100 * 1024
 
-  def renderLog(request: HttpServletRequest): String = {
-    val appId = Option(request.getParameter("appId"))
-    val executorId = Option(request.getParameter("executorId"))
-    val driverId = Option(request.getParameter("driverId"))
-    val self = Option(request.getParameter("self"))
-    val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
-      .getOrElse(defaultBytes)
-
-    val logDir = (appId, executorId, driverId, self) match {
-      case (Some(a), Some(e), None, None) =>
-        s"${workDir.getPath}/$a/$e/"
-      case (None, None, Some(d), None) =>
-        s"${workDir.getPath}/$d/"
-      case (None, None, None, Some(_)) =>
-        s"${sys.env.getOrElse("SPARK_LOG_DIR", workDir.getPath)}/"
-      case _ =>
-        throw new Exception("Request must specify either application or driver identifiers")
-    }
-
-    val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
-    val pre = s"==== Bytes $startByte-$endByte of $logLength of $logDir$logType ====\n"
-    pre + logText
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appId = Option(request.getParameter("appId"))
-    val executorId = Option(request.getParameter("executorId"))
-    val driverId = Option(request.getParameter("driverId"))
-    val self = Option(request.getParameter("self"))
+    val logDir = sys.env.getOrElse("SPARK_LOG_DIR", "logs/")
     val logType = request.getParameter("logType")
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
       .getOrElse(defaultBytes)
-
-    val (logDir, params, pageName) = (appId, executorId, driverId, self) match {
-      case (Some(a), Some(e), None, None) =>
-        (s"${workDir.getPath}/$a/$e/", s"appId=$a&executorId=$e", s"$a/$e")
-      case (None, None, Some(d), None) =>
-        (s"${workDir.getPath}/$d/", s"driverId=$d", d)
-      case (None, None, None, Some(_)) =>
-        (s"${sys.env.getOrElse("SPARK_LOG_DIR", workDir.getPath)}/", "self", "worker")
-      case _ =>
-        throw new Exception("Request must specify either application or driver identifiers")
-    }
-
     val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
-    val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
     val curLogLength = endByte - startByte
     val range =
       <span id="log-data">
@@ -103,14 +58,14 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
         End of Log
       </div>
 
-    val logParams = "?%s&logType=%s".format(params, logType)
+    val logParams = "?self&logType=%s".format(logType)
     val jsOnload = "window.onload = " +
       s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
 
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
       <div>
-        {linkToMaster}
+        <p><a href="/">Back to Master</a></p>
         {range}
         <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
           <div>{moreButton}</div>
@@ -121,7 +76,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
         <script>{Unparsed(jsOnload)}</script>
       </div>
 
-    UIUtils.basicSparkPage(request, content, logType + " log page for " + pageName)
+    UIUtils.basicSparkPage(request, content, logType + " log page for master")
   }
 
   /** Get the part of the log files given the offset and desired length of bytes */
@@ -131,21 +86,11 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       offsetOption: Option[Long],
       byteLength: Int
     ): (String, Long, Long, Long) = {
-
-    if (!supportedLogTypes.contains(logType)) {
-      return ("Error: Log type must be one of " + supportedLogTypes.mkString(", "), 0, 0, 0)
-    }
-
-    // Verify that the normalized path of the log directory is in the working directory
-    val normalizedUri = new File(logDirectory).toURI.normalize()
-    val normalizedLogDir = new File(normalizedUri.getPath)
-    if (!Utils.isInDirectory(workDir, normalizedLogDir)) {
-      return ("Error: invalid log directory " + logDirectory, 0, 0, 0)
-    }
-
     try {
       // Find a log file name
       val fileName = if (logType.equals("out")) {
+        val normalizedUri = new File(logDirectory).toURI.normalize()
+        val normalizedLogDir = new File(normalizedUri.getPath)
         normalizedLogDir.listFiles.map(_.getName).filter(_.endsWith(".out"))
           .headOption.getOrElse(logType)
       } else {
@@ -154,7 +99,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, fileName)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
 
-      val fileLengths: Seq[Long] = files.map(Utils.getFileLength(_, worker.conf))
+      val fileLengths: Seq[Long] = files.map(Utils.getFileLength(_, parent.master.conf))
       val totalLength = fileLengths.sum
       val offset = offsetOption.getOrElse(totalLength - byteLength)
       val startIndex = {

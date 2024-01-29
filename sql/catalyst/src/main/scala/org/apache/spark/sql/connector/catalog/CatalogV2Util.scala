@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
@@ -481,10 +481,23 @@ private[sql] object CatalogV2Util {
    * createTable and related APIs.
    */
   def structTypeToV2Columns(schema: StructType): Array[Column] = {
-    schema.fields.map(structFieldToV2Column)
+    schema.fields.map(structFieldToV2Column(_, useDefault = None, statementType = ""))
   }
 
-  private def structFieldToV2Column(f: StructField): Column = {
+  /** Same as above, but using the column defaults provided instead of extracting from metadata. */
+  def structTypeToV2ColumnsWithDefaults(
+      schema: StructType,
+      defaults: Seq[Option[Expression]],
+      statementType: String): Array[Column] = {
+    // Extend 'defaults' to be the same length as 'schema.fields' by filling in None.
+    val defaultsWithNones = defaults ++ Seq.fill(schema.fields.length - defaults.length)(None)
+    schema.fields.zip(defaultsWithNones).map { case (field, default) =>
+      structFieldToV2Column(field, default, statementType)
+    }
+  }
+
+  private def structFieldToV2Column(
+      f: StructField, useDefault: Option[Expression], statementType: String): Column = {
     def metadataAsJson(metadata: Metadata): String = {
       if (metadata == Metadata.empty) {
         null
@@ -513,7 +526,12 @@ private[sql] object CatalogV2Util {
     }
 
     if (isDefaultColumn) {
-      val e = analyze(f, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val e: Expression = useDefault.map { analyzed =>
+        coerceDefaultValue(
+          analyzed, f.dataType, statementType, f.name, f.getCurrentDefaultValue().get)
+      }.getOrElse {
+        analyze(f, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      }
       assert(e.resolved && e.foldable,
         "The existence default value must be a simple SQL string that is resolved and foldable, " +
           "but got: " + f.getExistenceDefaultValue().get)
