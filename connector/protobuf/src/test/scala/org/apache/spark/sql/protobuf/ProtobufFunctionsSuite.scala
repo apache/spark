@@ -1229,6 +1229,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val emptyProtoSchema =
       StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
+    /*
+      Below is the expected schema.
+      root
+       |-- empty_proto: struct (nullable = true)
+       |    |-- recursive_field: struct (nullable = true)
+       |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+       |    |-- recursive_array: array (nullable = true)
+       |    |    |-- element: struct (containsNull = false)
+       |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+    */
     val expectedSchema = StructType(
       StructField("empty_proto",
         StructType(
@@ -1246,6 +1256,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
         )
         assert(df.schema == expectedSchema)
+        logError("asdfunc")
+        df.printSchema()
     }
   }
 
