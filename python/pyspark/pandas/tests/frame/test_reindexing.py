@@ -23,7 +23,7 @@ from pandas.tseries.offsets import DateOffset
 from pyspark import pandas as ps
 from pyspark.errors import PySparkValueError
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -842,7 +842,11 @@ class FrameReindexingMixin:
             psdf.sample(n=1)
 
 
-class FrameReidexingTests(FrameReindexingMixin, ComparisonTestBase, SQLTestUtils):
+class FrameReidexingTests(
+    FrameReindexingMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 
