@@ -1230,14 +1230,32 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val emptyProtoSchema =
       StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
     /*
-      Below is the expected schema.
-      root
-       |-- empty_proto: struct (nullable = true)
-       |    |-- recursive_field: struct (nullable = true)
-       |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
-       |    |-- recursive_array: array (nullable = true)
-       |    |    |-- element: struct (containsNull = false)
-       |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+      The code below construct the expected schema with recursive depth set to 2.
+        root
+         |-- empty_proto: struct (nullable = true)
+         |    |-- recursive_field: struct (nullable = true)
+         |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |-- recursive_array: array (nullable = true)
+         |    |    |-- element: struct (containsNull = false)
+         |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+
+       Note: If recursive depth change, the resulting schema of empty recursive proto will change.
+       When recursive depth is 3, the schema will be
+        root
+         |-- empty_proto: struct (nullable = true)
+         |    |-- recursive_field: struct (nullable = true)
+         |    |    |-- recursive_field: struct (nullable = true)
+         |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |    |-- recursive_array: array (nullable = true)
+         |    |    |    |-- element: struct (containsNull = false)
+         |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |-- recursive_array: array (nullable = true)
+         |    |    |-- element: struct (containsNull = false)
+         |    |    |    |-- recursive_field: struct (nullable = true)
+         |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |    |    |-- recursive_array: array (nullable = true)
+         |    |    |    |    |-- element: struct (containsNull = false)
+         |    |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
     */
     val expectedSchema = StructType(
       StructField("empty_proto",
