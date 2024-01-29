@@ -1227,20 +1227,15 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     // This verifies that a empty proto like 'message A { A a = 1}' can be retained by
     // inserting a dummy field.
 
-    val emptyProtoSchema =
+    val structWithDummyColumn =
       StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
+    val structWithRecursiveDepthEquals2 = StructType(
+      StructField("recursive_field", structWithDummyColumn)
+        :: StructField("recursive_array", ArrayType(structWithDummyColumn, containsNull = false))
+        :: Nil)
     /*
-      The code below construct the expected schema with recursive depth set to 2.
-        root
-         |-- empty_proto: struct (nullable = true)
-         |    |-- recursive_field: struct (nullable = true)
-         |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
-         |    |-- recursive_array: array (nullable = true)
-         |    |    |-- element: struct (containsNull = false)
-         |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
-
-       Note: If recursive depth change, the resulting schema of empty recursive proto will change.
-       When recursive depth is 3, the schema will be
+      The code below construct the expected schema with recursive depth set to 3.
+      Note: If recursive depth change, the resulting schema of empty recursive proto will change.
         root
          |-- empty_proto: struct (nullable = true)
          |    |-- recursive_field: struct (nullable = true)
@@ -1257,23 +1252,24 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
          |    |    |    |    |-- element: struct (containsNull = false)
          |    |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
     */
-    val expectedSchema = StructType(
+    val structWithRecursiveDepthEquals3 = StructType(
       StructField("empty_proto",
         StructType(
-          StructField("recursive_field", emptyProtoSchema) ::
-            StructField("recursive_array", ArrayType(emptyProtoSchema, containsNull = false)
+          StructField("recursive_field", structWithRecursiveDepthEquals2) ::
+            StructField("recursive_array",
+              ArrayType(structWithRecursiveDepthEquals2, containsNull = false)
           ) :: Nil
         )
       ) :: Nil
     )
 
-    val options = Map("recursive.fields.max.depth" -> "2", "retain.empty.message.types" -> "true")
+    val options = Map("recursive.fields.max.depth" -> "3", "retain.empty.message.types" -> "true")
     checkWithFileAndClassName("EmptyRecursiveProto") {
       case (name, descFilePathOpt) =>
         val df = emptyBinaryDF.select(
           from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
         )
-        assert(df.schema == expectedSchema)
+        assert(df.schema == structWithRecursiveDepthEquals3)
     }
   }
 
