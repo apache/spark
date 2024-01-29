@@ -36,6 +36,10 @@ class FrameAttrsMixin:
         )
 
     @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
+
+    @property
     def df_pair(self):
         pdf = self.pdf
         psdf = ps.from_pandas(pdf)
