@@ -23,6 +23,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.ui.{SparkUI, WebUI}
@@ -41,6 +42,7 @@ class MasterWebUI(
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.get(UI_KILL_ENABLED)
+  val decommissionDisabled = !master.conf.get(DECOMMISSION_ENABLED)
   val decommissionAllowMode = master.conf.get(MASTER_UI_DECOMMISSION_ALLOW_MODE)
 
   initialize()
@@ -52,31 +54,33 @@ class MasterWebUI(
     attachPage(new LogPage(this))
     attachPage(masterPage)
     addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
-    attachHandler(createRedirectHandler(
-      "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
-    attachHandler(createRedirectHandler(
-      "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
-    attachHandler(createServletHandler("/workers/kill", new HttpServlet {
-      override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
-        val hostnames: Seq[String] = Option(req.getParameterValues("host"))
-          .getOrElse(Array[String]()).toImmutableArraySeq
-        if (!isDecommissioningRequestAllowed(req)) {
-          resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
-        } else {
-          val removedWorkers = masterEndpointRef.askSync[Integer](
-            DecommissionWorkersOnHosts(hostnames))
-          logInfo(s"Decommissioning of hosts $hostnames decommissioned $removedWorkers workers")
-          if (removedWorkers > 0) {
-            resp.setStatus(HttpServletResponse.SC_OK)
-          } else if (removedWorkers == 0) {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+    if (killEnabled) {
+      attachHandler(createRedirectHandler(
+        "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
+      attachHandler(createRedirectHandler(
+        "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
+      attachHandler(createServletHandler("/workers/kill", new HttpServlet {
+        override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+          val hostnames: Seq[String] = Option(req.getParameterValues("host"))
+            .getOrElse(Array[String]()).toImmutableArraySeq
+          if (decommissionDisabled || !isDecommissioningRequestAllowed(req)) {
+            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
           } else {
-            // We shouldn't even see this case.
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+            val removedWorkers = masterEndpointRef.askSync[Integer](
+              DecommissionWorkersOnHosts(hostnames))
+            logInfo(s"Decommissioning of hosts $hostnames decommissioned $removedWorkers workers")
+            if (removedWorkers > 0) {
+              resp.setStatus(HttpServletResponse.SC_OK)
+            } else if (removedWorkers == 0) {
+              resp.sendError(HttpServletResponse.SC_NOT_FOUND)
+            } else {
+              // We shouldn't even see this case.
+              resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+            }
           }
         }
-      }
-    }, ""))
+      }, ""))
+    }
   }
 
   def addProxy(): Unit = {
