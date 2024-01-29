@@ -41,7 +41,7 @@ def generate_errors_doc(output_rst_file_path: str) -> None:
 Error classes in PySpark
 ========================
 
-This is a list of common, named error classes returned by PySpark which are defined at `error_classes.py <https://github.com/apache/spark/blob/master/python/pyspark/errors/error_classes.py>`_.
+This is a list of common, named error classes returned by PySpark which are defined at `error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_.
 
 When writing PySpark errors, developers must use an error class from the list. If an appropriate error class is not available, add a new one into the list. For more information, please refer to `Contributing Error and Exception <contributing.rst#contributing-error-and-exception>`_.
 """  # noqa
