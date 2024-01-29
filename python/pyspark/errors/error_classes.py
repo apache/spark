@@ -16,15 +16,13 @@
 #
 
 import json
-from pathlib import Path
+import importlib.resources
 
-THIS_DIR = Path(__file__).parent
-# Note that though we call them "error classes" here, the proper name is "error conditions",
-# hence why the name of the JSON file different.
-# For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
-ERROR_CONDITIONS_PATH = THIS_DIR / "error-conditions.json"
-
-with open(ERROR_CONDITIONS_PATH) as f:
-    ERROR_CLASSES_JSON = f.read()
-
+# Note: Though we call them "error classes" here, the proper name is "error conditions",
+#   hence why the name of the JSON file different.
+#   For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
+# Note: When we drop support for Python 3.8, we should migrate from read_text() to
+#   file().joinpath().
+#   See: https://docs.python.org/3/library/importlib.resources.html#importlib.resources.open_text
+ERROR_CLASSES_JSON = importlib.resources.read_text("pyspark.errors", "error-conditions.json")
 ERROR_CLASSES_MAP = json.loads(ERROR_CLASSES_JSON)
