@@ -19,6 +19,8 @@
 
 import {formatDuration, formatTimeMillis} from "./utils.js";
 
+export {setAppLimit};
+
 var appLimit = -1;
 
 /* eslint-disable no-unused-vars */
