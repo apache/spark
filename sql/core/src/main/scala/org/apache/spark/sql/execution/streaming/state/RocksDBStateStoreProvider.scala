@@ -192,7 +192,7 @@ private[sql] class RocksDBStateStoreProvider
 
     /** Remove column family if exists */
      override def removeColFamilyIfExists(colFamilyName: String): Unit = {
-      rocksDB.removeColFamilyIfExists(colFamilyName)
+       rocksDB.removeColFamilyIfExists(colFamilyName)
     }
   }
 
