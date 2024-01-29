@@ -3268,37 +3268,23 @@ abstract class CSVSuite
            |  path "${testFile(carsFile)}"
            |)
        """.stripMargin)
+      val expected = Seq(
+        Row("No comment"),
+        Row("Go get one now they are going fast"))
       checkAnswer(
-        spark.table("CarsTable"),
-        Seq(
-          Row(2012, "Tesla", "S", "No comment", null),
-          Row(1997, "Ford", "E350", "Go get one now they are going fast", null),
-          Row(2015, "Chevy", "Volt", "", "")
-        ))
-    }
-    withTable("Products") {
-      spark.sql(
-        s"""
-           |CREATE TABLE IF NOT EXISTS Products (
-           |  product_id INT,
-           |  name STRING,
-           |  price FLOAT default 0.0,
-           |  quantity INT default 0
-           |)
-           |USING CSV
-           |OPTIONS (
-           |  header 'true',
-           |  inferSchema 'false',
-           |  enforceSchema 'false',
-           |  path "${testFile(productsFile)}"
-           |)
-       """.stripMargin)
+        sql("SELECT comment FROM CarsTable WHERE year < 2014"),
+        expected)
       checkAnswer(
-        spark.table("Products"),
-        Seq(
-          Row(1, "Apple", 0.50, 100),
-          Row(2, "Banana", 0.25, 200),
-          Row(3, "Orange", 0.75, 50)))
+        spark.read.format("csv")
+          .options(
+      Map(
+        "header" -> "true",
+        "inferSchema" -> "true",
+        "enforceSchema" -> "false"))
+        .load(testFile(carsFile))
+          .select("comment")
+          .where("year < 2014"),
+        expected)
     }
   }
 }

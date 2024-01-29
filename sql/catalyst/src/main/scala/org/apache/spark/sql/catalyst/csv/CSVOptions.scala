@@ -26,8 +26,10 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.types.StructType
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -285,6 +287,16 @@ class CSVOptions(
    * https://github.com/uniVocity/univocity-parsers/issues/529
    */
   val isColumnPruningEnabled: Boolean = getBool(COLUMN_PRUNING, !multiLine && columnPruning)
+
+  /**
+   * Returns true if column pruning is enabled and there are no existence column default values in
+   * the [[schema]]. This is useful when we want to disable column pruning when there are such
+   * defaults, instead preferring to reach in each row and then post-process it to substitute the
+   * default values after.
+   */
+  def isColumnPruningEnabledAndNoColumnDefaults(schema: StructType): Boolean =
+    isColumnPruningEnabled &&
+      !schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
