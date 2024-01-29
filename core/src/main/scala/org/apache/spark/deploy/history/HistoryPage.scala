@@ -35,8 +35,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
     val content =
-      <script type="module"
-              src={UIUtils.prependBaseUri(request, "/static/historypage-common.js")} /> ++
+      <script src={UIUtils.prependBaseUri(request, "/static/historypage-common.js")} /> ++
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")} />
       <div>
           <div class="container-fluid">
@@ -66,8 +65,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               <script src={UIUtils.prependBaseUri(
                 request, "/static/dataTables.rowsGroup.js")}></script> ++
                 <div id="history-summary"></div> ++
-                <script type="module"
-                        src={UIUtils.prependBaseUri(request, "/static/historypage.js")}></script> ++
+                <script src={UIUtils.prependBaseUri(request, "/static/historypage.js")}></script> ++
                 <script>setAppLimit({parent.maxApplications})</script>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>

@@ -17,7 +17,52 @@
 
 /* global $, Mustache, jQuery, uiRoot */
 
-import {formatDuration, formatTimeMillis} from "./utils.js";
+// This is copied from `utils.js`. Please sync this with it.
+function formatDuration(milliseconds) {
+  if (milliseconds < 100) {
+    return parseInt(milliseconds).toFixed(1) + " ms";
+  }
+  var seconds = milliseconds * 1.0 / 1000;
+  if (seconds < 1) {
+    return seconds.toFixed(1) + " s";
+  }
+  if (seconds < 60) {
+    return seconds.toFixed(0) + " s";
+  }
+  var minutes = seconds / 60;
+  if (minutes < 10) {
+    return minutes.toFixed(1) + " min";
+  } else if (minutes < 60) {
+    return minutes.toFixed(0) + " min";
+  }
+  var hours = minutes / 60;
+  return hours.toFixed(1) + " h";
+}
+
+// This is copied from `utils.js`. Please sync this with it.
+function formatTimeMillis(timeMillis) {
+  if (timeMillis <= 0) {
+    return "-";
+  } else {
+    var dt = new Date(timeMillis);
+    return formatDateString(dt);
+  }
+}
+
+// This is copied from `utils.js`. Please sync this with it.
+function padZeroes(num) {
+  return ("0" + num).slice(-2);
+}
+
+// This is copied from `utils.js`. Please sync this with it.
+function formatDateString(dt) {
+  return dt.getFullYear() + "-" +
+    padZeroes(dt.getMonth() + 1) + "-" +
+    padZeroes(dt.getDate()) + " " +
+    padZeroes(dt.getHours()) + ":" +
+    padZeroes(dt.getMinutes()) + ":" +
+    padZeroes(dt.getSeconds());
+}
 
 var appLimit = -1;
 
