@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DataSource",
     "DataSourceReader",
+    "DataSourceStreamReader",
     "DataSourceWriter",
     "DataSourceRegistration",
     "InputPartition",
@@ -157,6 +158,12 @@ class DataSource(ABC):
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "writer"},
+        )
+
+    def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "stream_reader"},
         )
 
 
@@ -297,6 +304,21 @@ class DataSourceReader(ABC):
         """
         ...
 
+class DataSourceStreamReader(ABC):
+    def latest_offset(self) -> dict:
+        ...
+
+    def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
+        ...
+
+    def read(self, partition) -> Iterator[Union[Tuple, Row]]:
+        ...
+
+    def commit(self, end: dict):
+        ...
+
+    def stop(self):
+        ...
 
 class DataSourceWriter(ABC):
     """

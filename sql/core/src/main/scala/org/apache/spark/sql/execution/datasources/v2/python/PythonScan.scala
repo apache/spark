@@ -17,8 +17,11 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.execution.python.PythonStreamingSourceRunner
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -27,9 +30,23 @@ class PythonScan(
      ds: PythonDataSourceV2,
      shortName: String,
      outputSchema: StructType,
-     options: CaseInsensitiveStringMap) extends Batch with Scan {
+     options: CaseInsensitiveStringMap) extends Scan {
 
-  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
+
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = null
+
+  override def description: String = "(Python)"
+
+  override def readSchema(): StructType = outputSchema
+
+  override def supportedCustomMetrics(): Array[CustomMetric] =
+    ds.source.createPythonMetrics()
+}
+
+class PythonBatch(ds: PythonDataSourceV2, shortName: String,
+                  outputSchema: StructType, options: CaseInsensitiveStringMap) extends Batch {
+  private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   private lazy val infoInPython: PythonDataSourceReadInfo = {
     ds.source.createReadInfoInPython(
@@ -45,13 +62,43 @@ class PythonScan(
     new PythonPartitionReaderFactory(
       ds.source, readerFunc, outputSchema, jobArtifactUUID)
   }
+}
 
-  override def toBatch: Batch = this
+case class PythonStreamingSourceOffset(json: String) extends Offset
 
-  override def description: String = "(Python)"
+case class PythonStreamingSourcePartition(partitions: Array[Byte]) extends InputPartition
 
-  override def readSchema(): StructType = outputSchema
+class PythonMicroBatchStream(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    outputSchema: StructType,
+    options: CaseInsensitiveStringMap) extends MicroBatchStream with Logging {
+  private def createDataSourceFunc =
+    ds.source.createPythonFunction(
+      ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)).dataSource)
 
-  override def supportedCustomMetrics(): Array[CustomMetric] =
-    ds.source.createPythonMetrics()
+  val runner: PythonStreamingSourceRunner =
+    new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema, outputSchema)
+  runner.init()
+  override def initialOffset(): Offset = null
+
+  override def latestOffset(): Offset = PythonStreamingSourceOffset(runner.latestOffset())
+
+
+  override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
+    logError("miao miao:" + start.asInstanceOf[PythonStreamingSourceOffset].json)
+    runner.partitions(start.asInstanceOf[PythonStreamingSourceOffset].json,
+      end.asInstanceOf[PythonStreamingSourceOffset].json).map(PythonStreamingSourcePartition(_))
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = null
+
+  override def commit(end: Offset): Unit = {
+  }
+
+  override def stop(): Unit = {
+    runner.stop()
+  }
+
+  override def deserializeOffset(json: String): Offset = PythonStreamingSourceOffset(json)
 }

@@ -24,8 +24,10 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
@@ -47,6 +49,22 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |""".stripMargin
   private val staticSourceName = "custom_source"
   private var tempDir: File = _
+
+
+  private def simpleDataStreamReaderScript: String =
+    """
+      |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
+      |
+      |class SimpleDataStreamReader(DataSourceStreamReader):
+      |    def latest_offset(self):
+      |        return {"0": "2"}
+      |    def partitions(self, start: dict, end: dict):
+      |        return [InputPartition(i) for i in range(int(start["0"]))]
+      |    def read(self, partition):
+      |        yield (0, partition.value)
+      |        yield (1, partition.value)
+      |        yield (2, partition.value)
+      |""".stripMargin
 
   override def beforeAll(): Unit = {
     // Create a Python Data Source package before starting up the Spark Session
@@ -140,6 +158,35 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val df = spark.read.format(dataSourceName).load()
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+  }
+
+  test("simple data stream source") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def stream_reader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val inputSchema = StructType.fromDDL("input BINARY")
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    val pythonDs = new PythonDataSourceV2
+    pythonDs.setShortName("SimpleDataSource")
+    val stream = new PythonMicroBatchStream(
+      pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
+
+    for (i <- 1 to 50) {
+      val offset = stream.latestOffset()
+      assert(offset.json == "{\"0\": \"2\"}")
+      assert(stream.planInputPartitions(offset, offset).size == 2)
+      Thread.sleep(500)
+    }
+    stream.stop()
   }
 
   test("simple data source with StructType schema") {
