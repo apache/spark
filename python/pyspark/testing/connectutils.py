@@ -89,7 +89,8 @@ class MockRemoteSession:
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
-    from pyspark.sql.connect.dataframe import DataFrame
+    if should_test_connect:
+        from pyspark.sql.connect.dataframe import DataFrame
 
     class MockDF(DataFrame):
         """Helper class that must only be used for the mock plan tests."""
