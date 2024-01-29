@@ -86,7 +86,6 @@ class PythonMicroBatchStream(
 
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
-    logError("miao miao:" + start.asInstanceOf[PythonStreamingSourceOffset].json)
     runner.partitions(start.asInstanceOf[PythonStreamingSourceOffset].json,
       end.asInstanceOf[PythonStreamingSourceOffset].json).map(PythonStreamingSourcePartition(_))
   }
