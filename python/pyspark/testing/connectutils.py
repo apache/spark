@@ -103,55 +103,55 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
                 mocked DataFrame."""
                 return self[name]
 
-    @classmethod
-    def _read_table(cls, table_name):
-        return cls._df_mock(Read(table_name))
-
-    @classmethod
-    def _udf_mock(cls, *args, **kwargs):
-        return "internal_name"
-
-    @classmethod
-    def _df_mock(cls, plan: LogicalPlan) -> MockDF:
-        return PlanOnlyTestFixture.MockDF(plan, cls.connect)
-
-    @classmethod
-    def _session_range(
-        cls,
-        start,
-        end,
-        step=1,
-        num_partitions=None,
-    ):
-        return cls._df_mock(Range(start, end, step, num_partitions))
-
-    @classmethod
-    def _session_sql(cls, query):
-        return cls._df_mock(SQL(query))
-
-    if have_pandas:
+        @classmethod
+        def _read_table(cls, table_name):
+            return cls._df_mock(Read(table_name))
 
         @classmethod
-        def _with_plan(cls, plan):
-            return cls._df_mock(plan)
+        def _udf_mock(cls, *args, **kwargs):
+            return "internal_name"
 
-    @classmethod
-    def setUpClass(cls):
-        cls.connect = MockRemoteSession()
-        cls.session = SparkSession.builder.remote().getOrCreate()
-        cls.tbl_name = "test_connect_plan_only_table_1"
+        @classmethod
+        def _df_mock(cls, plan: LogicalPlan) -> MockDF:
+            return PlanOnlyTestFixture.MockDF(plan, cls.connect)
 
-        cls.connect.set_hook("readTable", cls._read_table)
-        cls.connect.set_hook("range", cls._session_range)
-        cls.connect.set_hook("sql", cls._session_sql)
-        cls.connect.set_hook("with_plan", cls._with_plan)
+        @classmethod
+        def _session_range(
+            cls,
+            start,
+            end,
+            step=1,
+            num_partitions=None,
+        ):
+            return cls._df_mock(Range(start, end, step, num_partitions))
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.connect.drop_hook("readTable")
-        cls.connect.drop_hook("range")
-        cls.connect.drop_hook("sql")
-        cls.connect.drop_hook("with_plan")
+        @classmethod
+        def _session_sql(cls, query):
+            return cls._df_mock(SQL(query))
+
+        if have_pandas:
+
+            @classmethod
+            def _with_plan(cls, plan):
+                return cls._df_mock(plan)
+
+        @classmethod
+        def setUpClass(cls):
+            cls.connect = MockRemoteSession()
+            cls.session = SparkSession.builder.remote().getOrCreate()
+            cls.tbl_name = "test_connect_plan_only_table_1"
+
+            cls.connect.set_hook("readTable", cls._read_table)
+            cls.connect.set_hook("range", cls._session_range)
+            cls.connect.set_hook("sql", cls._session_sql)
+            cls.connect.set_hook("with_plan", cls._with_plan)
+
+        @classmethod
+        def tearDownClass(cls):
+            cls.connect.drop_hook("readTable")
+            cls.connect.drop_hook("range")
+            cls.connect.drop_hook("sql")
+            cls.connect.drop_hook("with_plan")
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
