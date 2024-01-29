@@ -26,12 +26,12 @@ license: |
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
-Internal error using TransformWithStateOperator
+Internal error using TransformWithStateOperator: 
 
 This error class has the following derived error classes:
 
 ## IMPLICIT_KEY_NOT_FOUND
 
-Implicit key not found in state store for stateName=`<stateName>`
+`<message>`
 
 

@@ -1658,12 +1658,12 @@
   },
   "INTERNAL_ERROR_TWS" : {
     "message" : [
-      "Internal error using TransformWithStateOperator"
+      "Internal error using TransformWithStateOperator: "
     ],
     "subClass" : {
       "IMPLICIT_KEY_NOT_FOUND" : {
         "message" : [
-          "Implicit key not found in state store for stateName=<stateName>"
+          "<message>"
         ]
       }
     },

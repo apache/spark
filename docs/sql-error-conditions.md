@@ -1002,7 +1002,7 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
-Internal error using TransformWithStateOperator
+Internal error using TransformWithStateOperator: 
 
 For more details see [INTERNAL_ERROR_TWS](sql-error-conditions-internal-error-tws-error-class.html)
 

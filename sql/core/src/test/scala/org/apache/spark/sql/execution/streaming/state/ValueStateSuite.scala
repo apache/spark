@@ -99,6 +99,7 @@ class ValueStateSuite extends SharedSparkSession
 
       assert(ex.isInstanceOf[SparkException])
       assert(ex.getMessage.contains("Implicit key not found"))
+      assert(ex.getMessage.contains("INTERNAL_ERROR_TWS.IMPLICIT_KEY_NOT_FOUND"))
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
       testState.update(123)
@@ -113,6 +114,7 @@ class ValueStateSuite extends SharedSparkSession
 
       assert(ex1.isInstanceOf[SparkException])
       assert(ex1.getMessage.contains("Implicit key not found"))
+      assert(ex.getMessage.contains("INTERNAL_ERROR_TWS.IMPLICIT_KEY_NOT_FOUND"))
     }
   }
 
