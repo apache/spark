@@ -24,7 +24,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.resource.{ResourceAmountUtils, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.GPU
 
-class ExecutorResourcesAmountsSuite extends SparkFunSuite {
+class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceUtils {
 
   implicit def toFractionalResource(resources: Map[String, Long]): Map[String, Double] =
     resources.map { case (k, v) => k -> ResourceAmountUtils.toFractionalResource(v) }
@@ -37,16 +37,6 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     resources.map { case (resName, addressesAmountMap) =>
       resName -> addressesAmountMap.map { case (k, v) =>
         k -> ResourceAmountUtils.toInternalResource(v) }
-  }
-
-  def compareMaps(lhsMap: Map[String, Double], rhsMap: Map[String, Double],
-                  eps: Double = 0.00000001): Boolean = {
-    val lhs = lhsMap.toSeq.sorted
-    val rhs = rhsMap.toSeq.sorted
-    lhs.size == rhs.size &&
-      lhs.zip(rhs).forall { case ((lName, lAmount), (rName, rAmount)) =>
-        lName == rName && (lAmount - rAmount).abs < eps
-      }
   }
 
   test("assign to rp without task resources requirement") {
