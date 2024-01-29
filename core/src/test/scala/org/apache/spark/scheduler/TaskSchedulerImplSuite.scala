@@ -2327,7 +2327,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         taskScheduler.submitTasks(taskSet)
         // Launch tasks on executor that satisfies resource requirements.
         var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-        taskDescriptions = taskDescriptions.sortBy(t => t.partitionId)
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
         assert(4 * taskNum === taskDescriptions.length)
         assert(!failedTaskSet)
         var gpuAddress = -1
@@ -2433,7 +2433,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         taskScheduler.submitTasks(taskSet)
         // Launch tasks on executor that satisfies resource requirements.
         var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-        taskDescriptions = taskDescriptions.sortBy(t => t.partitionId)
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
         assert(4 * taskNum === taskDescriptions.length)
         assert(!failedTaskSet)
         var gpuAddress = -1
