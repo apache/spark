@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -95,11 +95,10 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
 
   // Fails if the given catalog does not support column default value.
   def validateCatalogForDefaultValue(
-      schema: StructType,
+      columns: Seq[ColumnDefinition],
       catalog: TableCatalog,
       ident: Identifier): Unit = {
-    if (SQLConf.get.enableDefaultColumns &&
-      schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) &&
+    if (SQLConf.get.enableDefaultColumns && columns.exists(_.defaultValue.isDefined) &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "column default value")
@@ -444,6 +443,54 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
     getExistenceDefaultsBitmask(schema)
   def hasExistenceDefaultValues(schema: StructType): Boolean =
     existenceDefaultValues(schema).exists(_ != null)
+
+
+  def checkColumnDefaultValues(plan: LogicalPlan): Unit = {
+    plan match {
+      // Do not check anything if the children are not resolved yet.
+      case _ if !plan.childrenResolved =>
+
+      case cmd: V2CreateTablePlan if cmd.columns.exists(_.defaultValue.isDefined) =>
+        val statement = cmd match {
+          case _: CreateTable => "CREATE TABLE"
+          case _: ReplaceTable => "REPLACE TABLE"
+          case other =>
+            val cmd = other.getClass.getSimpleName
+            throw SparkException.internalError(
+              s"Command $cmd should not have column default value expression.")
+        }
+        cmd.columns.foreach { col =>
+          col.defaultValue.foreach { default =>
+            validateDefaultValueExpr(default, statement, col.name, col.dataType)
+          }
+        }
+
+      case _ =>
+    }
+  }
+
+  private def validateDefaultValueExpr(
+      default: DefaultValueExpression,
+      statement: String,
+      colName: String,
+      targetType: DataType): Unit = {
+    if (default.containsPattern(PLAN_EXPRESSION)) {
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+        statement, colName, default.originalSQL)
+    } else if (default.resolved) {
+      if (!Cast.canUpCast(default.child.dataType, targetType)) {
+        throw QueryCompilationErrors.defaultValuesDataTypeError(
+          statement, colName, default.originalSQL, targetType, default.child.dataType)
+      }
+      // Check passes. We do not check foldable here, as the plan is not optimized yet.
+    } else if (default.references.nonEmpty) {
+      // Ideally we should let the rest of `CheckAnalysis` to report errors about why the default
+      // expression is unresolved. But we should report a better error here if the default
+      // expression references columns, which means it's not a constant for sure.
+      throw QueryCompilationErrors.defaultValueNotConstantError(
+        statement, colName, default.originalSQL)
+    }
+  }
 
   /**
    * This is an Analyzer for processing default column values using built-in functions only.
