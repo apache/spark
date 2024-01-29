@@ -52,9 +52,7 @@ from pyspark.testing.sqlutils import (
 )
 
 
-unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-
-
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class UtilsTestsMixin:
     def test_assert_equal_inttype(self):
         df1 = self.spark.createDataFrame(
