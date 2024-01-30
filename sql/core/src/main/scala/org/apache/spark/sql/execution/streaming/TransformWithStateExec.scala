@@ -107,8 +107,12 @@ case class TransformWithStateExec(
     val keyObj = getKeyObj(keyRow)  // convert key to objects
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val valueObjIter = valueRowIter.map(getValueObj.apply)
-    val mappedIterator = statefulProcessor.handleInputRows(keyObj, valueObjIter,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
+    val mappedIterator = statefulProcessor.handleInputRows(
+      keyObj,
+      valueObjIter,
+      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
+      new ExpiredTimerInfoImpl(false)
+      ).map { obj =>
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
@@ -133,13 +137,16 @@ case class TransformWithStateExec(
       .asInstanceOf[TimerStateUtils.TimestampWithKey]
 
     if (tsWithKey.expiryTimestampMs < currTimestampMs) {
-      ImplicitKeyTracker.setImplicitKey(tsWithKey.key)
-      val mappedIterator = statefulProcessor.handleProcessingTimeTimers(tsWithKey.key,
-        tsWithKey.expiryTimestampMs,
-        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
+      ImplicitGroupingKeyTracker.setImplicitKey(tsWithKey.key)
+      val mappedIterator = statefulProcessor.handleInputRows(
+        tsWithKey.key,
+        Iterator.empty,
+        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
+        new ExpiredTimerInfoImpl(true, Some(tsWithKey.expiryTimestampMs), timeoutMode)
+      ).map { obj =>
         getOutputRow(obj)
       }
-      ImplicitKeyTracker.removeImplicitKey()
+      ImplicitGroupingKeyTracker.removeImplicitKey()
       store.remove(keyRow, TimerStateUtils.PROC_TIMERS_STATE_NAME)
       mappedIterator
     } else {
@@ -249,7 +256,8 @@ case class TransformWithStateExec(
       useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId)
+        val processorHandle = new StatefulProcessorHandleImpl(store,
+          getStateInfo.queryRunId, timeoutMode)
         assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
         statefulProcessor.init(processorHandle, outputMode)
         processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)

@@ -29,7 +29,9 @@ class MemoryStateStore extends StateStore() {
     map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
   }
 
-  override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+  override def createColFamilyIfAbsent(
+      colFamilyName: String,
+      isInternal: Boolean = false): Unit = {
     throw new UnsupportedOperationException("Creating multiple column families is not supported")
   }
 

@@ -45,7 +45,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.remove()
@@ -65,7 +66,8 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     // Trying to create value state here should fail
     _tempState = _processorHandle.getValueState[String, Long]("tempState",
       Encoders.STRING)

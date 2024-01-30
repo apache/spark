@@ -49,7 +49,7 @@ class TimerStateImpl[S](
     stateName: String) extends Logging {
 
   private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
-    val keyOption = ImplicitKeyTracker.getImplicitKeyOption
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
       throw new UnsupportedOperationException("Implicit key not found for operation on" +
         s"stateName=$stateName")

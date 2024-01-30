@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.ValueState
+import org.apache.spark.sql.streaming.{TimeoutMode, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -87,7 +87,8 @@ class ValueStateSuite extends SharedSparkSession
   test("Implicit key operations") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), TimeoutMode.NoTimeouts())
 
       val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
         Encoders.STRING)
@@ -118,7 +119,8 @@ class ValueStateSuite extends SharedSparkSession
   test("Value state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), TimeoutMode.NoTimeouts())
 
       val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
         Encoders.STRING)
@@ -144,7 +146,8 @@ class ValueStateSuite extends SharedSparkSession
   test("Value state operations for multiple instances") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), TimeoutMode.NoTimeouts())
 
       val testState1: ValueState[Long] = handle.getValueState[String, Long]("testState1",
         Encoders.STRING)
@@ -182,6 +185,20 @@ class ValueStateSuite extends SharedSparkSession
       testState2.remove()
       assert(!testState2.exists())
       assert(testState2.get() === null)
+    }
+  }
+
+  test("Value state operations for unsupported type name should fail") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), TimeoutMode.NoTimeouts())
+
+      val ex = intercept[Exception] {
+        handle.getValueState[String, Long]("_testState", Encoders.STRING)
+      }
+      assert(ex.isInstanceOf[UnsupportedOperationException])
+      assert(ex.getMessage.contains("reserved for internal use"))
     }
   }
 }
