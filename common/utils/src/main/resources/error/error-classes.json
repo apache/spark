@@ -1768,7 +1768,7 @@
       },
       "NOT_CONSTANT" : {
         "message" : [
-          "which is not a constant expression whose equivalent value is known at query planning time; please update your command to change the column default value to satisfy this constraint and then retry the command again."
+          "which is not a constant expression whose equivalent value is known at query planning time."
         ]
       },
       "SUBQUERY_EXPRESSION" : {

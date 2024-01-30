@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -444,32 +444,8 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
   def hasExistenceDefaultValues(schema: StructType): Boolean =
     existenceDefaultValues(schema).exists(_ != null)
 
-
-  def checkColumnDefaultValues(plan: LogicalPlan): Unit = {
-    plan match {
-      // Do not check anything if the children are not resolved yet.
-      case _ if !plan.childrenResolved =>
-
-      case cmd: V2CreateTablePlan if cmd.columns.exists(_.defaultValue.isDefined) =>
-        val statement = cmd match {
-          case _: CreateTable => "CREATE TABLE"
-          case _: ReplaceTable => "REPLACE TABLE"
-          case other =>
-            val cmd = other.getClass.getSimpleName
-            throw SparkException.internalError(
-              s"Command $cmd should not have column default value expression.")
-        }
-        cmd.columns.foreach { col =>
-          col.defaultValue.foreach { default =>
-            validateDefaultValueExpr(default, statement, col.name, col.dataType)
-          }
-        }
-
-      case _ =>
-    }
-  }
-
-  private def validateDefaultValueExpr(
+  // Called to check default value expressions in the analyzed plan.
+  def validateDefaultValueExpr(
       default: DefaultValueExpression,
       statement: String,
       colName: String,

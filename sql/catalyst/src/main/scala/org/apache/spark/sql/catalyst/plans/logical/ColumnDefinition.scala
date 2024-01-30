@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.LiteralValue
@@ -39,6 +42,7 @@ case class ColumnDefinition(
     defaultValue: Option[DefaultValueExpression] = None,
     generationExpression: Option[String] = None,
     metadata: Metadata = Metadata.empty) extends Expression with Unevaluable {
+
   override def children: Seq[Expression] = defaultValue.toSeq
 
   override protected def withNewChildrenInternal(
@@ -102,6 +106,42 @@ object ColumnDefinition {
       generationExpr,
       metadataBuilder.build()
     )
+  }
+
+  // Called by `CheckAnalysis` to check column definitions in DDL commands.
+  def checkColumnDefinitions(plan: LogicalPlan): Unit = {
+    plan match {
+      // Do not check anything if the children are not resolved yet.
+      case _ if !plan.childrenResolved =>
+
+      case cmd: V2CreateTablePlan if cmd.columns.exists(_.defaultValue.isDefined) =>
+        val statement = cmd match {
+          case _: CreateTable => "CREATE TABLE"
+          case _: ReplaceTable => "REPLACE TABLE"
+          case other =>
+            val cmd = other.getClass.getSimpleName
+            throw SparkException.internalError(
+              s"Command $cmd should not have column default value expression.")
+        }
+        cmd.columns.foreach { col =>
+          if (col.defaultValue.isDefined && col.generationExpression.isDefined) {
+            throw new AnalysisException(
+              errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+              messageParameters = Map(
+                "colName" -> col.name,
+                "defaultValue" -> col.defaultValue.get.originalSQL,
+                "genExpr" -> col.generationExpression.get
+              )
+            )
+          }
+
+          col.defaultValue.foreach { default =>
+            validateDefaultValueExpr(default, statement, col.name, col.dataType)
+          }
+        }
+
+      case _ =>
+    }
   }
 }
 
