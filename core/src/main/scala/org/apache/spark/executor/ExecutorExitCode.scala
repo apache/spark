@@ -49,7 +49,7 @@ object ExecutorExitCode {
     exitCode match {
       case UNCAUGHT_EXCEPTION => "Uncaught exception."
       case UNCAUGHT_EXCEPTION_TWICE => "Uncaught exception, and logging the exception failed."
-      case OOM => "OutOfMemoryError."
+      case OOM => "OutOfMemoryError"
       case DISK_STORE_FAILED_TO_CREATE_DIR =>
         "Failed to create local directory (bad spark.local.dir?)"
       // TODO: replace external block store with concrete implementation name
