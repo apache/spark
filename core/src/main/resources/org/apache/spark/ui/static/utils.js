@@ -276,6 +276,9 @@ function errorMessageCell(errorMessage) {
 function stringAbbreviate(content, limit) {
   if (content && content.length > limit) {
     const summary = content.substring(0, limit) + '...';
+    // TODO: Reused stacktrace-details* style for convenience, but it's not really a stacktrace
+    // Consider creating a new style for this case if stacktrace-details is not appropriate in
+    // the future.
     const details = detailsUINode(true, content);
     return summary + details;
   } else {
