@@ -51,7 +51,7 @@ object KafkaPartitionLocationAssigner {
     }.getOrElse(DefaultKafkaPartitionLocationAssigner)
 }
 
-object DefaultKafkaPartitionLocationAssinger extends KafkaPartitionLocationAssigner {
+object DefaultKafkaPartitionLocationAssigner extends KafkaPartitionLocationAssigner {
   def getLocationPreferences(
     partInfos: Seq[PartitionInfo],
     knownExecutors: Seq[String]): Map[PartitionInfo, Seq[String]] =

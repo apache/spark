@@ -22,10 +22,10 @@ import java.{util => ju}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.kafka.clients.admin.Admin
+import org.apache.kafka.clients.admin.{Admin, TopicDescription}
 import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
-import org.apache.kafka.common.{ TopicPartition, TopicPartitionInfo }
+import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
