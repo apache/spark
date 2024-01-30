@@ -1135,13 +1135,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         val df = emptyBinaryDF.select(
           from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
         )
-        // Top level empty message is retained without adding dummy column to the schema.
+        // Top level empty message is retained by adding dummy column to the schema.
         assert(df.schema ==
           structFromDDL("empty_proto struct<__dummy_field_in_empty_struct: string>"))
     }
 
-    // EmptyProto at inner level, because empty struct type is not allowed in Spark.,
-    // a dummy column is inserted to retain the empty message.
+    // Inner level empty message is retained by adding dummy column to the schema.
     checkWithFileAndClassName("EmptyProtoWrapper") {
       case (name, descFilePathOpt) =>
         val df = emptyBinaryDF.select(
@@ -1156,7 +1155,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   test("Write empty proto to parquet when retain.empty.message.types=true") {
     // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained
     // as a field by inserting a dummy column as sub column, such schema can be written to parquet.
-    val options = Map("recursive.fields.max.depth" -> "4", "retain.empty.message.types" -> "true")
+    val options = Map("retain.empty.message.types" -> "true")
     withTempDir { file =>
       val binaryDF = Seq(
         EmptyProtoWrapper.newBuilder.setName("my_name").build().toByteArray)
@@ -1208,8 +1207,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           val df = emptyBinaryDF.select(
             from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
           )
-        assert(df.schema ==
-          structFromDDL("empty_proto struct<>"))
+        assert(df.schema == structFromDDL("empty_proto struct<>"))
     }
 
     // EmptyRecursiveProto at inner level.

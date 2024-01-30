@@ -215,7 +215,7 @@ private[sql] class ProtobufOptions(
   //
   // ```
   // message A {}
-  // Message B {A a = 1, string name = 2}
+  // message B {A a = 1, string name = 2}
   // ```
   //
   // By default, in the spark schema field a will be dropped, which result in schema
