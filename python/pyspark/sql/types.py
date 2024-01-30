@@ -2216,9 +2216,13 @@ def _make_type_verifier(
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
             raise PySparkTypeError(
-                message=new_msg(
-                    "%s can not accept object %r in type %s" % (dataType, obj, type(obj))
-                )
+                error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
+                message_parameters={
+                    "field_name": name if name is not None else "",
+                    "data_type": str(dataType),
+                    "obj": repr(obj),
+                    "obj_type": str(type(obj)),
+                },
             )
 
     if isinstance(dataType, (StringType, CharType, VarcharType)):
@@ -2369,9 +2373,13 @@ def _make_type_verifier(
                     verifier(d.get(f))
             else:
                 raise PySparkTypeError(
-                    message=new_msg(
-                        "StructType can not accept object %r in type %s" % (obj, type(obj))
-                    )
+                    error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
+                    message_parameters={
+                        "field_name": name if name is not None else "",
+                        "data_type": str(dataType),
+                        "obj": repr(obj),
+                        "obj_type": str(type(obj)),
+                    },
                 )
 
         verify_value = verify_struct

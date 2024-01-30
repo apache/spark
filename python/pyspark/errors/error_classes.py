@@ -286,6 +286,11 @@ ERROR_CLASSES_JSON = '''
       "An error occurred while calling <func_name>: <error_msg>."
     ]
   },
+  "FIELD_DATA_TYPE_UNACCEPTABLE": {
+    "message": [
+      "<field_name>: <data_type> can not accept object <obj> in type <obj_type>."
+    ]
+  },
   "FIELD_NOT_NULLABLE": {
     "message": [
       "<field_name>: This field is not nullable, but got None."
