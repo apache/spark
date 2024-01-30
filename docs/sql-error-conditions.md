@@ -384,6 +384,12 @@ The codec `<codecName>` is not available. Consider to set the config `<configKey
 
 Cannot find a short name for the codec `<codecName>`.
 
+### COLLATION_INVALID_NAME
+
+[SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The value `<collationName>` does not represent correct collation name.
+
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)

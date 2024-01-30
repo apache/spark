@@ -159,14 +159,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
           "suggestion" -> toSQLId(hint)))
   }
 
-  def invalidCollationNameError(collationName: String): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_COLLATION_NAME",
-      messageParameters = Map(
-        "collationName" -> collationName),
-      cause = null)
-  }
-
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
     new SparkException(
       errorClass = "CANNOT_CAST_DATATYPE",
