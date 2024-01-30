@@ -21,8 +21,9 @@ import java.util.UUID
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -44,7 +45,7 @@ object ImplicitGroupingKeyTracker {
  */
 object StatefulProcessorHandleState extends Enumeration {
   type StatefulProcessorHandleState = Value
-  val CREATED, INITIALIZED, DATA_PROCESSED, CLOSED = Value
+  val CREATED, INITIALIZED, DATA_PROCESSED, TIMER_PROCESSED, CLOSED = Value
 }
 
 class QueryInfoImpl(
@@ -68,7 +69,10 @@ class QueryInfoImpl(
  * track of valid transitions as various functions are invoked to track object lifecycle.
  * @param store - instance of state store
  */
-class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
+class StatefulProcessorHandleImpl(
+    store: StateStore,
+    runId: UUID,
+    timeoutMode: TimeoutMode)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -117,4 +121,44 @@ class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
+
+  private def getTimerState[T](stateName: String): TimerStateImpl[T] = {
+    store.createColFamilyIfAbsent(stateName, true)
+    new TimerStateImpl[T](store, stateName)
+  }
+
+  private lazy val procTimers =
+    getTimerState[Boolean](TimerStateUtils.PROC_TIMERS_STATE_NAME)
+
+  override def registerTimer(expiryTimestampMs: Long): Unit = {
+    verify(timeoutMode == ProcessingTime || timeoutMode == EventTime,
+    s"Cannot register timers with incorrect TimeoutMode")
+    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
+    s"Cannot register processing time timer with " +
+      s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+
+    if (procTimers.exists(expiryTimestampMs)) {
+      logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
+    } else {
+      logInfo(s"Registering timer with expiryTimestampMs=$expiryTimestampMs")
+      procTimers.add(expiryTimestampMs, true)
+    }
+  }
+
+  override def deleteTimer(expiryTimestampMs: Long): Unit = {
+    verify(timeoutMode == ProcessingTime, s"Cannot delete processing time " +
+      "timers with incorrect TimeoutMode")
+    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
+    s"Cannot delete processing time timer with " +
+      s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+
+    if (!procTimers.exists(expiryTimestampMs)) {
+      logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")
+    } else {
+      logInfo(s"Removing timer with expiryTimestampMs=$expiryTimestampMs")
+      procTimers.remove(expiryTimestampMs)
+    }
+  }
+
+
 }

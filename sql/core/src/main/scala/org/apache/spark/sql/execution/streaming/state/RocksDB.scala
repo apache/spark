@@ -38,6 +38,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.TimerStateUtils
 import org.apache.spark.util.{NextIterator, Utils}
 
 /**
@@ -219,7 +220,7 @@ class RocksDB(
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
         changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
           if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
-            createColFamilyIfAbsent(colFamilyName)
+            createColFamilyIfAbsent(colFamilyName, checkInternalColumnFamilies(colFamilyName))
           }
 
           recordType match {
@@ -248,12 +249,33 @@ class RocksDB(
   }
 
   /**
+   * Check whether the column family name is for internal column families.
+   * @param cfName - column family name
+   * @return - true if the column family is for internal use, false otherwise
+   */
+  private def checkInternalColumnFamilies(cfName: String): Boolean = {
+    if (cfName == TimerStateUtils.PROC_TIMERS_STATE_NAME) {
+      true
+    } else {
+      false
+    }
+  }
+
+  /**
    * Create RocksDB column family, if not created already
    */
-  def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-    if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false): Unit = {
+    // Remove leading and trailing whitespaces
+    val cfName = colFamilyName.trim
+
+    if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
       throw new UnsupportedOperationException("Failed to create column family with reserved " +
         s"name=$colFamilyName")
+    }
+
+    if (!isInternal && cfName.charAt(0) == '_') {
+      throw new UnsupportedOperationException("Failed to create column family with unsupported " +
+        s"starting character. State variables starting with '_' are reserved for internal use.")
     }
 
     if (!checkColFamilyExists(colFamilyName)) {

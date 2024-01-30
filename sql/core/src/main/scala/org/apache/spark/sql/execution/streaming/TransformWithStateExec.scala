@@ -18,9 +18,12 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.commons.lang3.SerializationUtils
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.state._
@@ -62,8 +65,16 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
-  // TODO: update this to run no-data batches when timer support is added
-  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = false
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
+    timeoutMode match {
+      // TODO: check if we can return true only if actual timers are registered
+      case ProcessingTime =>
+        true
+
+      case _ =>
+        false
+    }
+  }
 
   override protected def withNewChildInternal(
     newChild: SparkPlan): TransformWithStateExec = copy(child = newChild)
@@ -112,6 +123,48 @@ case class TransformWithStateExec(
     }
   }
 
+  private def handleTimerRows(
+      store: StateStore,
+      keyRow: UnsafeRow,
+      currTimestampMs: Long): Iterator[InternalRow] = {
+    val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+    val tsWithKey = SerializationUtils
+      .deserialize(keyRow.getBinary(0))
+      .asInstanceOf[TimerStateUtils.TimestampWithKey]
+
+    if (tsWithKey.expiryTimestampMs < currTimestampMs) {
+      ImplicitKeyTracker.setImplicitKey(tsWithKey.key)
+      val mappedIterator = statefulProcessor.handleProcessingTimeTimers(tsWithKey.key,
+        tsWithKey.expiryTimestampMs,
+        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
+        getOutputRow(obj)
+      }
+      ImplicitKeyTracker.removeImplicitKey()
+      store.remove(keyRow, TimerStateUtils.PROC_TIMERS_STATE_NAME)
+      mappedIterator
+    } else {
+      Iterator.empty
+    }
+  }
+
+  private def processTimers(
+      store: StateStore,
+      timeoutMode: TimeoutMode): Iterator[InternalRow] = {
+    timeoutMode match {
+      case ProcessingTime =>
+        assert(batchTimestampMs.isDefined)
+        store.createColFamilyIfAbsent(TimerStateUtils.PROC_TIMERS_STATE_NAME, true)
+
+        val procTimeIter = store
+          .iterator(TimerStateUtils.PROC_TIMERS_STATE_NAME)
+        procTimeIter.flatMap { case rowPair =>
+          handleTimerRows(store, rowPair.key, batchTimestampMs.get)
+        }
+
+      case _ => Iterator.empty
+    }
+  }
+
   private def processDataWithPartition(
       iter: Iterator[InternalRow],
       store: StateStore,
@@ -119,9 +172,11 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
+    val timeoutLatencyMs = longMetric("allRemovalsTimeMs")
 
     val currentTimeNs = System.nanoTime
     val updatesStartTimeNs = currentTimeNs
+    var timeoutProcessingStartTimeNs = currentTimeNs
 
     // If timeout is based on event time, then filter late data based on watermark
     val filteredIter = watermarkPredicateForDataForLateEvents match {
@@ -131,8 +186,33 @@ case class TransformWithStateExec(
         iter
     }
 
-    val outputIterator = processNewData(filteredIter)
-    processorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+    val newDataProcessorIter =
+      CompletionIterator[InternalRow, Iterator[InternalRow]](
+      processNewData(filteredIter), {
+        // Once the input is processed, mark the start time for timeout processing to measure
+        // it separately from the overall processing time.
+        timeoutProcessingStartTimeNs = System.nanoTime
+        processorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+    })
+
+    // Late-bind the timeout processing iterator so it is created *after* the input is
+    // processed (the input iterator is exhausted) and the state updates are written into the
+    // state store. Otherwise the iterator may not see the updates (e.g. with RocksDB state store).
+    val timeoutProcessorIter = new Iterator[InternalRow] {
+      private lazy val itr = getIterator()
+      override def hasNext = itr.hasNext
+      override def next() = itr.next()
+      private def getIterator(): Iterator[InternalRow] =
+        CompletionIterator[InternalRow, Iterator[InternalRow]](
+          processTimers(store, timeoutMode), {
+          // Note: `timeoutLatencyMs` also includes the time the parent operator took for
+          // processing output returned through iterator.
+          timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
+          processorHandle.setHandleState(StatefulProcessorHandleState.TIMER_PROCESSED)
+        })
+    }
+
+    val outputIterator = newDataProcessorIter ++ timeoutProcessorIter
     // Return an iterator of all the rows generated by all the keys, such that when fully
     // consumed, all the state updates will be committed by the state store
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
@@ -151,6 +231,13 @@ case class TransformWithStateExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
+
+    timeoutMode match {
+      case ProcessingTime =>
+        require(batchTimestampMs.nonEmpty)
+
+      case _ =>
+    }
 
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateInfo,
