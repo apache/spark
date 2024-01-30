@@ -22,7 +22,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
  *
- * ERROR_CLASS has a prefix of "TWS_" or "STATE_STORE_" to indicate where the error is from
+ * ERROR_CLASS has a prefix of "STATE_STORE_" to indicate where the error is from
  */
 object StateStoreErrors {
   def implicitKeyNotFound(stateName: String): SparkException = {
