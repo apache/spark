@@ -308,4 +308,29 @@ class CollationSuite extends QueryTest
       checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
     }
   }
+
+  test("disable partition on collated string column") {
+    def createTable(partitionColumns: String*): Unit = {
+      val tableName = "test_partition"
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE IF NOT EXISTS $tableName
+             |(id INT, c1 STRING COLLATE 'SR_CI_AI', c2 STRING)
+             |USING PARQUET PARTITIONED BY (${partitionColumns.mkString(", ")})
+             |""".stripMargin)
+      }
+    }
+
+    // works fine on non collated columns
+    createTable("id")
+    createTable("c2")
+    createTable("id", "c2")
+
+    Seq(Seq("c1"), Seq("id", "c1"), Seq("c2", "c1")).foreach { partitionColumns =>
+      intercept[AnalysisException] {
+        createTable(partitionColumns: _*)
+      }
+    }
+  }
 }
