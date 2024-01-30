@@ -482,7 +482,8 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
         throw QueryCompilationErrors.defaultValuesDataTypeError(
           statement, colName, default.originalSQL, targetType, default.child.dataType)
       }
-      // Check passes. We do not check foldable here, as the plan is not optimized yet.
+      // Our analysis check passes here. We do not further inspect whether the
+      // expression is `foldable` here, as the plan is not optimized yet.
     } else if (default.references.nonEmpty) {
       // Ideally we should let the rest of `CheckAnalysis` to report errors about why the default
       // expression is unresolved. But we should report a better error here if the default
