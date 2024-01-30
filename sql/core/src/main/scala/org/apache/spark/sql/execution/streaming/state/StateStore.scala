@@ -103,6 +103,10 @@ trait ReadStateStore {
  * double resource cleanup.
  */
 trait StateStore extends ReadStateStore {
+
+  /**
+   * Remove column family with given name, if present.
+   */
   def removeColFamilyIfExists(colFamilyName: String): Unit
 
   /**
