@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
@@ -52,6 +53,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,
     forTimestampNTZ = true)
+
+  private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+  private val legacyMode = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
 
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
@@ -148,16 +152,30 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
           val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
-        val timestampType = SQLConf.get.timestampType
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if (options.inferTimestamp && (SQLConf.get.legacyTimeParserPolicy ==
-          LegacyBehaviorPolicy.LEGACY || timestampType == TimestampNTZType) &&
+        } else if (options.inferTimestamp) {
+          // For text-based format, it's ambiguous to infer a timestamp string without timezone, as
+          // it can be both TIMESTAMP LTZ and NTZ. To avoid behavior changes with the new support
+          // of NTZ, here we only try to infer NTZ if the config is set to use NTZ by default.
+          if (isDefaultNTZ &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-          timestampType
-        } else if (options.inferTimestamp &&
-            timestampFormatter.parseOptional(field).isDefined) {
-          TimestampType
+            TimestampNTZType
+          } else if (timestampFormatter.parseOptional(field).isDefined) {
+            TimestampType
+          } else if (legacyMode) {
+            val utf8Value = UTF8String.fromString(field)
+            // There was a mistake that we use TIMESTAMP NTZ parser to infer LTZ type with legacy
+            // mode. The mistake makes it easier to infer TIMESTAMP LTZ type and we have to keep
+            // this behavior now. See SPARK-46769 for more details.
+            if (SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, false).isDefined) {
+              TimestampType
+            } else {
+              StringType
+            }
+          } else {
+            StringType
+          }
         } else {
           StringType
         }

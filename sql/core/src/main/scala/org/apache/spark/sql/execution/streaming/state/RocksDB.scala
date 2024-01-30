@@ -151,6 +151,8 @@ class RocksDB(
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
 
+        // reset last snapshot version
+        lastSnapshotVersion = 0L
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
@@ -191,6 +193,7 @@ class RocksDB(
    */
   private def replayChangelog(endVersion: Long): Unit = {
     for (v <- loadedVersion + 1 to endVersion) {
+      logInfo(s"replaying changelog from version $loadedVersion -> $endVersion")
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v)

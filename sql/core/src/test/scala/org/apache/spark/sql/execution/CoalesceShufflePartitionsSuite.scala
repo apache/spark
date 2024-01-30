@@ -310,6 +310,67 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-46590 adaptive query execution works correctly with broadcast join and union") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      import spark.implicits._
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      val df00 = spark.range(0, 1000, 2)
+        .selectExpr("id as key", "id as value")
+        .union(Seq.fill(100000)((600, 600)).toDF("key", "value"))
+      val df01 = spark.range(0, 1000, 3)
+        .selectExpr("id as key", "id as value")
+      val df10 = spark.range(0, 1000, 5)
+        .selectExpr("id as key", "id as value")
+        .union(Seq.fill(500000)((600, 600)).toDF("key", "value"))
+      val df11 = spark.range(0, 1000, 7)
+        .selectExpr("id as key", "id as value")
+      val df20 = spark.range(0, 10).selectExpr("id as key", "id as value")
+
+      df20.join(df00.join(df01, Array("key", "value"), "left_outer")
+        .union(df10.join(df11, Array("key", "value"), "left_outer")))
+        .write
+        .format("noop")
+        .mode("overwrite")
+        .save()
+    }
+    withSparkSession(test, 12000, None)
+  }
+
+  test("SPARK-46590 adaptive query execution works correctly with cartesian join and union") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      import spark.implicits._
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "100B")
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      val df00 = spark.range(0, 10, 2)
+        .selectExpr("id as key", "id as value")
+        .union(Seq.fill(1000)((600, 600)).toDF("key", "value"))
+      val df01 = spark.range(0, 10, 3)
+        .selectExpr("id as key", "id as value")
+      val df10 = spark.range(0, 10, 5)
+        .selectExpr("id as key", "id as value")
+        .union(Seq.fill(5000)((600, 600)).toDF("key", "value"))
+      val df11 = spark.range(0, 10, 7)
+        .selectExpr("id as key", "id as value")
+      val df20 = spark.range(0, 10)
+        .selectExpr("id as key", "id as value")
+        .union(Seq.fill(1000)((11, 11)).toDF("key", "value"))
+      val df21 = spark.range(0, 10)
+        .selectExpr("id as key", "id as value")
+
+      df20.join(df21.hint("shuffle_hash"), Array("key", "value"), "left_outer")
+        .join(df00.join(df01.hint("shuffle_hash"), Array("key", "value"), "left_outer")
+          .union(df10.join(df11.hint("shuffle_hash"), Array("key", "value"), "left_outer")))
+        .write
+        .format("noop")
+        .mode("overwrite")
+        .save()
+    }
+    withSparkSession(test, 100, None)
+  }
+
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
     val test: SparkSession => Unit = { spark: SparkSession =>
       spark.sql("SET spark.sql.exchange.reuse=true")
