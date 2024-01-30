@@ -2208,6 +2208,36 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("disable filter pushdown for collated strings") {
+    withTempPath { path =>
+      val collation = "'SR_CI_AI'"
+      val df = sql(
+        s""" SELECT collate(c, $collation) as c
+          |FROM VALUES ('aaa'), ('AAA'), ('bbb')
+          |as data(c)
+          |""".stripMargin)
+
+      df.write.parquet(path.getAbsolutePath)
+
+      val filters = Seq(
+        ("==", Seq(Row("aaa"), Row("AAA"))),
+        ("!=", Seq(Row("bbb"))),
+        ("<", Seq()),
+        ("<=", Seq(Row("aaa"), Row("AAA"))),
+        (">", Seq(Row("bbb"))),
+        (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))),
+      )
+
+      filters.foreach { filter =>
+        val readback = spark.read.parquet(path.getAbsolutePath)
+          .where(s"c ${filter._1} collate('aaa', $collation)")
+        val explain = readback.queryExecution.explainString(ExplainMode.fromString("extended"))
+        assert(explain.contains("PushedFilters: []"))
+        checkAnswer(readback, filter._2)
+      }
+    }
+  }
 }
 
 @ExtendedSQLTest
