@@ -34,7 +34,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
+class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests {
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
     override val env = Map(
@@ -43,7 +43,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val usesIpc = false
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowMultiQueries=true"
   }
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -72,7 +72,17 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
       "'jumps', 'over', 'the', 'lazy', 'dog', '{\"status\": \"merrily\"}')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE upsert (id INTEGER, ts TIMESTAMP, v1 DOUBLE, v2 DOUBLE, " +
+      "PRIMARY KEY pk (id, ts))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsert VALUES " +
+      "(1, '1996-01-01 01:23:45', 1.234, 1.234567), " +
+      "(1, '1996-01-01 01:23:46', 1.235, 1.234568), " +
+      "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
+      "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
+
+  override val createTableOption = "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
 
   test("Basic test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
@@ -196,4 +206,5 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
   }
+
 }

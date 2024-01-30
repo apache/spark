@@ -23,8 +23,7 @@ import java.text.SimpleDateFormat
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Properties
 
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
 import org.apache.spark.tags.DockerTest
@@ -38,7 +37,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
+class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests {
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1-alpine")
     override val env = Map(
@@ -159,7 +158,16 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO custom_type (type_array, type) VALUES" +
       "('{1,fds,fdsa}','fdasfasdf')").executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE upsert (id integer, ts timestamp, v1 double precision, " +
+      "v2 double precision, CONSTRAINT pk PRIMARY KEY (id, ts))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsert VALUES " +
+      "(1, '1996-01-01 01:23:45', 1.234, 1.234567), " +
+      "(1, '1996-01-01 01:23:46', 1.235, 1.234568), " +
+      "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
+      "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
+
+  override val createTableOption = "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
 
   test("Type mapping for various types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)

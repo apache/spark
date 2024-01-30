@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType, StructField}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
@@ -136,6 +136,27 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def getTableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
+  }
+
+  override def supportsUpsert(): Boolean = true
+
+  override def getUpsertStatement(
+      tableName: String,
+      columns: Array[StructField],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String = {
+    val insertColumns = columns.map(_.name).map(quoteIdentifier)
+    val placeholders = columns.map(_ => "?").mkString(",")
+    val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
+    val updateColumns = insertColumns.filterNot(upsertKeyColumns.contains)
+    val updateClause =
+      updateColumns.map(x => s"$x = VALUES($x)").mkString(", ")
+
+    s"""
+       |INSERT INTO $tableName (${insertColumns.mkString(", ")})
+       |VALUES ( $placeholders )
+       |ON DUPLICATE KEY UPDATE $updateClause
+       |""".stripMargin
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
@@ -269,7 +290,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       }
     } catch {
       case _: Exception =>
-        logWarning("Cannot retrieved index info.")
+        logWarning("Cannot retrieve index info.")
     }
     indexMap.values.toArray
   }
