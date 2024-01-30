@@ -2354,7 +2354,7 @@ def _make_type_verifier(
             elif isinstance(obj, (tuple, list)):
                 if len(obj) != len(verifiers):
                     raise PySparkValueError(
-                        error_class="STRUCT_LENGTH_MISMATCH",
+                        error_class="FIELD_STRUCT_LENGTH_MISMATCH",
                         message_parameters={
                             "field_name": name if name is not None else "",
                             "object_length": str(len(obj)),
