@@ -2085,17 +2085,17 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 
 '`<optionName>`' must be specified.
 
+### STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Streaming stateful operator name does not match with the operator in state metadata with the same operator id (id: `<operatorId>`). This likely to happen when user changes stateful operator of existing streaming query. Stateful Operator name for current batch: `<currentOperatorName>`; Operator name in the state metadata: `<stateMetadataOperatorName>`.
+
 ### STREAM_FAILED
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Query [id = `<id>`, runId = `<runId>`] terminated with exception: `<message>`
-
-### STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA
-
-* [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Streaming stateful operator name does not match with the operator in state metadata with the same operator id (id: `<operatorId>`). Stateful Operator name for current batch: `<currentOperatorName>`; Operator name in the state metadata: `<stateMetadataOperatorName>`.
 
 ### SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT
 
