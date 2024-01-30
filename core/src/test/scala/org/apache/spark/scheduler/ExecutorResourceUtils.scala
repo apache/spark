@@ -15,31 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.scheduler
 
-import org.apache.spark.annotation.Stable
+trait ExecutorResourceUtils {
 
-/**
- * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
- *
- * @since 1.3.0
- * @param collationId The id of collation for this StringType.
- */
-@Stable
-class StringType private(val collationId: Int) extends AtomicType {
-  /**
-   * The default size of a value of the StringType is 20 bytes.
-   */
-  override def defaultSize: Int = 20
-
-  private[spark] override def asNullable: StringType = this
-}
-
-/**
- * @since 1.3.0
- */
-@Stable
-case object StringType extends StringType(0) {
-  val DEFAULT_COLLATION_ID = 0
-  def apply(collationId: Int): StringType = new StringType(collationId)
+  def compareMaps(lhs: Map[String, Double], rhs: Map[String, Double],
+                  eps: Double = 0.00000001): Boolean = {
+    lhs.size == rhs.size && lhs.forall { case (lName, lAmount) =>
+      rhs.get(lName).exists(rAmount => (lAmount - rAmount).abs < eps)
+    }
+  }
 }

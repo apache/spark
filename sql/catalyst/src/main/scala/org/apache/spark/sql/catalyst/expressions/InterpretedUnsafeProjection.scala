@@ -161,7 +161,7 @@ object InterpretedUnsafeProjection {
 
         case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
-        case PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
+        case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
         case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 

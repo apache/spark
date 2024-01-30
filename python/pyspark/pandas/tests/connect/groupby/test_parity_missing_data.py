@@ -22,7 +22,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class GroupbyParityMissingDataTests(
-    GroupbyMissingDataMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    GroupbyMissingDataMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
