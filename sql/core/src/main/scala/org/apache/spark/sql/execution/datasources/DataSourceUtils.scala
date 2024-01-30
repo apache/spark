@@ -286,15 +286,19 @@ object DataSourceUtils extends PredicateHelper {
    * @param expression The filter expression to be evaluated.
    * @return A boolean indicating whether the filter should be pushed down or not.
    */
-  def shouldPushFilter(expression: Expression): Boolean = expression match {
-    case attr: AttributeReference =>
-      attr.dataType match {
-        // don't push down filters for string columns with non-default collation
-        // as it could lead to incorrect results
-        case st: StringType => st.isDefaultCollation
-        case _ => true
-      }
+  def shouldPushFilter(expression: Expression): Boolean = {
+    def shouldPushFilterRecursive(expression: Expression): Boolean = expression match {
+      case attr: AttributeReference =>
+        attr.dataType match {
+          // don't push down filters for string columns with non-default collation
+          // as it could lead to incorrect results
+          case st: StringType => st.isDefaultCollation
+          case _ => true
+        }
 
-    case _ => expression.children.forall(shouldPushFilter)
+      case _ => expression.children.forall(shouldPushFilterRecursive)
+    }
+
+    expression.deterministic && shouldPushFilterRecursive(expression)
   }
 }
