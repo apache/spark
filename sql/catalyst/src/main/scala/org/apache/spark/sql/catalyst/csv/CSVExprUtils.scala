@@ -25,13 +25,18 @@ object CSVExprUtils {
    * This is currently being used in CSV reading path and CSV schema inference.
    */
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
+    @inline
+    def nonEmptyLine(line: String) : Boolean = {
+      line.trim.nonEmpty || line.contains(options.delimiter)
+    }
+
     if (options.isCommentSet) {
       val commentPrefix = options.comment.toString
       iter.filter { line =>
-        line.trim.nonEmpty && !line.startsWith(commentPrefix)
+        nonEmptyLine(line) && !line.startsWith(commentPrefix)
       }
     } else {
-      iter.filter(_.trim.nonEmpty)
+      iter.filter(nonEmptyLine)
     }
   }
 
