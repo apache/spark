@@ -54,20 +54,20 @@ class ConvertDtypesMixin:
         self.assert_eq(pdf2, psdf2)
         self.assert_eq(pdf2.dtypes, psdf2.dtypes)
 
-        # pdf2 = self.pdf.convert_dtypes(convert_string=False)
-        # psdf2 = self.psdf.convert_dtypes(convert_string=False)
-        # self.assert_eq(pdf2, psdf2)
-        # self.assert_eq(pdf2.dtypes, psdf2.dtypes)
+        pdf2 = self.pdf.convert_dtypes(convert_string=False)
+        psdf2 = self.psdf.convert_dtypes(convert_string=False)
+        self.assert_eq(pdf2, psdf2)
+        self.assert_eq(pdf2.dtypes, psdf2.dtypes)
 
         pdf2 = self.pdf.convert_dtypes(convert_integer=False)
         psdf2 = self.psdf.convert_dtypes(convert_integer=False)
         self.assert_eq(pdf2, psdf2)
         self.assert_eq(pdf2.dtypes, psdf2.dtypes)
 
-        # pdf2 = self.pdf.convert_dtypes(convert_boolean=False)
-        # psdf2 = self.psdf.convert_dtypes(convert_boolean=False)
-        # self.assert_eq(pdf2, psdf2)
-        # self.assert_eq(pdf2.dtypes, psdf2.dtypes)
+        pdf2 = self.pdf.convert_dtypes(convert_boolean=False)
+        psdf2 = self.psdf.convert_dtypes(convert_boolean=False)
+        self.assert_eq(pdf2, psdf2)
+        self.assert_eq(pdf2.dtypes, psdf2.dtypes)
 
         pdf2 = self.pdf.convert_dtypes(convert_floating=False)
         psdf2 = self.psdf.convert_dtypes(convert_floating=False)
