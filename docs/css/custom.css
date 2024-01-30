@@ -924,8 +924,14 @@ img {
 
 table {
   width: 100%;
-  overflow-wrap: normal;
+  overflow-wrap: break-word;
   border-collapse: collapse;
+  white-space: normal;
+}
+
+table code {
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 table th,
