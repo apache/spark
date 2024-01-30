@@ -17,19 +17,26 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark._
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.spark.sql.{QueryTest, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
 class QueryExecutionAnsiErrorsSuite extends QueryTest
   with SharedSparkSession {
+  import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
+
+  override def createSparkSession: TestSparkSession = {
+    SparkSession.cleanupAnyExistingSession()
+    new TestSparkSession(sparkConf, maxLocalTaskFailures = 2)
+  }
 
   private val ansiConf = "\"" + SQLConf.ANSI_ENABLED.key + "\""
 
@@ -321,5 +328,71 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "targetType" -> ("\"TINYINT\""),
         "columnName" -> "`col`")
     )
+  }
+
+  test("user-facing runtime errors") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      var numTaskStarted = 0
+      val listener = new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          numTaskStarted += 1
+        }
+      }
+      sparkContext.addSparkListener(listener)
+      try {
+        val df1 = spark.range(0, 10, 1, 1).map { v =>
+          if (v > 5) throw new RuntimeException("test error") else v
+        }
+        val e1 = intercept[SparkException](df1.collect())
+        assert(e1.getMessage.contains("Job aborted"))
+        sparkContext.listenerBus.waitUntilEmpty()
+        // In this test suite, Spark re-tries the task 2 times.
+        assert(numTaskStarted == 2)
+        numTaskStarted = 0
+
+        val df2 = spark.range(0, 10, 1, 2).map { v =>
+          if (v > 5) throw new RuntimeException("test error") else v
+        }
+        val e2 = intercept[SparkException](df2.collect())
+        assert(e2.getMessage.contains("Job aborted"))
+        sparkContext.listenerBus.waitUntilEmpty()
+        // In this test suite, Spark re-tries the task 2 times, the input data has 2 partitions, but
+        // only the first task will fail (contains value 0), so in total 3 tasks started.
+        assert(numTaskStarted == 3)
+        numTaskStarted = 0
+
+        val df3 = spark.range(0, 10, 1, 1).select(lit(1) / $"id")
+        checkError(
+          exception = intercept[SparkArithmeticException](df3.collect()),
+          errorClass = "DIVIDE_BY_ZERO",
+          parameters = Map("config" -> ansiConf),
+          context = ExpectedContext(
+            fragment = "div",
+            callSitePattern = getCurrentClassCallSitePattern
+          )
+        )
+        sparkContext.listenerBus.waitUntilEmpty()
+        // Spark should not re-try tasks with user-error
+        assert(numTaskStarted == 1)
+        numTaskStarted = 0
+
+        val df4 = spark.range(0, 10, 1, 2).select(lit(1) / $"id")
+        checkError(
+          exception = intercept[SparkArithmeticException](df4.collect()),
+          errorClass = "DIVIDE_BY_ZERO",
+          parameters = Map("config" -> ansiConf),
+          context = ExpectedContext(
+            fragment = "div",
+            callSitePattern = getCurrentClassCallSitePattern
+          )
+        )
+        sparkContext.listenerBus.waitUntilEmpty()
+        // Spark should not re-try tasks with user-error, and the input data has 2 partitions, so
+        // in total 2 tasks started.
+        assert(numTaskStarted == 2)
+      } finally {
+        sparkContext.removeSparkListener(listener)
+      }
+    }
   }
 }

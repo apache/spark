@@ -74,6 +74,26 @@ private[spark] object SparkThrowableHelper {
     errorClass.startsWith("INTERNAL_ERROR")
   }
 
+  def isRuntimeUserError(e: Throwable): Boolean = {
+    e match {
+      case st: SparkThrowable if st.getErrorClass != null =>
+        st.getErrorClass match {
+          case "DIVIDE_BY_ZERO" | "INTERVAL_DIVIDED_BY_ZERO" => true
+          case "ARITHMETIC_OVERFLOW" | "BINARY_ARITHMETIC_OVERFLOW" | "CAST_OVERFLOW" |
+               "CAST_OVERFLOW_IN_TABLE_INSERT" | "DATETIME_OVERFLOW" |
+               "INTERVAL_ARITHMETIC_OVERFLOW" => true
+          case "CAST_INVALID_INPUT" | "NUMERIC_VALUE_OUT_OF_RANGE" | "CANNOT_PARSE_TIMESTAMP" =>
+            true
+          case "INVALID_ARRAY_INDEX" | "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" |
+               "INVALID_INDEX_OF_ZERO" => true
+          // TODO: add more user-facing runtime errors (mostly ANSI errors).
+          case _ => false
+        }
+
+      case _ => false
+    }
+  }
+
   def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
     import ErrorMessageFormat._
     format match {

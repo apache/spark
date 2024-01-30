@@ -976,6 +976,14 @@ private[spark] class TaskSetManager(
             info.id, taskSet.id, tid, ef.description))
           return
         }
+        if (ef.exception.exists(SparkThrowableHelper.isRuntimeUserError)) {
+          // We should not re-try tasks for user-errors (e.g. arithmetic overflow), as the error is
+          // not transient and re-try won't help.
+          emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
+            accumUpdates, metricPeaks)
+          abort(s"$task throws a runtime user-error", ef.exception)
+          return
+        }
         val key = ef.description
         val now = clock.getTimeMillis()
         val (printFull, dupCount) = {
