@@ -400,9 +400,15 @@ private[spark] class SparkIllegalArgumentException private(
   }
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
-
   override def getErrorClass: String = errorClass.orNull
   override def getQueryContext: Array[QueryContext] = context
+}
+
+private[spark] object SparkIllegalArgumentException {
+    def apply(errorClass: String, messageParameters: java.util.Map[String, String]):
+        SparkIllegalArgumentException = {
+        new SparkIllegalArgumentException(errorClass, messageParameters.asScala.toMap)
+    }
 }
 
 private[spark] class SparkRuntimeException private(

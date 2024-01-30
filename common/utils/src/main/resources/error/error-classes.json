@@ -576,6 +576,12 @@
     ],
     "sqlState" : "22018"
   },
+  "COLLATION_INVALID_NAME" : {
+    "message" : [
+      "The value <collationName> does not represent correct collation name."
+    ],
+    "sqlState" : "22018"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."

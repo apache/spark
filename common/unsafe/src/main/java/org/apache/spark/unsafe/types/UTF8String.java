@@ -1388,6 +1388,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(bytes);
   }
 
+  /**
+   * Collation aware comparison between two UTF8 strings.
+   * @param other the object to be compared.
+   */
   @Override
   public int compareTo(@Nonnull final UTF8String other) {
     return ByteArray.compareBinary(
@@ -1396,6 +1400,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   public int compare(final UTF8String other) {
     return compareTo(other);
+  }
+
+  /**
+   * Binary comparison between two UTF8Strings.
+   */
+  public int binaryCompare(final UTF8String other) {
+    return ByteArray.compareBinary(
+        base, offset, numBytes, other.base, other.offset, other.numBytes);
   }
 
   @Override
@@ -1408,6 +1420,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       return false;
     }
+  }
+
+  public boolean binaryEquals(final UTF8String other) {
+    if (numBytes != other.numBytes) {
+      return false;
+    }
+    return ByteArrayMethods.arrayEquals(base, offset, other.base, other.offset, numBytes);
   }
 
   /**
@@ -1565,8 +1584,22 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  /**
+   * Collation aware hash for given UTF8 String.
+   * Hash guarantees that if two strings are equal then their hash codes are equal.
+   */
   @Override
   public int hashCode() {
+    return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
+  }
+
+  /**
+   * Hash of binary value of this UTF8String.
+   * Note that binary hashes may be different for two UTF8Strings that are considered equal due
+   * to collation settings.
+   * E.g. 'aaa' = 'AAA' for case-insensitive comparison but binary hashes will be different.
+   */
+  public int binaryHash() {
     return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
   }
 
