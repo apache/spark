@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import org.apache.spark.SparkException;
+import org.apache.spark.SparkIllegalArgumentException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -48,7 +49,7 @@ public class CollationFactorySuite {
     @Test
     public void collationFetchInvalidName() {
       assertThrows(
-        SparkException.class,
+        SparkIllegalArgumentException.class,
         () -> getInstance().collationNameToId("INVALID_NAME"),
         "Invalid collation name: INVALID_NAME");
     }
