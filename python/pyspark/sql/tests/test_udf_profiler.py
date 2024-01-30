@@ -51,7 +51,6 @@ def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
     action(df)
 
 
-@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class UDFProfilerTests(unittest.TestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
@@ -136,6 +135,7 @@ class UDFProfilerTests(unittest.TestCase):
         df = self.spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0)], ("id", "v"))
         df.mapInPandas(map, schema=df.schema).collect()
 
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_unsupported(self):
         with warnings.catch_warnings(record=True) as warns:
             warnings.simplefilter("always")
