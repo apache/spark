@@ -1009,10 +1009,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
     val table = "weblogs"
-    val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
-    val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
-    assert(MySQL.getTableExistsQuery(table) == limitQuery)
-    assert(Postgres.getTableExistsQuery(table) == limitQuery)
+    val defaultQuery = s"SELECT 1 FROM $table WHERE 1=0"
+    assert(MySQL.getTableExistsQuery(table) == defaultQuery)
+    assert(Postgres.getTableExistsQuery(table) == defaultQuery)
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)

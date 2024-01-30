@@ -107,10 +107,6 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     schemaBuilder.result
   }
 
-  override def getTableExistsQuery(table: String): String = {
-    s"SELECT 1 FROM $table LIMIT 1"
-  }
-
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
