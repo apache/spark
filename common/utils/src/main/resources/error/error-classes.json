@@ -1658,15 +1658,8 @@
   },
   "INTERNAL_ERROR_TWS" : {
     "message" : [
-      "Internal error using TransformWithStateOperator: "
+      "<message>"
     ],
-    "subClass" : {
-      "IMPLICIT_KEY_NOT_FOUND" : {
-        "message" : [
-          "<message>"
-        ]
-      }
-    },
     "sqlState" : "XX000"
   },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
@@ -3243,12 +3236,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
-    "message" : [
-      "Creating multiple column families with <stateStoreProvider> is not supported"
-    ],
-    "sqlState" : "42802"
-  },
   "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
     "message" : [
       "Store does not support multiple values per key"
@@ -3951,6 +3938,11 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
+        "message" : [
+          "Creating multiple column families with <stateStoreProvider> is not supported."
         ]
       },
       "TABLE_OPERATION" : {

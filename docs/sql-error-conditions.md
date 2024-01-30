@@ -998,13 +998,11 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 `<message>`
 
-### [INTERNAL_ERROR_TWS](sql-error-conditions-internal-error-tws-error-class.html)
+### INTERNAL_ERROR_TWS
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
-Internal error using TransformWithStateOperator: 
-
-For more details see [INTERNAL_ERROR_TWS](sql-error-conditions-internal-error-tws-error-class.html)
+`<message>`
 
 ### INTERVAL_ARITHMETIC_OVERFLOW
 
@@ -2026,12 +2024,6 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
-
-### STATE_STORE_MULTIPLE_COLUMN_FAMILIES
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Creating multiple column families with `<stateStoreProvider>` is not supported
 
 ### STATE_STORE_MULTIPLE_VALUES_PER_KEY
 

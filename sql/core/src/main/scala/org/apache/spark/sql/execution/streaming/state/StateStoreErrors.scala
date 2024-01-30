@@ -25,11 +25,10 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
  * ERROR_CLASS has a prefix of "TWS_" or "STATE_STORE_" to indicate where the error is from
  */
 object StateStoreErrors {
-  def implicitKeyNotFound(
-    stateName: String): SparkException = {
+  def implicitKeyNotFound(stateName: String): SparkException = {
     SparkException.internalError(
       msg = s"Implicit key not found in state store for stateName=$stateName",
-      category = "TWS.IMPLICIT_KEY_NOT_FOUND"
+      category = "TWS"
     )
   }
 
@@ -46,7 +45,7 @@ object StateStoreErrors {
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+    errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
   )
 

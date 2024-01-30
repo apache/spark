@@ -90,7 +90,8 @@ class ValueStateSuite extends SharedSparkSession
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
 
-      val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
+      val stateName = "testState"
+      val testState: ValueState[Long] = handle.getValueState[String, Long](stateName,
         Encoders.STRING)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
@@ -98,8 +99,14 @@ class ValueStateSuite extends SharedSparkSession
       }
 
       assert(ex.isInstanceOf[SparkException])
-      assert(ex.getMessage.contains("Implicit key not found"))
-      assert(ex.getMessage.contains("INTERNAL_ERROR_TWS.IMPLICIT_KEY_NOT_FOUND"))
+      checkError(
+        ex.asInstanceOf[SparkException],
+        errorClass = "INTERNAL_ERROR_TWS",
+        parameters = Map(
+          "message" -> s"Implicit key not found in state store for stateName=$stateName"
+        ),
+        matchPVals = true
+      )
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
       testState.update(123)
@@ -111,10 +118,14 @@ class ValueStateSuite extends SharedSparkSession
       val ex1 = intercept[Exception] {
         testState.update(123)
       }
-
-      assert(ex1.isInstanceOf[SparkException])
-      assert(ex1.getMessage.contains("Implicit key not found"))
-      assert(ex.getMessage.contains("INTERNAL_ERROR_TWS.IMPLICIT_KEY_NOT_FOUND"))
+      checkError(
+        ex.asInstanceOf[SparkException],
+        errorClass = "INTERNAL_ERROR_TWS",
+        parameters = Map(
+          "message" -> s"Implicit key not found in state store for stateName=$stateName"
+        ),
+        matchPVals = true
+      )
     }
   }
 
@@ -197,8 +208,13 @@ class ValueStateSuite extends SharedSparkSession
         storeId, keySchema, valueSchema, 0, useColumnFamilies = true,
         storeConf, new Configuration)
     }
-    assert(ex.getMessage.contains("Creating multiple column families" +
-      " with HDFSStateStoreProvider is not supported"))
-    assert(ex.getMessage.contains("[STATE_STORE_MULTIPLE_COLUMN_FAMILIES]"))
+    checkError(
+      ex,
+      errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+      parameters = Map(
+        "stateStoreProvider" -> "HDFSStateStoreProvider"
+      ),
+      matchPVals = true
+    )
   }
 }
