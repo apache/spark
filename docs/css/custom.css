@@ -807,6 +807,7 @@ blockquote {
   z-index: 1;
   position: relative;
   background-color: #FFF;
+  max-width: 914px;
   line-height: 1.6;
 }
 
@@ -814,7 +815,7 @@ blockquote {
   z-index: 1;
   position: relative;
   background-color: #FFF;
-  max-width: 80%;
+  max-width: 914px;
   line-height: 1.6;
   padding-left: 30px;
   min-height: 100vh;
