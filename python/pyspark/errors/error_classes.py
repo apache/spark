@@ -286,6 +286,26 @@ ERROR_CLASSES_JSON = '''
       "An error occurred while calling <func_name>: <error_msg>."
     ]
   },
+  "FIELD_NOT_NULLABLE": {
+    "message": [
+      "<field_name>: This field is not nullable, but got None."
+    ]
+  },
+  "FIELD_STRUCT_LENGTH_MISMATCH": {
+    "message": [
+      "<field_name>: Length of object (<object_length>) does not match with length of fields (<field_length>)."
+    ]
+  },
+  "FIELD_TYPE_MISMATCH": {
+    "message": [
+      "<field_name>: <obj> is not an instance of type <data_type>."
+    ]
+  },
+  "FIELD_VALUE_OUT_OF_RANGE": {
+    "message": [
+      "<field_name>: object of <data_type> out of range, got: <obj>."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {
     "message": [
       "Function `<func_name>` should return Column, got <return_type>."

@@ -2196,7 +2196,12 @@ def _make_type_verifier(
             if nullable:
                 return True
             else:
-                raise PySparkValueError(message=new_msg("This field is not nullable, but got None"))
+                raise PySparkValueError(
+                    error_class="FIELD_NOT_NULLABLE",
+                    message_parameters={
+                        "field_name": name if name is not None else "",
+                    },
+                )
         else:
             return False
 
@@ -2227,7 +2232,12 @@ def _make_type_verifier(
         def verify_udf(obj: Any) -> None:
             if not (hasattr(obj, "__UDT__") and obj.__UDT__ == dataType):
                 raise PySparkValueError(
-                    message=new_msg("%r is not an instance of type %r" % (obj, dataType))
+                    error_class="FIELD_TYPE_MISMATCH",
+                    message_parameters={
+                        "field_name": name if name is not None else "",
+                        "obj": str(obj),
+                        "data_type": str(dataType),
+                    },
                 )
             verifier(dataType.toInternal(obj))
 
@@ -2240,7 +2250,12 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -128 or obj > 127:
                 raise PySparkValueError(
-                    message=new_msg("object of ByteType out of range, got: %s" % obj)
+                    error_class="FIELD_VALUE_OUT_OF_RANGE",
+                    message_parameters={
+                        "field_name": name if name is not None else "",
+                        "data_type": "ByteType",
+                        "obj": str(obj),
+                    },
                 )
 
         verify_value = verify_byte
@@ -2252,7 +2267,12 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -32768 or obj > 32767:
                 raise PySparkValueError(
-                    message=new_msg("object of ShortType out of range, got: %s" % obj)
+                    error_class="FIELD_VALUE_OUT_OF_RANGE",
+                    message_parameters={
+                        "field_name": name if name is not None else "",
+                        "data_type": "ShortType",
+                        "obj": str(obj),
+                    },
                 )
 
         verify_value = verify_short
@@ -2264,7 +2284,12 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -2147483648 or obj > 2147483647:
                 raise PySparkValueError(
-                    message=new_msg("object of IntegerType out of range, got: %s" % obj)
+                    error_class="FIELD_VALUE_OUT_OF_RANGE",
+                    message_parameters={
+                        "field_name": name if name is not None else "",
+                        "data_type": "IntegerType",
+                        "obj": str(obj),
+                    },
                 )
 
         verify_value = verify_integer
@@ -2276,7 +2301,12 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -9223372036854775808 or obj > 9223372036854775807:
                 raise PySparkValueError(
-                    message=new_msg("object of LongType out of range, got: %s" % obj)
+                    error_class="FIELD_VALUE_OUT_OF_RANGE",
+                    message_parameters={
+                        "field_name": name if name is not None else "",
+                        "data_type": "LongType",
+                        "obj": str(obj),
+                    },
                 )
 
         verify_value = verify_long
@@ -2324,10 +2354,12 @@ def _make_type_verifier(
             elif isinstance(obj, (tuple, list)):
                 if len(obj) != len(verifiers):
                     raise PySparkValueError(
-                        message=new_msg(
-                            "Length of object (%d) does not match with "
-                            "length of fields (%d)" % (len(obj), len(verifiers))
-                        )
+                        error_class="STRUCT_LENGTH_MISMATCH",
+                        message_parameters={
+                            "field_name": name if name is not None else "",
+                            "object_length": str(len(obj)),
+                            "field_length": str(len(verifiers)),
+                        },
                     )
                 for v, (_, verifier) in zip(obj, verifiers):
                     verifier(v)
