@@ -200,7 +200,7 @@ You can optionally configure the cluster further by setting environment variable
 
 SPARK_MASTER_OPTS supports the following system properties:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.master.ui.port</code></td>
@@ -416,7 +416,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 
 SPARK_WORKER_OPTS supports the following system properties:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.worker.initialRegistrationRetries</code></td>
@@ -549,8 +549,8 @@ You can also pass an option `--total-executor-cores <numCores>` to control the n
 
 Spark applications supports the following configuration properties specific to standalone mode:
 
-<table>
-  <thead><tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
   <td><code>spark.standalone.submit.waitAppCompletion</code></td>
   <td><code>false</code></td>
@@ -599,8 +599,8 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 <code>version</code> is a protocol version, <code>v1</code> as of today, and
 <code>action</code> is one of the following supported actions.
 
-<table>
-  <thead><tr><th style="width:21%">Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>create</code></td>
     <td>Create a Spark driver via <code>cluster</code> mode.</td>
@@ -778,8 +778,8 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
-<table>
-  <thead><tr><th style="width:21%">System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>NONE</td>
