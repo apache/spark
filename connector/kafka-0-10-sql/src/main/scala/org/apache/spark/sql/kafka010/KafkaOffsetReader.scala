@@ -155,15 +155,16 @@ private[kafka010] object KafkaOffsetReader extends Logging {
       consumerStrategy: ConsumerStrategy,
       driverKafkaParams: ju.Map[String, Object],
       readerOptions: CaseInsensitiveMap[String],
-      driverGroupIdPrefix: String): KafkaOffsetReader = {
+      driverGroupIdPrefix: String,
+      partitionLocationAssigner: KafkaPartitionLocationAssigner): KafkaOffsetReader = {
     if (SQLConf.get.useDeprecatedKafkaOffsetFetching) {
       logDebug("Creating old and deprecated Consumer based offset reader")
       new KafkaOffsetReaderConsumer(consumerStrategy, driverKafkaParams, readerOptions,
-        driverGroupIdPrefix)
+        driverGroupIdPrefix, partitionLocationAssigner)
     } else {
       logDebug("Creating new Admin based offset reader")
       new KafkaOffsetReaderAdmin(consumerStrategy, driverKafkaParams, readerOptions,
-        driverGroupIdPrefix)
+        driverGroupIdPrefix, partitionLocationAssigner)
     }
   }
 }

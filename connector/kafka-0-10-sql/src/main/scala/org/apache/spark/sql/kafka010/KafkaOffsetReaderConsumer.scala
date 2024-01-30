@@ -51,7 +51,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     consumerStrategy: ConsumerStrategy,
     override val driverKafkaParams: ju.Map[String, Object],
     readerOptions: CaseInsensitiveMap[String],
-    driverGroupIdPrefix: String) extends KafkaOffsetReader with Logging {
+    driverGroupIdPrefix: String,
+    partitionLocationAssigner: KafkaPartitionLocationAssigner)
+    extends KafkaOffsetReader with Logging {
 
   /**
    * [[UninterruptibleThreadRunner]] ensures that all
@@ -99,6 +101,21 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
+
+  private val userSpecifiedLocationPreferences: Map[TopicPartition, Seq[String]] = {
+    val partitionInfos = fetchTopicPartitions()
+      .map(_.topic())
+      .toSet
+      .flatMap(topicName => consumer.partitionsFor(topicName).asScala)
+      .sortBy(partInfo => (partInfo.topic(), partInfo.partition()))
+
+    partitionLocationAssigner.getLocationPreferences(partitionInfos, getSortedExecutorList())
+      .map {
+        case (partInfo, executors) =>
+          val tp = new TopicPartition(partInfo.topic(), partInfo.partition())
+          (tp -> executors)
+      }
+  }
 
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
@@ -456,10 +473,13 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }
-      val divvied = rangeCalculator.getRanges(ranges).groupBy(_.topicPartition)
+      val divvied = rangeCalculator
+        .getRanges(ranges, getSortedExecutorList, userSpecifiedLocationPreferences)
+        .groupBy(_.topicPartition)
       divvied.flatMap { case (tp, splitOffsetRanges) =>
         if (splitOffsetRanges.length == 1) {
-          Seq(KafkaOffsetRange(tp, fromOffsetsMap(tp), untilOffsetsMap(tp), None))
+          val loc = splitOffsetRanges.head.preferredLoc
+          Seq(KafkaOffsetRange(tp, fromOffsetsMap(tp), untilOffsetsMap(tp), loc))
         } else {
           // the list can't be empty
           val first = splitOffsetRanges.head.copy(fromOffset = fromOffsetsMap(tp))
@@ -536,7 +556,10 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList().toImmutableArraySeq)
+    rangeCalculator.getRanges(
+      ranges,
+      getSortedExecutorList().toImmutableArraySeq,
+      userSpecifiedLocationPreferences)
   }
 
   private def partitionsAssignedToConsumer(

@@ -99,7 +99,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       strategy(caseInsensitiveParameters),
       kafkaParamsForDriver(specifiedKafkaParams),
       caseInsensitiveParameters,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+      driverGroupIdPrefix = s"$uniqueGroupId-driver",
+      loadLocationAssigner(caseInsensitiveParameters))
 
     new KafkaSource(
       sqlContext,
@@ -220,6 +221,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   private def failOnDataLoss(params: CaseInsensitiveMap[String]) =
     params.getOrElse(FAIL_ON_DATA_LOSS_OPTION_KEY, "true").toBoolean
+
+  private def loadLocationAssigner(params: CaseInsensitiveMap[String]) =
+    KafkaPartitionLocationAssigner
+      .instance(params.get(KAFKA_PARTITION_LOCATION_ASSIGNER))
 
   private def validateGeneralOptions(params: CaseInsensitiveMap[String]): Unit = {
     // Validate source options
@@ -462,7 +467,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         failOnDataLoss(caseInsensitiveOptions),
         startingRelationOffsets,
         endingRelationOffsets,
-        includeHeaders)
+        includeHeaders,
+        loadLocationAssigner(caseInsensitiveOptions))
     }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
@@ -484,7 +490,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
         caseInsensitiveOptions,
-        driverGroupIdPrefix = s"$uniqueGroupId-driver")
+        driverGroupIdPrefix = s"$uniqueGroupId-driver",
+        loadLocationAssigner(caseInsensitiveOptions))
 
       new KafkaMicroBatchStream(
         kafkaOffsetReader,
@@ -514,7 +521,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
         caseInsensitiveOptions,
-        driverGroupIdPrefix = s"$uniqueGroupId-driver")
+        driverGroupIdPrefix = s"$uniqueGroupId-driver",
+        loadLocationAssigner(caseInsensitiveOptions))
 
       new KafkaContinuousStream(
         kafkaOffsetReader,
@@ -570,6 +578,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val INCLUDE_HEADERS = "includeheaders"
   // This is only for internal testing and should not be used otherwise.
   private[kafka010] val MOCK_SYSTEM_TIME = "_mockSystemTime"
+  private[kafka010] val PARTITION_LOCATION_ASSIGNER = "partitionlocationassigner"
 
   private[kafka010] object StrategyOnNoMatchStartingOffset extends Enumeration {
     val ERROR, LATEST = Value

@@ -43,7 +43,8 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
    */
   def getRanges(
       ranges: Seq[KafkaOffsetRange],
-      executorLocations: Seq[String] = Seq.empty): Seq[KafkaOffsetRange] = {
+      executorLocations: Seq[String] = Seq.empty,
+      locationPreferences: Map[TopicPartition, Seq[String]] = Map.empty): Seq[KafkaOffsetRange] = {
     val offsetRanges = ranges.filter(_.size > 0)
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
@@ -51,7 +52,8 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
       // Assign preferred executor locations to each range such that the same topic-partition is
       // preferentially read from the same executor and the KafkaConsumer can be reused.
       offsetRanges.map { range =>
-        range.copy(preferredLoc = getLocation(range.topicPartition, executorLocations))
+        val loc = locationPreferences.getOrElse(range.topicPartition, executorLocations)
+        range.copy(preferredLoc = getLocation(range.topicPartition, loc))
       }
     } else {
 

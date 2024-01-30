@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
-import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.{ TopicPartition, TopicPartitionInfo }
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
@@ -50,8 +50,17 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
     Admin.create(updatedKafkaParams)
   }
 
+  /** Returns the assigned or subscribed [[TopicPartitionInfo]]. This
+   * provides more information to aid users in choosing partition
+   * locations
+   */
+  def assignedTopicPartitionInfos(admin: Admin): Set[TopicPartitionInfo]
+
   /** Returns the assigned or subscribed [[TopicPartition]] */
-  def assignedTopicPartitions(admin: Admin): Set[TopicPartition]
+  def assignedTopicPartitions(admin: Admin): Set[TopicPartition] =
+    assignedTopicPartitionInfos(admin).map { partInfo =>
+      new TopicPartition(partInfo.topic(), partInfo.partition())
+    }
 
   /**
    * Updates the parameters with security if needed.
@@ -62,16 +71,13 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
       .setAuthenticationConfigIfNeeded()
       .build()
 
-  protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartition] = {
-    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal).flatMap {
-      case (topic, topicDescription) =>
-        topicDescription.partitions().asScala.map { topicPartitionInfo =>
-          val partition = topicPartitionInfo.partition()
-          logDebug(s"Partition found: $topic:$partition")
-          new TopicPartition(topic, partition)
-        }
-    }.toSet
-  }
+  protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartitionInfo] =
+    admin.describeTopics(topics.asJava)
+      .all()
+      .get()
+      .asScala
+      .filterNot(_._2.isInternal)
+      .toSet
 }
 
 /**
@@ -87,10 +93,12 @@ private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
     consumer
   }
 
-  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+  override def assignedTopicPartitionInfos(admin: Admin): Set[TopicPartitionInfo] = {
     val topics = partitions.map(_.topic()).toSet
     logDebug(s"Topics for assignment: $topics")
-    retrieveAllPartitions(admin, topics).filter(partitions.contains(_))
+    retrieveAllPartitions(admin, topics).filter { tpi =>
+      partitions.contains(new TopicPartition(tpi.topic(), tpi.partition()))
+    }
   }
 
   override def toString: String = s"Assign[${partitions.mkString(", ")}]"
@@ -109,9 +117,8 @@ private[kafka010] case class SubscribeStrategy(topics: Seq[String])
     consumer
   }
 
-  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+  override def assignedTopicPartitionInfos(admin: Admin): Set[TopicPartitionInfo] =
     retrieveAllPartitions(admin, topics.toSet)
-  }
 
   override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
 }
@@ -131,7 +138,7 @@ private[kafka010] case class SubscribePatternStrategy(topicPattern: String)
     consumer
   }
 
-  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+  override def assignedTopicPartitionInfos(admin: Admin): Set[TopicPartitionInfo] = {
     logDebug(s"Topic pattern: $topicPattern")
     var topics = mutable.Seq.empty[String]
     // listTopics is not listing internal topics by default so no filter needed
