@@ -34,24 +34,23 @@ object StateStoreErrors {
   }
 
   def multipleColumnFamiliesNotSupported(stateStoreProvider: String):
-    TransformWithStateMultipleColumnFamilies = {
-      new TransformWithStateMultipleColumnFamilies(stateStoreProvider)
+    StateStoreMultipleColumnFamiliesNotSupportedException = {
+      new StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider)
     }
 
   def unsupportedOperationException(operationName: String, entity: String):
-    TransformWithStateUnsupportedOperation = {
-      new TransformWithStateUnsupportedOperation(operationName, entity)
+    StateStoreUnsupportedOperationException = {
+      new StateStoreUnsupportedOperationException(operationName, entity)
     }
-
 }
 
-class TransformWithStateMultipleColumnFamilies(stateStoreProvider: String)
+class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
   )
 
-class TransformWithStateUnsupportedOperation(operationType: String, entity: String)
+class StateStoreUnsupportedOperationException(operationType: String, entity: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)

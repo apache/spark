@@ -696,11 +696,17 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1)
 
-    val ex = intercept[UnsupportedOperationException] {
+    val ex1 = intercept[UnsupportedOperationException] {
       changelogWriter.put("a", "1", "testColFamily")
     }
-    assert(ex.getMessage.contains("[STATE_STORE_UNSUPPORTED_OPERATION]"))
-    assert(ex.getMessage.contains("Put operation not supported with changelog writer v1"))
+    assert(ex1.getMessage.contains("[STATE_STORE_UNSUPPORTED_OPERATION]"))
+    assert(ex1.getMessage.contains("Put operation not supported with changelog writer v1"))
+
+    val ex2 = intercept[UnsupportedOperationException] {
+      changelogWriter.delete("a", "testColFamily")
+    }
+    assert(ex2.getMessage.contains("[STATE_STORE_UNSUPPORTED_OPERATION]"))
+    assert(ex2.getMessage.contains("Delete operation not supported with changelog writer v1"))
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
