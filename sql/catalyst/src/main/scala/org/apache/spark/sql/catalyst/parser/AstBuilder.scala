@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
@@ -44,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -3123,24 +3122,26 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create top level table schema.
    */
   protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
-    StructType(Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList))
+    val columns = Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList)
+    StructType(columns.map(_.toV1Column))
   }
 
   /**
-   * Create a [[StructType]] from a number of CREATE TABLE column definitions.
+   * Get CREATE TABLE column definitions.
    */
   override def visitCreateOrReplaceTableColTypeList(
-      ctx: CreateOrReplaceTableColTypeListContext): Seq[StructField] = withOrigin(ctx) {
+      ctx: CreateOrReplaceTableColTypeListContext): Seq[ColumnDefinition] = withOrigin(ctx) {
     ctx.createOrReplaceTableColType().asScala.map(visitCreateOrReplaceTableColType).toSeq
   }
 
   /**
-   * Create a top level [[StructField]] from a CREATE TABLE column definition.
+   * Get a CREATE TABLE column definition.
    */
   override def visitCreateOrReplaceTableColType(
-      ctx: CreateOrReplaceTableColTypeContext): StructField = withOrigin(ctx) {
+      ctx: CreateOrReplaceTableColTypeContext): ColumnDefinition = withOrigin(ctx) {
     import ctx._
 
+    val name: String = colName.getText
     // Check that no duplicates exist among any CREATE TABLE column options specified.
     var nullable = true
     var defaultExpression: Option[DefaultExpressionContext] = None
@@ -3150,61 +3151,44 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       if (option.NULL != null) {
         if (!nullable) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "NOT NULL")
+            option, name, "NOT NULL")
         }
         nullable = false
       }
       Option(option.defaultExpression()).foreach { expr =>
+        if (!conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
+          throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
+        }
         if (defaultExpression.isDefined) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "DEFAULT")
+            option, name, "DEFAULT")
         }
         defaultExpression = Some(expr)
       }
       Option(option.generationExpression()).foreach { expr =>
         if (generationExpression.isDefined) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "GENERATED ALWAYS AS")
+            option, name, "GENERATED ALWAYS AS")
         }
         generationExpression = Some(expr)
       }
       Option(option.commentSpec()).foreach { spec =>
         if (commentSpec.isDefined) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "COMMENT")
+            option, name, "COMMENT")
         }
         commentSpec = Some(spec)
       }
     }
 
-    val builder = new MetadataBuilder
-    // Add comment to metadata
-    commentSpec.map(visitCommentSpec).foreach {
-      builder.putString("comment", _)
-    }
-    // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
-    defaultExpression.map(visitDefaultExpression).foreach { field =>
-      if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
-        // Add default to metadata
-        builder.putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, field)
-        builder.putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, field)
-      } else {
-        throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
-      }
-    }
-    // Add the 'GENERATED ALWAYS AS expression' clause in the column definition, if any, to the
-    // column metadata.
-    generationExpression.map(visitGenerationExpression).foreach { field =>
-      builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
-    }
-
-    val name: String = colName.getText
-
-    StructField(
+    ColumnDefinition(
       name = name,
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = nullable,
-      metadata = builder.build())
+      comment = commentSpec.map(visitCommentSpec),
+      defaultValue = defaultExpression.map(visitDefaultExpression),
+      generationExpression = generationExpression.map(visitGenerationExpression)
+    )
   }
 
   /**
@@ -3240,11 +3224,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Create a default string.
+   * Create `DefaultValueExpression` for a column.
    */
-  override def visitDefaultExpression(ctx: DefaultExpressionContext): String =
+  override def visitDefaultExpression(ctx: DefaultExpressionContext): DefaultValueExpression =
     withOrigin(ctx) {
-      getDefaultExpression(ctx.expression(), "DEFAULT").originalSQL
+      getDefaultExpression(ctx.expression(), "DEFAULT")
     }
 
   /**
@@ -3410,7 +3394,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * types like `i INT`, which should be appended to the existing table schema.
    */
   type TableClauses = (
-      Seq[Transform], Seq[StructField], Option[BucketSpec], Map[String, String],
+      Seq[Transform], Seq[ColumnDefinition], Option[BucketSpec], Map[String, String],
       OptionList, Option[String], Option[String], Option[SerdeInfo], Option[ClusterBySpec])
 
   /**
@@ -3437,12 +3421,15 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Parse a list of transforms or columns.
    */
   override def visitPartitionFieldList(
-      ctx: PartitionFieldListContext): (Seq[Transform], Seq[StructField]) = withOrigin(ctx) {
+      ctx: PartitionFieldListContext): (Seq[Transform], Seq[ColumnDefinition]) = withOrigin(ctx) {
     val (transforms, columns) = ctx.fields.asScala.map {
       case transform: PartitionTransformContext =>
         (Some(visitPartitionTransform(transform)), None)
       case field: PartitionColumnContext =>
-        (None, Some(visitColType(field.colType)))
+        val f = visitColType(field.colType)
+        // The parser rule of `visitColType` only supports basic column info with comment.
+        val col = ColumnDefinition(f.name, f.dataType, f.nullable, f.getComment())
+        (None, Some(col))
     }.unzip
 
     (transforms.flatten.toSeq, columns.flatten.toSeq)
@@ -3918,13 +3905,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   private def partitionExpressions(
       partTransforms: Seq[Transform],
-      partCols: Seq[StructField],
+      partCols: Seq[ColumnDefinition],
       ctx: ParserRuleContext): Seq[Transform] = {
     if (partTransforms.nonEmpty) {
       if (partCols.nonEmpty) {
         val references = partTransforms.map(_.describe()).mkString(", ")
         val columns = partCols
-          .map(field => s"${field.name} ${field.dataType.simpleString}")
+          .map(column => s"${column.name} ${column.dataType.simpleString}")
           .mkString(", ")
         operationNotAllowed(
           s"""PARTITION BY: Cannot mix partition expressions and partition columns:
@@ -3998,22 +3985,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
       serdeInfo, external)
 
-    // Parse column defaults from the table into separate expressions in the CREATE TABLE operator.
-    val specifiedDefaults: mutable.Map[Int, Expression] = mutable.Map.empty
-    Option(ctx.createOrReplaceTableColTypeList()).foreach {
-      _.createOrReplaceTableColType().asScala.zipWithIndex.foreach { case (typeContext, index) =>
-        typeContext.colDefinitionOption().asScala.foreach { option =>
-          Option(option.defaultExpression()).foreach { defaultExprContext =>
-            specifiedDefaults.update(index, expression(defaultExprContext.expression()))
-          }
-        }
-      }
-    }
-    val defaultValueExpressions: Seq[Option[Expression]] =
-      (0 until columns.size).map { index: Int =>
-        specifiedDefaults.get(index)
-      }
-
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
         operationNotAllowed(
@@ -4033,9 +4004,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
-        val schema = StructType(columns ++ partCols)
-        CreateTable(withIdentClause(identifierContext, UnresolvedIdentifier(_)),
-          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists, defaultValueExpressions)
+        val allColumns = columns ++ partCols
+        CreateTable(
+          withIdentClause(identifierContext, UnresolvedIdentifier(_)),
+          allColumns, partitioning, tableSpec, ignoreIfExists = ifNotExists)
     }
   }
 
@@ -4107,10 +4079,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
-        val schema = StructType(columns ++ partCols)
+        val allColumns = columns ++ partCols
         ReplaceTable(
           withIdentClause(ctx.replaceTableHeader.identifierReference(), UnresolvedIdentifier(_)),
-          schema, partitioning, tableSpec, orCreate = orCreate)
+          allColumns, partitioning, tableSpec, orCreate = orCreate)
     }
   }
 
@@ -4246,7 +4218,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
     val defaultExpr = defaultExpression.map(visitDefaultExpression).map { field =>
       if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
-        field
+        field.originalSQL
       } else {
         throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
       }
@@ -4343,7 +4315,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
     val setDefaultExpression: Option[String] =
       if (action.defaultExpression != null) {
-        Option(action.defaultExpression()).map(visitDefaultExpression)
+        Option(action.defaultExpression()).map(visitDefaultExpression).map(_.originalSQL)
       } else if (action.dropDefault != null) {
         Some("")
       } else {

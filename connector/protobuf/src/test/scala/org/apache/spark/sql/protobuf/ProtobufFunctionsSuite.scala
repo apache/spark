@@ -1124,7 +1124,78 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("Corner case: empty recursive proto fields should be dropped") {
+  test("Retain empty proto fields when retain.empty.message.types=true") {
+    // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained as
+    // a field by inserting a dummy column as sub column.
+    val options = Map("retain.empty.message.types" -> "true")
+
+    // EmptyProto at the top level. It will be an empty struct.
+    checkWithFileAndClassName("EmptyProto") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+        )
+        // Top level empty message is retained by adding dummy column to the schema.
+        assert(df.schema ==
+          structFromDDL("empty_proto struct<__dummy_field_in_empty_struct: string>"))
+    }
+
+    // Inner level empty message is retained by adding dummy column to the schema.
+    checkWithFileAndClassName("EmptyProtoWrapper") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+        )
+        // Nested empty message is retained by adding dummy column to the schema.
+        assert(df.schema == structFromDDL("wrapper struct" +
+          "<name: string, empty_proto struct<__dummy_field_in_empty_struct: string>>"))
+    }
+  }
+
+  test("Write empty proto to parquet when retain.empty.message.types=true") {
+    // When retain.empty.message.types=true, empty proto like 'message A {}' can be retained
+    // as a field by inserting a dummy column as sub column, such schema can be written to parquet.
+    val options = Map("retain.empty.message.types" -> "true")
+    withTempDir { file =>
+      val binaryDF = Seq(
+        EmptyProtoWrapper.newBuilder.setName("my_name").build().toByteArray)
+        .toDF("binary")
+      checkWithFileAndClassName("EmptyProtoWrapper") {
+        case (name, descFilePathOpt) =>
+          val df = binaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+          )
+          df.write.format("parquet").mode("overwrite").save(file.getAbsolutePath)
+      }
+      val resultDF = spark.read.format("parquet").load(file.getAbsolutePath)
+      assert(resultDF.schema == structFromDDL("wrapper struct" +
+          "<name: string, empty_proto struct<__dummy_field_in_empty_struct: string>>"
+      ))
+      // The dummy column of empty proto should have null value.
+      checkAnswer(resultDF, Seq(Row(Row("my_name", null))))
+    }
+
+    // When top level message is empty, write to parquet.
+    withTempDir { file =>
+      val binaryDF = Seq(
+        EmptyProto.newBuilder.build().toByteArray)
+        .toDF("binary")
+      checkWithFileAndClassName("EmptyProto") {
+        case (name, descFilePathOpt) =>
+          val df = binaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+          )
+          df.write.format("parquet").mode("overwrite").save(file.getAbsolutePath)
+      }
+      val resultDF = spark.read.format("parquet").load(file.getAbsolutePath)
+      assert(resultDF.schema ==
+        structFromDDL("empty_proto struct<__dummy_field_in_empty_struct: string>"))
+      // The dummy column of empty proto should have null value.
+      checkAnswer(resultDF, Seq(Row(Row(null))))
+    }
+  }
+
+  test("Corner case: empty recursive proto fields should be dropped by default") {
     // This verifies that a empty proto like 'message A { A a = 1}' are completely dropped
     // irrespective of max depth setting.
 
@@ -1147,6 +1218,56 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         )
         // 'empty_recursive' field is dropped from the schema. Only "name" is present.
         assert(df.schema == structFromDDL("wrapper struct<name: string>"))
+    }
+  }
+
+  test("Retain empty recursive proto fields when retain.empty.message.types=true") {
+    // This verifies that a empty proto like 'message A { A a = 1}' can be retained by
+    // inserting a dummy field.
+
+    val structWithDummyColumn =
+      StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
+    val structWithRecursiveDepthEquals2 = StructType(
+      StructField("recursive_field", structWithDummyColumn)
+        :: StructField("recursive_array", ArrayType(structWithDummyColumn, containsNull = false))
+        :: Nil)
+    /*
+      The code below construct the expected schema with recursive depth set to 3.
+      Note: If recursive depth change, the resulting schema of empty recursive proto will change.
+        root
+         |-- empty_proto: struct (nullable = true)
+         |    |-- recursive_field: struct (nullable = true)
+         |    |    |-- recursive_field: struct (nullable = true)
+         |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |    |-- recursive_array: array (nullable = true)
+         |    |    |    |-- element: struct (containsNull = false)
+         |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |-- recursive_array: array (nullable = true)
+         |    |    |-- element: struct (containsNull = false)
+         |    |    |    |-- recursive_field: struct (nullable = true)
+         |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+         |    |    |    |-- recursive_array: array (nullable = true)
+         |    |    |    |    |-- element: struct (containsNull = false)
+         |    |    |    |    |    |-- __dummy_field_in_empty_struct: string (nullable = true)
+    */
+    val structWithRecursiveDepthEquals3 = StructType(
+      StructField("empty_proto",
+        StructType(
+          StructField("recursive_field", structWithRecursiveDepthEquals2) ::
+            StructField("recursive_array",
+              ArrayType(structWithRecursiveDepthEquals2, containsNull = false)
+          ) :: Nil
+        )
+      ) :: Nil
+    )
+
+    val options = Map("recursive.fields.max.depth" -> "3", "retain.empty.message.types" -> "true")
+    checkWithFileAndClassName("EmptyRecursiveProto") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+        )
+        assert(df.schema == structWithRecursiveDepthEquals3)
     }
   }
 
