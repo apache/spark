@@ -106,7 +106,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     val partitionInfos = fetchTopicPartitions()
       .map(_.topic())
       .toSet
-      .flatMap(topicName => consumer.partitionsFor(topicName).asScala)
+      .flatMap(topicName => consumer().partitionsFor(topicName).asScala)
       .sortBy(partInfo => (partInfo.topic(), partInfo.partition()))
 
     partitionLocationAssigner.getLocationPreferences(partitionInfos, getSortedExecutorList())
@@ -474,7 +474,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }
       val divvied = rangeCalculator
-        .getRanges(ranges, getSortedExecutorList, userSpecifiedLocationPreferences)
+        .getRanges(ranges, getSortedExecutorList(), userSpecifiedLocationPreferences)
         .groupBy(_.topicPartition)
       divvied.flatMap { case (tp, splitOffsetRanges) =>
         if (splitOffsetRanges.length == 1) {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-
+package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.PartitionInfo
 

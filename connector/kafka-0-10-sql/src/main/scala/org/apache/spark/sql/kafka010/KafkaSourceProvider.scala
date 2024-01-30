@@ -224,7 +224,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   private def loadLocationAssigner(params: CaseInsensitiveMap[String]) =
     KafkaPartitionLocationAssigner
-      .instance(params.get(KAFKA_PARTITION_LOCATION_ASSIGNER))
+      .instance(params.get(PARTITION_LOCATION_ASSIGNER))
 
   private def validateGeneralOptions(params: CaseInsensitiveMap[String]): Unit = {
     // Validate source options
