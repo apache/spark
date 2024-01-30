@@ -123,10 +123,10 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  /** Function to delete state info if it exists and return state that was previously there
+  /** Function to delete and purge state variable if defined previously
    *
-   * @param stateName  - name of the state variable
-   * */
+   * @param stateName - name of the state variable
+   */
   override def deleteIfExists(stateName: String): Unit = {
     verify(currState == CREATED, s"Cannot delete state variable with name=$stateName after " +
       "initialization is complete")
