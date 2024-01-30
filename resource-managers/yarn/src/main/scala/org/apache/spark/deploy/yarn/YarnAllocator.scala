@@ -891,13 +891,15 @@ private[yarn] class YarnAllocator(
             // org.apache.hadoop.yarn.util.Apps#shouldCountTowardsNodeBlacklisting
             if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
               (false, s"Container marked as failed: $containerId$onHostStr. " +
-                s"Exit status: $exitStatus($sparkExitCodeReason). " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
                 s"Diagnostics: ${completedContainer.getDiagnostics}.")
             } else {
               // completed container from a bad node
               allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
               (true, s"Container from a bad node: $containerId$onHostStr. " +
-                s"Exit status: $exitStatus($sparkExitCodeReason). " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
                 s"Diagnostics: ${completedContainer.getDiagnostics}.")
             }
         }
