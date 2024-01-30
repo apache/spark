@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.text.SimpleDateFormat
-import java.util.{Date, Optional, UUID}
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.{Optional, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.Clock
@@ -91,8 +92,10 @@ trait ProgressReporter extends Logging {
   // The timestamp we report an event that has not executed anything
   private var lastNoExecutionProgressEventTime = Long.MinValue
 
-  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
+  private val timestampFormat =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
+      .withZone(DateTimeUtils.getZoneId("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -326,7 +329,7 @@ trait ProgressReporter extends Logging {
     val onlyDataSourceV2Sources = {
       // Check whether the streaming query's logical plan has only V2 micro-batch data sources
       val allStreamingLeaves = logicalPlan.collect {
-        case s: StreamingDataSourceV2Relation => s.stream.isInstanceOf[MicroBatchStream]
+        case s: StreamingDataSourceV2ScanRelation => s.stream.isInstanceOf[MicroBatchStream]
         case _: StreamingExecutionRelation => false
       }
       allStreamingLeaves.forall(_ == true)
@@ -435,7 +438,7 @@ trait ProgressReporter extends Logging {
   }
 
   protected def formatTimestamp(millis: Long): String = {
-    timestampFormat.format(new Date(millis))
+    timestampFormat.format(Instant.ofEpochMilli(millis))
   }
 
   /** Updates the message returned in `status`. */

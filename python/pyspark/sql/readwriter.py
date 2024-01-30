@@ -2096,6 +2096,7 @@ class DataFrameWriter(OptionUtils):
         timestampFormat: Optional[str] = None,
         compression: Optional[str] = None,
         encoding: Optional[str] = None,
+        validateName: Optional[bool] = None,
     ) -> None:
         r"""Saves the content of the :class:`DataFrame` in XML format at the specified path.
 
@@ -2155,6 +2156,7 @@ class DataFrameWriter(OptionUtils):
             timestampFormat=timestampFormat,
             compression=compression,
             encoding=encoding,
+            validateName=validateName,
         )
         self._jwrite.xml(path)
 

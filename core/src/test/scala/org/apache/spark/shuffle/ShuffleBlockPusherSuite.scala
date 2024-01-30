@@ -41,7 +41,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
 import org.apache.spark.storage._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SslTestUtils, ThreadUtils}
 
 class ShuffleBlockPusherSuite extends SparkFunSuite {
 

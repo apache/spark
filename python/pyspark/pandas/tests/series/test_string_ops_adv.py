@@ -213,7 +213,11 @@ class SeriesStringOpsAdvMixin:
             self.check_func(lambda x: x.str.get_dummies())
 
 
-class SeriesStringOpsAdvTests(SeriesStringOpsAdvMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SeriesStringOpsAdvTests(
+    SeriesStringOpsAdvMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -348,7 +348,7 @@ Configuration of Avro can be done via `spark.conf.set` or by running `SET key=va
     <td>snappy</td>
     <td>
       Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
-      snappy, bzip2 and xz. Default codec is snappy.
+      snappy, bzip2, xz and zstandard. Default codec is snappy.
     </td>
     <td>2.4.0</td>
   </tr>
@@ -361,6 +361,32 @@ Configuration of Avro can be done via `spark.conf.set` or by running `SET key=va
       in the current implementation.
     </td>
     <td>2.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.xz.level</td>
+    <td>6</td>
+    <td>
+      Compression level for the xz codec used in writing of AVRO files. Valid value must be in
+      the range of from 1 to 9 inclusive. The default value is 6 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.zstandard.level</td>
+    <td>3</td>
+    <td>
+      Compression level for the zstandard codec used in writing of AVRO files.
+      The default value is 3 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.zstandard.bufferPool.enabled</td>
+    <td>false</td>
+    <td>
+      If true, enable buffer pool of ZSTD JNI library when writing of AVRO files.
+    </td>
+    <td>4.0.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.datetimeRebaseModeInRead</td>
@@ -412,9 +438,10 @@ built-in but external module, both implicit classes are removed. Please use `.fo
 
 If you prefer using your own build of `spark-avro` jar file, you can simply disable the configuration
 `spark.sql.legacy.replaceDatabricksSparkAvro.enabled`, and use the option `--jars` on deploying your
-applications. Read the [Advanced Dependency Management](https://spark.apache
-.org/docs/latest/submitting-applications.html#advanced-dependency-management) section in Application
+applications. Read the [Advanced Dependency Management][adm] section in the Application
 Submission Guide for more details.
+
+[adm]: submitting-applications.html#advanced-dependency-management
 
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.3/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.3/specification/#complex-types) under records of Avro.

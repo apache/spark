@@ -56,6 +56,7 @@ package object state {
         numColsPrefixKey: Int,
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
+        useColumnFamilies: Boolean = false,
         extraOptions: Map[String, String] = Map.empty)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
@@ -80,6 +81,7 @@ package object state {
         numColsPrefixKey,
         sessionState,
         storeCoordinator,
+        useColumnFamilies,
         extraOptions)
     }
 
@@ -91,6 +93,7 @@ package object state {
         numColsPrefixKey: Int,
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
+        useColumnFamilies: Boolean = false,
         extraOptions: Map[String, String] = Map.empty)(
         storeReadFn: (ReadStateStore, Iterator[T]) => Iterator[U])
       : ReadStateStoreRDD[T, U] = {
@@ -115,6 +118,7 @@ package object state {
         numColsPrefixKey,
         sessionState,
         storeCoordinator,
+        useColumnFamilies,
         extraOptions)
     }
   }

@@ -33,7 +33,6 @@ class GroupByRollingAdvMixin(GroupByRollingTestingFuncMixin):
         super().tearDownClass()
 
     def test_groupby_rolling_std(self):
-        # TODO: `std` now raise error in pandas 1.0.0
         self._test_groupby_rolling_func("std")
 
     def test_groupby_rolling_var(self):

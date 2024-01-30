@@ -128,22 +128,25 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("SPARK-32559: string to date trim Control Characters") {
-    Seq("2015-03-18", "2015-03-18T123321", " 2015-03-18 123321", "+2015-03-18")
-      .foreach {
-        input => Seq(input, "\u0003", "\u0003", " ", " ")
-          .permutations.map(p => p.mkString).foreach {
-          s => assert(toDate(s).get === days(2015, 3, 18))
-        }
+    val expected = days(2015, 3, 18)
+    permuteWithWhitespaceAndControl(
+      "2015-03-18", "2015-03-18T123321", " 2015-03-18 123321", "+2015-03-18"
+    ).foreach { s =>
+      assert(toDate(s).get === expected)
     }
 
-    Seq("INVALID_INPUT", " ", "1999-08-", "2015-03-18\u0003123321", "2015-03-18Q123321")
-      .foreach {
-        input =>
-          Seq(input, "\u0003", "\u0003", " ", " ").permutations.map(p => p.mkString).foreach {
-            s => assert(toDate(s).isEmpty)
-          }
-      }
+    permuteWithWhitespaceAndControl(
+      "INVALID_INPUT", " ", "1999-08-", "2015-03-18\u0003123321", "2015-03-18Q123321"
+    ).foreach { s =>
+      assert(toDate(s).isEmpty)
+    }
   }
+
+  private def permuteWithWhitespaceAndControl(values: String*): Seq[String] =
+    values.flatMap { input =>
+      Seq(input, "\u0003", "\u0003", " ", " ")
+        .permutations.map(_.mkString)
+    }
 
   test("string to date") {
     assert(toDate("2015-01-28").get === days(2015, 1, 28))
@@ -337,6 +340,20 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       zoneId = getZoneId("Europe/Moscow")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123456 Europe/Moscow", expected)
+
+      // Check whitespace and control character permutations
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zid))
+      permuteWithWhitespaceAndControl(
+        "2015-03-18 12:03:17", "2015-03-18T12:03:17"
+      ).foreach { s =>
+        checkStringToTimestamp(s, expected)
+      }
+
+      permuteWithWhitespaceAndControl(
+        "INVALID_INPUT", "\t", "", "2015-03-18\u000312:03:17", "2015-03-18 12:", "2015-03-18 123"
+      ).foreach { s =>
+        checkStringToTimestamp(s, None)
+      }
     }
   }
 

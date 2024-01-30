@@ -179,6 +179,11 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
 
+    def test_assert_vanilla_mode(self):
+        from pyspark.sql import is_remote
+
+        self.assertFalse(is_remote())
+
 
 class ByteArrayOutput:
     def __init__(self):
@@ -753,16 +758,25 @@ def assertDataFrameEqual(
     has_pandas = False
     try:
         # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
-        import pyspark.pandas as ps
         import pandas as pd
-        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
         has_pandas = True
     except ImportError:
         # no pandas, so we won't call pandasutils functions
         pass
 
-    if has_pandas:
+    has_arrow = False
+    try:
+        import pyarrow
+
+        has_arrow = True
+    except ImportError:
+        pass
+
+    if has_pandas and has_arrow:
+        import pyspark.pandas as ps
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+
         if (
             isinstance(actual, pd.DataFrame)
             or isinstance(expected, pd.DataFrame)

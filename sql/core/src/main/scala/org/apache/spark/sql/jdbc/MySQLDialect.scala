@@ -24,6 +24,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
@@ -68,8 +69,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
-        throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-          s"support aggregate function: $funcName with DISTINCT");
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3184",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
@@ -273,7 +277,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
@@ -286,10 +291,10 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 
