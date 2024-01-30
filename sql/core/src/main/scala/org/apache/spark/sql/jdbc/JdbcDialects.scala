@@ -198,7 +198,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return The SQL query to use for checking the table.
    */
   def getTableExistsQuery(table: String): String = {
-    s"SELECT * FROM $table WHERE 1=0"
+    s"SELECT 1 FROM $table WHERE 1=0"
   }
 
   /**
