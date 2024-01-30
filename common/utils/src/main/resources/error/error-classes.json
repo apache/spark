@@ -1772,6 +1772,11 @@
           "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
         ]
       },
+      "NOT_CONSTANT" : {
+        "message" : [
+          "which is not a constant expression whose equivalent value is known at query planning time."
+        ]
+      },
       "SUBQUERY_EXPRESSION" : {
         "message" : [
           "which contains subquery expressions."
@@ -5970,11 +5975,6 @@
   "_LEGACY_ERROR_TEMP_2101" : {
     "message" : [
       "Not support non-primitive type now."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2102" : {
-    "message" : [
-      "Unsupported type: <catalogString>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2103" : {

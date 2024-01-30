@@ -1825,7 +1825,10 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        return StreamingQueryManager(self._jsparkSession.streams())
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
+        return self._sqm
 
     def stop(self) -> None:
         """
@@ -2123,6 +2126,11 @@ class SparkSession(SparkConversionMixin):
         self._profiler_collector.show_perf_profiles(id)
 
     showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
+
+    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
+        self._profiler_collector.show_memory_profiles(id)
+
+    showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
 
 
 def _test() -> None:

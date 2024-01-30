@@ -438,9 +438,10 @@ built-in but external module, both implicit classes are removed. Please use `.fo
 
 If you prefer using your own build of `spark-avro` jar file, you can simply disable the configuration
 `spark.sql.legacy.replaceDatabricksSparkAvro.enabled`, and use the option `--jars` on deploying your
-applications. Read the [Advanced Dependency Management](https://spark.apache
-.org/docs/latest/submitting-applications.html#advanced-dependency-management) section in Application
+applications. Read the [Advanced Dependency Management][adm] section in the Application
 Submission Guide for more details.
+
+[adm]: submitting-applications.html#advanced-dependency-management
 
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.3/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.3/specification/#complex-types) under records of Avro.

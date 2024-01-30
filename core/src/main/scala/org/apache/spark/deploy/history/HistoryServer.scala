@@ -148,6 +148,7 @@ class HistoryServer(
    */
   def initialize(): Unit = {
     attachPage(new HistoryPage(this))
+    attachPage(new LogPage(conf))
 
     attachHandler(ApiRootResource.getServletHandler(this))
 

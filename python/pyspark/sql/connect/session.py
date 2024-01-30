@@ -704,7 +704,10 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        return StreamingQueryManager(self)
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self)
+        return self._sqm
 
     streams.__doc__ = PySparkSession.streams.__doc__
 
@@ -934,6 +937,11 @@ class SparkSession:
         self._profiler_collector.show_perf_profiles(id)
 
     showPerfProfiles.__doc__ = PySparkSession.showPerfProfiles.__doc__
+
+    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
+        self._profiler_collector.show_memory_profiles(id)
+
+    showMemoryProfiles.__doc__ = PySparkSession.showMemoryProfiles.__doc__
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

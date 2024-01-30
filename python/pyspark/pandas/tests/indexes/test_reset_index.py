@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -144,7 +144,11 @@ class FrameResetIndexMixin:
         )
 
 
-class FrameResetIndexTests(FrameResetIndexMixin, ComparisonTestBase, SQLTestUtils):
+class FrameResetIndexTests(
+    FrameResetIndexMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -179,6 +179,15 @@ launcher = Module(
     ],
 )
 
+sketch = Module(
+    name="sketch",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/sketch/",
+    ],
+    sbt_test_goals=["sketch/test"],
+)
+
 core = Module(
     name="core",
     dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
@@ -200,7 +209,7 @@ api = Module(
 
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, core, api],
+    dependencies=[tags, sketch, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -313,15 +322,6 @@ connect = Module(
         "connect/test",
         "connect-client-jvm/test",
     ],
-)
-
-sketch = Module(
-    name="sketch",
-    dependencies=[tags],
-    source_file_regexes=[
-        "common/sketch/",
-    ],
-    sbt_test_goals=["sketch/test"],
 )
 
 graphx = Module(
@@ -1002,6 +1002,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_readwriter",
         "pyspark.sql.tests.connect.test_parity_udf",
         "pyspark.sql.tests.connect.test_parity_udf_profiler",
+        "pyspark.sql.tests.connect.test_parity_memory_profiler",
         "pyspark.sql.tests.connect.test_parity_udtf",
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_map",
