@@ -557,7 +557,6 @@ pre {
   border-radius: 4px;
 }
 
-code,
 pre {
   font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
 }
@@ -741,7 +740,6 @@ h3 {
   margin: 0;
 }
 
-.global code,
 .global pre {
   font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
 }
@@ -759,15 +757,6 @@ h3 {
   background-color: #f5f5f5;
   border: 1px solid #ccc;
   border-radius: 4px;
-}
-
-.global code {
-  font: 90% "Menlo", "Lucida Console", Consolas, monospace;
-  white-space: nowrap;
-  background: transparent;
-  border-radius: 4px;
-  padding: 0;
-  color: inherit;
 }
 
 .global pre code {
