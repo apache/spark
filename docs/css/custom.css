@@ -954,8 +954,9 @@ table tr:nth-child(2n) {
 
 table.spark-config {
   width: 100%;
+  table-layout: fixed;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* We have long config names and formulas that often show up in tables. To prevent
@@ -965,16 +966,17 @@ table.spark-config {
 table.spark-config code,
 table.spark-config th,
 table.spark-config td {
-  overflow-wrap: anywhere;
   white-space: normal;
+  overflow-wrap: break-word;
 }
 
-/* CSS does not respect max-width on tables or table parts (like cells, columns, etc.).
+/* CSS does not respect max-width on tables or table parts (like cells, columns, etc.),
+   so we have to pick a fixed width for each column.
    See: https://stackoverflow.com/a/8465980
  */
 table.spark-config th:nth-child(1),
 table.spark-config td:nth-child(1) {
-  width: 25%;
+  width: 30%;
 }
 
 table.spark-config th:nth-child(2),
