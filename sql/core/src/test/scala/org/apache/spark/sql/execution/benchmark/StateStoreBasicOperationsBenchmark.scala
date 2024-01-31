@@ -277,7 +277,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
   }
 
   private def getRows(store: StateStore, keys: Seq[UnsafeRow]): Seq[UnsafeRow] = {
-    keys.map(store.get)
+    keys.map(key => store.get(key))
   }
 
   private def loadInitialData(
@@ -346,7 +346,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val provider = new HDFSBackedStateStoreProvider()
     val storeConf = new StateStoreConf(new SQLConf())
     provider.init(
-      storeId, keySchema, valueSchema, 0,
+      storeId, keySchema, valueSchema, 0, useColumnFamilies = false,
       storeConf, new Configuration)
     provider
   }
@@ -361,7 +361,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val storeConf = new StateStoreConf(sqlConf)
 
     provider.init(
-      storeId, keySchema, valueSchema, 0,
+      storeId, keySchema, valueSchema, 0, useColumnFamilies = false,
       storeConf, new Configuration)
     provider
   }

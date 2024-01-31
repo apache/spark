@@ -233,8 +233,8 @@ Data source options of Avro can be set via:
  * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
  * the `options` parameter in function `from_avro`.
 
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Scope</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
@@ -331,8 +331,8 @@ Data source options of Avro can be set via:
 
 ## Configuration
 Configuration of Avro can be done via `spark.conf.set` or by running `SET key=value` commands using SQL.
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
@@ -438,9 +438,10 @@ built-in but external module, both implicit classes are removed. Please use `.fo
 
 If you prefer using your own build of `spark-avro` jar file, you can simply disable the configuration
 `spark.sql.legacy.replaceDatabricksSparkAvro.enabled`, and use the option `--jars` on deploying your
-applications. Read the [Advanced Dependency Management](https://spark.apache
-.org/docs/latest/submitting-applications.html#advanced-dependency-management) section in Application
+applications. Read the [Advanced Dependency Management][adm] section in the Application
 Submission Guide for more details.
+
+[adm]: submitting-applications.html#advanced-dependency-management
 
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.3/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.3/specification/#complex-types) under records of Avro.

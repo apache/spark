@@ -40,7 +40,7 @@ Then enable the profiling in the configuration.
 
 ### Code profiling configuration
 
-<table class="table">
+<table class="spark-config">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.executor.profiling.enabled</code></td>

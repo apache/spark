@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
@@ -217,8 +218,7 @@ private[sql] object GroupStateImpl {
       throw new IllegalArgumentException("eventTimeWatermarkMs must be 0 or positive if present")
     }
     if (hasTimedOut && timeoutConf == NoTimeout) {
-      throw new UnsupportedOperationException(
-        "hasTimedOut is true however there's no timeout configured")
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3168")
     }
 
     new GroupStateImpl[S](

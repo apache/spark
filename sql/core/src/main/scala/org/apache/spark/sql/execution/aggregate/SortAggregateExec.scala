@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -98,11 +99,11 @@ case class SortAggregateExec(
   protected override def needHashTable: Boolean = false
 
   protected override def doProduceWithKeys(ctx: CodegenContext): String = {
-    throw new UnsupportedOperationException("SortAggregate code-gen does not support grouping keys")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3170")
   }
 
   protected override def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    throw new UnsupportedOperationException("SortAggregate code-gen does not support grouping keys")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3170")
   }
 
   override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)

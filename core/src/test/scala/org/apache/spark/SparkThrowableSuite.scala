@@ -122,20 +122,23 @@ class SparkThrowableSuite extends SparkFunSuite {
       s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
   }
 
-  test("SQLSTATE invariants") {
-    val sqlStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState)
-    val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
-    val errorClassReadMeContents =
-      IOUtils.toString(errorClassReadMe.openStream(), StandardCharsets.UTF_8)
-    val sqlStateTableRegex =
-      "(?s)<!-- SQLSTATE table start -->(.+)<!-- SQLSTATE table stop -->".r
-    val sqlTable = sqlStateTableRegex.findFirstIn(errorClassReadMeContents).get
-    val sqlTableRows = sqlTable.split("\n").filter(_.startsWith("|")).drop(2)
-    val validSqlStates = sqlTableRows.map(_.slice(1, 6)).toSet
-    // Sanity check
-    assert(Set("22012", "22003", "42601").subsetOf(validSqlStates))
-    assert(validSqlStates.forall(_.length == 5), validSqlStates)
-    checkCondition(sqlStates, s => validSqlStates.contains(s))
+  test("Error category and error state / SQLSTATE invariants") {
+    val errorCategoriesJson = Utils.getSparkClassLoader.getResource("error/error-categories.json")
+    val errorStatesJson = Utils.getSparkClassLoader.getResource("error/error-states.json")
+    val mapper = JsonMapper.builder()
+      .addModule(DefaultScalaModule)
+      .enable(STRICT_DUPLICATE_DETECTION)
+      .build()
+    val errorCategories = mapper.readValue(
+      errorCategoriesJson, new TypeReference[Map[String, String]]() {})
+    val errorStates = mapper.readValue(
+      errorStatesJson, new TypeReference[Map[String, ErrorStateInfo]]() {})
+    val errorClassStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
+    assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
+    assert(errorCategories.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
+    assert(errorStates.keySet.filter(!_.matches("[A-Z0-9]{5}")).isEmpty)
+    assert(errorStates.keySet.map(_.substring(0, 2)).diff(errorCategories.keySet).isEmpty)
+    assert(errorClassStates.diff(errorStates.keySet).isEmpty)
   }
 
   test("Message invariants") {

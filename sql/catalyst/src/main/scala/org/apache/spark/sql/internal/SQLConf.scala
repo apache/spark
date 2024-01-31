@@ -5684,7 +5684,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def getAllDefinedConfs: Seq[(String, String, String, String)] = {
     loadDefinedConfs()
     getConfigEntries().asScala.filter(_.isPublic).map { entry =>
-      val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
+      val displayValue =
+        // We get the display value in this way rather than call getConfString(entry.key)
+        // because we want the default _definition_ and not the computed value.
+        //   e.g. `<undefined>` instead of `null`
+        //   e.g. `<value of spark.buffer.size>` instead of `65536`
+        Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)
     }.toSeq
   }

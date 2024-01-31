@@ -1416,6 +1416,7 @@ class TestStateStoreProvider extends StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     throw new Exception("Successfully instantiated")

@@ -22,7 +22,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -464,7 +464,11 @@ class FrameReshapingMixin:
             self.assert_eq(pdf.squeeze(axis), psdf.squeeze(axis))
 
 
-class FrameReshapingTests(FrameReshapingMixin, ComparisonTestBase, SQLTestUtils):
+class FrameReshapingTests(
+    FrameReshapingMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

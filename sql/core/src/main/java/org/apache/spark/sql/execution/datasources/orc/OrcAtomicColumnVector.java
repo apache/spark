@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 
 import org.apache.hadoop.hive.ql.exec.vector.*;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.types.DataType;
@@ -71,7 +72,7 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     } else if (vector instanceof TimestampColumnVector timestampColumnVector) {
       timestampData = timestampColumnVector;
     } else {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
   }
 
@@ -146,16 +147,16 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
 
   @Override
   public ColumnarArray getArray(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public ColumnarMap getMap(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public org.apache.spark.sql.vectorized.ColumnVector getChild(int ordinal) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 }
