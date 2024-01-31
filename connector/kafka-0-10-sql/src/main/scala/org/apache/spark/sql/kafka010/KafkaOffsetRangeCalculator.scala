@@ -43,7 +43,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
    */
   def getRanges(
       ranges: Seq[KafkaOffsetRange],
-      executorLocations: Seq[String] = Seq.empty,
+      executorLocations: Array[String] = Array.empty,
       locationPreferences: Map[TopicPartition, Seq[String]] = Map.empty): Seq[KafkaOffsetRange] = {
     val offsetRanges = ranges.filter(_.size > 0)
 
@@ -101,7 +101,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
     math.max(math.round(size.toDouble / totalSize * minParts), 1).toInt
   }
 
-  private def getLocation(tp: TopicPartition, executorLocations: Seq[String]): Option[String] = {
+  private def getLocation(tp: TopicPartition, executorLocations: Array[String]): Option[String] = {
     def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 
     val numExecutors = executorLocations.length
