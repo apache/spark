@@ -1123,18 +1123,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Write the contained data to an HDF5 file using HDFStore.
 
-        Hierarchical Data Format (HDF) is self-describing, allowing an
-        application to interpret the structure and contents of a file with
-        no outside information. One HDF file can hold a mix of related objects
-        which can be accessed as a group or as individual objects.
-
-        In order to add another DataFrame or Series to an existing HDF file
-        please use append mode and a different a key.
-
-        .. warning::
-
-           One can store a subclass of ``DataFrame`` or ``Series`` to HDF5,
-           but the type of the subclass is lost upon storing.
+        .. note:: This method should only be used if the resulting DataFrame is expected
+                  to be small, as all the data is loaded into the driver's memory.
 
         .. versionadded:: 4.0.0
 
@@ -1152,6 +1142,7 @@ class Frame(object, metaclass=ABCMeta):
             - 'a': append, an existing file is opened for reading and
               writing, and if the file does not exist it is created.
             - 'r+': similar to 'a', but the file must already exist.
+
         complevel : {0-9}, default None
             Specifies a compression level for data.
             A value of 0 or None disables compression.
@@ -1175,6 +1166,7 @@ class Frame(object, metaclass=ABCMeta):
               like searching / selecting subsets of the data.
             - If None, pd.get_option('io.hdf.default_format') is checked,
               followed by fallback to "fixed".
+
         index : bool, default True
             Write DataFrame index as a column.
         min_itemsize : dict or int, optional
