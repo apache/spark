@@ -159,8 +159,6 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
-    // If the query is running in batch mode, we need to create a new StateStore and instantiate
-    // a temp directory on the executors in mapPartitions
     if (isStreaming) {
       child.execute().mapPartitionsWithStateStore[InternalRow](
         getStateInfo,
@@ -175,6 +173,8 @@ case class TransformWithStateExec(
           processData(store, singleIterator)
       }
     } else {
+      // If the query is running in batch mode, we need to create a new StateStore and instantiate
+      // a temp directory on the executors in mapPartitionsWithIndex.
       child.execute().mapPartitionsWithIndex[InternalRow](
         (i, iter) => {
           val providerId = new StateStoreProviderId(
