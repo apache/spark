@@ -159,6 +159,8 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+    // If the query is running in batch mode, we need to create a new StateStore and instantiate
+    // a temp directory on the executors in mapPartitions
     if (isStreaming) {
       child.execute().mapPartitionsWithStateStore[InternalRow](
         getStateInfo,
@@ -175,11 +177,11 @@ case class TransformWithStateExec(
     } else {
       child.execute().mapPartitionsWithIndex[InternalRow](
         (i, iter) => {
-
           val providerId = new StateStoreProviderId(
             StateStoreId(Utils.createTempDir().getAbsolutePath,
               i, 0), getStateInfo.queryRunId)
 
+          // Create StateStoreProvider for this partition
           val stateStoreProvider = StateStoreProvider.createAndInit(
             providerId,
             schemaForKeyRow,
@@ -196,6 +198,12 @@ case class TransformWithStateExec(
     }
   }
 
+  /**
+   * Process the data in the partition using the state store and the stateful processor.
+   * @param store The state store to use
+   * @param singleIterator The iterator of rows to process
+   * @return An iterator of rows that are the result of processing the input rows
+   */
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
@@ -207,6 +215,12 @@ case class TransformWithStateExec(
     result
   }
 
+  /**
+   * Set the default SQLConf values for the State Store.
+   * This is used for the batch operator, since these SQLConfs are not
+   * automatically populated for batch queries.
+   * @return SQLConf with default values with RocksDBStateStoreProvider
+   */
   private def getDefaultStateStoreSQLConf: SQLConf = {
       val sqlConf = new SQLConf()
       StateStoreConf.sqlConfKeys.foreach {
@@ -234,7 +248,7 @@ object TransformWithStateExec {
       child: SparkPlan): SparkPlan = {
     val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
     val statefulOperatorStateInfo = StatefulOperatorStateInfo(
-      Utils.createTempDir().getAbsolutePath,
+      checkpointLocation = "", // empty checkpointLocation will be populated in doExecute
       queryRunId = UUID.randomUUID(),
       operatorId = 0,
       storeVersion = 0,

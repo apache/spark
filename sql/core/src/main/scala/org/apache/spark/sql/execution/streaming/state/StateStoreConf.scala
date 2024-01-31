@@ -87,6 +87,10 @@ object StateStoreConf {
 
   val empty = new StateStoreConf()
 
+  /**
+   * List of SQLConfs that need to be set in order to
+   * instantiate the StateStoreConf.
+   */
   val sqlConfKeys = Seq(
     SQLConf.NUM_STATE_STORE_MAINTENANCE_THREADS,
     SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT,
