@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.execution.datasources.SQLRDD
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
@@ -157,7 +158,7 @@ object JDBCRDD extends Logging {
  * Both the driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
-private[jdbc] class JDBCRDD(
+class JDBCRDD(
     sc: SparkContext,
     getConnection: Int => Connection,
     schema: StructType,
@@ -171,7 +172,7 @@ private[jdbc] class JDBCRDD(
     limit: Int,
     sortOrders: Array[String],
     offset: Int)
-  extends RDD[InternalRow](sc, Nil) {
+  extends SQLRDD(sc) {
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
@@ -272,7 +273,15 @@ private[jdbc] class JDBCRDD(
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
+
+    val startTime = System.nanoTime
     rs = stmt.executeQuery()
+    val endTime = System.nanoTime
+
+    val executionTime = endTime - startTime
+    logInfo(s"Query execution time = $executionTime ns")
+    queryExecutionTimeMetric.add(executionTime)
+
     val rowsIterator =
       JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
 
