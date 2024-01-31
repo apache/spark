@@ -177,9 +177,12 @@ case class TransformWithStateExec(
       // a temp directory on the executors in mapPartitionsWithIndex.
       child.execute().mapPartitionsWithIndex[InternalRow](
         (i, iter) => {
-          val providerId = new StateStoreProviderId(
-            StateStoreId(Utils.createTempDir().getAbsolutePath,
-              i, 0), getStateInfo.queryRunId)
+          val providerId = {
+            // lazy creation to initialize tempDirPath once
+            lazy val tempDirPath = Utils.createTempDir().getAbsolutePath
+            new StateStoreProviderId(
+              StateStoreId(tempDirPath, 0, i), getStateInfo.queryRunId)
+          }
 
           val sqlConf = new SQLConf()
           sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,

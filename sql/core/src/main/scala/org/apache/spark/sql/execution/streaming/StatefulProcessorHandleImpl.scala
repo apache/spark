@@ -74,30 +74,21 @@ class StatefulProcessorHandleImpl(store: StateStore, runId: UUID, isStreaming: B
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
+  private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
   private def buildQueryInfo(): QueryInfo = {
 
-    if (!isStreaming) {
-      val queryId = "00000000-0000-0000-0000-000000000000"
-      val batchId = 0L
-      new QueryInfoImpl(UUID.fromString(queryId), runId, batchId)
+    val taskCtxOpt = Option(TaskContext.get())
+    val (queryId, batchId) = if (!isStreaming) {
+      (BATCH_QUERY_ID, 0L)
+    } else if (taskCtxOpt.isDefined) {
+      (taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY),
+        taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong)
     } else {
-      val taskCtxOpt = Option(TaskContext.get())
-      // Task context is not available in tests, so we generate a random query id and batch id here
-      val queryId = if (taskCtxOpt.isDefined) {
-        taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY)
-      } else {
-        assert(Utils.isTesting, "Failed to find query id in task context")
-        UUID.randomUUID().toString
-      }
-
-      val batchId = if (taskCtxOpt.isDefined) {
-        taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong
-      } else {
-        assert(Utils.isTesting, "Failed to find batch id in task context")
-        0
-      }
-      new QueryInfoImpl(UUID.fromString(queryId), runId, batchId)
+      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
+      (UUID.randomUUID().toString, 0L)
     }
+
+    new QueryInfoImpl(UUID.fromString(queryId), runId, batchId)
   }
 
   private lazy val currQueryInfo: QueryInfo = buildQueryInfo()
