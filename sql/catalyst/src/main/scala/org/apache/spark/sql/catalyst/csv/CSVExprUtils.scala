@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.csv
 import org.apache.commons.lang3.StringUtils
 
 object CSVExprUtils {
+
   /**
-   * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).
-   * This is currently being used in CSV reading path and CSV schema inference.
+   * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`). This is
+   * currently being used in CSV reading path and CSV schema inference.
    */
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] = {
     @inline
-    def nonEmptyLine(line: String) : Boolean = {
+    def nonEmptyLine(line: String): Boolean = {
       line.trim.nonEmpty || line.contains(options.delimiter)
     }
 
@@ -64,17 +65,18 @@ object CSVExprUtils {
   }
 
   /**
-   * Helper method that converts string representation of a character to actual character.
-   * It handles some Java escaped strings and throws exception if given string is longer than one
+   * Helper method that converts string representation of a character to actual character. It
+   * handles some Java escaped strings and throws exception if given string is longer than one
    * character.
    */
   @throws[IllegalArgumentException]
   def toChar(str: String): Char = {
     (str: Seq[Char]) match {
       case Seq() => throw new IllegalArgumentException("Delimiter cannot be empty string")
-      case Seq('\\') => throw new IllegalArgumentException("Single backslash is prohibited." +
-        " It has special meaning as beginning of an escape sequence." +
-        " To get the backslash character, pass a string with two backslashes as the delimiter.")
+      case Seq('\\') =>
+        throw new IllegalArgumentException("Single backslash is prohibited." +
+          " It has special meaning as beginning of an escape sequence." +
+          " To get the backslash character, pass a string with two backslashes as the delimiter.")
       case Seq(c) => c
       case Seq('\\', 't') => '\t'
       case Seq('\\', 'r') => '\r'
@@ -93,29 +95,26 @@ object CSVExprUtils {
   }
 
   /**
-   * Helper method that converts string representation of a character sequence to actual
-   * delimiter characters. The input is processed in "chunks", and each chunk is converted
-   * by calling [[CSVExprUtils.toChar()]].  A chunk is either:
-   * <ul>
-   *   <li>a backslash followed by another character</li>
-   *   <li>a non-backslash character by itself</li>
-   * </ul>
-   * , in that order of precedence. The result of the converting all chunks is returned as
-   * a [[String]].
+   * Helper method that converts string representation of a character sequence to actual delimiter
+   * characters. The input is processed in "chunks", and each chunk is converted by calling
+   * [[CSVExprUtils.toChar()]]. A chunk is either: <ul> <li>a backslash followed by another
+   * character</li> <li>a non-backslash character by itself</li> </ul> , in that order of
+   * precedence. The result of the converting all chunks is returned as a [[String]].
    *
-   * <br/><br/>Examples:
-   * <ul><li>`\t` will result in a single tab character as the separator (same as before)
-   * </li><li>`|||` will result in a sequence of three pipe characters as the separator
+   * <br/><br/>Examples: <ul><li>`\t` will result in a single tab character as the separator (same
+   * as before) </li><li>`|||` will result in a sequence of three pipe characters as the separator
    * </li><li>`\\` will result in a single backslash as the separator (same as before)
    * </li><li>`\.` will result in an error (since a dot is not a character that needs escaped)
    * </li><li>`\\.` will result in a backslash, then dot, as the separator character sequence
    * </li><li>`.\t.` will result in a dot, then tab, then dot as the separator character sequence
-   * </li>
-   * </ul>
+   * </li> </ul>
    *
-   * @param str the string representing the sequence of separator characters
-   * @return a [[String]] representing the multi-character delimiter
-   * @throws IllegalArgumentException if any of the individual input chunks are illegal
+   * @param str
+   *   the string representing the sequence of separator characters
+   * @return
+   *   a [[String]] representing the multi-character delimiter
+   * @throws IllegalArgumentException
+   *   if any of the individual input chunks are illegal
    */
   def toDelimiterStr(str: String): String = {
     var idx = 0

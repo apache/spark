@@ -80,6 +80,7 @@ abstract class CSVSuite
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
+  private val tabSepEmptyColsFile = "test-data/tab-sep-with-empty-columns.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -1635,6 +1636,20 @@ abstract class CSVSuite
           checkAnswer(readBack, Row(expected))
         }
       }
+  }
+
+  test("SPARK-46876: Lines only containing delimiter should not be treated as empty lines") {
+    assert(spark.read
+      .schema("a string, b string, c string")
+      .option("sep", "\t")
+      .csv(Seq("1\t2\t3", "\t\t", "4\t5\t6").toDS())
+      .count() == 3)
+
+    assert(spark.read
+      .schema("a string, b string, c string")
+      .option("sep", "\t")
+      .csv(testFile(tabSepEmptyColsFile))
+      .count() == 3)
   }
 
   test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
