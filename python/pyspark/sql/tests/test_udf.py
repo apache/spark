@@ -16,6 +16,7 @@
 #
 
 import functools
+import platform
 import pydoc
 import shutil
 import tempfile
@@ -1045,7 +1046,7 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    @unittest.skipIf("pypy" in platform.python_implementation().lower())
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):
@@ -1053,7 +1054,7 @@ class BaseUDFTestsMixin(object):
 
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    @unittest.skipIf("pypy" in platform.python_implementation().lower())
     def test_err_udf_init(self):
         with QuietTest(self.sc):
             self.check_err_udf_init()
