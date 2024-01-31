@@ -17,23 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
 
-/**
- * Class that is used as base class for all RDDs
- * that retrieves data from some external data source using SQL query
- */
-abstract class SQLRDD (sparkContext: SparkContext)
-  extends RDD[InternalRow](sparkContext, deps = Nil) {
-
-  val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
-    sparkContext,
-    name = "Query execution time")
-
-  val metrics: Seq[(String, SQLMetric)] = Seq(
-    "queryExecutionTime" -> queryExecutionTimeMetric
-  )
+trait DataSourceMetricsMixin {
+  def getMetrics: Seq[(String, SQLMetric)]
 }

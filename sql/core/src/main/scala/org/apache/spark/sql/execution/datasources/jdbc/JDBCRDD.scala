@@ -26,8 +26,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.execution.datasources.SQLRDD
+import org.apache.spark.sql.execution.datasources.DataSourceMetricsMixin
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
@@ -172,7 +173,14 @@ class JDBCRDD(
     limit: Int,
     sortOrders: Array[String],
     offset: Int)
-  extends SQLRDD(sc) {
+  extends RDD[InternalRow](sc, Nil) with DataSourceMetricsMixin {
+
+  /**
+   * Execution time of the query issued to JDBC connection
+   */
+  val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    name = "Query execution time")
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
@@ -287,5 +295,11 @@ class JDBCRDD(
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
+  }
+
+  override def getMetrics: Seq[(String, SQLMetric)] = {
+    Seq(
+      "queryExecutionTime" -> queryExecutionTimeMetric
+    )
   }
 }

@@ -122,7 +122,7 @@ case class RowDataSourceScanExec(
     )
 
     rdd match {
-      case sqlRdd: SQLRDD => (metrics ++ sqlRdd.metrics).toMap
+      case rddWithDSMetrics: DataSourceMetricsMixin => metrics ++ rddWithDSMetrics.getMetrics
       case _ => metrics
     }
   }
