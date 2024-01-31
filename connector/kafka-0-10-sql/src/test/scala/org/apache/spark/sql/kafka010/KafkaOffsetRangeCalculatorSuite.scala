@@ -44,7 +44,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
     assert(
       calc.getRanges(
         Seq(KafkaOffsetRange(tp1, 1, 2)),
-        executorLocations = Seq("location")) ==
+        executorLocations = Array("location")) ==
       Seq(KafkaOffsetRange(tp1, 1, 2, Some("location"))))
   }
 
@@ -78,7 +78,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp1, 1, 2),
           KafkaOffsetRange(tp2, 1, 2),
           KafkaOffsetRange(tp3, 1, 2)),
-        Seq("exec1", "exec2", "exec3")) ===
+        Array("exec1", "exec2", "exec3")) ===
         Seq(
           KafkaOffsetRange(tp1, 1, 2, Some("exec3")),
           KafkaOffsetRange(tp2, 1, 2, Some("exec1")),
@@ -98,7 +98,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
     assert(
       calc.getRanges(
         Seq(KafkaOffsetRange(tp1, 1, 5)),
-        executorLocations = Seq("location")) ==
+        executorLocations = Array("location")) ==
         Seq(
           KafkaOffsetRange(tp1, 1, 2, None),
           KafkaOffsetRange(tp1, 2, 3, None),

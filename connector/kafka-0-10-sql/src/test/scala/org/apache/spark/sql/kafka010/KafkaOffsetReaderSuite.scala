@@ -66,7 +66,8 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       )),
       CaseInsensitiveMap(
         minPartitions.map(m => Map("minPartitions" -> m.toString)).getOrElse(Map.empty)),
-      UUID.randomUUID().toString
+      UUID.randomUUID().toString,
+      DefaultKafkaPartitionLocationAssigner
     )
   }
 
@@ -96,7 +97,8 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       SubscribeStrategy(Seq()),
       KafkaSourceProvider.kafkaParamsForDriver(kafkaParams),
       CaseInsensitiveMap(Map.empty),
-      ""
+      "",
+      DefaultKafkaPartitionLocationAssigner
     )
     assert(reader.isolationLevel === isolationLevel)
   }
