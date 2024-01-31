@@ -96,11 +96,11 @@ class RunningCountMostRecentStatefulProcessor
   override def close(): Unit = {}
 }
 
-class RunningCountMostRecentStatefulProcessorWithDeletion
-  extends RunningCountMostRecentStatefulProcessor
+class MostRecentStatefulProcessorWithDeletion
+  extends StatefulProcessor[String, (String, String), (String, String)]
   with Logging {
-  @transient private var _countState: ValueState[Long] = _
   @transient private var _mostRecent: ValueState[String] = _
+  @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
      handle: StatefulProcessorHandle,
@@ -108,8 +108,6 @@ class RunningCountMostRecentStatefulProcessorWithDeletion
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _processorHandle.deleteIfExists("countState")
-    _countState = _processorHandle.getValueState[String, Long]("countState",
-      Encoders.STRING)
     _mostRecent = _processorHandle.getValueState[String, String]("mostRecent",
       Encoders.STRING)
   }
@@ -117,18 +115,18 @@ class RunningCountMostRecentStatefulProcessorWithDeletion
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues): Iterator[(String, String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
-    var output = List[(String, String, String)]()
+    var output = List[(String, String)]()
     inputRows.foreach { row =>
       _mostRecent.update(row._2)
-      _countState.update(count)
-      output = (key, count.toString, mostRecent) :: output
+      output = (key, mostRecent) :: output
     }
     output.iterator
   }
+
+  override def close(): Unit = {}
 }
 
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
@@ -218,7 +216,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
       val stream2 = inputData.toDS()
         .groupByKey(x => x._1)
-        .transformWithState(new RunningCountMostRecentStatefulProcessorWithDeletion(),
+        .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
           TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
@@ -231,8 +229,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       testStream(stream2, OutputMode.Update())(
         StartStream(checkpointLocation = chkptDir),
         AddData(inputData, ("a", "str2"), ("b", "str3")),
-        CheckNewAnswer(("a", "1", "str1"),
-          ("b", "1", "")), // should not factor in previous count state
+        CheckNewAnswer(("a", "str1"),
+          ("b", "")), // should not factor in previous count state
         StopStream
       )
     }
