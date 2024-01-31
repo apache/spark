@@ -46,8 +46,8 @@ object PartitionDescription {
       topic,
       tpi.partition(),
       tpi.leader(),
-      Array.apply[Node](tpi.replicas().asScala: _*),
-      Array.apply[Node](tpi.isr().asScala: _*))
+      tpi.replicas().asScala.toArray,
+      tpi.isr().asScala.toArray)
 }
 
 trait KafkaPartitionLocationAssigner {
