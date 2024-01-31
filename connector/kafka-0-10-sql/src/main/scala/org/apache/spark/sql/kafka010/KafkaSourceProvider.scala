@@ -153,7 +153,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       includeHeaders = includeHeaders,
       startingOffsets = startingRelationOffsets,
       endingOffsets = endingRelationOffsets,
-      locationAssigner = loadLocationAssigner(caseInsensitiveOptions))
+      locationAssigner = loadLocationAssigner(caseInsensitiveParameters))
   }
 
   override def createSink(
