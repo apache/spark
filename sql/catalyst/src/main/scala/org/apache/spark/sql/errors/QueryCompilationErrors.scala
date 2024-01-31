@@ -3543,6 +3543,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "defaultValue" -> defaultValue))
   }
 
+  def defaultValueNotConstantError(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ))
+  }
+
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",

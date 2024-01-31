@@ -302,6 +302,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // general unresolved check below to throw a more tailored error message.
         new ResolveReferencesInAggregate(catalogManager).checkUnresolvedGroupByAll(operator)
 
+        // Early checks for column definitions, to produce better error messages
+        ColumnDefinition.checkColumnDefinitions(operator)
+
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")

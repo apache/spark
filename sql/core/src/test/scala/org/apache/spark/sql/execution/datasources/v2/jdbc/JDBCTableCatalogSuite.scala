@@ -608,6 +608,28 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-46822: Respect charVarcharAsString when casting jdbc type to catalyst type in jdbc") {
+    try {
+      withConnection(
+        _.prepareStatement("""CREATE TABLE "test"."char_tbl" (ID CHAR(5), deptno VARCHAR(10))""")
+        .executeUpdate())
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        val expected = new StructType()
+          .add("ID", StringType, true, defaultMetadata)
+          .add("DEPTNO", StringType, true, defaultMetadata)
+        assert(sql(s"SELECT * FROM h2.test.char_tbl").schema === expected)
+      }
+      val expected = new StructType()
+        .add("ID", CharType(5), true, defaultMetadata)
+        .add("DEPTNO", VarcharType(10), true, defaultMetadata)
+      val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expected)
+      assert(sql(s"SELECT * FROM h2.test.char_tbl").schema === replaced)
+    } finally {
+      withConnection(
+        _.prepareStatement("""DROP TABLE IF EXISTS "test"."char_tbl"""").executeUpdate())
+    }
+  }
+
   test("SPARK-45449: Cache Invalidation Issue with JDBC Table") {
     withTable("h2.test.cache_t") {
       withConnection { conn =>

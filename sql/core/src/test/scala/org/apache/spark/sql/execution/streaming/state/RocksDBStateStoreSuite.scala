@@ -55,10 +55,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   import StateStoreTestsHelper._
 
-  test("version encoding") {
+  testWithColumnFamilies(s"version encoding",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     import RocksDBStateStoreProvider._
 
-    tryWithProviderResource(newStoreProvider()) { provider =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
       val keyRow = dataToKeyRow("a", 0)
       val valueRow = dataToValueRow(1)
@@ -122,15 +123,18 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("rocksdb file manager metrics exposed") {
+  testWithColumnFamilies("rocksdb file manager metrics exposed",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     import RocksDBStateStoreProvider._
-    def getCustomMetric(metrics: StateStoreMetrics, customMetric: StateStoreCustomMetric): Long = {
+    def getCustomMetric(metrics: StateStoreMetrics,
+      customMetric: StateStoreCustomMetric): Long = {
       val metricPair = metrics.customMetrics.find(_._1.name == customMetric.name)
       assert(metricPair.isDefined)
       metricPair.get._2
     }
+
     withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
-      tryWithProviderResource(newStoreProvider()) { provider =>
+      tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
         val store = provider.getStore(0)
         // Verify state after updating
         put(store, "a", 0, 1)
@@ -142,8 +146,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(storeMetrics.numKeys === 1)
         // SPARK-46249 - In the case of changelog checkpointing, the snapshot upload happens in
         // the context of the background maintenance thread. The file manager metrics are updated
-        // here and will be available as part of the next metrics update. So we cannot rely on the
-        // file manager metrics to be available here for this version.
+        // here and will be available as part of the next metrics update. So we cannot rely on
+        // the file manager metrics to be available here for this version.
         if (!isChangelogCheckpointingEnabled) {
           assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
           assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
@@ -162,6 +166,16 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     newStoreProvider(storeId, numColsPrefixKey = 0)
   }
 
+  override def newStoreProvider(storeId: StateStoreId, useColumnFamilies: Boolean):
+    RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, numColsPrefixKey = 0, useColumnFamilies = useColumnFamilies)
+  }
+
+  override def newStoreProvider(useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = 0,
+      useColumnFamilies = useColumnFamilies)
+  }
+
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
     newStoreProvider(storeId, numColsPrefixKey = -1, conf = conf)
   }
@@ -174,23 +188,28 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       storeId: StateStoreId,
       numColsPrefixKey: Int,
       sqlConf: Option[SQLConf] = None,
-      conf: Configuration = new Configuration): RocksDBStateStoreProvider = {
+      conf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
+      useColumnFamilies,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
     provider
   }
 
   override def getLatestData(
-      storeProvider: RocksDBStateStoreProvider): Set[((String, Int), Int)] = {
-    getData(storeProvider, version = -1)
+      storeProvider: RocksDBStateStoreProvider,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    getData(storeProvider, version = -1, useColumnFamilies)
   }
 
   override def getData(
       provider: RocksDBStateStoreProvider,
-      version: Int = -1): Set[((String, Int), Int)] = {
-    tryWithProviderResource(newStoreProvider(provider.stateStoreId)) { reloadedProvider =>
+      version: Int = -1,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    tryWithProviderResource(newStoreProvider(provider.stateStoreId,
+      useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
       reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
     }
@@ -220,19 +239,21 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  override def testWithAllCodec(name: String)(func: => Any): Unit = {
-    codecsInShortName.foreach { codecName =>
-      super.test(s"$name - with codec $codecName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
-          func
+  override def testWithAllCodec(name: String)(func: Boolean => Any): Unit = {
+    Seq(true, false).foreach { colFamiliesEnabled =>
+      codecsInShortName.foreach { codecName =>
+        super.test(s"$name - with codec $codecName - colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
-    }
 
-    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecName =>
-      super.test(s"$name - with codec $codecName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
-          func
+      CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecName =>
+        super.test(s"$name - with codec $codecName - colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
     }
