@@ -42,9 +42,7 @@ from pyspark.sql.types import (
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
-    have_pyarrow,
     test_compiled,
-    pyarrow_requirement_message,
     test_not_compiled_message,
 )
 from pyspark.testing.utils import QuietTest, assertDataFrameEqual
