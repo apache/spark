@@ -256,9 +256,9 @@ private[spark] object TestUtils extends SparkTestUtils {
    * Returns the Location header from an HTTP(S) URL.
    */
   def redirectUrl(
-                        url: URL,
-                        method: String = "GET",
-                        headers: Seq[(String, String)] = Nil): String = {
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil): String = {
     withHttpConnection(url, method, headers = headers) { connection =>
       connection.getHeaderField("Location");
     }
