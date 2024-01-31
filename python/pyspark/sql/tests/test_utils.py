@@ -984,7 +984,6 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_non_pyspark_df(self):
         dict1 = {"a": 1, "b": 2}
         dict2 = {"a": 1, "b": 2}

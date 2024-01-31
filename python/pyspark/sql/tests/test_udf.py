@@ -1054,7 +1054,6 @@ class BaseUDFTestsMixin(object):
 
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
 
-    # @unittest.skipIf("pypy" in platform.python_implementation().lower(), "cannot run in environment pypy")
     def test_err_udf_init(self):
         with QuietTest(self.sc):
             self.check_err_udf_init()
