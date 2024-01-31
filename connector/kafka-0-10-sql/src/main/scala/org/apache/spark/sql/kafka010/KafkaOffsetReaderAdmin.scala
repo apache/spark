@@ -104,17 +104,13 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
   private val userSpecifiedLocationPreferences: Map[TopicPartition, Seq[String]] = {
-    val partitionInfos = consumerStrategy.assignedTopicPartitions(admin)
-      .map(_.topic())
-      .toSet
-      .flatMap((topicName: String) => consumer().partitionsFor(topicName).asScala)
-      .sortBy(partInfo => (partInfo.topic(), partInfo.partition()))
+    val partitionDescrs = consumerStrategy.assignedTopicPartitions(admin)
+      .toList
+      .sortBy(descr => (descr.topic, descr.partition))
 
-    partitionLocationAssigner.getLocationPreferences(partitionInfos, getSortedExecutorList)
+    partitionLocationAssigner.getLocationPreferences(partitionDescrs, getSortedExecutorList)
       .map {
-        case (partInfo, executors) =>
-          val tp = new TopicPartition(partInfo.topic(), partInfo.partition())
-          (tp -> executors)
+        case (descr, executors) => (descr.toTopicPartition -> executors)
       }
   }
 

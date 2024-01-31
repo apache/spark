@@ -17,9 +17,38 @@
 
 package org.apache.spark.sql.kafka010
 
-import org.apache.kafka.common.PartitionInfo
+import java.{ util => ju }
+
+import org.apache.kafka.common.{ Node, PartitionInfo, TopicPartition, TopicPartitionInfo }
 
 import org.apache.spark.util.Utils
+
+case class PartitionDescription(
+  topic: String,
+  partition: Int,
+  leader: Node,
+  replicas: Array[Node],
+  isr: Array[Node]) {
+  def toTopicPartition: TopicPartition = new TopicPartition(topic, partition)
+}
+
+object PartitionDescription {
+  def fromPartitionInfo(pi: PartitionInfo): PartitionDescription =
+    PartitionDescription(
+      pi.topic(),
+      pi.partition(),
+      pi.leader(),
+      pi.replicas(),
+      pi.inSyncReplicas())
+
+  def fromTopicPartitionInfo(topic: String, tpi: TopicPartitionInfo): PartitionDescription =
+    PartitionDescription(
+      topic,
+      tpi.partition(),
+      tpi.leader(),
+      tpi.replicas().toArray(),
+      tpi.isr().toArray())
+}
 
 trait KafkaPartitionLocationAssigner {
   /**
@@ -28,7 +57,7 @@ trait KafkaPartitionLocationAssigner {
   * partition is not associated with any executors, the partition
   * will be consistently assigned to any available executor.
   *
-  * @param partInfos      Partition information per topic and partition
+  * @param partDescrs     Partition information per topic and partition
   *                       subscribed. This collection is provided sorted by
   *                       topic, then partition
   *
@@ -38,8 +67,8 @@ trait KafkaPartitionLocationAssigner {
   *                       executors
   */
   def getLocationPreferences(
-    partInfos: Seq[PartitionInfo],
-    knownExecutors: Seq[String]): Map[PartitionInfo, Seq[String]]
+    partDescrs: Seq[PartitionDescription],
+    knownExecutors: Seq[String]): Map[PartitionDescription, Seq[String]]
 }
 
 object KafkaPartitionLocationAssigner {
@@ -53,8 +82,8 @@ object KafkaPartitionLocationAssigner {
 
 object DefaultKafkaPartitionLocationAssigner extends KafkaPartitionLocationAssigner {
   def getLocationPreferences(
-    partInfos: Seq[PartitionInfo],
-    knownExecutors: Seq[String]): Map[PartitionInfo, Seq[String]] =
+    partDescrs: Seq[PartitionDescription],
+    knownExecutors: Seq[String]): Map[TopicPartition, Seq[String]] =
     Map.empty
 }
 
