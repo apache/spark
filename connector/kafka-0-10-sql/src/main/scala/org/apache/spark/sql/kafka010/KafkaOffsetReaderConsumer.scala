@@ -107,7 +107,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       .map(_.topic())
       .toSet
       .toList
-      .flatMap((topicName: String) => consumer().partitionsFor(topicName).asScala)
+      .flatMap((topicName: String) => consumer.partitionsFor(topicName).asScala)
       .map(partInfo => PartitionDescription.fromPartitionInfo(partInfo))
       .sortBy(descr => (descr.topic, descr.partition))
 

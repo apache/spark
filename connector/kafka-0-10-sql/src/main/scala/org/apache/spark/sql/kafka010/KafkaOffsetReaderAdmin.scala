@@ -139,7 +139,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
-    val partitions = consumerStrategy.assignedTopicPartitions(admin)
+    val partitions = consumerStrategy.assignedTopicPartitions(admin).map(_.toTopicPartition)
     // Obtain TopicPartition offsets with late binding support
     offsetRangeLimit match {
       case EarliestOffsetRangeLimit => partitions.map {
@@ -516,7 +516,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     : Map[TopicPartition, Long] = {
 
     withRetries {
-      val partitions = consumerStrategy.assignedTopicPartitions(admin).asJava
+      val partitions = consumerStrategy.assignedTopicPartitions(admin)
+        .map(_.toTopicPartition)
+        .asJava
       logDebug(s"Partitions assigned: $partitions.")
       body(partitions)
     }

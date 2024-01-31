@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.{ util => ju }
-
 import org.apache.kafka.common.{ Node, PartitionInfo, TopicPartition, TopicPartitionInfo }
 
 import org.apache.spark.util.Utils
@@ -46,8 +44,8 @@ object PartitionDescription {
       topic,
       tpi.partition(),
       tpi.leader(),
-      tpi.replicas().toArray(),
-      tpi.isr().toArray())
+      Array.apply[Node](tpi.replicas(): _*),
+      Array.apply[Node](tpi.isr(): _*))
 }
 
 trait KafkaPartitionLocationAssigner {
