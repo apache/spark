@@ -100,8 +100,6 @@ Excel
    read_excel
    DataFrame.to_excel
 
-
-
 JSON
 ----
 .. autosummary::
