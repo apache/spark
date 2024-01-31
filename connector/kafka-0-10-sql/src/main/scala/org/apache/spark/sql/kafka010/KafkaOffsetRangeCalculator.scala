@@ -44,7 +44,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
   def getRanges(
       ranges: Seq[KafkaOffsetRange],
       executorLocations: Array[String] = Array.empty,
-      locationPreferences: Map[TopicPartition, Seq[String]] = Map.empty): Seq[KafkaOffsetRange] = {
+      locationPreferences: Map[TopicPartition, Array[String]] = Map.empty): Seq[KafkaOffsetRange] = {
     val offsetRanges = ranges.filter(_.size > 0)
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions

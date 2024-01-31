@@ -68,7 +68,7 @@ trait KafkaPartitionLocationAssigner {
   */
   def getLocationPreferences(
     partDescrs: Array[PartitionDescription],
-    knownExecutors: Array[String]): Map[PartitionDescription, Seq[String]]
+    knownExecutors: Array[String]): Map[PartitionDescription, Array[String]]
 }
 
 object KafkaPartitionLocationAssigner {
@@ -83,7 +83,7 @@ object KafkaPartitionLocationAssigner {
 object DefaultKafkaPartitionLocationAssigner extends KafkaPartitionLocationAssigner {
   def getLocationPreferences(
     partDescrs: Array[PartitionDescription],
-    knownExecutors: Array[String]): Map[PartitionDescription, Seq[String]] =
+    knownExecutors: Array[String]): Map[PartitionDescription, Array[String]] =
     Map.empty
 }
 
