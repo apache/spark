@@ -1136,7 +1136,7 @@ class Frame(object, metaclass=ABCMeta):
            One can store a subclass of ``DataFrame`` or ``Series`` to HDF5,
            but the type of the subclass is lost upon storing.
 
-        .. versionadded:: 3.3.0
+        .. versionadded:: 4.0.0
 
         Parameters
         ----------
