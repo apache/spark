@@ -181,6 +181,11 @@ case class TransformWithStateExec(
             StateStoreId(Utils.createTempDir().getAbsolutePath,
               i, 0), getStateInfo.queryRunId)
 
+          val sqlConf = new SQLConf()
+          sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+            classOf[RocksDBStateStoreProvider].getName)
+          val storeConf = new StateStoreConf(sqlConf)
+
           // Create StateStoreProvider for this partition
           val stateStoreProvider = StateStoreProvider.createAndInit(
             providerId,
@@ -188,7 +193,7 @@ case class TransformWithStateExec(
             schemaForValueRow,
             numColsPrefixKey = 0,
             useColumnFamilies = true,
-            storeConf = StateStoreConf(getDefaultStateStoreSQLConf),
+            storeConf = storeConf,
             hadoopConf = new Configuration())
 
           val store = stateStoreProvider.getStore(0)
@@ -214,24 +219,7 @@ case class TransformWithStateExec(
     val result = processDataWithPartition(singleIterator, store, processorHandle)
     result
   }
-
-  /**
-   * Set the default SQLConf values for the State Store.
-   * This is used for the batch operator, since these SQLConfs are not
-   * automatically populated for batch queries.
-   * @return SQLConf with default values with RocksDBStateStoreProvider
-   */
-  private def getDefaultStateStoreSQLConf: SQLConf = {
-      val sqlConf = new SQLConf()
-      StateStoreConf.sqlConfKeys.foreach {
-        case conf@SQLConf.STATE_STORE_PROVIDER_CLASS =>
-          sqlConf.setConfString(conf.key, classOf[RocksDBStateStoreProvider].getName)
-        case conf => sqlConf.setConfString(conf.key, conf.defaultValueString)
-      }
-      sqlConf
-  }
 }
-
 
 object TransformWithStateExec {
 

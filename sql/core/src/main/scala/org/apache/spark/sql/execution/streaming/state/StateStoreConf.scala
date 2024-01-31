@@ -87,21 +87,5 @@ object StateStoreConf {
 
   val empty = new StateStoreConf()
 
-  /**
-   * List of SQLConfs that need to be set in order to
-   * instantiate the StateStoreConf.
-   */
-  val sqlConfKeys = Seq(
-    SQLConf.NUM_STATE_STORE_MAINTENANCE_THREADS,
-    SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT,
-    SQLConf.MIN_BATCHES_TO_RETAIN,
-    SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY,
-    SQLConf.STATE_STORE_PROVIDER_CLASS,
-    SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED,
-    SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS,
-    SQLConf.STATE_STORE_COMPRESSION_CODEC,
-    SQLConf.STREAMING_MAINTENANCE_INTERVAL,
-    SQLConf.STATE_SCHEMA_CHECK_ENABLED)
-
   def apply(conf: SQLConf): StateStoreConf = new StateStoreConf(conf)
 }
