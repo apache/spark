@@ -2435,7 +2435,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df1)
     checkPushedInfo(df1,
       """
-        |PushedAggregates: [MODE(SALARY, true)],
+        |PushedAggregates: [MODE() WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2465,7 +2465,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df3)
     checkPushedInfo(df3,
       """
-        |PushedAggregates: [MODE(SALARY, true)],
+        |PushedAggregates: [MODE() WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2481,11 +2481,67 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df4)
     checkPushedInfo(df4,
       """
-        |PushedAggregates: [MODE(SALARY, false)],
+        |PushedAggregates: [MODE() WITHIN GROUP (ORDER BY SALARY DESC NULLS LAST)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df4, Seq(Row(1, 10000.00), Row(2, 12000.00), Row(6, 12000.00)))
+  }
+
+  test("scan with aggregate push-down: PERCENTILE & PERCENTILE_DISC with filter and group by") {
+    val df1 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  PERCENTILE(salary, 0.5)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df1)
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1,
+      """
+        |PushedAggregates: [PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df1, Seq(Row(1, 9500.00), Row(2, 11000.00), Row(6, 12000.00)))
+
+    val df2 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY),
+        |  PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY DESC)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df2)
+    checkAggregateRemoved(df2)
+    checkPushedInfo(df2,
+      """
+        |PushedAggregates: [PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST),
+        |PERCENTILE_CONT(0.3) WITHIN GROUP (ORDER BY SALARY DESC NULLS LAST)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df2,
+      Seq(Row(1, 9300.0, 9700.0), Row(2, 10600.0, 11400.0), Row(6, 12000.0, 12000.0)))
+
+    val df3 = sql(
+      """
+        |SELECT
+        |  dept,
+        |  PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY),
+        |  PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY DESC)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
+    checkFiltersRemoved(df3)
+    checkAggregateRemoved(df3)
+    checkPushedInfo(df3,
+      """
+        |PushedAggregates: [PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY ASC NULLS FIRST),
+        |PERCENTILE_DISC(0.3) WITHIN GROUP (ORDER BY SALARY DESC NULLS LAST)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df3,
+      Seq(Row(1, 9000.0, 10000.0), Row(2, 10000.0, 12000.0), Row(6, 12000.0, 12000.0)))
   }
 
   test("scan with aggregate push-down: aggregate over alias push down") {

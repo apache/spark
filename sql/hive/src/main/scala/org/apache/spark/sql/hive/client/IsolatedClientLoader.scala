@@ -124,8 +124,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     }
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
-        .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
-      Seq("com.google.guava:guava:14.0.1") ++ hadoopJarNames
+        .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++ hadoopJarNames
 
     implicit val printStream: PrintStream = SparkSubmit.printStream
     val classpaths = quietly {
@@ -207,7 +206,6 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("org.apache.spark.") ||
     isHadoopClass ||
     name.startsWith("scala.") ||
-    (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
     name.startsWith("java.") ||
     name.startsWith("javax.sql.") ||
     sharedPrefixes.exists(name.startsWith)

@@ -57,6 +57,7 @@ private[spark] abstract class RestSubmissionServer(
   protected val killAllRequestServlet: KillAllRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
   protected val clearRequestServlet: ClearRequestServlet
+  protected val readyzRequestServlet: ReadyzRequestServlet
 
   private var _server: Option[Server] = None
 
@@ -68,6 +69,7 @@ private[spark] abstract class RestSubmissionServer(
     s"$baseContext/killall/*" -> killAllRequestServlet,
     s"$baseContext/status/*" -> statusRequestServlet,
     s"$baseContext/clear/*" -> clearRequestServlet,
+    s"$baseContext/readyz/*" -> readyzRequestServlet,
     "/*" -> new ErrorServlet // default handler
   )
 
@@ -269,6 +271,31 @@ private[rest] abstract class ClearRequestServlet extends RestServlet {
 }
 
 /**
+ * A servlet for handling readyz requests passed to the [[RestSubmissionServer]].
+ */
+private[rest] abstract class ReadyzRequestServlet extends RestServlet {
+
+  /**
+   * Return the status of master is ready or not.
+   */
+  protected override def doGet(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    val readyzResponse = handleReadyz()
+    val responseMessage = if (readyzResponse.success) {
+      response.setStatus(HttpServletResponse.SC_OK)
+      readyzResponse
+    } else {
+      response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+      handleError("Master is not ready.")
+    }
+    sendResponse(responseMessage, response)
+  }
+
+  protected def handleReadyz(): ReadyzResponse
+}
+
+/**
  * A servlet for handling status requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class StatusRequestServlet extends RestServlet {
@@ -352,7 +379,8 @@ private class ErrorServlet extends RestServlet {
           "Missing the /submissions prefix."
         case `serverVersion` :: "submissions" :: tail =>
           // http://host:port/correct-version/submissions/*
-          "Missing an action: please specify one of /create, /kill, /killall, /clear or /status."
+          "Missing an action: please specify one of /create, /kill, /killall, /clear, /status, " +
+            "or /readyz."
         case unknownVersion :: tail =>
           // http://host:port/unknown-version/*
           versionMismatch = true

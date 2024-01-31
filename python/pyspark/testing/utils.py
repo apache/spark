@@ -179,6 +179,11 @@ class ReusedPySparkTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
 
+    def test_assert_vanilla_mode(self):
+        from pyspark.sql import is_remote
+
+        self.assertFalse(is_remote())
+
 
 class ByteArrayOutput:
     def __init__(self):
@@ -753,16 +758,25 @@ def assertDataFrameEqual(
     has_pandas = False
     try:
         # If pandas dependencies are available, allow pandas or pandas-on-Spark DataFrame
-        import pyspark.pandas as ps
         import pandas as pd
-        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
         has_pandas = True
     except ImportError:
         # no pandas, so we won't call pandasutils functions
         pass
 
-    if has_pandas:
+    has_arrow = False
+    try:
+        import pyarrow
+
+        has_arrow = True
+    except ImportError:
+        pass
+
+    if has_pandas and has_arrow:
+        import pyspark.pandas as ps
+        from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+
         if (
             isinstance(actual, pd.DataFrame)
             or isinstance(expected, pd.DataFrame)
@@ -775,29 +789,29 @@ def assertDataFrameEqual(
                 actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
-        from pyspark.sql.utils import get_dataframe_class
+    from pyspark.sql.utils import get_dataframe_class
 
-        # if is_remote(), allow Connect DataFrame
-        SparkDataFrame = get_dataframe_class()
+    # if is_remote(), allow Connect DataFrame
+    SparkDataFrame = get_dataframe_class()
 
-        if not isinstance(actual, (DataFrame, SparkDataFrame, list)):
-            raise PySparkAssertionError(
-                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-                message_parameters={
-                    "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
-                    "arg_name": "actual",
-                    "actual_type": type(actual),
-                },
-            )
-        elif not isinstance(expected, (DataFrame, SparkDataFrame, list)):
-            raise PySparkAssertionError(
-                error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-                message_parameters={
-                    "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
-                    "arg_name": "expected",
-                    "actual_type": type(expected),
-                },
-            )
+    if not isinstance(actual, (DataFrame, SparkDataFrame, list)):
+        raise PySparkAssertionError(
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
+                "arg_name": "actual",
+                "actual_type": type(actual),
+            },
+        )
+    elif not isinstance(expected, (DataFrame, SparkDataFrame, list)):
+        raise PySparkAssertionError(
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
+                "arg_name": "expected",
+                "actual_type": type(expected),
+            },
+        )
 
     if ignoreColumnOrder:
         actual = actual.select(*sorted(actual.columns))

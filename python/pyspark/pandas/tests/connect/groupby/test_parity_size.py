@@ -19,10 +19,14 @@ import unittest
 
 from pyspark.pandas.tests.groupby.test_size import SizeTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SizeParityTests(SizeTestsMixin, PandasOnSparkTestCase, ReusedConnectTestCase):
+class SizeParityTests(
+    SizeTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

@@ -23,7 +23,8 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -157,6 +158,29 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_csv($"value", schema, options)),
       Row(Row(null)))
+  }
+
+  test("from_csv with invalid datatype") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", Array(100L, 200L, null, 300L))))
+
+    val valueType = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("scores", ArrayType(LongType))))
+
+    val schema = StructType(Seq(StructField("key", LongType), StructField("value", valueType)))
+
+    val options = Map.empty[String, String]
+    val df = spark.createDataFrame(rows, schema)
+
+    checkError(
+      exception = intercept[SparkException] {
+        df.select(from_csv(to_csv($"value"), schema, options)).collect()
+      }.getCause.asInstanceOf[SparkUnsupportedOperationException],
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> toSQLType(valueType))
+    )
   }
 
   test("from_csv with option (nanValue)") {

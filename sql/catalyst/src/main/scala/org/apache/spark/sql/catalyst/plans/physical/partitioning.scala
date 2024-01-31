@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
@@ -634,8 +634,7 @@ trait ShuffleSpec {
    *  - [[isCompatibleWith]] returns false on the side where the `clustering` is from.
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
-    throw new UnsupportedOperationException("Operation unsupported for " +
-        s"${getClass.getCanonicalName}")
+    throw SparkUnsupportedOperationException()
 }
 
 case object SinglePartitionShuffleSpec extends ShuffleSpec {

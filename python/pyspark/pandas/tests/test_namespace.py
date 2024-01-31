@@ -393,7 +393,7 @@ class NamespaceTestsMixin:
         psdf3 = psdf.copy()
 
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C")])
-        # TODO: colums.names = ["XYZ", "ABC"]
+        columns.names = ["XYZ", "ABC"]
         pdf3.columns = columns
         psdf3.columns = columns
 

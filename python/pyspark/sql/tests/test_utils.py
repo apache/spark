@@ -20,11 +20,11 @@ import difflib
 from itertools import zip_longest
 
 from pyspark.errors import QueryContextType
-from pyspark.sql.functions import sha2, to_timestamp
 from pyspark.errors import (
     AnalysisException,
     ParseException,
     PySparkAssertionError,
+    PySparkValueError,
     IllegalArgumentException,
     SparkUpgradeException,
 )
@@ -590,8 +590,8 @@ class UtilsTestsMixin:
             data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
         )
 
-        df1 = df1.withColumn("timestamp", to_timestamp("timestamp"))
-        df2 = df2.withColumn("timestamp", to_timestamp("timestamp"))
+        df1 = df1.withColumn("timestamp", F.to_timestamp("timestamp"))
+        df2 = df2.withColumn("timestamp", F.to_timestamp("timestamp"))
 
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
@@ -1729,17 +1729,14 @@ class UtilsTestsMixin:
             "Setting negative mapred.reduce.tasks",
             lambda: self.spark.sql("SET mapred.reduce.tasks=-1"),
         )
+
+    def test_capture_pyspark_value_exception(self):
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegex(
-            IllegalArgumentException,
-            "1024 is not in the permitted values",
-            lambda: df.select(sha2(df.a, 1024)).collect(),
+            PySparkValueError,
+            "Value for `numBits` has to be amongst the following values",
+            lambda: df.select(F.sha2(df.a, 1024)).collect(),
         )
-        try:
-            df.select(sha2(df.a, 1024)).collect()
-        except IllegalArgumentException as e:
-            self.assertRegex(e._desc, "1024 is not in the permitted values")
-            self.assertRegex(e._stackTrace, "org.apache.spark.sql.functions")
 
     def test_get_error_class_state(self):
         # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)

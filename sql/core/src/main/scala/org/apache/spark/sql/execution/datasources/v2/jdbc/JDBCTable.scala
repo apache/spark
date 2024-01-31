@@ -66,10 +66,11 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.CREATE_INDEX",
         messageParameters = Map(
-          "url" -> jdbcOptions.url,
+          "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
-        dialect = JdbcDialects.get(jdbcOptions.url)) {
+        dialect = JdbcDialects.get(jdbcOptions.url),
+        description = s"Failed to create index $indexName in ${name()}") {
         JdbcUtils.createIndex(
           conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
       }
@@ -87,10 +88,11 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.DROP_INDEX",
         messageParameters = Map(
-          "url" -> jdbcOptions.url,
+          "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
-        dialect = JdbcDialects.get(jdbcOptions.url)) {
+        dialect = JdbcDialects.get(jdbcOptions.url),
+        description = s"Failed to drop index $indexName in ${name()}") {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }
     }

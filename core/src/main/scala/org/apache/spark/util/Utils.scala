@@ -2851,7 +2851,7 @@ private[spark] object Utils
     else {
       // The last char is a dollar sign
       // Find last non-dollar char
-      val lastNonDollarChar = s.reverse.find(_ != '$')
+      val lastNonDollarChar = s.findLast(_ != '$')
       lastNonDollarChar match {
         case None => s
         case Some(c) =>
@@ -3025,6 +3025,23 @@ private[spark] object Utils
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
       case _ => math.max(sortedSize(len / 2), 1)
     }
+  }
+
+  /**
+   * Check if a command is available.
+   */
+  def checkCommandAvailable(command: String): Boolean = {
+    // To avoid conflicts with java.lang.Process
+    import scala.sys.process.{Process, ProcessLogger}
+
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
+    } else {
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
   }
 
   /**

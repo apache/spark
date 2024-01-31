@@ -191,7 +191,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
       new SparkConnectReleaseExecuteHandler(responseObserver).handle(request)
     } catch
       ErrorUtils.handleError(
-        "reattachExecute",
+        "releaseExecute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)

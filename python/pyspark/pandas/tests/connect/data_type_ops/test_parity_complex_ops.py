@@ -17,13 +17,16 @@
 import unittest
 
 from pyspark.pandas.tests.data_type_ops.test_complex_ops import ComplexOpsTestsMixin
-from pyspark.pandas.tests.connect.data_type_ops.testing_utils import OpsTestBase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ComplexOpsParityTests(
-    ComplexOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
+    ComplexOpsTestsMixin,
+    PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
 ):
     pass
 
