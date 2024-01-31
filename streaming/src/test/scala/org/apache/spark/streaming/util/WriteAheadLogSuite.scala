@@ -238,7 +238,7 @@ class FileBasedWriteAheadLogSuite
 
     class GetMaxCounter {
       private var value = 0
-      @volatile private var max: Int = 0
+      private var max: Int = 0
       def increment(): Unit = synchronized {
         value = value + 1
         if (value > max) max = value
