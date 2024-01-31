@@ -951,8 +951,8 @@ class SparkSession:
             self._profiler_collector.show_memory_profiles(id)
         else:
             warnings.warn(
-                "Memory profiling is disabled. To enable it, install 'memory-profiler' from PyPI"
-                " (https://pypi.org/project/memory-profiler/).",
+                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
+                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
                 UserWarning,
             )
 
