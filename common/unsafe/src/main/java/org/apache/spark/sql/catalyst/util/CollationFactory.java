@@ -30,7 +30,10 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Static entry point for collation aware string functions.
  * Provides functionality to the UTF8String object which respects defined collation settings.
  */
-public class CollationFactory {
+public final class CollationFactory {
+  /**
+   * Entry encapsulating all information about a collation.
+   */
   public static class CollationInfo {
     public final String collationName;
     public final Collator collator;
@@ -41,6 +44,11 @@ public class CollationFactory {
      * For non-ICU collations (e.g. UTF8 Binary) the version is set to "1.0".
      */
     public final String version;
+
+    /**
+     * Collation sensitive hash function. Output for two UTF8Strings will be the same if they are
+     * equal according to the collation.
+     */
     public final Function<UTF8String, Integer> hashFunction;
 
     /**
@@ -50,7 +58,7 @@ public class CollationFactory {
     public final BiFunction<UTF8String, UTF8String, Boolean> equalsFunction;
 
     /**
-     * Binary collation implies that UTF8Strings are considered equal only if * they are
+     * Binary collation implies that UTF8Strings are considered equal only if they are
      * byte for byte equal. All accent or case-insensitive collations are considered non-binary.
      */
     public final boolean isBinaryCollation;
@@ -124,7 +132,8 @@ public class CollationFactory {
 
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
-    collatorTable[3] = new CollationInfo("UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
+    collatorTable[3] = new CollationInfo(
+            "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
     collatorTable[3].collator.setStrength(Collator.SECONDARY);
 
     for (int i = 0; i < collatorTable.length; i++) {
@@ -134,6 +143,9 @@ public class CollationFactory {
 
   private static final CollationFactory instance = new CollationFactory();
 
+  /**
+   * Returns the collation id for the given collation name.
+   */
   public int collationNameToId(String collationName) {
     String normalizedName = collationName.toUpperCase();
     if (collationNameToIdMap.containsKey(normalizedName)) {

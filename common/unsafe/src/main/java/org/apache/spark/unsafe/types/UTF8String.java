@@ -1394,8 +1394,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   @Override
   public int compareTo(@Nonnull final UTF8String other) {
-    return ByteArray.compareBinary(
-        base, offset, numBytes, other.base, other.offset, other.numBytes);
+    return binaryCompare(other);
   }
 
   public int compare(final UTF8String other) {
@@ -1413,10 +1412,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   @Override
   public boolean equals(final Object other) {
     if (other instanceof UTF8String o) {
-      if (numBytes != o.numBytes) {
-        return false;
-      }
-      return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
+      return binaryEquals(o);
     } else {
       return false;
     }
@@ -1590,7 +1586,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
+    return binaryHash();
   }
 
   /**

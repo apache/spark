@@ -17,7 +17,6 @@
 
 package org.apache.spark.unsafe.types;
 
-import org.apache.spark.SparkException;
 import org.apache.spark.SparkIllegalArgumentException;
 import org.junit.jupiter.api.Test;
 
@@ -34,7 +33,8 @@ public class CollationFactorySuite {
       assertEquals(collationInfo.collationName, "UCS_BASIC");
       assertTrue(collationInfo.isBinaryCollation);
 
-      collationInfo = getInstance().fetchCollationInfo(1); assertEquals(collationInfo.collationName, "UCS_BASIC_LCASE");
+      collationInfo = getInstance().fetchCollationInfo(1);
+      assertEquals(collationInfo.collationName, "UCS_BASIC_LCASE");
       assertFalse(collationInfo.isBinaryCollation);
 
       collationInfo = getInstance().fetchCollationInfo(2);
