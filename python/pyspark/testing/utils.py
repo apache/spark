@@ -605,10 +605,11 @@ def assertDataFrameEqual(
     >>> list_of_rows = [Row(1, 1000), Row(2, 3000)]
     >>> assertDataFrameEqual(df1, list_of_rows)  # pass, actual and expected data are equal
 
-    >>> import pyspark.pandas as ps
-    >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
-    >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
-    >>> assertDataFrameEqual(df1, df2)  # pass, pandas-on-Spark DataFrames are equal
+    >>> import pyspark.pandas as ps  # doctest: +SKIP
+    >>> df1 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKIP
+    >>> df2 = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})  # doctest: +SKIP
+    >>> # pass, pandas-on-Spark DataFrames are equal
+    >>> assertDataFrameEqual(df1, df2)  # doctest: +SKIP
 
     >>> df1 = spark.createDataFrame(
     ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])

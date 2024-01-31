@@ -24,6 +24,10 @@ from pyspark import SparkConf, SparkContext
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
+from pyspark.testing.connectutils import (
+    should_test_connect,
+    connect_requirement_message,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
@@ -213,6 +217,7 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             if sc is not None:
                 sc.stop()
 
+    @unittest.skipIf(not should_test_connect, connect_requirement_message)
     def test_session_with_spark_connect_mode_enabled(self):
         with unittest.mock.patch.dict(os.environ, {"SPARK_CONNECT_MODE_ENABLED": "1"}):
             with self.assertRaisesRegex(RuntimeError, "Cannot create a Spark Connect session"):
@@ -454,6 +459,7 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
             del os.environ["SPARK_REMOTE"]
             del os.environ["SPARK_LOCAL_REMOTE"]
 
+    @unittest.skipIf(not should_test_connect, connect_requirement_message)
     def test_invalid_create(self):
         with self.assertRaises(PySparkRuntimeError) as pe2:
             SparkSession.builder.config("spark.remote", "local").create()
