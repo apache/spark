@@ -123,7 +123,8 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  /** Function to delete and purge state variable if defined previously
+  /**
+   * Function to delete and purge state variable if defined previously
    *
    * @param stateName - name of the state variable
    */
