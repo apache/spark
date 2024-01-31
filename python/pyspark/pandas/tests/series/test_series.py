@@ -774,7 +774,11 @@ class SeriesTestsMixin:
             psser.transform(lambda x: x + 1, axis=1)
 
 
-class SeriesTests(SeriesTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SeriesTests(
+    SeriesTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -1710,53 +1710,6 @@ class SparkConnectPlanner(
    */
   private def transformUnregisteredFunction(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
-    def extractArgsOfProtobufFunction(
-        functionName: String,
-        argumentsCount: Int,
-        children: collection.Seq[Expression])
-        : (String, Option[Array[Byte]], Map[String, String]) = {
-      val messageClassName = children(1) match {
-        case Literal(s, StringType) if s != null => s.toString
-        case other =>
-          throw InvalidPlanInput(
-            s"MessageClassName in $functionName should be a literal string, but got $other")
-      }
-      val (binaryFileDescSetOpt, options) = if (argumentsCount == 2) {
-        (None, Map.empty[String, String])
-      } else if (argumentsCount == 3) {
-        children(2) match {
-          case Literal(b, BinaryType) if b != null =>
-            (Some(b.asInstanceOf[Array[Byte]]), Map.empty[String, String])
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
-            (None, ExprUtils.convertToMapData(CreateMap(arguments)))
-          case other =>
-            throw InvalidPlanInput(
-              s"The valid type for the 3rd arg in $functionName " +
-                s"is binary or map, but got $other")
-        }
-      } else if (argumentsCount == 4) {
-        val fileDescSetOpt = children(2) match {
-          case Literal(b, BinaryType) if b != null =>
-            Some(b.asInstanceOf[Array[Byte]])
-          case other =>
-            throw InvalidPlanInput(
-              s"DescFilePath in $functionName should be a literal binary, but got $other")
-        }
-        val map = children(3) match {
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
-            ExprUtils.convertToMapData(CreateMap(arguments))
-          case other =>
-            throw InvalidPlanInput(
-              s"Options in $functionName should be created by map, but got $other")
-        }
-        (fileDescSetOpt, map)
-      } else {
-        throw InvalidPlanInput(
-          s"$functionName requires 2 ~ 4 arguments, but got $argumentsCount ones!")
-      }
-      (messageClassName, binaryFileDescSetOpt, options)
-    }
-
     fun.getFunctionName match {
       case "product" if fun.getArgumentsCount == 1 =>
         Some(
@@ -1979,17 +1932,13 @@ class SparkConnectPlanner(
       // Protobuf-specific functions
       case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (messageClassName, binaryFileDescSetOpt, options) =
-          extractArgsOfProtobufFunction("from_protobuf", fun.getArgumentsCount, children)
-        Some(
-          ProtobufDataToCatalyst(children.head, messageClassName, binaryFileDescSetOpt, options))
+        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
+        Some(ProtobufDataToCatalyst(children(0), msgName, desc, options))
 
       case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (messageClassName, binaryFileDescSetOpt, options) =
-          extractArgsOfProtobufFunction("to_protobuf", fun.getArgumentsCount, children)
-        Some(
-          CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
+        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
+        Some(CatalystDataToProtobuf(children(0), msgName, desc, options))
 
       case "uuid" if fun.getArgumentsCount == 1 =>
         // Uuid does not have a constructor which accepts Expression typed 'seed'
@@ -2026,6 +1975,22 @@ class SparkConnectPlanner(
       udfDeterministic = f.deterministic)
   }
 
+  private def extractProtobufArgs(children: Seq[Expression]) = {
+    val msgName = extractString(children(1), "MessageClassName")
+    var desc = Option.empty[Array[Byte]]
+    var options = Map.empty[String, String]
+    if (children.length == 3) {
+      children(2) match {
+        case b: Literal => desc = Some(extractBinary(b, "binaryFileDescriptorSet"))
+        case o => options = extractMapData(o, "options")
+      }
+    } else if (children.length == 4) {
+      desc = Some(extractBinary(children(2), "binaryFileDescriptorSet"))
+      options = extractMapData(children(3), "options")
+    }
+    (msgName, desc, options)
+  }
+
   private def extractBoolean(expr: Expression, field: String): Boolean = expr match {
     case Literal(bool: Boolean, BooleanType) => bool
     case other => throw InvalidPlanInput(s"$field should be a literal boolean, but got $other")
@@ -2049,6 +2014,11 @@ class SparkConnectPlanner(
   private def extractString(expr: Expression, field: String): String = expr match {
     case Literal(s, StringType) if s != null => s.toString
     case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
+  }
+
+  private def extractBinary(expr: Expression, field: String): Array[Byte] = expr match {
+    case Literal(b: Array[Byte], BinaryType) if b != null => b
+    case other => throw InvalidPlanInput(s"$field should be a literal binary, but got $other")
   }
 
   @scala.annotation.tailrec

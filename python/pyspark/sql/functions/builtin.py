@@ -3790,9 +3790,51 @@ def bit_and(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Bitwise AND with all non-null values
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(bit_and("c")).first()
-    Row(bit_and(c)=0)
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |         0|
+    +----------+
+
+    Example 2: Bitwise AND with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |         0|
+    +----------+
+
+    Example 3: Bitwise AND with all null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import IntegerType, StructType, StructField
+    >>> schema = StructType([StructField("c", IntegerType(), True)])
+    >>> df = spark.createDataFrame([[None],[None],[None]], schema=schema)
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |      NULL|
+    +----------+
+
+    Example 4: Bitwise AND with single input value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[5]], ["c"])
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |         5|
+    +----------+
     """
     return _invoke_function_over_columns("bit_and", col)
 
@@ -3816,9 +3858,51 @@ def bit_or(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Bitwise OR with all non-null values
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(bit_or("c")).first()
-    Row(bit_or(c)=3)
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |        3|
+    +---------+
+
+    Example 2: Bitwise OR with some null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |        3|
+    +---------+
+
+    Example 3: Bitwise OR with all null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import IntegerType, StructType, StructField
+    >>> schema = StructType([StructField("c", IntegerType(), True)])
+    >>> df = spark.createDataFrame([[None],[None],[None]], schema=schema)
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |     NULL|
+    +---------+
+
+    Example 4: Bitwise OR with single input value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[5]], ["c"])
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |        5|
+    +---------+
     """
     return _invoke_function_over_columns("bit_or", col)
 
@@ -3842,9 +3926,51 @@ def bit_xor(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Bitwise XOR with all non-null values
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(bit_xor("c")).first()
-    Row(bit_xor(c)=2)
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |         2|
+    +----------+
+
+    Example 2: Bitwise XOR with some null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |         3|
+    +----------+
+
+    Example 3: Bitwise XOR with all null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import IntegerType, StructType, StructField
+    >>> schema = StructType([StructField("c", IntegerType(), True)])
+    >>> df = spark.createDataFrame([[None],[None],[None]], schema=schema)
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |      NULL|
+    +----------+
+
+    Example 4: Bitwise XOR with single input value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[5]], ["c"])
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |         5|
+    +----------+
     """
     return _invoke_function_over_columns("bit_xor", col)
 

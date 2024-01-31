@@ -14,23 +14,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import inspect
+import os
 import unittest
 
-from pyspark.pandas.tests.series.test_series import SeriesTestsMixin
+from pyspark.tests.test_memory_profiler import MemoryProfiler2TestsMixin, _do_computation
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesParityTests(
-    SeriesTestsMixin,
-    PandasOnSparkTestUtils,
-    ReusedConnectTestCase,
-):
-    pass
+class MemoryProfilerParityTests(MemoryProfiler2TestsMixin, ReusedConnectTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.spark._profiler_collector._value = None
+
+    def test_memory_profiler_udf_multiple_actions(self):
+        def action(df):
+            df.collect()
+            df.show()
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            _do_computation(self.spark, action=action)
+
+        self.assertEqual(6, len(self.profile_results), str(list(self.profile_results)))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.series.test_parity_series import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_memory_profiler import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

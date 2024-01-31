@@ -19,7 +19,7 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -70,7 +70,11 @@ class FrameAlignMixin:
             self.assert_eq(psdf_r.sort_index(), pdf_r.sort_index())
 
 
-class FrameAlignTests(FrameAlignMixin, ComparisonTestBase, SQLTestUtils):
+class FrameAlignTests(
+    FrameAlignMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

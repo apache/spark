@@ -233,8 +233,8 @@ Data source options of Avro can be set via:
  * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
  * the `options` parameter in function `from_avro`.
 
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Scope</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
@@ -331,8 +331,8 @@ Data source options of Avro can be set via:
 
 ## Configuration
 Configuration of Avro can be done via `spark.conf.set` or by running `SET key=value` commands using SQL.
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
