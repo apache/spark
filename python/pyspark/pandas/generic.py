@@ -1179,10 +1179,7 @@ class Frame(object, metaclass=ABCMeta):
         data_columns : list of columns or True, optional
             List of columns to create as indexed data columns for on-disk
             queries, or True to use all columns. By default only the axes
-            of the object are indexed. See
-            :ref:`Query via data columns<io.hdf5-query-data-columns>`. for
-            more information.
-            Applicable only to format='table'.
+            of the object are indexed. Applicable only to format='table'.
         errors : str, default 'strict'
             Specifies how encoding and decoding errors are to be handled.
             See the errors argument for :func:`open` for a full list
