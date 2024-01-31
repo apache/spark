@@ -325,7 +325,7 @@ private[spark] object JettyUtils extends Logging {
       // If SSL is configured, create the secure connector first.
       val securePort = sslOptions.createJettySslContextFactoryServer().map { factory =>
 
-        // spark-45522: SniHostCheck defaulted to true since Jetty 10,
+        // SPARK-45522: SniHostCheck defaulted to true since Jetty 10,
         // this will affect the standalone deployment.
         val src = new SecureRequestCustomizer()
         src.setSniHostCheck(false)
