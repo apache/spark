@@ -45,8 +45,8 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging
-  with Eventually with Matchers {
+  with VolumeSuite with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite
+  with Logging with Eventually with Matchers {
 
 
   import KubernetesSuite._
@@ -642,6 +642,7 @@ class KubernetesSuite extends SparkFunSuite
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val localTestTag = Tag("local")
+  val pvTestTag = Tag("pv")
   val schedulingTestTag = Tag("schedule")
   val decomTestTag = Tag("decom")
   val rTestTag = Tag("r")

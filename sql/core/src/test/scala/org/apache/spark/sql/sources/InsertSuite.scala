@@ -1156,7 +1156,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("create table t(i boolean, s bigint default badvalue) using parquet")
         },
-        errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",
@@ -2077,7 +2077,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             "colName" -> "`s`",
             "expectedType" -> "\"STRUCT<x: BOOLEAN, y: STRING>\"",
             "defaultValue" -> "struct(42, 56)",
-            "actualType" -> "\"STRUCT<col1: INT, col2: INT>\""))
+            "actualType" -> "\"STRUCT<col1: INT NOT NULL, col2: INT NOT NULL>\""))
       }
     }
   }

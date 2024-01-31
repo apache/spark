@@ -146,8 +146,16 @@ public class V2ExpressionSQLBuilder {
       return visitAggregateFunction("AVG", avg.isDistinct(),
         expressionsToStringArray(avg.children()));
     } else if (expr instanceof GeneralAggregateFunc f) {
-      return visitAggregateFunction(f.name(), f.isDistinct(),
-        expressionsToStringArray(f.children()));
+      if (f.orderingWithinGroups().length == 0) {
+        return visitAggregateFunction(f.name(), f.isDistinct(),
+          expressionsToStringArray(f.children()));
+      } else {
+        return visitInverseDistributionFunction(
+          f.name(),
+          f.isDistinct(),
+          expressionsToStringArray(f.children()),
+          expressionsToStringArray(f.orderingWithinGroups()));
+      }
     } else if (expr instanceof UserDefinedScalarFunc f) {
       return visitUserDefinedScalarFunction(f.name(), f.canonicalName(),
         expressionsToStringArray(f.children()));
@@ -271,6 +279,15 @@ public class V2ExpressionSQLBuilder {
     } else {
       return joinArrayToString(inputs, ", ", funcName + "(", ")");
     }
+  }
+
+  protected String visitInverseDistributionFunction(
+      String funcName, boolean isDistinct, String[] inputs, String[] orderingWithinGroups) {
+    assert(isDistinct == false);
+    String withinGroup =
+      joinArrayToString(orderingWithinGroups, ", ", "WITHIN GROUP (ORDER BY ", ")");
+    String functionCall = joinArrayToString(inputs, ", ", funcName + "(", ")");
+    return functionCall + " " + withinGroup;
   }
 
   protected String visitUserDefinedScalarFunction(

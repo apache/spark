@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexesAsTypeMixin:
@@ -86,7 +86,7 @@ class IndexesAsTypeMixin:
 
 class IndexesAsTypeTests(
     IndexesAsTypeMixin,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     TestUtils,
 ):
     pass

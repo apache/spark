@@ -3543,6 +3543,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "defaultValue" -> defaultValue))
   }
 
+  def defaultValueNotConstantError(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ))
+  }
+
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -3881,6 +3894,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> provider))
   }
 
+  def foundMultipleXMLDataSourceError(provider: String,
+      sourceNames: Seq[String],
+      externalSource: String): Throwable = {
+    new AnalysisException(
+      errorClass = "MULTIPLE_XML_DATA_SOURCE",
+      messageParameters = Map("provider" -> provider,
+        "sourceNames" -> sourceNames.mkString(", "),
+        "externalSource" -> externalSource)
+    )
+  }
+
   def xmlRowTagRequiredError(optionName: String): Throwable = {
     new AnalysisException(
       errorClass = "XML_ROW_TAG_MISSING",
@@ -3939,5 +3963,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "dsSchema" -> toSQLType(dsSchema),
         "expectedSchema" -> toSQLType(expectedSchema)))
+  }
+
+  def cannotResolveDataFrameColumn(e: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
+    )
+  }
+
+  def ambiguousColumnReferences(e: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
+    )
   }
 }

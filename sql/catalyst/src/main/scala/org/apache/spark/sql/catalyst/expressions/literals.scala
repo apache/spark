@@ -237,13 +237,15 @@ object Literal {
           }
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
-        case PhysicalStringType => v.isInstanceOf[UTF8String]
+        case _: PhysicalStringType => v.isInstanceOf[UTF8String]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]
             st.fields.map(_.dataType).zipWithIndex.forall {
-              case (fieldDataType, i) => doValidate(row.get(i, fieldDataType), fieldDataType)
+              case (fieldDataType, i) =>
+                // Do not need to validate null values.
+                row.isNullAt(i) || doValidate(row.get(i, fieldDataType), fieldDataType)
             }
           }
         case _ => false

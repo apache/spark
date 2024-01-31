@@ -148,11 +148,14 @@ case class StructField(
     .map(" COMMENT '" + _ + "'")
     .getOrElse("")
 
+  private lazy val nullDDL = if (nullable) "" else " NOT NULL"
+
   /**
    * Returns a string containing a schema in SQL format. For example the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
    */
-  private[sql] def sql = s"${QuotingUtils.quoteIfNeeded(name)}: ${dataType.sql}$getDDLComment"
+  private[sql] def sql =
+    s"${QuotingUtils.quoteIfNeeded(name)}: ${dataType.sql}$nullDDL$getDDLComment"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -161,7 +164,7 @@ case class StructField(
    * @since 2.4.0
    */
   def toDDL: String = {
-    val nullString = if (nullable) "" else " NOT NULL"
-    s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLDefault$getDDLComment"
+    s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}$nullDDL" +
+      s"$getDDLDefault$getDDLComment"
   }
 }
