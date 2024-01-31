@@ -280,23 +280,24 @@ class CSVOptions(
     .getOrElse(UNESCAPED_QUOTE_HANDLING, "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
 
   /**
-   * The column pruning feature can be enabled either via the CSV option `columnPruning` or
-   * in non-multiline mode via initialization of CSV options by the SQL config:
-   * `spark.sql.csv.parser.columnPruning.enabled`.
-   * The feature is disabled in the `multiLine` mode because of the issue:
-   * https://github.com/uniVocity/univocity-parsers/issues/529
    */
   val isColumnPruningEnabled: Boolean = getBool(COLUMN_PRUNING, !multiLine && columnPruning)
 
   /**
    * Returns true if column pruning is enabled and there are no existence column default values in
-   * the [[schema]]. This is useful when we want to disable column pruning when there are such
-   * defaults, instead preferring to reach in each row and then post-process it to substitute the
-   * default values after.
+   * the [[schema]].
+   *
+   * The column pruning feature can be enabled either via the CSV option `columnPruning` or
+   * in non-multiline mode via initialization of CSV options by the SQL config:
+   * `spark.sql.csv.parser.columnPruning.enabled`.
+   * The feature is disabled in the `multiLine` mode because of the issue:
+   * https://github.com/uniVocity/univocity-parsers/issues/529
+   *
+   * We disable column pruning when there are any column defaults, instead preferring to reach in
+   * each row and then post-process it to substitute the default values after.
    */
-  def isColumnPruningEnabledAndNoColumnDefaults(schema: StructType): Boolean =
-    isColumnPruningEnabled &&
-      !schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+  def isColumnPruningEnabled(schema: StructType): Boolean = isColumnPruningEnabled &&
+    !schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
