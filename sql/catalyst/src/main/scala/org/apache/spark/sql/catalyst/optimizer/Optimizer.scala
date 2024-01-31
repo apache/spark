@@ -1726,8 +1726,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // Push `Filter` operators through `Aggregate` operators. Parts of the predicates that can
     // be beneath must satisfy the following conditions:
     // 1. Grouping expressions are not empty.
-    // 2. Predicate expression is deterministic.
-    // 3. References of predicate expression are subset of aggregate's child.
+    // 2. De-aliased predicate expression is deterministic.
+    // 3. References of de-aliased predicate expression are subset of aggregate's child.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.exists(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
@@ -1737,7 +1737,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // attributes produced by the aggregate operator's child operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        replaced.deterministic && !cond.throwable &&
+        replaced.deterministic && !replaced.throwable &&
           cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
