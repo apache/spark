@@ -280,10 +280,6 @@ class CSVOptions(
     .getOrElse(UNESCAPED_QUOTE_HANDLING, "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
 
   /**
-   */
-  val isColumnPruningEnabled: Boolean = getBool(COLUMN_PRUNING, !multiLine && columnPruning)
-
-  /**
    * Returns true if column pruning is enabled and there are no existence column default values in
    * the [[schema]].
    *
@@ -296,8 +292,9 @@ class CSVOptions(
    * We disable column pruning when there are any column defaults, instead preferring to reach in
    * each row and then post-process it to substitute the default values after.
    */
-  def isColumnPruningEnabled(schema: StructType): Boolean = isColumnPruningEnabled &&
-    !schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+  def isColumnPruningEnabled(schema: StructType): Boolean =
+    getBool(COLUMN_PRUNING, !multiLine && columnPruning) &&
+      !schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
