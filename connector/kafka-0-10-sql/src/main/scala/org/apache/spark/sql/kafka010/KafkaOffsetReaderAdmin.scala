@@ -105,7 +105,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   private val userSpecifiedLocationPreferences: Map[TopicPartition, Seq[String]] = {
     val partitionDescrs = consumerStrategy.assignedTopicPartitions(admin)
-      .toList
+      .toArray
       .sortBy(descr => (descr.topic, descr.partition))
 
     partitionLocationAssigner.getLocationPreferences(partitionDescrs, getSortedExecutorList)

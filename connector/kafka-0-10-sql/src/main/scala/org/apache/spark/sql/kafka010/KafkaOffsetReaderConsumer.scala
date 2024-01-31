@@ -106,9 +106,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     val partitionDescrs = fetchTopicPartitions()
       .map(_.topic())
       .toSet
-      .toList
       .flatMap((topicName: String) => consumer.partitionsFor(topicName).asScala)
       .map(partInfo => PartitionDescription.fromPartitionInfo(partInfo))
+      .toArray()
       .sortBy(descr => (descr.topic, descr.partition))
 
     partitionLocationAssigner.getLocationPreferences(partitionDescrs, getSortedExecutorList())
