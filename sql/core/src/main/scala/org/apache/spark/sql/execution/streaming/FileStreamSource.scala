@@ -100,8 +100,8 @@ class FileStreamSource(
       implicitly[Ordering[Long]]
     }
 
-  private val maxFileAgeMs: Long = if (
-    sourceOptions.latestFirst && (maxFilesPerBatch.isDefined || maxBytesPerBatch.isDefined)) {
+  private val maxFileAgeMs: Long = if (sourceOptions.latestFirst &&
+      (maxFilesPerBatch.isDefined || maxBytesPerBatch.isDefined)) {
     Long.MaxValue
   } else {
     sourceOptions.maxFileAgeMs
@@ -135,8 +135,8 @@ class FileStreamSource(
    * Always puts the 1st element in a left split and keep adding it to a left split
    * until reaches a specified threshold or [[Long.MaxValue]].
    */
-  private def takeFilesUntilMax(files: Seq[NewFileEntry], maxSize: Long):
-  (FilesSplit, FilesSplit) = {
+  private def takeFilesUntilMax(files: Seq[NewFileEntry], maxSize: Long)
+    : (FilesSplit, FilesSplit) = {
     var lSize = BigInt(0)
     var rSize = BigInt(0)
     val lFiles = ArrayBuffer[NewFileEntry]()
