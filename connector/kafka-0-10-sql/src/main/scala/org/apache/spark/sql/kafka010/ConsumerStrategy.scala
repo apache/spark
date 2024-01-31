@@ -94,7 +94,8 @@ private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
   override def assignedTopicPartitions(admin: Admin): Set[PartitionDescription] = {
     val topics = partitions.map(_.topic()).toSet
     logDebug(s"Topics for assignment: $topics")
-    retrieveAllPartitions(admin, topics).filter(partitions.contains(_.toTopicPartition))
+    retrieveAllPartitions(admin, topics)
+      .filter((pd: PartitionDescription) => partitions.contains(pd.toTopicPartition))
   }
 
   override def toString: String = s"Assign[${partitions.mkString(", ")}]"
