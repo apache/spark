@@ -209,16 +209,11 @@ case class TransformWithStateExec(
 
   private def getDefaultStateStoreSQLConf: SQLConf = {
       val sqlConf = new SQLConf()
-      sqlConf.setConf(SQLConf.NUM_STATE_STORE_MAINTENANCE_THREADS, 1)
-      sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, 1)
-      sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 1)
-      sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS,
-        "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
-      sqlConf.setConf(SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED, false)
-      sqlConf.setConf(SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS, false)
-      sqlConf.setConf(SQLConf.STATE_STORE_COMPRESSION_CODEC, "lz4")
-      sqlConf.setConf(SQLConf.STATE_SCHEMA_CHECK_ENABLED, false)
-      sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 1000L)
+      StateStoreConf.sqlConfKeys.foreach {
+        case conf@SQLConf.STATE_STORE_PROVIDER_CLASS =>
+          sqlConf.setConfString(conf.key, classOf[RocksDBStateStoreProvider].getName)
+        case conf => sqlConf.setConfString(conf.key, conf.defaultValueString)
+      }
       sqlConf
   }
 }
