@@ -287,7 +287,6 @@ class JDBCRDD(
     val endTime = System.nanoTime
 
     val executionTime = endTime - startTime
-    logInfo(s"Query execution time = $executionTime ns")
     queryExecutionTimeMetric.add(executionTime)
 
     val rowsIterator =
