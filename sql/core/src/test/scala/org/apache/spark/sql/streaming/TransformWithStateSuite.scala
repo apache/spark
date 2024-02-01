@@ -61,14 +61,14 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
 
 class RunningCountMostRecentStatefulProcessor
   extends StatefulProcessor[String, (String, String), (String, String, String)]
-    with Logging {
+  with Logging {
   @transient private var _countState: ValueState[Long] = _
   @transient private var _mostRecent: ValueState[String] = _
   @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
-       handle: StatefulProcessorHandle,
-       outputMode: OutputMode) : Unit = {
+    handle: StatefulProcessorHandle,
+    outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _countState = _processorHandle.getValueState[String, Long]("countState",
@@ -78,9 +78,9 @@ class RunningCountMostRecentStatefulProcessor
   }
 
   override def handleInputRows(
-      key: String,
-      inputRows: Iterator[(String, String)],
-      timerValues: TimerValues): Iterator[(String, String, String)] = {
+    key: String,
+    inputRows: Iterator[(String, String)],
+    timerValues: TimerValues): Iterator[(String, String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
@@ -206,33 +206,35 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      val chkptDir = Utils.createTempDir("streaming.metadata").getCanonicalPath
-      val inputData = MemoryStream[(String, String)]
-      val stream1 = inputData.toDS()
-        .groupByKey(x => x._1)
-        .transformWithState(new RunningCountMostRecentStatefulProcessor(),
-          TimeoutMode.NoTimeouts(),
-          OutputMode.Update())
+      withTempDir { chkptDir =>
+        val dirPath = chkptDir.getCanonicalPath
+        val inputData = MemoryStream[(String, String)]
+        val stream1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeoutMode.NoTimeouts(),
+            OutputMode.Update())
 
-      val stream2 = inputData.toDS()
-        .groupByKey(x => x._1)
-        .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
-          TimeoutMode.NoTimeouts(),
-          OutputMode.Update())
+        val stream2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeoutMode.NoTimeouts(),
+            OutputMode.Update())
 
-      testStream(stream1, OutputMode.Update())(
-        StartStream(checkpointLocation = chkptDir),
-        AddData(inputData, ("a", "str1")),
-        CheckNewAnswer(("a", "1", "")),
-        StopStream
-      )
-      testStream(stream2, OutputMode.Update())(
-        StartStream(checkpointLocation = chkptDir),
-        AddData(inputData, ("a", "str2"), ("b", "str3")),
-        CheckNewAnswer(("a", "str1"),
-          ("b", "")), // should not factor in previous count state
-        StopStream
-      )
+        testStream(stream1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          StopStream
+        )
+        testStream(stream2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, ("a", "str2"), ("b", "str3")),
+          CheckNewAnswer(("a", "str1"),
+            ("b", "")), // should not factor in previous count state
+          StopStream
+        )
+      }
     }
   }
 }
