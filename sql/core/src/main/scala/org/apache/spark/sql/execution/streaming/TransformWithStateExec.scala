@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
@@ -53,21 +52,21 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  * @param child the physical plan for the underlying data
  */
 case class TransformWithStateExec(
-    keyDeserializer: Expression,
-    valueDeserializer: Expression,
-    groupingAttributes: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
-    statefulProcessor: StatefulProcessor[Any, Any, Any],
-    timeoutMode: TimeoutMode,
-    outputMode: OutputMode,
-    keyEncoder: ExpressionEncoder[Any],
-    outputObjAttr: Attribute,
-    stateInfo: Option[StatefulOperatorStateInfo],
-    batchTimestampMs: Option[Long],
-    eventTimeWatermarkForLateEvents: Option[Long],
-    eventTimeWatermarkForEviction: Option[Long],
-    isStreaming: Boolean = true,
-    child: SparkPlan)
+     keyDeserializer: Expression,
+     valueDeserializer: Expression,
+     groupingAttributes: Seq[Attribute],
+     dataAttributes: Seq[Attribute],
+     statefulProcessor: StatefulProcessor[Any, Any, Any],
+     timeoutMode: TimeoutMode,
+     outputMode: OutputMode,
+     keyEncoder: ExpressionEncoder[Any],
+     outputObjAttr: Attribute,
+     stateInfo: Option[StatefulOperatorStateInfo],
+     batchTimestampMs: Option[Long],
+     eventTimeWatermarkForLateEvents: Option[Long],
+     eventTimeWatermarkForEviction: Option[Long],
+     child: SparkPlan,
+     isStreaming: Boolean = true)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
@@ -218,7 +217,7 @@ case class TransformWithStateExec(
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
-      store, getStateInfo.queryRunId, isStreaming)
+      store, getStateInfo.queryRunId, keyEncoder, isStreaming)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.init(processorHandle, outputMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
@@ -264,7 +263,7 @@ object TransformWithStateExec {
       Some(System.currentTimeMillis),
       None,
       None,
-      isStreaming = false,
-      child)
+      child,
+      isStreaming = false)
   }
 }

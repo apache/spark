@@ -723,7 +723,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Strategy to convert [[TransformWithState]] logical operator to physical operator
    * in streaming plans.
    */
-  object TransformWithStateStreamingSrategy extends Strategy {
+  object TransformWithStateStreamingStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
@@ -743,7 +743,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          isStreaming = true,
           planLater(child))
         execPlan :: Nil
       case _ =>
@@ -898,7 +897,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           outputObjAttr, child) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
           groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
-          outputObjAttr, planLater(child)) :: Nil
+          keyEncoder, outputObjAttr, planLater(child)) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
