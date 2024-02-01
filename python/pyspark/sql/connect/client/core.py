@@ -588,7 +588,7 @@ class SparkConnectClient(object):
 
     def __init__(
         self,
-        connection: Union[str, DefaultChannelBuilder],
+        connection: Union[str, ChannelBuilder],
         user_id: Optional[str] = None,
         channel_options: Optional[List[Tuple[str, Any]]] = None,
         retry_policy: Optional[Dict[str, Any]] = None,
@@ -599,7 +599,7 @@ class SparkConnectClient(object):
 
         Parameters
         ----------
-        connection : str or :class:`DefaultChannelBuilder`
+        connection : str or :class:`ChannelBuilder`
             Connection string that is used to extract the connection parameters and configure
             the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
             Defaults to `sc://localhost`.
