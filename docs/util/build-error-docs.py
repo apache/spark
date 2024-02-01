@@ -33,7 +33,9 @@ def load_error_classes(path):
             continue
         if "subClass" in details:
             for sub_name in details["subClass"]:
-                details["subClass"][sub_name]["message"] = assemble_message(details["subClass"][sub_name]["message"])
+                details["subClass"][sub_name]["message"] = (
+                    assemble_message(details["subClass"][sub_name]["message"])
+                )
         details["message"] = assemble_message(details["message"])
         error_classes[name] = details
     return error_classes
