@@ -28,9 +28,14 @@ import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFa
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
+object PythonStreamingSourceRunner {
+  val partitionsFuncId = 886
+  val latestOffsetsFuncId = 887
+}
 
 class PythonStreamingSourceRunner(
     func: PythonFunction,
@@ -48,12 +53,10 @@ class PythonStreamingSourceRunner(
   private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
 
-  val partitions_func_id = 886
-  val latestOffsets_func_id = 887
-  val read_func_id = 888
-
   private var dataOut: DataOutputStream = null
   private var dataIn: DataInputStream = null
+
+  import PythonStreamingSourceRunner._
 
   /**
    * Initializes the Python worker for streaming functions. Sets up Spark Connect session
@@ -108,19 +111,26 @@ class PythonStreamingSourceRunner(
 
     val initStatus = dataIn.readInt()
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val error = PythonWorkerUtils.readUTF(dataIn)
-      logError(s"When calling worker init error: $error")
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan", tpe = "init_source", msg = msg)
     }
   }
 
   def latestOffset(): String = {
-    dataOut.writeInt(latestOffsets_func_id)
+    dataOut.writeInt(latestOffsetsFuncId)
     dataOut.flush()
-    PythonWorkerUtils.readUTF(dataIn)
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan", tpe = "latest offset", msg = msg)
+    }
+    PythonWorkerUtils.readUTF(len, dataIn)
   }
 
   def partitions(start: String, end: String): Array[Array[Byte]] = {
-    dataOut.writeInt(partitions_func_id)
+    dataOut.writeInt(partitionsFuncId)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)
     dataOut.flush()
@@ -128,8 +138,9 @@ class PythonStreamingSourceRunner(
     val pickledPartitions = ArrayBuffer.empty[Array[Byte]]
     val numPartitions = dataIn.readInt()
     if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val error = PythonWorkerUtils.readUTF(dataIn)
-      logError(s"When calling partition error message: $error")
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan", tpe = "plan partitions", msg = msg)
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -137,14 +148,6 @@ class PythonStreamingSourceRunner(
     }
     pickledPartitions.toArray
   }
-
-  def read(): Unit = {
-    dataOut.writeInt(read_func_id)
-    dataOut.flush()
-    // readIntOrThrow(read_func_id)
-  }
-
-
 
   def stop(): Unit = {
     logInfo(s"Stopping streaming runner for module: $workerModule.")

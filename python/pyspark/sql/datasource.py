@@ -305,19 +305,79 @@ class DataSourceReader(ABC):
         ...
 
 class DataSourceStreamReader(ABC):
+    def initial_offset(self) -> dict:
+        """
+        The initial offset of the streaming data source.
+
+        Returns
+        -------
+        dict
+            A dict whose key and values are str type.
+        """
+        ...
+
     def latest_offset(self) -> dict:
+        """
+        Seek the latest offset of the streaming data source.
+
+        Returns
+        -------
+        dict
+            A dict whose key and values are str type.
+        """
         ...
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
+        """
+        Plan the read partitions given the start and end offset.
+
+        Returns
+        -------
+        Sequence[InputPartition]
+            A sequence of partitions for this data source. Each partition value
+            must be an instance of `InputPartition` or a subclass of it.
+        """
         ...
 
     def read(self, partition) -> Iterator[Union[Tuple, Row]]:
+        """
+        Generates data for a given partition and returns an iterator of tuples or rows.
+
+        This method is invoked once per partition to read the data. Implementing
+        this method is required for readable data sources. You can initialize any
+        non-serializable resources required for reading data from the data source
+        within this method.
+
+        Parameters
+        ----------
+        partition : object
+            The partition to read. It must be one of the partition values returned by
+            ``partitions()``.
+
+        Returns
+        -------
+        Iterator[Tuple] or Iterator[Row]
+            An iterator of tuples or rows. Each tuple or row will be converted to a row
+            in the final DataFrame.
+        """
         ...
 
     def commit(self, end: dict):
+        """
+        Invoked when the streaming query have finished processing data up to a specific offset.
+        User can safely delete all the data before "end".
+        Parameters
+        ----------
+        end : dict
+            The latest offset that the streaming query has processed for this source.
+        """
         ...
 
     def stop(self):
+        """
+        Invoked when the streaming query terminated. Can be used to clean up resources hold
+        by the stream reader.
+        """
         ...
 
 class DataSourceWriter(ABC):

@@ -54,7 +54,6 @@ from pyspark.worker_util import (
 # Get the partitions if any.
 partitions_func_id = 886
 latest_offsets_func_id = 887
-read_func_id = 888
 
 def latest_offset_func(reader, outfile):
     offset = reader.latest_offset()
@@ -69,10 +68,6 @@ def partitions_func(reader, infile, outfile):
     write_int(len(partitions), outfile)
     for partition in partitions:
         pickleSer._write_with_length(partition, outfile)
-
-
-def read_func(reader, infile, outfile):
-    write_int(read_func_id, outfile)
 
 def main(infile: IO, outfile: IO) -> None:
     try:
@@ -157,8 +152,6 @@ def main(infile: IO, outfile: IO) -> None:
                 latest_offset_func(reader, outfile)
             elif func_id == partitions_func_id:
                 partitions_func(reader, infile, outfile)
-            elif func_id == read_func_id:
-                read_func(reader, infile, outfile)
             outfile.flush()
 
     except BaseException as e:
