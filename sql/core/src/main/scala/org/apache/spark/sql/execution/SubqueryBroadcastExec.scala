@@ -34,32 +34,34 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * Physical plan for a custom subquery that collects and transforms the broadcast key values.
- * This subquery retrieves the partition key from the broadcast results based on the type of
- * [[HashedRelation]] returned. If the key is packed inside a Long, we extract it through
+ * This subquery retrieves the partition keys from the broadcast results based on the type of
+ * [[HashedRelation]] returned. If a key is packed inside a Long, we extract it through
  * bitwise operations, otherwise we return it from the appropriate index of the [[UnsafeRow]].
  *
- * @param index the index of the join key in the list of keys from the build side
+ * @param indices the indices of the join keys in the list of keys from the build side
  * @param buildKeys the join keys from the build side of the join used
  * @param child the BroadcastExchange or the AdaptiveSparkPlan with BroadcastQueryStageExec
  *              from the build side of the join
  */
 case class SubqueryBroadcastExec(
     name: String,
-    index: Int,
+    indices: Seq[Int],
     buildKeys: Seq[Expression],
     child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 
   // `SubqueryBroadcastExec` is only used with `InSubqueryExec`. No one would reference this output,
   // so the exprId doesn't matter here. But it's important to correctly report the output length, so
-  // that `InSubqueryExec` can know it's the single-column execution mode, not multi-column.
+  // that `InSubqueryExec` can know whether it's the single-column or multi-column execution mode.
   override def output: Seq[Attribute] = {
-    val key = buildKeys(index)
-    val name = key match {
-      case n: NamedExpression => n.name
-      case Cast(n: NamedExpression, _, _, _) => n.name
-      case _ => "key"
+    indices.map { idx =>
+      val key = buildKeys(idx)
+      val name = key match {
+        case n: NamedExpression => n.name
+        case Cast(n: NamedExpression, _, _, _) => n.name
+        case _ => s"key_$idx"
+      }
+      AttributeReference(name, key.dataType, key.nullable)()
     }
-    Seq(AttributeReference(name, key.dataType, key.nullable)())
   }
 
   override lazy val metrics = Map(
@@ -69,7 +71,7 @@ case class SubqueryBroadcastExec(
 
   override def doCanonicalize(): SparkPlan = {
     val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
-    SubqueryBroadcastExec("dpp", index, keys, child.canonicalized)
+    SubqueryBroadcastExec("dpp", indices, keys, child.canonicalized)
   }
 
   @transient
@@ -84,14 +86,15 @@ case class SubqueryBroadcastExec(
         val beforeCollect = System.nanoTime()
 
         val broadcastRelation = child.executeBroadcast[HashedRelation]().value
-        val (iter, expr) = if (broadcastRelation.isInstanceOf[LongHashedRelation]) {
-          (broadcastRelation.keys(), HashJoin.extractKeyExprAt(buildKeys, index))
+        val exprs = if (broadcastRelation.isInstanceOf[LongHashedRelation]) {
+          indices.map { idx => HashJoin.extractKeyExprAt(buildKeys, idx) }
         } else {
-          (broadcastRelation.keys(),
-            BoundReference(index, buildKeys(index).dataType, buildKeys(index).nullable))
+          indices.map { idx =>
+            BoundReference(idx, buildKeys(idx).dataType, buildKeys(idx).nullable) }
         }
 
-        val proj = UnsafeProjection.create(expr)
+        val proj = UnsafeProjection.create(exprs)
+        val iter = broadcastRelation.keys()
         val keyIter = iter.map(proj).map(_.copy())
 
         val rows = if (broadcastRelation.keyIsUnique) {
