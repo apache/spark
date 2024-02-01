@@ -180,7 +180,7 @@ class JDBCRDD(
    */
   val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
     sparkContext,
-    name = "Query execution time")
+    name = "JDBC query execution time")
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
