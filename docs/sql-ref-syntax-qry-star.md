@@ -38,7 +38,7 @@ except_clause
 
 * **name**
 
-  If present limits the columns or fields to be named to those in the specified referencable field, columns, or table.
+  If present limits the columns or fields to be named to those in the specified referencable field, column, or table.
 
 * **`*`**
 
