@@ -18,8 +18,8 @@
 package org.apache.spark.status.api.v1.sql
 
 import java.util.Date
-import javax.ws.rs._
-import javax.ws.rs.core.MediaType
+import jakarta.ws.rs._
+import jakarta.ws.rs.core.MediaType
 
 import scala.util.{Failure, Success, Try}
 

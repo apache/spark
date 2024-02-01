@@ -25,7 +25,7 @@ import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
 import jakarta.servlet.http.HttpServletRequest
-import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
+import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
