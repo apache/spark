@@ -25,6 +25,7 @@ import com.google.common.io.ByteStreams
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -137,8 +138,7 @@ class StateStoreChangelogWriterV1(
   }
 
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v1")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3195")
   }
 
   override def delete(key: Array[Byte]): Unit = {
@@ -151,8 +151,7 @@ class StateStoreChangelogWriterV1(
   }
 
   override def delete(key: Array[Byte], colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v1")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3195")
   }
 
   override def commit(): Unit = {
@@ -189,8 +188,7 @@ class StateStoreChangelogWriterV2(
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v2")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3196")
   }
 
   override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
@@ -206,8 +204,7 @@ class StateStoreChangelogWriterV2(
   }
 
   override def delete(key: Array[Byte]): Unit = {
-    throw new UnsupportedOperationException("Operation not supported with state " +
-      "changelog writer v2")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3196")
   }
 
   override def delete(key: Array[Byte], colFamilyName: String): Unit = {

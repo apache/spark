@@ -16,10 +16,9 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.Serializable
-
 import org.apache.commons.lang3.SerializationUtils
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
@@ -48,8 +47,9 @@ class ValueStateImpl[K, S](
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw new UnsupportedOperationException("Implicit key not found for operation on" +
-        s"stateName=$stateName")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3198",
+        messageParameters = Map("stateName" -> stateName))
     }
 
     val exprEnc: ExpressionEncoder[K] = encoderFor(keyEnc)

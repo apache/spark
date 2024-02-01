@@ -7437,6 +7437,36 @@
       "Datatype not supported <dt>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3193" : {
+    "message" : [
+      "Creating multiple column families with HDFSBackedStateStoreProvider is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3194" : {
+    "message" : [
+      "Multiple column families are not supported with HDFSBackedStateStoreProvider"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3195" : {
+    "message" : [
+      "Operation not supported with state changelog writer v1"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3196" : {
+    "message" : [
+      "Operation not supported with state changelog writer v2"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3197" : {
+    "message" : [
+      "Failed to create column family with reserved name=<colFamilyName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3198" : {
+    "message" : [
+      "Implicit key not found for operation on stateName=<stateName>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

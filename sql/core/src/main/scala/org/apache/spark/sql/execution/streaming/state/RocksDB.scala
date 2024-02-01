@@ -34,7 +34,7 @@ import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -252,8 +252,9 @@ class RocksDB(
    */
   def createColFamilyIfAbsent(colFamilyName: String): Unit = {
     if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
-      throw new UnsupportedOperationException("Failed to create column family with reserved " +
-        s"name=$colFamilyName")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3197",
+        messageParameters = Map("colFamilyName" -> colFamilyName).toMap)
     }
 
     if (!checkColFamilyExists(colFamilyName)) {
