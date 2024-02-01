@@ -109,7 +109,8 @@ object StateEncoder {
     // TODO: avroOptions - empty?
     val avroOptions = AvroOptions(Map.empty)
     val avroDeserializer = new AvroDeserializer(avroType, valSchema,
-      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType)
+      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType)
     val reader = new GenericDatumReader[Any](avroType)
     decoder = DecoderFactory.get().binaryDecoder(avroBytes, 0, avroBytes.length, decoder)
     result = reader.read(result, decoder)

@@ -36,7 +36,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.avro.AvroCompressionCodec._
-import org.apache.spark.sql.execution.avro.AvroOptions.IGNORE_EXTENSION
+import org.apache.spark.sql.execution.avro.AvroOptions._
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -61,7 +61,10 @@ private[sql] object AvroUtils extends Logging {
           new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
       }
 
-    SchemaConverters.toSqlType(avroSchema, parsedOptions.useStableIdForUnionType).dataType match {
+    SchemaConverters.toSqlType(
+      avroSchema,
+      parsedOptions.useStableIdForUnionType,
+      parsedOptions.stableIdPrefixForUnionType).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
