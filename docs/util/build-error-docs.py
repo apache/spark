@@ -51,11 +51,6 @@ def anchor_name(class_name: str, sub_class_name: str = None):
         if part
     ]
     anchor = "-".join(parts).lower().replace("_", "-")
-    # machine_part = (
-    #     hashlib.sha1(class_name.encode(), usedforsecurity=False)
-    #     .hexdigest()
-    #     .lower()[:4]
-    # )
     return anchor
 
 
@@ -65,7 +60,6 @@ def generate_doc_rows(class_name, class_details):
         <tr id="{anchor}">
             <td>{sql_state}</td>
             <td>
-            <!--<td colspan="2">-->
                 <span class="error-name">
                     <code>
                     <a href="#{anchor}">#</a>
@@ -74,7 +68,6 @@ def generate_doc_rows(class_name, class_details):
                 </span>
             </td>
             <td>{message}</td>
-            <!--<td colspan="2">{message}</td>-->
         </tr>
         """
         .format(
@@ -94,7 +87,6 @@ def generate_doc_rows(class_name, class_details):
                 """
                 <tr id="{anchor}">
                     <td></td>
-                    <!--<td></td>-->
                     <td class="error-sub-class">
                         <span class="error-name">
                             <code>
@@ -103,7 +95,6 @@ def generate_doc_rows(class_name, class_details):
                             {sub_class_name}
                         </span>
                     </td>
-                    <!--<td></td>-->
                     <td class="error-sub-class">{message}</td>
                 </tr>
                 """
@@ -135,10 +126,6 @@ def generate_doc_table(error_classes):
         <table id="error-conditions">
         <tr>
             <th>Error State / SQLSTATE</th>
-            <!--
-            <th colspan="2">Error Condition & Sub-Condition</th>
-            <th colspan="2">Message</th>
-            -->
             <th>Error Condition & Sub-Condition</th>
             <th>Message</th>
         </tr>
