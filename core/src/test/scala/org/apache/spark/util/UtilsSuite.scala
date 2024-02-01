@@ -948,10 +948,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       conf.set(DYN_ALLOCATION_MIN_EXECUTORS, 3)) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
       conf.set("spark.executor.instances", "2")) === 3)
-    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
-      conf.set("spark.executor.instances", "4")) === 4)
-    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
-      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)) === 4)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should ignore executor.instances
+      conf.set("spark.executor.instances", "4")) === 3)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should ignore executor.instances
+      conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)) === 3)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
       conf.set(DYN_ALLOCATION_INITIAL_EXECUTORS, 5)) === 5)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
