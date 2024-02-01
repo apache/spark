@@ -152,7 +152,9 @@ public final class CollationFactory {
       return collationNameToIdMap.get(normalizedName);
     } else {
       throw new SparkException(
-        "COLLATION_INVALID_NAME", Collections.singletonMap("collationName", collationName));
+       "COLLATION_INVALID_NAME",
+        SparkException.constructMessageParams(
+          Collections.singletonMap("collationName", collationName)), null);
     }
   }
 

@@ -67,13 +67,6 @@ class SparkException(
       messageParameters = messageParameters,
       context = context)
 
-  def this(errorClass: String, messageParameters: java.util.Map[String, String]) =
-    this(
-      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      cause = null,
-      errorClass = Some(errorClass),
-      messageParameters = messageParameters.asScala.toMap)
-
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
@@ -127,6 +120,16 @@ object SparkException {
     if (!requirement) {
       throw new SparkIllegalArgumentException(errorClass, messageParameters)
     }
+  }
+
+  /**
+   * Utility method to construct message params from Java Map.
+   * @param messageParameters The Java Map.
+   * @return Scala collection that can be passed to SparkException constructor.
+   */
+  def constructMessageParams(
+    messageParameters: java.util.Map[String, String]): Map[String, String] = {
+    messageParameters.asScala.toMap
   }
 }
 
