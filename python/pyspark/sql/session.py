@@ -81,6 +81,12 @@ if TYPE_CHECKING:
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
 
+try:
+    import memory_profiler  # type: ignore # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 __all__ = ["SparkSession"]
 
@@ -2128,7 +2134,14 @@ class SparkSession(SparkConversionMixin):
     showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
 
     def showMemoryProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_memory_profiles(id)
+        if has_memory_profiler:
+            self._profiler_collector.show_memory_profiles(id)
+        else:
+            warnings.warn(
+                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
+                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
+                UserWarning,
+            )
 
     showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
 

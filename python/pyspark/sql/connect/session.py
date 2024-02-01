@@ -96,6 +96,14 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udtf import UDTFRegistration
 
 
+try:
+    import memory_profiler  # type: ignore # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
+
+
 class SparkSession:
     # The active SparkSession for the current thread
     _active_session: ClassVar[threading.local] = threading.local()
@@ -939,7 +947,14 @@ class SparkSession:
     showPerfProfiles.__doc__ = PySparkSession.showPerfProfiles.__doc__
 
     def showMemoryProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_memory_profiles(id)
+        if has_memory_profiler:
+            self._profiler_collector.show_memory_profiles(id)
+        else:
+            warnings.warn(
+                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
+                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
+                UserWarning,
+            )
 
     showMemoryProfiles.__doc__ = PySparkSession.showMemoryProfiles.__doc__
 

@@ -43,8 +43,6 @@ class MissingPandasLikeDataFrame:
     reorder_levels = _unsupported_function("reorder_levels")
     set_axis = _unsupported_function("set_axis")
     to_feather = _unsupported_function("to_feather")
-    to_gbq = _unsupported_function("to_gbq")
-    to_hdf = _unsupported_function("to_hdf")
     to_period = _unsupported_function("to_period")
     to_sql = _unsupported_function("to_sql")
     to_stata = _unsupported_function("to_stata")
@@ -55,6 +53,9 @@ class MissingPandasLikeDataFrame:
     # Deprecated functions
     lookup = _unsupported_function(
         "lookup", deprecated=True, reason="Use DataFrame.melt and DataFrame.loc instead."
+    )
+    to_gbq = _unsupported_function(
+        "to_gbq", deprecated=True, reason="Use pandas_gbq.to_gbq instead."
     )
 
     # Functions we won't support.
