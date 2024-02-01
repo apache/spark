@@ -114,6 +114,9 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     val endingOffsets = SpecificOffsetRangeLimit(Map(tp -> 4))
     val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
       endingOffsets)
+    println("========")
+    println(offsetRanges)
+    println("========")
     assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
       KafkaOffsetRange(tp, 1, 2, None),
       KafkaOffsetRange(tp, 2, 3, None),
