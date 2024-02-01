@@ -63,7 +63,7 @@ table_ordering
 
 - **function_name**
 
-  The name of the built-in or user defined function. When resolving an unqualified function_name Databricks will first consider a built-in or temporary function, and then a function in the current schema.
+  The name of the built-in or user defined function. When resolving an unqualified function_name Spark will first consider a built-in or temporary function, and then a function in the current schema.
 
 - **argExpr**
 

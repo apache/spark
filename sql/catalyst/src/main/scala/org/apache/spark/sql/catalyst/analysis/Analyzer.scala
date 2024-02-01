@@ -1867,8 +1867,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * Build a project list for Project/Aggregate and expand the star if possible
      */
     private def buildExpandedProjectList(
-                                          exprs: Seq[NamedExpression],
-                                          child: LogicalPlan): Seq[NamedExpression] = {
+      exprs: Seq[NamedExpression],
+      child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
         case s: Star => expand(s, child)
