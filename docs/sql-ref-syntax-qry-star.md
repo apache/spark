@@ -22,7 +22,7 @@ license: |
 ### Description
 
 A shorthand to name all the referencable columns in the FROM clause or a specific table reference's columns or fields in the FROM clause.
-The star clause clause is most frequently used in the SELECT list.
+The star clause is most frequently used in the SELECT list.
 Spark also supports its use in function invocation and certain n-ary operations within the SELECT list and WHERE clause.
 
 ### Syntax
