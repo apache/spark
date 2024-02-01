@@ -18,7 +18,7 @@
 package org.apache.spark.metrics.sink
 
 import java.util.Properties
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 
 import com.codahale.metrics.MetricRegistry
 import org.eclipse.jetty.servlet.ServletContextHandler

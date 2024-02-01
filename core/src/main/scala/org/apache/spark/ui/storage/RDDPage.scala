@@ -19,7 +19,7 @@ package org.apache.spark.ui.storage
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 

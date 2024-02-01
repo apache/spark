@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.util.zip.ZipOutputStream
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.util.control.NonFatal
 import scala.xml.Node

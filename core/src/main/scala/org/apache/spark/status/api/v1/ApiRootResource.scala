@@ -18,7 +18,7 @@ package org.apache.spark.status.api.v1
 
 import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
 

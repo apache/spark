@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
 import scala.jdk.CollectionConverters._
