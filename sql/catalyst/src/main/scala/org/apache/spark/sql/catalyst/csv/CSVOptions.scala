@@ -294,7 +294,7 @@ class CSVOptions(
    */
   def isColumnPruningEnabled(schema: StructType): Boolean =
     isColumnPruningOptionEnabled &&
-      schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+      !schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
 
   private val isColumnPruningOptionEnabled: Boolean =
     getBool(COLUMN_PRUNING, !multiLine && columnPruning)
