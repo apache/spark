@@ -21,7 +21,7 @@ import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
-import javax.servlet.http.HttpServletResponse
+import jakarta.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Future}

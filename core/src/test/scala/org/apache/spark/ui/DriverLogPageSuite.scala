@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.commons.io.FileUtils
 import org.mockito.Mockito.{mock, when}

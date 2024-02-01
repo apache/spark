@@ -18,8 +18,8 @@
 package org.apache.spark.ui
 
 import java.util.EnumSet
-import javax.servlet.DispatcherType
-import javax.servlet.http.{HttpServlet, HttpServletRequest}
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap

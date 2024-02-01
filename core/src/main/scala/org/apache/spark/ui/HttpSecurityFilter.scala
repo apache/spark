@@ -18,8 +18,8 @@
 package org.apache.spark.ui
 
 import java.util.{Enumeration, Map => JMap}
-import javax.servlet._
-import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
+import jakarta.servlet._
+import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
 import scala.jdk.CollectionConverters._
 

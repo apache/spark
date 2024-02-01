@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.HashSet
 import scala.xml.{Node, Unparsed}

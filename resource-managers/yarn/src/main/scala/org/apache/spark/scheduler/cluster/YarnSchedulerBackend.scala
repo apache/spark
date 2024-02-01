@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.servlet.DispatcherType
+import jakarta.servlet.DispatcherType
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}

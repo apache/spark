@@ -18,7 +18,7 @@
 package org.apache.spark.ui
 
 import java.util.Date
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import org.eclipse.jetty.servlet.ServletContextHandler
 

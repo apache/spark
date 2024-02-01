@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.{CountDownLatch, Executors, TimeoutException, TimeUnit}
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
 

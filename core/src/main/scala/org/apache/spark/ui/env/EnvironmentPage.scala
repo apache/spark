@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.env
 
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.StringBuilder
 import scala.xml.Node

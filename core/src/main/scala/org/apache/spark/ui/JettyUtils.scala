@@ -19,8 +19,8 @@ package org.apache.spark.ui
 
 import java.net.{URI, URL, URLDecoder}
 import java.util.EnumSet
-import javax.servlet.DispatcherType
-import javax.servlet.http._
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http._
 
 import scala.language.implicitConversions
 import scala.util.Try

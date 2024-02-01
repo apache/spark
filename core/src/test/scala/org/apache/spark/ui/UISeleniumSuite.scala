@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.net.URL
 import java.util.Locale
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 import scala.xml.Node
