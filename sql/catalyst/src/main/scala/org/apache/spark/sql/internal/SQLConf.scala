@@ -721,11 +721,9 @@ object SQLConf {
         "shuffle partitions, but adaptively calculate the target size according to the default " +
         "parallelism of the Spark cluster. The calculated size is usually smaller than the " +
         "configured target size. This is to maximize the parallelism and avoid performance " +
-        "regressions when enabling adaptive query execution. This is helpful where even small " +
-        "partitions with small data size require a large amount of computation, and so " +
-        "coalescing the small partitions reduces parallelism and harms performance. In more " +
-        "typical cases where this is not true, coalescing partitions can avoid many tiny tasks " +
-        "and improve performance, and so this config can be set to false.")
+        "regressions when enabling adaptive query execution. It's recommended to set this " +
+        "config to true on a busy cluster to make resource utilization more efficient (not many " +
+        "small tasks).")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
