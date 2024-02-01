@@ -34,7 +34,7 @@ class MemoryStateStore extends StateStore() {
   }
 
   override def removeColFamilyIfExists(colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Doesn't support removing column families!")
+    throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
   override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)

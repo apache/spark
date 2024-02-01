@@ -203,8 +203,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def removeColFamilyIfExists(colFamilyName: String): Unit = {
-      throw new UnsupportedOperationException("Removing columnFamily with " +
-        "HDFSBackedStateStoreProvider is not supported")
+      throw StateStoreErrors.removingColumnFamiliesNotSupported(
+        "HDFSBackedStateStoreProvider")
+
     }
   }
 

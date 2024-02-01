@@ -269,7 +269,7 @@ class RocksDB(
    */
   def removeColFamilyIfExists(colFamilyName: String): Unit = {
     if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
-      throw new UnsupportedOperationException("Removing default column family is not allowed")
+      throw StateStoreErrors.cannotRemoveDefaultColumnFamily(colFamilyName)
     }
 
     if (checkColFamilyExists(colFamilyName)) {
