@@ -20,6 +20,7 @@ import java.util.UUID
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, ValueState}
@@ -113,11 +114,11 @@ class StatefulProcessorHandleImpl(
 
   def getHandleState: StatefulProcessorHandleState = currState
 
-  override def getValueState[T](stateName: String): ValueState[T] = {
+  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
     store.createColFamilyIfAbsent(stateName)
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder)
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
 
