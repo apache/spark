@@ -202,7 +202,11 @@ case class TransformWithStateExec(
             hadoopConf = new Configuration())
 
           val store = stateStoreProvider.getStore(0)
-          processData(store, iter)
+          val outputIterator = processData(store, iter)
+          CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
+            stateStoreProvider.close()
+            statefulProcessor.close()
+          })
         }
       )
     }
@@ -221,8 +225,7 @@ case class TransformWithStateExec(
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.init(processorHandle, outputMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
-    val result = processDataWithPartition(singleIterator, store, processorHandle)
-    result
+    processDataWithPartition(singleIterator, store, processorHandle)
   }
 }
 
