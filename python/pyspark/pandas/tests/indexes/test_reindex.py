@@ -15,34 +15,15 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 
-import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameReindexMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43811): Enable DataFrameTests.test_reindex for pandas 2.0.0.",
-    )
     def test_reindex(self):
         index = pd.Index(["A", "B", "C", "D", "E"])
         columns = pd.Index(["numbers"])
@@ -64,9 +45,12 @@ class FrameReindexMixin:
             psdf.reindex(["A", "B", "C"], columns=["numbers", "2", "3"]).sort_index(),
         )
 
+        # We manually test this due to the bug in pandas.
+        expected_result = ps.DataFrame([1.0, 2.0, 3.0], index=ps.Index(["A", "B", "C"]))
+        expected_result.columns = pd.Index(["numbers"], name="cols")
         self.assert_eq(
-            pdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
             psdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
+            expected_result,
         )
 
         self.assert_eq(
@@ -294,7 +278,11 @@ class FrameReindexMixin:
         )
 
 
-class FrameReindexTests(FrameReindexMixin, ComparisonTestBase, SQLTestUtils):
+class FrameReindexTests(
+    FrameReindexMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

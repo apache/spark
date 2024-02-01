@@ -262,6 +262,17 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-44973: conv must allocate enough space for all digits plus negative sign") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(
+        ((BigInt(Long.MaxValue) + 1).toString(16)),
+        (BigInt(Long.MinValue).toString(16))
+      ).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, -2)),
+        Seq(Row(BigInt(Long.MinValue).toString(2)), Row(BigInt(Long.MinValue).toString(2))))
+    }
+  }
+
   test("floor") {
     testOneToOneMathFunction(floor, (d: Double) => math.floor(d).toLong)
     // testOneToOneMathFunction does not validate the resulting data type

@@ -30,10 +30,10 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 
-trait ColumnResolutionHelper extends Logging {
+trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   def conf: SQLConf
 
@@ -95,12 +95,13 @@ trait ColumnResolutionHelper extends Logging {
     }
   }
 
-    // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
     (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
     ("user", () => CurrentUser(), toPrettySQL),
+    ("session_user", () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 
@@ -134,7 +135,7 @@ trait ColumnResolutionHelper extends Logging {
       resolveColumnByName: Seq[String] => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
-      allowOuter: Boolean): Expression = {
+      includeLastResort: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
       if (e.resolved) return e
       val resolved = e match {
@@ -195,8 +196,11 @@ trait ColumnResolutionHelper extends Logging {
 
     try {
       val resolved = innerResolve(expr, isTopLevel = true)
-      val withOuterResolved = if (allowOuter) resolveOuterRef(resolved) else resolved
-      resolveVariables(withOuterResolved)
+      if (includeLastResort) {
+        resolveColsLastResort(resolved)
+      } else {
+        resolved
+      }
     } catch {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
@@ -420,15 +424,15 @@ trait ColumnResolutionHelper extends Logging {
       expr: Expression,
       plan: LogicalPlan,
       throws: Boolean = false,
-      allowOuter: Boolean = false): Expression = {
+      includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      expr,
+      tryResolveDataFrameColumns(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, conf.resolver)
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
   }
 
   /**
@@ -442,22 +446,9 @@ trait ColumnResolutionHelper extends Logging {
   def resolveExpressionByPlanChildren(
       e: Expression,
       q: LogicalPlan,
-      allowOuter: Boolean = false): Expression = {
-    val newE = if (e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
-      // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
-      // expression are from Spark Connect, and need to be resolved in this way:
-      //    1, extract the attached plan id from the expression (UnresolvedAttribute only for now);
-      //    2, top-down traverse the query plan to find the plan node that matches the plan id;
-      //    3, if can not find the matching node, fail the analysis due to illegal references;
-      //    4, resolve the expression with the matching node, if any error occurs here, apply the
-      //    old code path;
-      resolveExpressionByPlanId(e, q)
-    } else {
-      e
-    }
-
+      includeLastResort: Boolean = false): Expression = {
     resolveExpression(
-      newE,
+      tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, conf.resolver)
       },
@@ -466,7 +457,16 @@ trait ColumnResolutionHelper extends Logging {
         q.children.head.output
       },
       throws = true,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
+  }
+
+  /**
+   * The last resort to resolve columns. Currently it does two things:
+   *  - Try to resolve column names as outer references
+   *  - Try to resolve column names as SQL variable
+   */
+  protected def resolveColsLastResort(e: Expression): Expression = {
+    resolveVariables(resolveOuterRef(e))
   }
 
   def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
@@ -477,46 +477,158 @@ trait ColumnResolutionHelper extends Logging {
     }
   }
 
-  private def resolveExpressionByPlanId(
+  // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
+  // expression are from Spark Connect, and need to be resolved in this way:
+  //    1. extract the attached plan id from UnresolvedAttribute;
+  //    2. top-down traverse the query plan to find the plan node that matches the plan id;
+  //    3. if can not find the matching node, fail the analysis due to illegal references;
+  //    4. if more than one matching nodes are found, fail due to ambiguous column reference;
+  //    5. resolve the expression with the matching node, if any error occurs here, return the
+  //       original expression as it is.
+  private def tryResolveDataFrameColumns(
       e: Expression,
-      q: LogicalPlan): Expression = {
-    if (!e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
-      return e
-    }
-
-    e match {
-      case u: UnresolvedAttribute =>
-        resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
-      case _ =>
-        e.mapChildren(c => resolveExpressionByPlanId(c, q))
-    }
+      q: Seq[LogicalPlan]): Expression = e match {
+    case u: UnresolvedAttribute =>
+      resolveDataFrameColumn(u, q).getOrElse(u)
+    case u: UnresolvedDataFrameStar =>
+      resolveDataFrameStar(u, q)
+    case _ if e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, UNRESOLVED_DF_STAR) =>
+      e.mapChildren(c => tryResolveDataFrameColumns(c, q))
+    case _ => e
   }
 
-  private def resolveUnresolvedAttributeByPlanId(
+  private def resolveDataFrameColumn(
       u: UnresolvedAttribute,
-      q: LogicalPlan): Option[NamedExpression] = {
+      q: Seq[LogicalPlan]): Option[NamedExpression] = {
     val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
     if (planIdOpt.isEmpty) return None
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
-    val planOpt = q.find(_.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId))
-    if (planOpt.isEmpty) {
-      // For example:
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
+    val (resolved, matched) = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q)
+    if (!matched) {
+      // Can not find the target plan node with plan id, e.g.
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
       //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
       //  df1.select(df2.a)   <-   illegal reference df2.a
-      throw new AnalysisException(s"When resolving $u, " +
-        s"fail to find subplan with plan_id=$planId in $q")
+      throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     }
-    val plan = planOpt.get
-
-    try {
-      plan.resolve(u.nameParts, conf.resolver)
-    } catch {
-      case e: AnalysisException =>
-        logDebug(s"Fail to resolve $u with $plan due to $e")
-        None
-    }
+    resolved
   }
+
+  private def resolveDataFrameColumnByPlanId(
+      u: UnresolvedAttribute,
+      id: Long,
+      isMetadataAccess: Boolean,
+      q: Seq[LogicalPlan]): (Option[NamedExpression], Boolean) = {
+    q.iterator.map(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _))
+      .foldLeft((Option.empty[NamedExpression], false)) {
+        case ((r1, m1), (r2, m2)) =>
+          if (r1.nonEmpty && r2.nonEmpty) {
+            throw QueryCompilationErrors.ambiguousColumnReferences(u)
+          }
+          (if (r1.nonEmpty) r1 else r2, m1 | m2)
+      }
+  }
+
+  private def resolveDataFrameColumnRecursively(
+      u: UnresolvedAttribute,
+      id: Long,
+      isMetadataAccess: Boolean,
+      p: LogicalPlan): (Option[NamedExpression], Boolean) = {
+    val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      val resolved = try {
+        if (!isMetadataAccess) {
+          p.resolve(u.nameParts, conf.resolver)
+        } else if (u.nameParts.size == 1) {
+          p.getMetadataAttributeByNameOpt(u.nameParts.head)
+        } else {
+          None
+        }
+      } catch {
+        case e: AnalysisException =>
+          logDebug(s"Fail to resolve $u with $p due to $e")
+          None
+      }
+      (resolved, true)
+    } else {
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children)
+    }
+
+    // In self join case like:
+    //   df1 = spark.range(10).withColumn("a", sf.lit(0))
+    //   df2 = df1.withColumnRenamed("a", "b")
+    //   df1.join(df2, df1["a"] == df2["b"])
+    //
+    // the logical plan would be like:
+    //
+    // 'Join Inner, '`==`('a, 'b)                             [plan_id=5]
+    //    :- Project [id#22L, 0 AS a#25]                      [plan_id=1]
+    //      :  +- Range (0, 10, step=1, splits=Some(12))
+    //    +- Project [id#28L, a#31 AS b#36]                   [plan_id=2]
+    //         +- Project [id#28L, 0 AS a#31]                 [plan_id=1]
+    //            +- Range (0, 10, step=1, splits=Some(12))
+    //
+    // When resolving the column reference df1.a, the target node with plan_id=1
+    // can be found in both sides of the Join node.
+    // To correctly resolve df1.a, the analyzer discards the resolved attribute
+    // in the right side, by filtering out the result by the output attributes of
+    // Project plan_id=2.
+    //
+    // However, there are analyzer rules (e.g. ResolveReferencesInSort)
+    // supporting missing column resolution. Then a valid resolved attribute
+    // maybe filtered out here. In this case, resolveDataFrameColumnByPlanId
+    // returns None, the dataframe column will remain unresolved, and the analyzer
+    // will try to resolve it without plan id later.
+    val filtered = resolved.filter { r =>
+      if (isMetadataAccess) {
+        r.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
+      } else {
+        r.references.subsetOf(p.outputSet)
+      }
+    }
+    (filtered, matched)
+  }
+
+  private def resolveDataFrameStar(
+      u: UnresolvedDataFrameStar,
+      q: Seq[LogicalPlan]): ResolvedStar = {
+    resolveDataFrameStarByPlanId(u, u.planId, q).getOrElse(
+      // Can not find the target plan node with plan id, e.g.
+      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+      //  df1.select(df2["*"])   <-   illegal reference df2["*"]
+      throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
+    )
+  }
+
+  private def resolveDataFrameStarByPlanId(
+      u: UnresolvedDataFrameStar,
+      id: Long,
+      q: Seq[LogicalPlan]): Option[ResolvedStar] = {
+    q.iterator.map(resolveDataFrameStarRecursively(u, id, _))
+      .foldLeft(Option.empty[ResolvedStar]) {
+        case (r1, r2) =>
+          if (r1.nonEmpty && r2.nonEmpty) {
+            throw QueryCompilationErrors.ambiguousColumnReferences(u)
+          }
+          if (r1.nonEmpty) r1 else r2
+      }
+  }
+
+   private def resolveDataFrameStarRecursively(
+      u: UnresolvedDataFrameStar,
+      id: Long,
+      p: LogicalPlan): Option[ResolvedStar] = {
+     val resolved = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+       Some(ResolvedStar(p.output))
+     } else {
+       resolveDataFrameStarByPlanId(u, id, p.children)
+     }
+     resolved.filter { r =>
+       val outputSet = AttributeSet(p.output ++ p.metadataOutput)
+       r.expressions.forall(_.references.subsetOf(outputSet))
+     }
+   }
 }

@@ -409,7 +409,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"replaceArg\"",
-    "inputName" : "upperChar",
+    "inputName" : "`upperChar`",
     "inputType" : "\"STRING\"",
     "sqlExpr" : "\"mask(c1, replaceArg, x, n, NULL)\""
   },
@@ -432,7 +432,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"replaceArg\"",
-    "inputName" : "upperChar",
+    "inputName" : "`upperChar`",
     "inputType" : "\"STRING\"",
     "sqlExpr" : "\"mask(c1, replaceArg, x, n, NULL)\""
   },

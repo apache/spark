@@ -18,10 +18,10 @@
 package org.apache.spark.rdd
 
 import java.io.{FileNotFoundException, IOException}
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
 
-import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -43,6 +43,7 @@ import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -89,6 +90,8 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
+ * @param ignoreCorruptFiles Whether to ignore corrupt files.
+ * @param ignoreMissingFiles Whether to ignore missing files.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.hadoopRDD()`
@@ -101,11 +104,34 @@ class HadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minPartitions: Int)
+    minPartitions: Int,
+    ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
     sparkContext.clean(initLocalJobConfFuncOpt.get)
+  }
+
+  def this(
+      sc: SparkContext,
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      initLocalJobConfFuncOpt: Option[JobConf => Unit],
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minPartitions: Int) = {
+    this(
+      sc,
+      broadcastedConf,
+      initLocalJobConfFuncOpt,
+      inputFormatClass,
+      keyClass,
+      valueClass,
+      minPartitions,
+      ignoreCorruptFiles = sc.conf.get(IGNORE_CORRUPT_FILES),
+      ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES)
+    )
   }
 
   def this(
@@ -134,10 +160,6 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
-
-  private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
-
-  private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
@@ -280,8 +302,8 @@ class HadoopRDD[K, V](
       private var reader: RecordReader[K, V] = null
       private val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(
-        new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(createTime),
-        context.stageId, theSplit.index, context.attemptNumber, jobConf)
+        HadoopRDD.DATE_TIME_FORMATTER.format(createTime.toInstant),
+        context.stageId(), theSplit.index, context.attemptNumber(), jobConf)
 
       reader =
         try {
@@ -378,7 +400,7 @@ class HadoopRDD[K, V](
         HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
       case _ => None
     }
-    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
+    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost").toImmutableArraySeq)
   }
 
   override def checkpoint(): Unit = {
@@ -403,6 +425,11 @@ private[spark] object HadoopRDD extends Logging {
    * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
    */
   val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyyMMddHHmmss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
@@ -461,6 +488,6 @@ private[spark] object HadoopRDD extends Logging {
       } else {
         None
       }
-    })
+    }.toImmutableArraySeq)
   }
 }

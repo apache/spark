@@ -21,7 +21,7 @@ import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -39,12 +39,12 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.client.util.Cleaner
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -66,7 +66,6 @@ import org.apache.spark.sql.types.StructType
  */
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
-    private val cleaner: Cleaner,
     private val planIdGenerator: AtomicLong)
     extends Serializable
     with Closeable
@@ -134,8 +133,6 @@ class SparkSession private[sql] (
         } else {
           val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
           builder.getCachedLocalRelationBuilder
-            .setUserId(client.userId)
-            .setSessionId(client.sessionId)
             .setHash(hash)
         }
       } else {
@@ -237,8 +234,9 @@ class SparkSession private[sql] (
    *   An array of Java/Scala objects that can be converted to SQL literal expressions. See <a
    *   href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html"> Supported Data
    *   Types</a> for supported value types in Scala/Java. For example: 1, "Steven",
-   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of literal expression, in that
-   *   case it is taken as is.
+   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of a literal or collection
+   *   constructor functions such as `map()`, `array()`, `struct()`, in that case it is taken as
+   *   is.
    *
    * @since 3.5.0
    */
@@ -250,17 +248,20 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
+          .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
-    // .toBuffer forces that the iterator is consumed and closed
-    val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+    val responseIter = client.execute(plan.build())
 
-    val response = responseSeq
-      .find(_.hasSqlCommandResult)
-      .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-
-    // Update the builder with the values from the result.
-    builder.mergeFrom(response.getSqlCommandResult.getRelation)
+    try {
+      val response = responseIter
+        .find(_.hasSqlCommandResult)
+        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+      // Update the builder with the values from the result.
+      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+    } finally {
+      // consume the rest of the iterator
+      responseIter.foreach(_ => ())
+    }
   }
 
   /**
@@ -274,7 +275,8 @@ class SparkSession private[sql] (
    *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
    *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
-   *   can be also a `Column` of literal expression, in that case it is taken as is.
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    *
    * @since 3.4.0
    */
@@ -294,7 +296,8 @@ class SparkSession private[sql] (
    *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
    *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
-   *   can be also a `Column` of literal expression, in that case it is taken as is.
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    *
    * @since 3.4.0
    */
@@ -307,17 +310,20 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      // .toBuffer forces that the iterator is consumed and closed
-      val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+      val responseIter = client.execute(plan.build())
 
-      val response = responseSeq
-        .find(_.hasSqlCommandResult)
-        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-
-      // Update the builder with the values from the result.
-      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      try {
+        val response = responseIter
+          .find(_.hasSqlCommandResult)
+          .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+        // Update the builder with the values from the result.
+        builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      } finally {
+        // consume the rest of the iterator
+        responseIter.foreach(_ => ())
+      }
   }
 
   /**
@@ -535,7 +541,6 @@ class SparkSession private[sql] (
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder, timeZoneId)
-    cleaner.register(result)
     result
   }
 
@@ -544,14 +549,14 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer
+    // .foreach forces that the iterator is consumed and closed
+    client.execute(plan).foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer.toSeq
+    // .toSeq forces that the iterator is consumed and closed
+    client.execute(plan).toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
@@ -578,7 +583,7 @@ class SparkSession private[sql] (
   /**
    * Add a single artifact to the client session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
@@ -586,9 +591,50 @@ class SparkSession private[sql] (
   def addArtifact(uri: URI): Unit = client.addArtifact(uri)
 
   /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(bytes: Array[Byte], target: String): Unit = client.addArtifact(bytes, target)
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(source: String, target: String): Unit = client.addArtifact(source, target)
+
+  /**
    * Add one or more artifacts to the session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    *
    * @since 3.4.0
    */
@@ -666,6 +712,9 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
+    if (releaseSessionOnClose) {
+      client.releaseSession()
+    }
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
@@ -673,6 +722,22 @@ class SparkSession private[sql] (
 
   /**
    * Add a tag to be assigned to all the operations started by this thread in this session.
+   *
+   * Often, a unit of execution in an application consists of multiple Spark executions.
+   * Application programmers can use this method to group all those jobs together and give a group
+   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
+   * running running executions with this tag. For example:
+   * {{{
+   * // In the main thread:
+   * spark.addTag("myjobs")
+   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
+   *
+   * // In a separate thread:
+   * spark.interruptTag("myjobs")
+   * }}}
+   *
+   * There may be multiple tags present at the same time, so different parts of application may
+   * use different tags to perform cancellation at different levels of granularity.
    *
    * @param tag
    *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
@@ -714,6 +779,17 @@ class SparkSession private[sql] (
   def clearTags(): Unit = {
     client.clearTags()
   }
+
+  /**
+   * We cannot deserialize a connect [[SparkSession]] because of a class clash on the server side.
+   * We null out the instance for now.
+   */
+  private def writeReplace(): Any = null
+
+  /**
+   * Set to false to prevent client.releaseSession on close() (testing only)
+   */
+  private[sql] var releaseSessionOnClose = true
 }
 
 // The minimal builder needed to create a spark session.
@@ -751,7 +827,7 @@ object SparkSession extends Logging {
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(configuration.toSparkConnectClient, cleaner, planIdGenerator)
+    new SparkSession(configuration.toSparkConnectClient, planIdGenerator)
   }
 
   /**
@@ -772,14 +848,11 @@ object SparkSession extends Logging {
    */
   def builder(): Builder = new Builder()
 
-  private[sql] lazy val cleaner = {
-    val cleaner = new Cleaner
-    cleaner.start()
-    cleaner
-  }
-
   class Builder() extends Logging {
-    private val builder = SparkConnectClient.builder()
+    // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
+    // by default, if it exists. The connection string can be overridden using
+    // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
+    private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
@@ -885,7 +958,7 @@ object SparkSession extends Logging {
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null) {
-        Option(new SparkSession(client, cleaner, planIdGenerator))
+        Option(new SparkSession(client, planIdGenerator))
       } else {
         None
       }

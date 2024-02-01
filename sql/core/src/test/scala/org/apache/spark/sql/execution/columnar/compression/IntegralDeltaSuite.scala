@@ -43,7 +43,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       val deltas = if (input.isEmpty) {
         Seq.empty[Long]
       } else {
-        (input.tail, input.init).zipped.map {
+        input.tail.lazyZip(input.init).map {
           case (x: Int, y: Int) => (x - y).toLong
           case (x: Long, y: Long) => x - y
           case other => fail(s"Unexpected input $other")
@@ -80,7 +80,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
         assertResult(Byte.MinValue, "The first byte should be an escaping mark")(buffer.get())
         assertResult(input.head, "The first value is wrong")(columnType.extract(buffer))
 
-        (input.tail, deltas).zipped.foreach { (value, delta) =>
+        input.tail.lazyZip(deltas).foreach { (value, delta) =>
           if (math.abs(delta) <= Byte.MaxValue) {
             assertResult(delta, "Wrong delta")(buffer.get())
           } else {

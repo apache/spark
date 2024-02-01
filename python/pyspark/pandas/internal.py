@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECK
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype  # noqa: F401
+
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import (
     functions as F,
@@ -40,17 +41,9 @@ from pyspark.sql.types import (  # noqa: F401
     StringType,
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred
-
-# For supporting Spark Connect
 from pyspark.sql.utils import is_remote, get_column_class, get_dataframe_class
-
-# For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label
-
-if TYPE_CHECKING:
-    # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.series import Series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
@@ -71,6 +64,8 @@ from pyspark.pandas.utils import (
     spark_column_equals,
 )
 
+if TYPE_CHECKING:
+    from pyspark.pandas.series import Series
 
 # A function to turn given numbers to Spark columns that represent pandas-on-Spark index.
 SPARK_INDEX_NAME_FORMAT = "__index_level_{}__".format

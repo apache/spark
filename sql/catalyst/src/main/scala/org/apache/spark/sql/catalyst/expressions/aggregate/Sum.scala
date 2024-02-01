@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{EvalMode, _}
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -186,7 +187,7 @@ case class Sum(
   // The flag `evalMode` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (evalMode == EvalMode.ANSI) {
+  override def initQueryContext(): Option[QueryContext] = if (evalMode == EvalMode.ANSI) {
     Some(origin.context)
   } else {
     None

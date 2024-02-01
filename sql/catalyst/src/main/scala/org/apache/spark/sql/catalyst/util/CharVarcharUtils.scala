@@ -25,10 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
-  private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+  // visible for testing
+  private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a
@@ -178,7 +180,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
           Seq(Literal(f.name), processStringForCharVarchar(
             GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
-        })
+        }.toImmutableArraySeq)
         if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
           // No field needs char/varchar processing, just return the original expression.
           expr

@@ -16,8 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.Breaks._
 import scala.util.control.NonFatal
 
@@ -198,7 +198,7 @@ private[spark] class Client(
           // Break the while loop if the pod is completed or we don't want to wait
           if (watcher.watchOrStop(sId)) {
             watch.close()
-            break
+            break()
           }
         }
       }
@@ -247,7 +247,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
       SparkKubernetesClientFactory.ClientType.Submission,
       sparkConf,
-      None,
       None)) { kubernetesClient =>
         val client = new Client(
           kubernetesConf,

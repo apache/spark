@@ -44,7 +44,7 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_2.12</artifactId>
+    <artifactId>hadoop-cloud_2.13</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...
@@ -60,7 +60,7 @@ required by Keystone.
 The following table contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
 any (alphanumeric) name.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Meaning</th><th>Required</th></tr></thead>
 <tr>
   <td><code>fs.swift.service.PROVIDER.auth.url</code></td>

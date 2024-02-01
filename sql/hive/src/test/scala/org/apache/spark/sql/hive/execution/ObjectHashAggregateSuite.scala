@@ -152,13 +152,15 @@ class ObjectHashAggregateSuite
       val df = spark.createDataFrame(spark.sparkContext.parallelize(data, 1), schema)
       val aggFunctions = schema.fieldNames.map(f => typed_count(col(f)))
 
+      import org.apache.spark.util.ArrayImplicits._
       checkAnswer(
-        df.agg(aggFunctions.head, aggFunctions.tail: _*),
+        df.agg(aggFunctions.head, aggFunctions.tail.toImmutableArraySeq: _*),
         Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long))
       )
 
       checkAnswer(
-        df.groupBy($"id" % 4 as "mod").agg(aggFunctions.head, aggFunctions.tail: _*),
+        df.groupBy($"id" % 4 as "mod")
+          .agg(aggFunctions.head, aggFunctions.tail.toImmutableArraySeq: _*),
         data.groupBy(_.getInt(0) % 4).map { case (key, value) =>
           key -> Row.fromSeq(value.map(_.toSeq).transpose.map(_.count(_ != null): Long))
         }.toSeq.map {
@@ -168,7 +170,7 @@ class ObjectHashAggregateSuite
 
       withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "5") {
         checkAnswer(
-          df.agg(aggFunctions.head, aggFunctions.tail: _*),
+          df.agg(aggFunctions.head, aggFunctions.tail.toImmutableArraySeq: _*),
           Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long))
         )
       }

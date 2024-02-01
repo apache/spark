@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -85,7 +86,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
         } else {
           field
         }
-      }
+      }.toImmutableArraySeq
       StructType(newFields)
     } else {
       tableSchema
@@ -94,11 +95,10 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
 
   // Fails if the given catalog does not support column default value.
   def validateCatalogForDefaultValue(
-      schema: StructType,
+      columns: Seq[ColumnDefinition],
       catalog: TableCatalog,
       ident: Identifier): Unit = {
-    if (SQLConf.get.enableDefaultColumns &&
-      schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) &&
+    if (SQLConf.get.enableDefaultColumns && columns.exists(_.defaultValue.isDefined) &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "column default value")
@@ -294,6 +294,20 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
     // Perform implicit coercion from the provided expression type to the required column type.
+    coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
+  }
+
+  /**
+   * Returns the result of type coercion from [[analyzed]] to [[dataType]], or throws an error if
+   * the expression is not coercible.
+   */
+  def coerceDefaultValue(
+      analyzed: Expression,
+      dataType: DataType,
+      statementType: String,
+      colName: String,
+      defaultSQL: String): Expression = {
+    // Perform implicit coercion from the provided expression type to the required column type.
     if (dataType == analyzed.dataType) {
       analyzed
     } else if (Cast.canUpCast(analyzed.dataType, dataType)) {
@@ -326,6 +340,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       }
     }
   }
+
   /**
    * Normalizes a schema field name suitable for use in looking up into maps keyed by schema field
    * names.
@@ -374,7 +389,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
    * above, for convenience.
    */
   def getExistenceDefaultsBitmask(schema: StructType): Array[Boolean] = {
-    Array.fill[Boolean](existenceDefaultValues(schema).size)(true)
+    Array.fill[Boolean](existenceDefaultValues(schema).length)(true)
   }
 
   /**
@@ -383,7 +398,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
    */
   def resetExistenceDefaultsBitmask(schema: StructType, bitmask: Array[Boolean]): Unit = {
     val defaultValues = existenceDefaultValues(schema)
-    for (i <- 0 until defaultValues.size) {
+    for (i <- 0 until defaultValues.length) {
       bitmask(i) = (defaultValues(i) != null)
     }
   }
@@ -395,7 +410,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       bitmask: Array[Boolean]): Unit = {
     val existingValues = existenceDefaultValues(schema)
     if (hasExistenceDefaultValues(schema)) {
-      for (i <- 0 until existingValues.size) {
+      for (i <- 0 until existingValues.length) {
         if (bitmask(i)) {
           row.update(i, existingValues(i))
         }
@@ -429,6 +444,31 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
   def hasExistenceDefaultValues(schema: StructType): Boolean =
     existenceDefaultValues(schema).exists(_ != null)
 
+  // Called to check default value expressions in the analyzed plan.
+  def validateDefaultValueExpr(
+      default: DefaultValueExpression,
+      statement: String,
+      colName: String,
+      targetType: DataType): Unit = {
+    if (default.containsPattern(PLAN_EXPRESSION)) {
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+        statement, colName, default.originalSQL)
+    } else if (default.resolved) {
+      if (!Cast.canUpCast(default.child.dataType, targetType)) {
+        throw QueryCompilationErrors.defaultValuesDataTypeError(
+          statement, colName, default.originalSQL, targetType, default.child.dataType)
+      }
+      // Our analysis check passes here. We do not further inspect whether the
+      // expression is `foldable` here, as the plan is not optimized yet.
+    } else if (default.references.nonEmpty) {
+      // Ideally we should let the rest of `CheckAnalysis` report errors about why the default
+      // expression is unresolved. But we should report a better error here if the default
+      // expression references columns, which means it's not a constant for sure.
+      throw QueryCompilationErrors.defaultValueNotConstantError(
+        statement, colName, default.originalSQL)
+    }
+  }
+
   /**
    * This is an Analyzer for processing default column values using built-in functions only.
    */
@@ -450,7 +490,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
     override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
     override def name(): String = CatalogManager.SESSION_CATALOG_NAME
     override def listFunctions(namespace: Array[String]): Array[Identifier] = {
-      throw new UnsupportedOperationException()
+      throw SparkUnsupportedOperationException()
     }
     override def loadFunction(ident: Identifier): UnboundFunction = {
       V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))

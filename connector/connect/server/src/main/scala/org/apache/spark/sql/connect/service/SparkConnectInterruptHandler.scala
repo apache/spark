@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
 
@@ -54,6 +54,7 @@ class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.Interr
     val response = proto.InterruptResponse
       .newBuilder()
       .setSessionId(v.getSessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
       .addAllInterruptedIds(interruptedIds.asJava)
       .build()
 

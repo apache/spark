@@ -211,7 +211,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-          "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
+          "operation" -> "ALTER COLUMN ... FIRST | AFTER"))
     }
   }
 
@@ -1437,7 +1437,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           "tableName" -> "spark_catalog.default.partitionedtable",
           "specifiedPartCols" -> "", "existingPartCols" -> "a, b")
       )
-      assert(sql("select * from partitionedTable").collect().size == 1)
+      assert(sql("select * from partitionedTable").collect().length == 1)
       // Inserts new data successfully when partition columns are correctly specified in
       // partitionBy(...).
       // TODO: Right now, partition columns are always treated in a case-insensitive way.
@@ -1495,7 +1495,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-18009 calling toLocalIterator on commands") {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val df = sql("show databases")
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)
@@ -2068,9 +2068,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> "`tmp_v`",
+          "viewName" -> "`tmp_v`",
           "operation" -> "ALTER TABLE ... ADD COLUMNS"),
         context = ExpectedContext(
           fragment = "tmp_v",
@@ -2087,7 +2087,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
         },
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
           "operation" -> "ALTER TABLE ... ADD COLUMNS"),
@@ -2184,12 +2184,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   test("Refresh table before drop database cascade") {
     withTempDir { tempDir =>
-      val file1 = new File(tempDir + "/first.csv")
+      val file1 = new File(s"$tempDir/first.csv")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("first")
       }
 
-      val file2 = new File(tempDir + "/second.csv")
+      val file2 = new File(s"$tempDir/second.csv")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("second")
       }
@@ -2404,6 +2404,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
         "operation" -> "generated columns")
     )
+  }
+
+  test("SPARK-44837: Error when altering partition column in non-delta table") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT, j INT, k INT) USING parquet PARTITIONED BY (i, j)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t ALTER COLUMN i COMMENT 'comment'")
+        },
+        errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+        sqlState = "428FR",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`i`")
+      )
+    }
   }
 }
 

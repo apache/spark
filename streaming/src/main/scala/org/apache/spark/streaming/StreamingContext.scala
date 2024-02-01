@@ -93,7 +93,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
-   * @param master cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName a name for your job, to display on the cluster web UI
    * @param batchDuration the time interval at which streaming data will be divided into batches
    */

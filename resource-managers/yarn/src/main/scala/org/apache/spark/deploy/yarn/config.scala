@@ -462,6 +462,29 @@ package object config extends Logging {
     .stringConf
     .createWithDefault("yarn.io/fpga")
 
+  private[spark] val YARN_CLIENT_STAT_CACHE_PRELOAD_ENABLED =
+    ConfigBuilder("spark.yarn.client.statCache.preload.enabled")
+    .doc("Enables statCache to be preloaded at YARN client side. This feature analyzes the " +
+      "pattern of resources paths, and if multiple resources shared the same parent directory, " +
+      "a single <code>listStatus</code> will be invoked on the parent directory instead of " +
+      "multiple <code>getFileStatus</code> on individual resources. If most resources are from " +
+      "a small set of directories, this can improve job submission time. Enabling this feature " +
+      "may potentially increase client memory overhead.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD =
+    ConfigBuilder("spark.yarn.client.statCache.preload.perDirectoryThreshold")
+      .doc("Minimum resource count in a directory to trigger statCache preloading when " +
+        "submitting an application. If the number of resources in a directory, without " +
+        "any wildcards, equals or exceeds this threshold, the statCache for that directory " +
+        "will be preloaded. This configuration will only take effect when " +
+        "<code>spark.yarn.client.statCache.preloaded.enabled</code> option is enabled.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(5)
+
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."

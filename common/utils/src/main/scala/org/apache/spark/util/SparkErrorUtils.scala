@@ -90,4 +90,4 @@ private[spark] trait SparkErrorUtils extends Logging {
   }
 }
 
-object SparkErrorUtils extends SparkErrorUtils
+private[spark] object SparkErrorUtils extends SparkErrorUtils

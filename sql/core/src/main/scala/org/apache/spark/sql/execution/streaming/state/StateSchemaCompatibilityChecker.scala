@@ -88,8 +88,7 @@ class StateSchemaCompatibilityChecker(
   private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
     DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
-  // Visible for testing
-  private[sql] def readSchemaFile(): (StructType, StructType) = {
+  def readSchemaFile(): (StructType, StructType) = {
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
@@ -104,7 +103,7 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
-  private def createSchemaFile(keySchema: StructType, valueSchema: StructType): Unit = {
+  def createSchemaFile(keySchema: StructType, valueSchema: StructType): Unit = {
     createSchemaFile(keySchema, valueSchema, schemaWriter)
   }
 

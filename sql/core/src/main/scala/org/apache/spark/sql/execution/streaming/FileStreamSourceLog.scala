@@ -22,12 +22,10 @@ import java.util.Map.Entry
 
 import scala.collection.mutable
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ArrayImplicits._
 
 class FileStreamSourceLog(
     metadataLogVersion: Int,
@@ -50,8 +48,6 @@ class FileStreamSourceLog(
     sparkSession.sessionState.conf.fileSourceLogCleanupDelay
 
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
-
-  private implicit val formats = Serialization.formats(NoTypeHints)
 
   // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
   // used to avoid scanning the compacted log file to retrieve it's own batch data.
@@ -115,7 +111,7 @@ class FileStreamSourceLog(
     val batches =
       (existedBatches ++ retrievedBatches).map(i => i._1 -> i._2.get).toArray.sortBy(_._1)
     if (startBatchId <= endBatchId) {
-      HDFSMetadataLog.verifyBatchIds(batches.map(_._1), startId, endId)
+      HDFSMetadataLog.verifyBatchIds(batches.map(_._1).toImmutableArraySeq, startId, endId)
     }
     batches
   }

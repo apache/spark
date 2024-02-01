@@ -1,6 +1,16 @@
 <baskets>
   <basket>
     <entry>
+      <key>1</key>
+      <value>fork</value>
+    </entry>
+    <entry>
+      <key>2</key>
+      <value>cup</value>
+    </entry>
+  </basket>
+  <basket>
+    <entry>
       <key>9027</key>
       <value>glasstop stove in black</value>
       <extra>123</extra>

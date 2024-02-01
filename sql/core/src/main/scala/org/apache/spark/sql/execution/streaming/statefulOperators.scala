@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -65,7 +65,7 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateInfo: StatefulOperatorStateInfo = {
+  def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
@@ -143,7 +143,6 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
     "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
-    "numShufflePartitions" -> SQLMetrics.createMetric(sparkContext, "number of shuffle partitions"),
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
   ) ++ stateStoreCustomMetrics ++ pythonMetrics
@@ -157,8 +156,10 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       .map(entry => entry._1 -> longMetric(entry._1).value)
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(customMetrics.mapValues(long2Long).toMap.asJava)
+      new java.util.HashMap(customMetrics.transform((_, v) => long2Long(v)).asJava)
 
+    // We now don't report number of shuffle partitions inside the state operator. Instead,
+    // it will be filled when the stream query progress is reported
     new StateOperatorProgress(
       operatorName = shortName,
       numRowsTotal = longMetric("numTotalStateRows").value,
@@ -169,7 +170,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       commitTimeMs = longMetric("commitTimeMs").value,
       memoryUsedBytes = longMetric("stateMemory").value,
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
-      numShufflePartitions = longMetric("numShufflePartitions").value,
+      numShufflePartitions = stateInfo.map(_.numPartitions.toLong).getOrElse(-1L),
       numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics
     )
@@ -178,12 +179,20 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
 
+  /** Metadata of this stateful operator and its states stores. */
+  def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo =
+      Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
+
   /** Set the operator level metrics */
   protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
     assert(numStateStoreInstances >= 1, s"invalid number of stores: $numStateStoreInstances")
     // Shuffle partitions capture the number of tasks that have this stateful operator instance.
     // For each task instance this number is incremented by one.
-    longMetric("numShufflePartitions") += 1
     longMetric("numStateStoreInstances") += numStateStoreInstances
   }
 
@@ -383,9 +392,9 @@ object WatermarkSupport {
       // with allowing them.
       val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
       if (eventTimeColsSet.size > 1) {
-        throw new AnalysisException("More than one event time columns are available. Please " +
-          "ensure there is at most one event time column per stream. event time columns: " +
-          eventTimeCols.mkString("(", ",", ")"))
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
       // With above check, even there are multiple columns in eventTimeCols, all columns must be
@@ -425,22 +434,22 @@ case class StateStoreRestoreExec(
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
-        val hasInput = iter.hasNext
-        if (!hasInput && keyExpressions.isEmpty) {
-          // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
-          // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
-          // restore the value, so that we don't overwrite our state with a 0 value, but rather
-          // merge the 0 with existing state.
-          store.iterator().map(_.value)
-        } else {
-          iter.flatMap { row =>
-            val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
-            val restoredRow = stateManager.get(store, key)
-            val outputRows = Option(restoredRow).toSeq :+ row
-            numOutputRows += outputRows.size
-            outputRows
-          }
+      val hasInput = iter.hasNext
+      if (!hasInput && keyExpressions.isEmpty) {
+        // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
+        // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
+        // restore the value, so that we don't overwrite our state with a 0 value, but rather
+        // merge the 0 with existing state.
+        store.iterator().map(_.value)
+      } else {
+        iter.flatMap { row =>
+          val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
+          val restoredRow = stateManager.get(store, key)
+          val outputRows = Option(restoredRow).toSeq :+ row
+          numOutputRows += outputRows.size
+          outputRows
         }
+      }
     }
   }
 
@@ -506,20 +515,42 @@ case class StateStoreSaveExec(
                 numUpdatedStateRows += 1
               }
             }
-            allRemovalsTimeMs += 0
-            commitTimeMs += timeTakenMs {
-              stateManager.commit(store)
-            }
-            setStoreMetrics(store)
-            setOperatorMetrics()
-            stateManager.values(store).map { valueRow =>
-              numOutputRows += 1
-              valueRow
+
+            // SPARK-45582 - Ensure that store instance is not used after commit is called
+            // to invoke the iterator.
+            val rangeIter = stateManager.values(store)
+
+            new NextIterator[InternalRow] {
+              override protected def getNext(): InternalRow = {
+                if (rangeIter.hasNext) {
+                  val valueRow = rangeIter.next()
+                  numOutputRows += 1
+                  valueRow
+                } else {
+                  finished = true
+                  null
+                }
+              }
+
+              override protected def close(): Unit = {
+                allRemovalsTimeMs += 0
+                commitTimeMs += timeTakenMs {
+                  stateManager.commit(store)
+                }
+                setStoreMetrics(store)
+                setOperatorMetrics()
+              }
             }
 
           // Update and output only rows being evicted from the StateStore
           // Assumption: watermark predicates must be non-empty if append mode is allowed
           case Some(Append) =>
+            assert(watermarkPredicateForDataForLateEvents.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
+            assert(watermarkPredicateForKeysForEviction.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
             allUpdatesTimeMs += timeTakenMs {
               val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
                 watermarkPredicateForDataForLateEvents.get)
@@ -735,6 +766,8 @@ case class SessionWindowStateStoreSaveExec(
 
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
+  override def shortName: String = "sessionWindowStateStoreSaveExec"
+
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
@@ -765,18 +798,37 @@ case class SessionWindowStateStoreSaveExec(
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
           }
-          commitTimeMs += timeTakenMs {
-            stateManager.commit(store)
-          }
-          setStoreMetrics(store)
-          stateManager.iterator(store).map { row =>
-            numOutputRows += 1
-            row
+
+          // SPARK-45582 - Ensure that store instance is not used after commit is called
+          // to invoke the iterator.
+          val rangeIter = stateManager.iterator(store)
+
+          new NextIterator[InternalRow] {
+            override protected def getNext(): InternalRow = {
+              if (rangeIter.hasNext) {
+                val valueRow = rangeIter.next()
+                numOutputRows += 1
+                valueRow
+              } else {
+                finished = true
+                null
+              }
+            }
+
+            override protected def close(): Unit = {
+              commitTimeMs += timeTakenMs {
+                stateManager.commit(store)
+              }
+              setStoreMetrics(store)
+            }
           }
 
         // Update and output only rows being evicted from the StateStore
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
+          assert(watermarkPredicateForDataForEviction.isDefined,
+              "Watermark needs to be defined for session window query in append mode")
+
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
           }
@@ -819,6 +871,14 @@ case class SessionWindowStateStoreSaveExec(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo = Array(StateStoreMetadataV1(
+      StateStoreId.DEFAULT_STORE_NAME, stateManager.getNumColsForPrefixKey, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
@@ -837,7 +897,7 @@ case class SessionWindowStateStoreSaveExec(
         val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey.toSeq)
         numUpdatedStateRows += upserted
         numRemovedStateRows += deleted
-        curValuesOnKey.clear
+        curValuesOnKey.clear()
       }
     }
 
@@ -914,7 +974,7 @@ abstract class BaseStreamingDeduplicateExec
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
-      extraOptionOnStateStore) { (store, iter) =>
+      extraOptions = extraOptionOnStateStore) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
@@ -1037,10 +1097,14 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   protected val extraOptionOnStateStore: Map[String, String] = Map.empty
 
-  private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
+  // Below three variables are defined as lazy, as evaluating these variables does not work with
+  // canonicalized plan. Specifically, attributes in child won't have an event time column in
+  // the canonicalized plan. These variables are NOT referenced in canonicalized plan, hence
+  // defining these variables as lazy would avoid such error.
+  private lazy val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
     allowMultipleEventTimeColumns = false).get
-  private val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
-  private val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
+  private lazy val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
+  private lazy val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
 
   protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = {
     val timeoutToUnsafeRow = UnsafeProjection.create(schemaForValueRow)

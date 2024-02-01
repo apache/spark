@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.broadcast
+import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -164,7 +164,7 @@ trait CodegenSupport extends SparkPlan {
       }
 
     val inputVars = inputVarsCandidate match {
-      case stream: Stream[ExprCode] => stream.force
+      case stream: LazyList[ExprCode] => stream.force
       case other => other
     }
 
@@ -339,7 +339,7 @@ trait CodegenSupport extends SparkPlan {
    *       different inputs(join build side, aggregate buffer, etc.), or other special cases.
    */
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -356,7 +356,9 @@ trait CodegenSupport extends SparkPlan {
     } else if (children.length == 1) {
       children.head.asInstanceOf[CodegenSupport].needCopyResult
     } else {
-      throw new UnsupportedOperationException
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3163",
+        messageParameters = Map("num" -> children.length.toString))
     }
   }
 
@@ -402,7 +404,7 @@ trait CodegenSupport extends SparkPlan {
       val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
       if (Utils.isTesting) {
-        throw new IllegalStateException(errMsg)
+        throw SparkException.internalError(errMsg)
       } else {
         logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
       }
@@ -779,11 +781,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {

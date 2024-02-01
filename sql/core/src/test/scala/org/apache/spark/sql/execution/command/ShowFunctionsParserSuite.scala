@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CurrentNamespace, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.ShowFunctions
 
 class ShowFunctionsParserSuite extends AnalysisTest {
-  val nsPlan = UnresolvedNamespace(Nil)
+  val nsPlan = CurrentNamespace
 
   test("show functions in the scope") {
     comparePlans(

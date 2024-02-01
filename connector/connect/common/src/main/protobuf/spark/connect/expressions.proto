@@ -223,6 +223,9 @@ message Expression {
 
     // (Optional) The id of corresponding connect plan.
     optional int64 plan_id = 2;
+
+    // (Optional) The requested column is a metadata column.
+    optional bool is_metadata_column = 3;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function
@@ -258,6 +261,9 @@ message Expression {
     // If set, it should end with '.*' and will be parsed by 'parseAttributeName'
     // in the server side.
     optional string unparsed_target = 1;
+
+    // (Optional) The id of corresponding connect plan.
+    optional int64 plan_id = 2;
   }
 
   // Represents all of the input attributes to a given relational operator, for example in

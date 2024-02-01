@@ -47,6 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
+from pyspark.sql.profiler import AccumulatorProfilerCollector, ProfilerCollector
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -74,11 +75,18 @@ if TYPE_CHECKING:
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
+    from pyspark.sql.datasource import DataSourceRegistration
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
 
+try:
+    import memory_profiler  # type: ignore # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 __all__ = ["SparkSession"]
 
@@ -252,12 +260,17 @@ class SparkSession(SparkConversionMixin):
             -------
             :class:`SparkSession.Builder`
 
+            See Also
+            --------
+            :class:`SparkConf`
+
             Examples
             --------
-            For an existing class:`SparkConf`, use `conf` parameter.
+            For an existing :class:`SparkConf`, use `conf` parameter.
 
             >>> from pyspark.conf import SparkConf
-            >>> SparkSession.builder.config(conf=SparkConf())
+            >>> conf = SparkConf().setAppName("example").setMaster("local")
+            >>> SparkSession.builder.config(conf=conf)
             <pyspark.sql.session.SparkSession.Builder...
 
             For a (key, value) pair, you can omit parameter names.
@@ -265,7 +278,13 @@ class SparkSession(SparkConversionMixin):
             >>> SparkSession.builder.config("spark.some.config.option", "some-value")
             <pyspark.sql.session.SparkSession.Builder...
 
-            Additionally, you can pass a dictionary of configurations to set.
+            Set multiple configurations.
+
+            >>> SparkSession.builder.config(
+            ...     "spark.some.config.number", 123).config("spark.some.config.float", 0.123)
+            <pyspark.sql.session.SparkSession.Builder...
+
+            Set multiple configurations using a dictionary.
 
             >>> SparkSession.builder.config(
             ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
@@ -273,18 +292,18 @@ class SparkSession(SparkConversionMixin):
             """
             with self._lock:
                 if conf is not None:
-                    for (k, v) in conf.getAll():
-                        self._validate_startup_urls()
+                    for k, v in conf.getAll():
                         self._options[k] = v
+                        self._validate_startup_urls()
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
                         v = to_str(v)  # type: ignore[assignment]
-                        self._validate_startup_urls()
                         self._options[k] = v
+                        self._validate_startup_urls()
                 else:
                     value = to_str(value)
-                    self._validate_startup_urls()
                     self._options[cast(str, key)] = value
+                    self._validate_startup_urls()
                 return self
 
         def _validate_startup_urls(
@@ -294,21 +313,17 @@ class SparkSession(SparkConversionMixin):
             Helper function that validates the combination of startup URLs and raises an exception
             if incompatible options are selected.
             """
-            if "spark.master" in self._options and (
+            if ("spark.master" in self._options or "MASTER" in os.environ) and (
                 "spark.remote" in self._options or "SPARK_REMOTE" in os.environ
             ):
-                raise RuntimeError(
-                    "Spark master cannot be configured with Spark Connect server; "
-                    "however, found URL for Spark Connect [%s]"
-                    % self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
-                )
-            if "spark.remote" in self._options and (
-                "spark.master" in self._options or "MASTER" in os.environ
-            ):
-                raise RuntimeError(
-                    "Spark Connect server cannot be configured with Spark master; "
-                    "however, found URL for Spark master [%s]"
-                    % self._options.get("spark.master", os.environ.get("MASTER"))
+                raise PySparkRuntimeError(
+                    error_class="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
+                    message_parameters={
+                        "master_url": self._options.get("spark.master", os.environ.get("MASTER")),
+                        "connect_url": self._options.get(
+                            "spark.remote", os.environ.get("SPARK_REMOTE")
+                        ),
+                    },
                 )
 
             if "spark.remote" in self._options:
@@ -316,10 +331,12 @@ class SparkSession(SparkConversionMixin):
                 if ("SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != remote) and (
                     "SPARK_LOCAL_REMOTE" in os.environ and not remote.startswith("local")
                 ):
-                    raise RuntimeError(
-                        "Only one Spark Connect client URL can be set; however, got a "
-                        "different URL [%s] from the existing [%s]"
-                        % (os.environ["SPARK_REMOTE"], remote)
+                    raise PySparkRuntimeError(
+                        error_class="CANNOT_CONFIGURE_SPARK_CONNECT",
+                        message_parameters={
+                            "existing_url": os.environ["SPARK_REMOTE"],
+                            "new_url": remote,
+                        },
                     )
 
         def master(self, master: str) -> "SparkSession.Builder":
@@ -455,7 +472,11 @@ class SparkSession(SparkConversionMixin):
             opts = dict(self._options)
 
             with self._lock:
-                if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                if (
+                    "SPARK_CONNECT_MODE_ENABLED" in os.environ
+                    or "SPARK_REMOTE" in os.environ
+                    or "spark.remote" in opts
+                ):
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
@@ -464,6 +485,12 @@ class SparkSession(SparkConversionMixin):
                             and SparkSession._instantiatedSession is None
                         ):
                             url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                            if url is None:
+                                raise PySparkRuntimeError(
+                                    error_class="CONNECT_URL_NOT_SET",
+                                    message_parameters={},
+                                )
 
                             if url.startswith("local"):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
@@ -479,9 +506,9 @@ class SparkSession(SparkConversionMixin):
                             opts["spark.remote"] = url
                             return RemoteSparkSession.builder.config(map=opts).getOrCreate()
                         else:
-                            raise RuntimeError(
-                                "Cannot start a remote Spark session because there "
-                                "is a regular Spark session already running."
+                            raise PySparkRuntimeError(
+                                error_class="SESSION_ALREADY_EXIST",
+                                message_parameters={},
                             )
 
                 session = SparkSession._instantiatedSession
@@ -524,9 +551,9 @@ class SparkSession(SparkConversionMixin):
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
                 if url.startswith("local"):
-                    raise RuntimeError(
-                        "Creating new SparkSessions with `local` "
-                        "connection string is not supported."
+                    raise PySparkRuntimeError(
+                        error_class="UNSUPPORTED_LOCAL_CONNECTION_STRING",
+                        message_parameters={},
                     )
 
                 # Mark this Spark Session as Spark Connect. This prevents that local PySpark is
@@ -535,9 +562,9 @@ class SparkSession(SparkConversionMixin):
                 opts["spark.remote"] = url
                 return RemoteSparkSession.builder.config(map=opts).create()
             else:
-                raise RuntimeError(
-                    "SparkSession.builder.create() can only be used with Spark Connect; "
-                    "however, spark.remote was not found."
+                raise PySparkRuntimeError(
+                    error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+                    message_parameters={"feature": "SparkSession.builder.create"},
                 )
 
     # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
@@ -602,6 +629,8 @@ class SparkSession(SparkConversionMixin):
             assert self._jvm is not None
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+
+        self._profiler_collector = AccumulatorProfilerCollector()
 
     def _repr_html_(self) -> str:
         return """
@@ -847,16 +876,35 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
-        .. versionchanged:: 3.5.0
-            Supports Spark Connect.
-
         Returns
         -------
         :class:`UDTFRegistration`
+
+        Notes
+        -----
+        Supports Spark Connect.
         """
         from pyspark.sql.udtf import UDTFRegistration
 
         return UDTFRegistration(self)
+
+    @property
+    def dataSource(self) -> "DataSourceRegistration":
+        """Returns a :class:`DataSourceRegistration` for data source registration.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`DataSourceRegistration`
+
+        Notes
+        -----
+        This feature is experimental and unstable.
+        """
+        from pyspark.sql.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
 
     def range(
         self,
@@ -1251,7 +1299,7 @@ class SparkSession(SparkConversionMixin):
             :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
-            column names, default is None.  The data type string format equals to
+            column names, default is None. The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>``.
 
@@ -1288,34 +1336,31 @@ class SparkSession(SparkConversionMixin):
         --------
         Create a DataFrame from a list of tuples.
 
-        >>> spark.createDataFrame([('Alice', 1)]).collect()
-        [Row(_1='Alice', _2=1)]
-        >>> spark.createDataFrame([('Alice', 1)], ['name', 'age']).collect()
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame([('Alice', 1)]).show()
+        +-----+---+
+        |   _1| _2|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
 
-        Create a DataFrame from a list of dictionaries
+        Create a DataFrame from a list of dictionaries.
 
         >>> d = [{'name': 'Alice', 'age': 1}]
-        >>> spark.createDataFrame(d).collect()
-        [Row(age=1, name='Alice')]
+        >>> spark.createDataFrame(d).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  1|Alice|
+        +---+-----+
 
-        Create a DataFrame from an RDD.
+        Create a DataFrame with column names specified.
 
-        >>> rdd = spark.sparkContext.parallelize([('Alice', 1)])
-        >>> spark.createDataFrame(rdd).collect()
-        [Row(_1='Alice', _2=1)]
-        >>> df = spark.createDataFrame(rdd, ['name', 'age'])
-        >>> df.collect()
-        [Row(name='Alice', age=1)]
-
-        Create a DataFrame from Row instances.
-
-        >>> from pyspark.sql import Row
-        >>> Person = Row('name', 'age')
-        >>> person = rdd.map(lambda r: Person(*r))
-        >>> df2 = spark.createDataFrame(person)
-        >>> df2.collect()
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame([('Alice', 1)], ['name', 'age']).show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
 
         Create a DataFrame with the explicit schema specified.
 
@@ -1323,39 +1368,66 @@ class SparkSession(SparkConversionMixin):
         >>> schema = StructType([
         ...    StructField("name", StringType(), True),
         ...    StructField("age", IntegerType(), True)])
-        >>> df3 = spark.createDataFrame(rdd, schema)
-        >>> df3.collect()
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame([('Alice', 1)], schema).show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
+
+        Create a DataFrame with the schema in DDL formatted string.
+
+        >>> spark.createDataFrame([('Alice', 1)], "name: string, age: int").show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
+
+        Create an empty DataFrame.
+        When initializing an empty DataFrame in PySpark, it's mandatory to specify its schema,
+        as the DataFrame lacks data from which the schema can be inferred.
+
+        >>> spark.createDataFrame([], "name: string, age: int").show()
+        +----+---+
+        |name|age|
+        +----+---+
+        +----+---+
+
+        Create a DataFrame from Row objects.
+
+        >>> from pyspark.sql import Row
+        >>> Person = Row('name', 'age')
+        >>> df = spark.createDataFrame([Person("Alice", 1)])
+        >>> df.show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
 
         Create a DataFrame from a pandas DataFrame.
 
-        >>> spark.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame(df.toPandas()).show()  # doctest: +SKIP
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
         >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
-        [Row(0=1, 1=2)]
-
-        Create  a DataFrame from an RDD with the schema in DDL formatted string.
-
-        >>> spark.createDataFrame(rdd, "a: string, b: int").collect()
-        [Row(a='Alice', b=1)]
-        >>> rdd = rdd.map(lambda row: row[1])
-        >>> spark.createDataFrame(rdd, "int").collect()
-        [Row(value=1)]
-
-        When the type is unmatched, it throws an exception.
-
-        >>> spark.createDataFrame(rdd, "boolean").collect() # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        Py4JJavaError: ...
+        +---+---+
+        |  0|  1|
+        +---+---+
+        |  1|  2|
+        +---+---+
         """
         SparkSession._activeSession = self
         assert self._jvm is not None
         self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
-                error_class="SHOULD_NOT_DATAFRAME",
-                message_parameters={"arg_name": "data"},
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         if isinstance(schema, str):
@@ -1485,11 +1557,13 @@ class SparkSession(SparkConversionMixin):
         args : dict or list
             A dictionary of parameter names to Python objects or a list of Python objects
             that can be converted to SQL literal expressions. See
-            <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-            Supported Data Types</a> for supported value types in Python.
+            `Supported Data Types`_ for supported value types in Python.
             For example, dictionary keys: "rank", "name", "birthdate";
             dictionary or list values: 1, "Steven", datetime.date(2023, 4, 2).
-            A value can be also a `Column` of literal expression, in that case it is taken as is.
+            A value can be also a `Column` of a literal or collection constructor functions such
+            as `map()`, `array()`, `struct()`, in that case it is taken as is.
+
+            .. _Supported Data Types: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
 
             .. versionadded:: 3.4.0
 
@@ -1567,25 +1641,29 @@ class SparkSession(SparkConversionMixin):
         |  3|  6|
         +---+---+
 
-        And substitude named parameters with the `:` prefix by SQL literals.
+        And substitute named parameters with the `:` prefix by SQL literals.
 
-        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : 5}, df=mydf).show()
-        +---+---+
-        |  A|  B|
-        +---+---+
-        |  3|  6|
-        +---+---+
+        >>> from pyspark.sql.functions import create_map
+        >>> spark.sql(
+        ...   "SELECT *, element_at(:m, 'a') AS C FROM {df} WHERE {df[B]} > :minB",
+        ...   {"minB" : 5, "m" : create_map(lit('a'), lit(1))}, df=mydf).show()
+        +---+---+---+
+        |  A|  B|  C|
+        +---+---+---+
+        |  3|  6|  1|
+        +---+---+---+
 
         Or positional parameters marked by `?` in the SQL query by SQL literals.
 
+        >>> from pyspark.sql.functions import array
         >>> spark.sql(
-        ...   "SELECT * FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
-        ...   args=[5, 2], df=mydf).show()
-        +---+---+
-        |  A|  B|
-        +---+---+
-        |  3|  6|
-        +---+---+
+        ...   "SELECT *, element_at(?, 1) AS C FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
+        ...   args=[array(lit(1), lit(2), lit(3)), 5, 2], df=mydf).show()
+        +---+---+---+
+        |  A|  B|  C|
+        +---+---+---+
+        |  3|  6|  1|
+        +---+---+---+
         """
 
         formatter = SQLStringFormatter(self)
@@ -1635,6 +1713,12 @@ class SparkSession(SparkConversionMixin):
         |  4|
         +---+
         """
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return DataFrame(self._jsparkSession.table(tableName), self)
 
     @property
@@ -1747,7 +1831,10 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        return StreamingQueryManager(self._jsparkSession.streams())
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
+        return self._sqm
 
     def stop(self) -> None:
         """
@@ -1844,9 +1931,9 @@ class SparkSession(SparkConversionMixin):
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
         """
-        raise RuntimeError(
-            "SparkSession.client is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.client"},
         )
 
     def addArtifacts(
@@ -1877,9 +1964,9 @@ class SparkSession(SparkConversionMixin):
         This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
         an exception.
         """
-        raise RuntimeError(
-            "SparkSession.addArtifact(s) is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.addArtifact(s)"},
         )
 
     addArtifact = addArtifacts
@@ -1907,9 +1994,9 @@ class SparkSession(SparkConversionMixin):
         Also, this is an API dedicated to Spark Connect client only. With regular
         Spark Session, it throws an exception.
         """
-        raise RuntimeError(
-            "SparkSession.copyFromLocalToFs is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
     def interruptAll(self) -> List[str]:
@@ -1927,9 +2014,9 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise RuntimeError(
-            "SparkSession.interruptAll is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.interruptAll"},
         )
 
     def interruptTag(self, tag: str) -> List[str]:
@@ -1947,9 +2034,9 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise RuntimeError(
-            "SparkSession.interruptTag is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.interruptTag"},
         )
 
     def interruptOperation(self, op_id: str) -> List[str]:
@@ -1967,25 +2054,33 @@ class SparkSession(SparkConversionMixin):
         -----
         There is still a possibility of operation finishing just as it is interrupted.
         """
-        raise RuntimeError(
-            "SparkSession.interruptOperation is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.interruptOperation"},
         )
 
     def addTag(self, tag: str) -> None:
         """
         Add a tag to be assigned to all the operations started by this thread in this session.
 
+        Often, a unit of execution in an application consists of multiple Spark executions.
+        Application programmers can use this method to group all those jobs together and give a
+        group tag. The application can use :meth:`SparkSession.interruptTag` to cancel all running
+        executions with this tag.
+
+        There may be multiple tags present at the same time, so different parts of application may
+        use different tags to perform cancellation at different levels of granularity.
+
         .. versionadded:: 3.5.0
 
         Parameters
         ----------
-        tag : list of str
+        tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise RuntimeError(
-            "SparkSession.addTag is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.addTag"},
         )
 
     def removeTag(self, tag: str) -> None:
@@ -2000,9 +2095,9 @@ class SparkSession(SparkConversionMixin):
         tag : list of str
             The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise RuntimeError(
-            "SparkSession.removeTag is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.removeTag"},
         )
 
     def getTags(self) -> Set[str]:
@@ -2017,9 +2112,9 @@ class SparkSession(SparkConversionMixin):
         set of str
             Set of tags of interrupted operations.
         """
-        raise RuntimeError(
-            "SparkSession.getTags is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.getTags"},
         )
 
     def clearTags(self) -> None:
@@ -2028,10 +2123,27 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
         """
-        raise RuntimeError(
-            "SparkSession.clearTags is only supported with Spark Connect; "
-            "however, the current Spark session does not use Spark Connect."
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.clearTags"},
         )
+
+    def showPerfProfiles(self, id: Optional[int] = None) -> None:
+        self._profiler_collector.show_perf_profiles(id)
+
+    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
+
+    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
+        if has_memory_profiler:
+            self._profiler_collector.show_memory_profiles(id)
+        else:
+            warnings.warn(
+                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
+                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
+                UserWarning,
+            )
+
+    showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
 
 
 def _test() -> None:

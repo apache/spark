@@ -66,6 +66,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_LOAD_FUNCTION_CLASS",
+  "sqlState" : "46103",
   "messageParameters" : {
     "className" : "test.non.existent.udaf",
     "functionName" : "`spark_catalog`.`default`.`udaf1`"

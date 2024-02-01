@@ -202,29 +202,27 @@ public class JavaUtils {
   private static final Map<String, ByteUnit> byteSuffixes;
 
   static {
-    final Map<String, TimeUnit> timeSuffixesBuilder = new HashMap<>();
-    timeSuffixesBuilder.put("us", TimeUnit.MICROSECONDS);
-    timeSuffixesBuilder.put("ms", TimeUnit.MILLISECONDS);
-    timeSuffixesBuilder.put("s", TimeUnit.SECONDS);
-    timeSuffixesBuilder.put("m", TimeUnit.MINUTES);
-    timeSuffixesBuilder.put("min", TimeUnit.MINUTES);
-    timeSuffixesBuilder.put("h", TimeUnit.HOURS);
-    timeSuffixesBuilder.put("d", TimeUnit.DAYS);
-    timeSuffixes = Collections.unmodifiableMap(timeSuffixesBuilder);
+    timeSuffixes = Map.of(
+      "us", TimeUnit.MICROSECONDS,
+      "ms", TimeUnit.MILLISECONDS,
+      "s", TimeUnit.SECONDS,
+      "m", TimeUnit.MINUTES,
+      "min", TimeUnit.MINUTES,
+      "h", TimeUnit.HOURS,
+      "d", TimeUnit.DAYS);
 
-    final Map<String, ByteUnit> byteSuffixesBuilder = new HashMap<>();
-    byteSuffixesBuilder.put("b", ByteUnit.BYTE);
-    byteSuffixesBuilder.put("k", ByteUnit.KiB);
-    byteSuffixesBuilder.put("kb", ByteUnit.KiB);
-    byteSuffixesBuilder.put("m", ByteUnit.MiB);
-    byteSuffixesBuilder.put("mb", ByteUnit.MiB);
-    byteSuffixesBuilder.put("g", ByteUnit.GiB);
-    byteSuffixesBuilder.put("gb", ByteUnit.GiB);
-    byteSuffixesBuilder.put("t", ByteUnit.TiB);
-    byteSuffixesBuilder.put("tb", ByteUnit.TiB);
-    byteSuffixesBuilder.put("p", ByteUnit.PiB);
-    byteSuffixesBuilder.put("pb", ByteUnit.PiB);
-    byteSuffixes = Collections.unmodifiableMap(byteSuffixesBuilder);
+    byteSuffixes = Map.ofEntries(
+      Map.entry("b", ByteUnit.BYTE),
+      Map.entry("k", ByteUnit.KiB),
+      Map.entry("kb", ByteUnit.KiB),
+      Map.entry("m", ByteUnit.MiB),
+      Map.entry("mb", ByteUnit.MiB),
+      Map.entry("g", ByteUnit.GiB),
+      Map.entry("gb", ByteUnit.GiB),
+      Map.entry("t", ByteUnit.TiB),
+      Map.entry("tb", ByteUnit.TiB),
+      Map.entry("p", ByteUnit.PiB),
+      Map.entry("pb", ByteUnit.PiB));
   }
 
   /**

@@ -22,9 +22,10 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class GroupbyParityHeadTailTests(
-    GroupbyHeadTailMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    GroupbyHeadTailMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
-
     pass
 
 

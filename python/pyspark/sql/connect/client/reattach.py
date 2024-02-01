@@ -14,14 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.client.retries import Retrying, RetryException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+from threading import RLock
 import warnings
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast
+from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
 from multiprocessing.pool import ThreadPool
 import os
 
@@ -30,6 +32,7 @@ from grpc_status import rpc_status
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+from pyspark.errors import PySparkRuntimeError
 
 
 class ExecutePlanResponseReattachableIterator(Generator):
@@ -53,17 +56,41 @@ class ExecutePlanResponseReattachableIterator(Generator):
     ReleaseExecute RPCs that instruct the server to release responses that it already processed.
     """
 
-    _release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+    # Lock to manage the pool
+    _lock: ClassVar[RLock] = RLock()
+    _release_thread_pool: Optional[ThreadPool] = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+
+    @classmethod
+    def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+        """
+        When the channel is closed, this method will be called before, to make sure all
+        outstanding calls are closed.
+        """
+        with cls._lock:
+            if cls._release_thread_pool is not None:
+                cls._release_thread_pool.close()
+                cls._release_thread_pool.join()
+                cls._release_thread_pool = None
+
+    @classmethod
+    def _initialize_pool_if_necessary(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+        """
+        If the processing pool for the release calls is None, initialize the pool exactly once.
+        """
+        with cls._lock:
+            if cls._release_thread_pool is None:
+                cls._release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
 
     def __init__(
         self,
         request: pb2.ExecutePlanRequest,
         stub: grpc_lib.SparkConnectServiceStub,
-        retry_policy: Dict[str, Any],
+        retrying: Callable[[], Retrying],
         metadata: Iterable[Tuple[str, str]],
     ):
+        ExecutePlanResponseReattachableIterator._initialize_pool_if_necessary()
         self._request = request
-        self._retry_policy = retry_policy
+        self._retrying = retrying
         if request.operation_id:
             self._operation_id = request.operation_id
         else:
@@ -94,7 +121,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
         self._metadata = metadata
-        self._iterator: Iterator[pb2.ExecutePlanResponse] = iter(
+        self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
             self._stub.ExecutePlan(self._initial_request, metadata=metadata)
         )
 
@@ -111,7 +138,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         self._last_returned_response_id = ret.response_id
         if ret.HasField("result_complete"):
-            self._result_complete = True
             self._release_all()
         else:
             self._release_until(self._last_returned_response_id)
@@ -119,30 +145,18 @@ class ExecutePlanResponseReattachableIterator(Generator):
         return ret
 
     def _has_next(self) -> bool:
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
-
         if self._result_complete:
             # After response complete response
             return False
         else:
             try:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
-                        # on first try, we use the existing iterator.
-                        if not attempt.is_first_try():
-                            # on retry, the iterator is borked, so we need a new one
-                            self._iterator = iter(
-                                self._stub.ReattachExecute(
-                                    self._create_reattach_execute_request(), metadata=self._metadata
-                                )
-                            )
-
                         if self._current is None:
                             try:
-                                self._current = self._call_iter(lambda: next(self._iterator))
+                                self._current = self._call_iter(
+                                    lambda: next(self._iterator)  # type: ignore[arg-type]
+                                )
                             except StopIteration:
                                 pass
 
@@ -154,16 +168,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
                         # arrive, we keep reattaching.
                         if not self._result_complete and not has_next:
                             while not has_next:
-                                self._iterator = iter(
-                                    self._stub.ReattachExecute(
-                                        self._create_reattach_execute_request(),
-                                        metadata=self._metadata,
-                                    )
-                                )
+                                # unset iterator for new ReattachExecute to be called in _call_iter
+                                self._iterator = None
                                 # shouldn't change
                                 assert not self._result_complete
                                 try:
-                                    self._current = self._call_iter(lambda: next(self._iterator))
+                                    self._current = self._call_iter(
+                                        lambda: next(self._iterator)  # type: ignore[arg-type]
+                                    )
                                 except StopIteration:
                                     pass
                                 has_next = self._current is not None
@@ -184,22 +196,18 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if self._result_complete:
             return
 
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
-
         request = self._create_release_execute_request(until_response_id)
 
         def target() -> None:
             try:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
+            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
 
     def _release_all(self) -> None:
         """
@@ -212,22 +220,18 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if self._result_complete:
             return
 
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
-
         request = self._create_release_execute_request(None)
 
         def target() -> None:
             try:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
+            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:
@@ -238,16 +242,23 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         Called inside retry block, so retryable failure will get handled upstream.
         """
+        if self._iterator is None:
+            # we get a new iterator with ReattachExecute if it was unset.
+            self._iterator = iter(
+                self._stub.ReattachExecute(
+                    self._create_reattach_execute_request(), metadata=self._metadata
+                )
+            )
+
         try:
             return iter_fun()
         except grpc.RpcError as e:
             status = rpc_status.from_call(cast(grpc.Call, e))
             if status is not None and "INVALID_HANDLE.OPERATION_NOT_FOUND" in status.message:
                 if self._last_returned_response_id is not None:
-                    raise RuntimeError(
-                        "OPERATION_NOT_FOUND on the server but "
-                        "responses were already received from it.",
-                        e,
+                    raise PySparkRuntimeError(
+                        error_class="RESPONSE_ALREADY_RECEIVED",
+                        message_parameters={},
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(
@@ -255,7 +266,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 )
                 raise RetryException()
             else:
+                # Remove the iterator, so that a new one will be created after retry.
+                self._iterator = None
                 raise e
+        except Exception as e:
+            # Remove the iterator, so that a new one will be created after retry.
+            self._iterator = None
+            raise e
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         reattach = pb2.ReattachExecuteRequest(
@@ -300,10 +317,3 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     def __del__(self) -> None:
         return self.close()
-
-
-class RetryException(Exception):
-    """
-    An exception that can be thrown upstream when inside retry and which will be retryable
-    regardless of policy.
-    """

@@ -45,11 +45,29 @@ SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 SCBUILD="${SCBUILD:-1}"
 if [ "$SCBUILD" -eq "1" ]; then
   # Build the jars needed for spark connect JVM client
-  build/sbt "${SCALA_ARG}" "sql/package;connect-client-jvm/assembly" || exit 1
+  build/sbt "${SCALA_ARG}" "connect-client-jvm/package" || exit 1
 fi
 
 if [ -z "$SCCLASSPATH" ]; then
   SCCLASSPATH=$(connector/connect/bin/spark-connect-scala-client-classpath)
 fi
 
-exec java -cp "$SCCLASSPATH" org.apache.spark.sql.application.ConnectRepl "$@"
+JVM_ARGS="-XX:+IgnoreUnrecognizedVMOptions \
+  --add-opens=java.base/java.lang=ALL-UNNAMED \
+  --add-opens=java.base/java.lang.invoke=ALL-UNNAMED \
+  --add-opens=java.base/java.lang.reflect=ALL-UNNAMED \
+  --add-opens=java.base/java.io=ALL-UNNAMED \
+  --add-opens=java.base/java.net=ALL-UNNAMED \
+  --add-opens=java.base/java.nio=ALL-UNNAMED \
+  --add-opens=java.base/java.util=ALL-UNNAMED \
+  --add-opens=java.base/java.util.concurrent=ALL-UNNAMED \
+  --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED \
+  --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED \
+  --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
+  --add-opens=java.base/sun.nio.cs=ALL-UNNAMED \
+  --add-opens=java.base/sun.security.action=ALL-UNNAMED \
+  --add-opens=java.base/sun.util.calendar=ALL-UNNAMED \
+  --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED \
+  -Djdk.reflect.useDirectMethodHandle=false "
+
+exec java $JVM_ARGS -cp "$SCCLASSPATH" org.apache.spark.sql.application.ConnectRepl "$@"

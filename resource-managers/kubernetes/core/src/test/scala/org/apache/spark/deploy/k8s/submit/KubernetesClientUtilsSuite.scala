@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import org.scalatest.BeforeAndAfter

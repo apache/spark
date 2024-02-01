@@ -17,7 +17,6 @@
 
 import datetime
 import unittest
-from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
@@ -25,6 +24,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
@@ -751,9 +751,7 @@ class BooleanExtensionOpsTest(OpsTestBase):
                 # A pandas boolean extension series cannot be casted to fractional extension dtypes
                 self.assert_eq([1.0, 0.0, np.nan], psser.astype(dtype).tolist())
             elif dtype in self.string_extension_dtype:
-                if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-                    # Limit pandas version due to https://github.com/pandas-dev/pandas/issues/31204
-                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
             else:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
@@ -809,7 +807,11 @@ class BooleanExtensionOpsTest(OpsTestBase):
         self.check_extension(pser >= pser, psser >= psser)
 
 
-class BooleanOpsTests(BooleanOpsTestsMixin, OpsTestBase):
+class BooleanOpsTests(
+    BooleanOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

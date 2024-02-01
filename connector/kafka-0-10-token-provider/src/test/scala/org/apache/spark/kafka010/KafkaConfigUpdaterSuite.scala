@@ -19,7 +19,7 @@ package org.apache.spark.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs

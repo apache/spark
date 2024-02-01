@@ -317,6 +317,29 @@ class DataTypeSuite extends SparkFunSuite {
     assert(message.contains("Unrecognized token 'abcd'"))
   }
 
+  // SPARK-40820: fromJson with only name and type
+  test("Deserialized and serialized schema without nullable or metadata in") {
+    val schema =
+      """
+        |{
+        |    "type": "struct",
+        |    "fields": [
+        |        {
+        |            "name": "c1",
+        |            "type": "string"
+        |        }
+        |    ]
+        |}
+        |""".stripMargin
+    val dt = DataType.fromJson(schema)
+
+    dt.simpleString equals "struct<c1:string>"
+    dt.json equals
+      """
+        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":false,"metadata":{}}]}
+        |""".stripMargin
+  }
+
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
     test(s"Check the default size of $dataType") {
       assert(dataType.defaultSize === expectedDefaultSize)

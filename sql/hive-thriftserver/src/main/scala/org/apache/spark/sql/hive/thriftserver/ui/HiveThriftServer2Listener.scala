@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hive.service.server.HiveServer2
 

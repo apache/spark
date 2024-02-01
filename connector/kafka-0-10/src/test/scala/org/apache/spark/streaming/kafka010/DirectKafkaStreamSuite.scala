@@ -24,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.kafka.clients.consumer._
@@ -90,7 +90,7 @@ class DirectKafkaStreamSuite
     kp.put("bootstrap.servers", kafkaTestUtils.brokerAddress)
     kp.put("key.deserializer", classOf[StringDeserializer])
     kp.put("value.deserializer", classOf[StringDeserializer])
-    kp.put("group.id", s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}")
+    kp.put("group.id", s"test-consumer-${Random.nextInt()}-${System.currentTimeMillis}")
     extra.foreach(e => kp.put(e._1, e._2))
     kp
   }
@@ -138,7 +138,7 @@ class DirectKafkaStreamSuite
         val partSize = all.size
         val rangeSize = off.untilOffset - off.fromOffset
         Iterator((partSize, rangeSize))
-      }.collect
+      }.collect()
 
       // Verify whether number of elements in each partition
       // matches with the corresponding offset range
@@ -204,7 +204,7 @@ class DirectKafkaStreamSuite
         val partSize = all.size
         val rangeSize = off.untilOffset - off.fromOffset
         Iterator((partSize, rangeSize))
-      }.collect
+      }.collect()
 
       // Verify whether number of elements in each partition
       // matches with the corresponding offset range
@@ -255,9 +255,9 @@ class DirectKafkaStreamSuite
         preferredHosts,
         ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
         new DefaultPerPartitionConfig(sparkConf))
-      s.consumer.poll(0)
+      s.consumer().poll(0)
       assert(
-        s.consumer.position(topicPartition) >= offsetBeforeStart,
+        s.consumer().position(topicPartition) >= offsetBeforeStart,
         "Start offset not from latest"
       )
       s
@@ -311,9 +311,9 @@ class DirectKafkaStreamSuite
           kafkaParams.asScala,
           Map(topicPartition -> 11L)),
         new DefaultPerPartitionConfig(sparkConf))
-      s.consumer.poll(0)
+      s.consumer().poll(0)
       assert(
-        s.consumer.position(topicPartition) >= offsetBeforeStart,
+        s.consumer().position(topicPartition) >= offsetBeforeStart,
         "Start offset not from latest"
       )
       s
@@ -616,7 +616,7 @@ class DirectKafkaStreamSuite
       eventually(timeout(5.seconds), interval(10.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
         // Funky "-" in message makes the complete assertion message read better.
-        assert(collectedData.asScala.exists(_.size == expectedSize),
+        assert(collectedData.asScala.exists(_.length == expectedSize),
           s" - No arrays of size $expectedSize for rate $rate found in $dataToString")
       }
     }
@@ -726,8 +726,8 @@ class DirectKafkaStreamSuite
   /** Get the generated offset ranges from the DirectKafkaStream */
   private def getOffsetRanges[K, V](
       kafkaStream: DStream[ConsumerRecord[K, V]]): Seq[(Time, Array[OffsetRange])] = {
-    kafkaStream.generatedRDDs.mapValues { rdd =>
-      rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+    kafkaStream.generatedRDDs.map { case (t, rdd) =>
+      (t, rdd.asInstanceOf[HasOffsetRanges].offsetRanges)
     }.toSeq.sortBy { _._1 }
   }
 
@@ -805,7 +805,7 @@ private[streaming] class ConstantEstimator(@volatile private var rate: Long)
       time: Long,
       elements: Long,
       processingDelay: Long,
-      schedulingDelay: Long): Option[Double] = Some(rate)
+      schedulingDelay: Long): Option[Double] = Some(rate.toDouble)
 }
 
 private[streaming] class ConstantRateController(id: Int, estimator: RateEstimator, rate: Long)

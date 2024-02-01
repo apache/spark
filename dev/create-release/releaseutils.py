@@ -187,7 +187,6 @@ known_components = {
     "java api": "Java API",
     "k8s": "Kubernetes",
     "kubernetes": "Kubernetes",
-    "mesos": "Mesos",
     "ml": "MLlib",
     "mllib": "MLlib",
     "project infra": "Project Infra",

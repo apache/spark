@@ -206,6 +206,19 @@ private[spark] trait RpcEnvFileServer {
     fixedBaseUri
   }
 
+  /**
+   * Removes a file from this RpcEnv.
+   *
+   * @param key Local file to remove.
+   */
+  def removeFile(key: String): Unit
+
+  /**
+   * Removes a jar to from this RpcEnv.
+   *
+   * @param key Local jar to remove.
+   */
+  def removeJar(key: String): Unit
 }
 
 private[spark] case class RpcEnvConfig(

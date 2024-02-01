@@ -30,6 +30,7 @@ import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -200,7 +201,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("svd of a low-rank matrix") {
-    val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0, 1.0)), 2)
+    val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0, 1.0)).toImmutableArraySeq, 2)
     val mat = new RowMatrix(rows, 4, 3)
     for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
       val svd = mat.computeSVD(2, computeU = true, 1e-6, 300, 1e-10, mode)
@@ -293,7 +294,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       val calcR = result.R
       assert(closeToZero(abs(expected.q) - abs(calcQ.toBreeze())))
       assert(closeToZero(abs(expected.r) - abs(calcR.asBreeze.asInstanceOf[BDM[Double]])))
-      assert(closeToZero(calcQ.multiply(calcR).toBreeze - mat.toBreeze()))
+      assert(closeToZero(calcQ.multiply(calcR).toBreeze() - mat.toBreeze()))
       // Decomposition without computing Q
       val rOnly = mat.tallSkinnyQR(computeQ = false)
       assert(rOnly.Q == null)

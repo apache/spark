@@ -20,32 +20,23 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
-from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class NumPyCompatTestsMixin:
     blacklist = [
-        # Koalas does not currently support
+        # Pandas-on-Spark does not currently support
         "conj",
         "conjugate",
         "isnat",
         "matmul",
         "frexp",
         # Values are close enough but tests failed.
-        "arccos",
-        "exp",
-        "expm1",
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
         "modf",
-        "floor_divide",  # flaky
-        # Results seem inconsistent in a different version of, I (Hyukjin) suspect, PyArrow.
-        # From PyArrow 0.15, seems it returns the correct results via PySpark. Probably we
-        # can enable it later when Koalas switches to PyArrow 0.15 completely.
-        "left_shift",
     ]
 
     @property
@@ -54,6 +45,10 @@ class NumPyCompatTestsMixin:
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_np_add_series(self):
         psdf = self.psdf
@@ -86,6 +81,8 @@ class NumPyCompatTestsMixin:
             np.left_shift(psdf1, psdf2)
 
     def test_np_spark_compat_series(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -134,6 +131,8 @@ class NumPyCompatTestsMixin:
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -183,7 +182,11 @@ class NumPyCompatTestsMixin:
             reset_option("compute.ops_on_diff_frames")
 
 
-class NumPyCompatTests(NumPyCompatTestsMixin, ComparisonTestBase, SQLTestUtils):
+class NumPyCompatTests(
+    NumPyCompatTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

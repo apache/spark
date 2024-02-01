@@ -20,7 +20,7 @@ package org.apache.spark.sql.api.r
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.{Locale, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 import org.apache.spark.TaskContext
@@ -30,11 +30,12 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema, Literal}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object SQLUtils extends Logging {
   SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
@@ -192,7 +193,7 @@ private[sql] object SQLUtils extends Logging {
       case 's' =>
         // Read StructType for DataFrame
         val fields = SerDe.readList(dis, jvmObjectTracker = null)
-        Row.fromSeq(fields)
+        Row.fromSeq(fields.toImmutableArraySeq)
       case _ => null
     }
   }
@@ -220,8 +221,8 @@ private[sql] object SQLUtils extends Logging {
     sparkSession.catalog.listTables(db).collect().map(_.name)
   }
 
-  def createArrayType(column: Column): ArrayType = {
-    new ArrayType(ExprUtils.evalTypeExpr(column.expr), true)
+  def createArrayType(elementType: String): ArrayType = {
+    ArrayType(ExprUtils.evalTypeExpr(Literal(elementType)), true)
   }
 
   /**
@@ -232,7 +233,7 @@ private[sql] object SQLUtils extends Logging {
       sparkSession: SparkSession,
       filename: String): JavaRDD[Array[Byte]] = {
     // Parallelize the record batches to create an RDD
-    val batches = ArrowConverters.readArrowStreamFromFile(filename)
+    val batches = ArrowConverters.readArrowStreamFromFile(filename).toImmutableArraySeq
     JavaRDD.fromRDD(sparkSession.sparkContext.parallelize(batches, batches.length))
   }
 

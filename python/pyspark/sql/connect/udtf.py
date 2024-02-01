@@ -50,7 +50,7 @@ def _create_udtf(
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     evalType: int = PythonEvalType.SQL_TABLE_UDF,
-    deterministic: bool = True,
+    deterministic: bool = False,
 ) -> "UserDefinedTableFunction":
     udtf_obj = UserDefinedTableFunction(
         cls, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
@@ -62,7 +62,7 @@ def _create_py_udtf(
     cls: Type,
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
-    deterministic: bool = True,
+    deterministic: bool = False,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedTableFunction":
     if useArrow is not None:
@@ -78,39 +78,31 @@ def _create_py_udtf(
                 == "true"
             )
         except PySparkRuntimeError as e:
-            if e.error_class == "NO_ACTIVE_OR_DEFAULT_SESSION":
+            if e.getErrorClass() == "NO_ACTIVE_OR_DEFAULT_SESSION":
                 pass  # Just uses the default if no session found.
             else:
                 raise e
 
-    # Create a regular Python UDTF and check for invalid handler class.
-    regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
+    eval_type: int = PythonEvalType.SQL_TABLE_UDF
 
-    if not arrow_enabled:
-        return regular_udtf
-
-    from pyspark.sql.pandas.utils import (
-        require_minimum_pandas_version,
-        require_minimum_pyarrow_version,
-    )
-
-    try:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-    except ImportError as e:
-        warnings.warn(
-            f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
-            f"Falling back to using regular Python UDTFs.",
-            UserWarning,
+    if arrow_enabled:
+        from pyspark.sql.pandas.utils import (
+            require_minimum_pandas_version,
+            require_minimum_pyarrow_version,
         )
-        return regular_udtf
 
-    from pyspark.sql.udtf import _vectorize_udtf
+        try:
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+            eval_type = PythonEvalType.SQL_ARROW_TABLE_UDF
+        except ImportError as e:
+            warnings.warn(
+                f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
+                f"Falling back to using regular Python UDTFs.",
+                UserWarning,
+            )
 
-    vectorized_udtf = _vectorize_udtf(cls)
-    return _create_udtf(
-        vectorized_udtf, returnType, name, PythonEvalType.SQL_ARROW_TABLE_UDF, deterministic
-    )
+    return _create_udtf(cls, returnType, name, eval_type, deterministic)
 
 
 class UserDefinedTableFunction:
@@ -129,7 +121,7 @@ class UserDefinedTableFunction:
         returnType: Optional[Union[StructType, str]],
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
-        deterministic: bool = True,
+        deterministic: bool = False,
     ) -> None:
         _validate_udtf_handler(func, returnType)
 
@@ -175,10 +167,10 @@ class UserDefinedTableFunction:
         session = SparkSession.active()
 
         plan = self._build_common_inline_user_defined_table_function(*args, **kwargs)
-        return DataFrame.withPlan(plan, session)
+        return DataFrame(plan, session)
 
-    def asNondeterministic(self) -> "UserDefinedTableFunction":
-        self.deterministic = False
+    def asDeterministic(self) -> "UserDefinedTableFunction":
+        self.deterministic = True
         return self
 
 

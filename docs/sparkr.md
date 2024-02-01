@@ -77,7 +77,7 @@ sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g
 
 The following Spark driver properties can be set in `sparkConfig` with `sparkR.session` from RStudio:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr></thead>
   <tr>
     <td><code>spark.master</code></td>
@@ -588,7 +588,7 @@ The following example shows how to save/load a MLlib model by SparkR.
 {% include_example read_write r/ml/ml.R %}
 
 # Data type mapping between R and Spark
-<table class="table table-striped">
+<table>
 <thead><tr><th>R</th><th>Spark</th></tr></thead>
 <tr>
   <td>byte</td>
@@ -728,7 +728,7 @@ function is masking another function.
 
 The following functions are masked by the SparkR package:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th>Masked function</th><th>How to Access</th></tr></thead>
   <tr>
     <td><code>cov</code> in <code>package:stats</code></td>

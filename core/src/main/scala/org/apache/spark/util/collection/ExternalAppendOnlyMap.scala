@@ -362,7 +362,7 @@ class ExternalAppendOnlyMap[K, V, C](
     private def removeFromBuffer[T](buffer: ArrayBuffer[T], index: Int): T = {
       val elem = buffer(index)
       buffer(index) = buffer(buffer.size - 1)  // This also works if index == buffer.size - 1
-      buffer.trimEnd(1)
+      buffer.dropRightInPlace(1)
       elem
     }
 
@@ -565,7 +565,7 @@ class ExternalAppendOnlyMap[K, V, C](
       if (hasSpilled) {
         false
       } else {
-        logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
+        logInfo(s"Task ${context.taskAttemptId()} force spilling in-memory map to disk and " +
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val nextUpstream = spillMemoryIteratorToDisk(upstream)
         assert(!upstream.hasNext)
@@ -581,7 +581,7 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     def toCompletionIterator: CompletionIterator[(K, C), SpillableIterator] = {
-      CompletionIterator[(K, C), SpillableIterator](this, this.destroy)
+      CompletionIterator[(K, C), SpillableIterator](this, this.destroy())
     }
 
     def readNext(): (K, C) = SPILL_LOCK.synchronized {
@@ -592,7 +592,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    override def hasNext(): Boolean = cur != null
+    override def hasNext: Boolean = cur != null
 
     override def next(): (K, C) = {
       val r = cur

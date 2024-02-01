@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWrapper}

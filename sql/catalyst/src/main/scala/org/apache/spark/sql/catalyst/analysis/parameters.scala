@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Literal, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
@@ -41,14 +41,16 @@ sealed trait Parameter extends LeafExpression with Unevaluable {
 }
 
 /**
- * The expression represents a named parameter that should be replaced by a literal.
+ * The expression represents a named parameter that should be replaced by a literal or
+ * collection constructor functions such as `map()`, `array()`, `struct()`.
  *
  * @param name The identifier of the parameter without the marker.
  */
 case class NamedParameter(name: String) extends Parameter
 
 /**
- * The expression represents a positional parameter that should be replaced by a literal.
+ * The expression represents a positional parameter that should be replaced by a literal or
+ * by collection constructor functions such as `map()`, `array()`, `struct()`.
  *
  * @param pos An unique position of the parameter in a SQL query text.
  */
@@ -68,22 +70,34 @@ abstract class ParameterizedQuery(child: LogicalPlan) extends UnresolvedUnaryNod
  * The logical plan representing a parameterized query with named parameters.
  *
  * @param child The parameterized logical plan.
- * @param args The map of parameter names to its literal values.
+ * @param argNames Argument names.
+ * @param argValues A sequence of argument values matched to argument names `argNames`.
  */
-case class NameParameterizedQuery(child: LogicalPlan, args: Map[String, Expression])
+case class NameParameterizedQuery(
+    child: LogicalPlan,
+    argNames: Seq[String],
+    argValues: Seq[Expression])
   extends ParameterizedQuery(child) {
-  assert(args.nonEmpty)
+  assert(argNames.nonEmpty && argValues.nonEmpty)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
+}
+
+object NameParameterizedQuery {
+  def apply(child: LogicalPlan, args: Map[String, Expression]): NameParameterizedQuery = {
+    val argsSeq = args.toSeq
+    new NameParameterizedQuery(child, argsSeq.map(_._1), argsSeq.map(_._2))
+  }
 }
 
 /**
  * The logical plan representing a parameterized query with positional parameters.
  *
  * @param child The parameterized logical plan.
- * @param args The literal values of positional parameters.
+ * @param args The literal values or collection constructor functions such as `map()`,
+ *             `array()`, `struct()` of positional parameters.
  */
-case class PosParameterizedQuery(child: LogicalPlan, args: Array[Expression])
+case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
@@ -91,12 +105,19 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Array[Expression])
 }
 
 /**
- * Finds all named parameters in `ParameterizedQuery` and substitutes them by literals from the
- * user-specified arguments.
+ * Finds all named parameters in `ParameterizedQuery` and substitutes them by literals or
+ * by collection constructor functions such as `map()`, `array()`, `struct()`
+ * from the user-specified arguments.
  */
 object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
-    args.find(!_._2.isInstanceOf[Literal]).foreach { case (name, expr) =>
+    def isNotAllowed(expr: Expression): Boolean = expr.exists {
+      case _: Literal | _: CreateArray | _: CreateNamedStruct |
+        _: CreateMap | _: MapFromArrays |  _: MapFromEntries | _: VariableReference => false
+      case a: Alias => isNotAllowed(a.child)
+      case _ => true
+    }
+    args.find(arg => isNotAllowed(arg._2)).foreach { case (name, expr) =>
       expr.failAnalysis(
         errorClass = "INVALID_SQL_ARG",
         messageParameters = Map("name" -> name))
@@ -119,11 +140,18 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
-      case p @ NameParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
+      case NameParameterizedQuery(child, argNames, argValues)
+        if !child.containsPattern(UNRESOLVED_WITH) && argValues.forall(_.resolved) =>
+        if (argNames.length != argValues.length) {
+          throw SparkException.internalError(s"The number of argument names ${argNames.length} " +
+            s"must be equal to the number of argument values ${argValues.length}.")
+        }
+        val args = argNames.zip(argValues).toMap
         checkArgs(args)
         bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
-      case p @ PosParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
+      case PosParameterizedQuery(child, args)
+        if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_.resolved) =>
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 

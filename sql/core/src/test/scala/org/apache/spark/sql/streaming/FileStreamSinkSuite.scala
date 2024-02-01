@@ -21,8 +21,8 @@ import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.JobContext
@@ -42,6 +42,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSinkSuite extends StreamTest {
@@ -212,7 +213,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
     // with aggregations using event time windows and watermark, which allows
     // aggregation + append mode.
     val inputData = MemoryStream[Long]
-    val inputDF = inputData.toDF.toDF("time")
+    val inputDF = inputData.toDF().toDF("time")
     val outputDf = inputDF
       .selectExpr("timestamp_seconds(time) AS timestamp")
       .withWatermark("timestamp", "10 seconds")
@@ -588,7 +589,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       "fs.file.impl.disable.cache" -> "true") {
       withTempDir { tempDir =>
         val path = new File(tempDir, "text").getCanonicalPath
-        Seq("foo").toDF.write.format("text").save(path)
+        Seq("foo").toDF().write.format("text").save(path)
         spark.read.format("text").load(path)
       }
     }
@@ -600,7 +601,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       "fs.file.impl.disable.cache" -> "true") {
       withTempDir { tempDir =>
         val path = new File(tempDir, "text").getCanonicalPath
-        Seq("foo").toDF.write.format("text").save(path)
+        Seq("foo").toDF().write.format("text").save(path)
         spark.read.format("text").load(path + "/*")
       }
     }
@@ -751,7 +752,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
       }.headOption.getOrElse {
         fail(s"No FileScan in query\n${df.queryExecution}")
       }
-      func(fileScan.planInputPartitions().map(_.asInstanceOf[FilePartition]))
+      func(fileScan.planInputPartitions().map(_.asInstanceOf[FilePartition]).toImmutableArraySeq)
     }
 
     // Read without pruning

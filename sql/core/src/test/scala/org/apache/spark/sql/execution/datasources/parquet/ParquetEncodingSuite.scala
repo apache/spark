@@ -20,7 +20,7 @@ import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
@@ -58,10 +58,10 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
   test("All Types Dictionary") {
     (1 :: 1000 :: Nil).foreach { n => {
       withTempPath { dir =>
-        List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
+        List.fill(n)(ROW).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
         val file = TestUtils.listDirectory(dir).head
 
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null)
@@ -87,11 +87,11 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
   test("All Types Null") {
     (1 :: 100 :: Nil).foreach { n => {
       withTempPath { dir =>
-        val data = List.fill(n)(NULL_ROW).toDF
+        val data = List.fill(n)(NULL_ROW).toDF()
         data.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = TestUtils.listDirectory(dir).head
 
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null)
@@ -125,7 +125,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
         val file = TestUtils.listDirectory(dir).head
 
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null /* set columns to null to project all columns */)

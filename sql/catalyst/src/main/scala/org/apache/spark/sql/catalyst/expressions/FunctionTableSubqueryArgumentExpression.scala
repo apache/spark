@@ -93,7 +93,7 @@ case class FunctionTableSubqueryArgumentExpression(
       newChildren: IndexedSeq[Expression]): FunctionTableSubqueryArgumentExpression =
     copy(outerAttrs = newChildren)
 
-  final override def nodePatternsInternal: Seq[TreePattern] =
+  final override def nodePatternsInternal(): Seq[TreePattern] =
     Seq(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)
 
   def hasRepartitioning: Boolean = withSinglePartition || partitionByExpressions.nonEmpty
@@ -163,21 +163,3 @@ case class FunctionTableSubqueryArgumentExpression(
 
   private lazy val subqueryOutputs: Map[Expression, Int] = plan.output.zipWithIndex.toMap
 }
-
-object FunctionTableSubqueryArgumentExpression {
-  /**
-   * Returns a sequence of zero-based integer indexes identifying the values of a Python UDTF's
-   * 'eval' method's *args list that correspond to partitioning columns of the input TABLE argument.
-   */
-  def partitionChildIndexes(udtfArguments: Seq[Expression]): Seq[Int] = {
-    udtfArguments.zipWithIndex.flatMap { case (expr, index) =>
-      expr match {
-        case f: FunctionTableSubqueryArgumentExpression =>
-          f.partitioningExpressionIndexes.map(_ + index)
-        case _ =>
-          Seq()
-      }
-    }
-  }
-}
-

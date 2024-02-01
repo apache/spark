@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
@@ -322,14 +322,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: bad magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenBadMagic))
-    // TODO assign a error-classes name
-    checkError(
-      exception = intercept[SparkException] {
-        sql("SELECT testcat.ns.strlen('abc')").collect()
-      },
-      errorClass = null,
-      parameters = Map.empty
-    )
+    intercept[UnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: bad magic method with default impl") {
@@ -341,7 +334,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: no implementation found") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenNoImpl))
-    intercept[SparkException](sql("SELECT testcat.ns.strlen('abc')").collect())
+    intercept[UnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: invalid parameter type or length") {
@@ -419,11 +412,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"),
       new JavaStrLen(new JavaStrLenNoImpl))
-    // TODO assign a error-classes name
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')").collect()),
-      errorClass = null,
-      parameters = Map.empty,
+      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      parameters = Map("scalarFunc" -> "strlen"),
       context = ExpectedContext(
         fragment = "testcat.ns.strlen('abc')",
         start = 7,
@@ -454,11 +446,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("SPARK-35390: scalar function w/ mismatch type parameters from magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(new JavaLongAddMismatchMagic))
-    // TODO assign a error-classes name
     checkError(
       exception = intercept[AnalysisException](sql("SELECT testcat.ns.add(1L, 2L)").collect()),
-      errorClass = null,
-      parameters = Map.empty,
+      errorClass = "_LEGACY_ERROR_TEMP_3055",
+      parameters = Map("scalarFunc" -> "long_add_mismatch_magic"),
       context = ExpectedContext(
         fragment = "testcat.ns.add(1L, 2L)",
         start = 7,
@@ -688,6 +679,16 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-44930: Fold deterministic ApplyFunctionExpression") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
+
+    val df1 = sql("SELECT testcat.ns.strlen('abc') as col1")
+    val df2 = sql("SELECT 3 as col1")
+    comparePlans(df1.queryExecution.optimizedPlan, df2.queryExecution.optimizedPlan)
+    checkAnswer(df1, Row(3) :: Nil)
+  }
+
   private case object StrLenDefault extends ScalarFunction[Int] {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
@@ -807,7 +808,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def description(): String = name()
 
     override def bind(inputType: StructType): BoundFunction = {
-      throw new UnsupportedOperationException(s"Not implemented")
+      throw SparkUnsupportedOperationException()
     }
   }
 }

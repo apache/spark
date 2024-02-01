@@ -149,6 +149,6 @@ object HyperLogLogPlusPlus {
     case Literal(d: Double, DoubleType) => d
     case Literal(dec: Decimal, _) => dec.toDouble
     case _ =>
-      throw QueryCompilationErrors.secondArgumentNotDoubleLiteralError
+      throw QueryCompilationErrors.secondArgumentNotDoubleLiteralError()
   }
 }

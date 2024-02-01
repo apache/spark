@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.PullOutNondeterministic
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
@@ -32,22 +31,8 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
     case upper @ Aggregate(_, _, lower: Aggregate) if isLowerRedundant(upper, lower) =>
-      val aliasMap = getAliasMap(lower)
-
-      val newAggregate = upper.copy(
-        child = lower.child,
-        groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
-        aggregateExpressions = upper.aggregateExpressions.map(
-          replaceAliasButKeepName(_, aliasMap))
-      )
-
-      // We might have introduces non-deterministic grouping expression
-      if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
-        PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
-      } else {
-        newAggregate
-      }
-
+      val projectList = lower.aggregateExpressions.filter(upper.references.contains(_))
+      upper.copy(child = Project(projectList, lower.child))
     case agg @ Aggregate(groupingExps, _, child)
         if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
       Project(agg.aggregateExpressions, child)

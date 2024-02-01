@@ -313,6 +313,7 @@ SELECT t1.x.y.* FROM t1
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
   "messageParameters" : {
     "columns" : "`i1`",
     "targetString" : "`t1`.`x`.`y`"
@@ -413,6 +414,7 @@ SELECT * FROM v1
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
     "colName" : "i1",
@@ -460,6 +462,7 @@ SELECT * FROM v2
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+  "sqlState" : "51024",
   "messageParameters" : {
     "actualCols" : "[]",
     "colName" : "i1",

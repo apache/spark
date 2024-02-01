@@ -19,15 +19,17 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object ArrowUtils {
 
@@ -52,13 +54,14 @@ private[sql] object ArrowUtils {
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType if timeZoneId == null =>
-      throw new IllegalStateException("Missing timezoneId where it is mandatory.")
+      throw SparkException.internalError("Missing timezoneId where it is mandatory.")
     case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
     case TimestampNTZType =>
       new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
     case NullType => ArrowType.Null.INSTANCE
     case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
     case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
+    case CalendarIntervalType => new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO)
     case _ =>
       throw ExecutionErrors.unsupportedDataTypeError(dt)
   }
@@ -85,6 +88,8 @@ private[sql] object ArrowUtils {
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType()
     case di: ArrowType.Duration if di.getUnit == TimeUnit.MICROSECOND => DayTimeIntervalType()
+    case ci: ArrowType.Interval
+      if ci.getUnit == IntervalUnit.MONTH_DAY_NANO => CalendarIntervalType
     case _ => throw ExecutionErrors.unsupportedArrowTypeError(dt)
   }
 
@@ -106,7 +111,7 @@ private[sql] object ArrowUtils {
         new Field(name, fieldType,
           fields.map { field =>
             toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes)
-          }.toSeq.asJava)
+          }.toImmutableArraySeq.asJava)
       case MapType(keyType, valueType, valueContainsNull) =>
         val mapType = new FieldType(nullable, new ArrowType.Map(false), null)
         // Note: Map Type struct can not be null, Struct Type key field can not be null
@@ -179,7 +184,7 @@ private[sql] object ArrowUtils {
         st.names
       } else {
         if (errorOnDuplicatedFieldNames) {
-          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(st.names)
+          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(st.names.toImmutableArraySeq)
         }
         val genNawName = st.names.groupBy(identity).map {
           case (name, names) if names.length > 1 =>

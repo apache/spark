@@ -22,8 +22,8 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.LongAdder
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -77,9 +78,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def get(key: UnsafeRow): UnsafeRow = map.get(key)
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
       map.iterator()
     }
 
@@ -89,7 +90,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"HDFSReadStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       map.prefixScan(prefixKey)
     }
   }
@@ -112,11 +114,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def get(key: UnsafeRow): UnsafeRow = {
+    override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+      throw new UnsupportedOperationException("Creating multiple column families with " +
+        "HDFSBackedStateStoreProvider is not supported")
+    }
+
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       mapToUpdate.get(key)
     }
 
-    override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
+    override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       require(value != null, "Cannot put a null value")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       val keyCopy = key.copy()
@@ -125,7 +132,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
-    override def remove(key: UnsafeRow): Unit = {
+    override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
@@ -135,17 +142,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
-      verify(state == UPDATING, "Cannot commit after already committed or aborted")
-
       try {
+        verify(state == UPDATING, "Cannot commit after already committed or aborted")
         commitUpdates(newVersion, mapToUpdate, compressedStream)
         state = COMMITTED
         logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
         newVersion
       } catch {
-        case NonFatal(e) =>
-          throw new IllegalStateException(
-            s"Error committing version $newVersion into $this", e)
+        case e: Throwable =>
+          throw QueryExecutionErrors.failedToCommitStateFileError(this.toString(), e)
       }
     }
 
@@ -166,9 +171,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(): Iterator[UnsafeRowPair] = mapToUpdate.iterator()
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = mapToUpdate.iterator()
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       mapToUpdate.prefixScan(prefixKey)
     }
 
@@ -238,6 +244,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     this.stateStoreId_ = stateStoreId
@@ -246,6 +253,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
+
+    // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
+    if (useColumnFamilies) {
+      throw new UnsupportedOperationException("Multiple column families are not supported with " +
+        s"HDFSBackedStateStoreProvider")
+    }
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
       (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
@@ -708,7 +721,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Fetch all the files that back the store */
   private def fetchFiles(): Seq[StoreFile] = {
     val files: Seq[FileStatus] = try {
-      fm.list(baseDir)
+      fm.list(baseDir).toImmutableArraySeq
     } catch {
       case _: java.io.FileNotFoundException =>
         Seq.empty

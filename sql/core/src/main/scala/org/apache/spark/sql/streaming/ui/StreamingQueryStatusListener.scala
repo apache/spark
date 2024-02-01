@@ -93,7 +93,7 @@ private[sql] class StreamingQueryStatusListener(
     progressIds.enqueue(getUniqueId(runId, batchId, timestamp))
     store.write(new StreamingQueryProgressWrapper(event.progress))
     while (progressIds.length > streamingProgressRetention) {
-      val uniqueId = progressIds.dequeue
+      val uniqueId = progressIds.dequeue()
       store.delete(classOf[StreamingQueryProgressWrapper], uniqueId)
     }
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
@@ -25,6 +25,8 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection}
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer}
+import org.apache.spark.sql.execution.ColumnarToRowExec
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation.clearSerializer
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -120,7 +122,8 @@ class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
   }
 }
 
-class CachedBatchSerializerSuite  extends QueryTest with SharedSparkSession {
+class CachedBatchSerializerSuite extends QueryTest
+  with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   override protected def sparkConf: SparkConf = {
@@ -149,6 +152,31 @@ class CachedBatchSerializerSuite  extends QueryTest with SharedSparkSession {
       val df = data.union(data)
       assert(df.count() == 6)
       checkAnswer(df, Row(100) :: Row(200) :: Row(300) :: Row(100) :: Row(200) :: Row(300) :: Nil)
+    }
+  }
+
+  test("SPARK-45632: Table cache should avoid unnecessary ColumnarToRow when enable AQE") {
+    withTempPath { workDir =>
+      val workDirPath = workDir.getAbsolutePath
+      Seq(100, 200, 300).toDF("c").write.parquet(workDirPath)
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+        val df = spark.read.parquet(workDirPath).cache()
+        assert(df.count() == 3)
+
+        val finalPlan = df.queryExecution.executedPlan
+        val tableCacheOpt = find(finalPlan) {
+          case i: InMemoryTableScanExec if i.relation.cacheBuilder.supportsColumnarInput => true
+          case _ => false
+        }
+        assert(tableCacheOpt.isDefined)
+        val tableCache = tableCacheOpt.get.asInstanceOf[InMemoryTableScanExec].relation.cachedPlan
+        assert(tableCache.isInstanceOf[AdaptiveSparkPlanExec])
+        assert(tableCache.asInstanceOf[AdaptiveSparkPlanExec].supportsColumnar)
+        assert(collect(tableCache) {
+          case _: ColumnarToRowExec => true
+        }.isEmpty)
+        df.unpersist()
+      }
     }
   }
 }

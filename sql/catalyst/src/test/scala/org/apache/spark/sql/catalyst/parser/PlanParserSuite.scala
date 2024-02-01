@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import scala.annotation.nowarn
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
@@ -1677,7 +1679,8 @@ class PlanParserSuite extends AnalysisTest {
           List.empty, List.empty, None, None, false)))
 
     // verify with ROW FORMAT DELIMETED
-    assertEqual(
+    @nowarn("cat=deprecation")
+    val sqlWithRowFormatDelimiters: String =
       """
         |SELECT TRANSFORM(a, b, c)
         |  ROW FORMAT DELIMITED
@@ -1694,7 +1697,9 @@ class PlanParserSuite extends AnalysisTest {
         |  LINES TERMINATED BY '\n'
         |  NULL DEFINED AS 'NULL'
         |FROM testData
-      """.stripMargin,
+      """.stripMargin
+    assertEqual(
+      sqlWithRowFormatDelimiters,
       ScriptTransformation(
         "cat",
         Seq(AttributeReference("a", StringType)(),
@@ -1807,38 +1812,62 @@ class PlanParserSuite extends AnalysisTest {
 
     assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col)",
-      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_CONT"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
-      PercentileCont(UnresolvedAttribute("col"),
-        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_CONT"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Descending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
-      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
+      UnresolvedFunction(
+        Seq("PERCENTILE_CONT"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))),
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col)",
-      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_DISC"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col DESC)",
-      PercentileDisc(UnresolvedAttribute("col"),
-        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+      UnresolvedFunction(
+        Seq("PERCENTILE_DISC"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        None,
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Descending)))
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
-      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
-        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
+      UnresolvedFunction(
+        Seq("PERCENTILE_DISC"),
+        Seq(Literal(Decimal(0.1), DecimalType(1, 1))),
+        false,
+        Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))),
+        orderingWithinGroup = Seq(SortOrder(UnresolvedAttribute("col"), Ascending)))
     )
   }
 
@@ -1892,5 +1921,16 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SELECT * FROM a LIMIT ?"),
       table("a").select(star()).limit(PosParameter(22)))
+  }
+
+  test("SPARK-45189: Creating UnresolvedRelation from TableIdentifier should include the" +
+    " catalog field") {
+    val tableId = TableIdentifier("t", Some("db"), Some("cat"))
+    val unresolvedRelation = UnresolvedRelation(tableId)
+    assert(unresolvedRelation.multipartIdentifier == Seq("cat", "db", "t"))
+    val unresolvedRelation2 = UnresolvedRelation(tableId, CaseInsensitiveStringMap.empty, true)
+    assert(unresolvedRelation2.multipartIdentifier == Seq("cat", "db", "t"))
+    assert(unresolvedRelation2.options == CaseInsensitiveStringMap.empty)
+    assert(unresolvedRelation2.isStreaming)
   }
 }

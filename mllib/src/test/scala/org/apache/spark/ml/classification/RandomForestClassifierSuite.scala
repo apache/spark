@@ -32,6 +32,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test suite for [[RandomForestClassifier]].
@@ -49,10 +50,12 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000))
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+          .toImmutableArraySeq)
         .map(_.asML)
     orderedLabeledPoints5_20 =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 5, 20))
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 5, 20)
+          .toImmutableArraySeq)
         .map(_.asML)
     binaryDataset = generateSVMInput(0.01, Array[Double](-1.5, 1.0), 1000, seed).toDF()
   }
@@ -108,7 +111,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0)),
       LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
     )
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val categoricalFeatures = Map(0 -> 3, 2 -> 2, 4 -> 4)
     val numClasses = 3
 
@@ -229,7 +232,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val data = TreeTests.getTwoTreesLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
-    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    val df = sc.parallelize(data.toImmutableArraySeq, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
@@ -314,7 +317,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
           arr(i) = new LabeledPoint(2.0, Vectors.dense(0.0, 2.0))
         }
       }
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val multinomialDataset = spark.createDataFrame(rdd)
 
     val rf = new RandomForestClassifier()

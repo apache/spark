@@ -38,12 +38,14 @@ object EventLogTestHelper {
   def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
     conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_ENABLE_ROLLING, false)
     conf.set(EVENT_LOG_BLOCK_UPDATES, true)
     conf.set(EVENT_LOG_TESTING, true)
     conf.set(EVENT_LOG_DIR, logDir.toString)
-    compressionCodec.foreach { codec =>
-      conf.set(EVENT_LOG_COMPRESS, true)
-      conf.set(EVENT_LOG_COMPRESSION_CODEC, codec)
+    conf.set(EVENT_LOG_COMPRESS, true)
+    compressionCodec match {
+      case Some(codec) => conf.set(EVENT_LOG_COMPRESSION_CODEC, codec)
+      case _ => conf.set(EVENT_LOG_COMPRESSION_CODEC, "None")
     }
     conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf
@@ -54,7 +56,7 @@ object EventLogTestHelper {
       eventStr: String,
       desiredSize: Long): Seq[String] = {
     val stringLen = eventStr.getBytes(StandardCharsets.UTF_8).length
-    val repeatCount = Math.floor(desiredSize / stringLen).toInt
+    val repeatCount = (desiredSize / stringLen).toInt
     (0 until repeatCount).map { _ =>
       writer.writeEvent(eventStr, flushLogger = true)
       eventStr

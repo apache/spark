@@ -29,12 +29,21 @@ See also :class:`SparkSession`.
     :toctree: api/
 
     SparkSession.active
+
+.. autosummary::
+    :toctree: api/
+    :template: autosummary/accessor_method.rst
+
     SparkSession.builder.appName
     SparkSession.builder.config
     SparkSession.builder.enableHiveSupport
     SparkSession.builder.getOrCreate
     SparkSession.builder.master
     SparkSession.builder.remote
+
+.. autosummary::
+    :toctree: api/
+
     SparkSession.catalog
     SparkSession.conf
     SparkSession.createDataFrame
@@ -58,8 +67,13 @@ Spark Connect Only
 
 .. autosummary::
     :toctree: api/
+    :template: autosummary/accessor_method.rst
 
     SparkSession.builder.create
+
+.. autosummary::
+    :toctree: api/
+
     SparkSession.addArtifact
     SparkSession.addArtifacts
     SparkSession.copyFromLocalToFs

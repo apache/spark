@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.ExecutorSummaryWrapper
@@ -137,7 +137,8 @@ private[protobuf] class ExecutorSummaryWrapperSerializer
       blacklistedInStages = binary.getBlacklistedInStagesList.asScala.map(_.toInt).toSet,
       peakMemoryMetrics = peakMemoryMetrics,
       attributes = binary.getAttributesMap.asScala.toMap,
-      resources = binary.getResourcesMap.asScala.mapValues(deserializeResourceInformation).toMap,
+      resources =
+        binary.getResourcesMap.asScala.toMap.transform((_, v) => deserializeResourceInformation(v)),
       resourceProfileId = binary.getResourceProfileId,
       isExcluded = binary.getIsExcluded,
       excludedInStages = binary.getExcludedInStagesList.asScala.map(_.toInt).toSet)

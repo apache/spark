@@ -19,8 +19,8 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, OffsetAndTimestamp}
@@ -32,6 +32,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class uses Kafka's own [[org.apache.kafka.clients.consumer.KafkaConsumer]] API to
@@ -465,7 +466,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
           val end = splitOffsetRanges.last.copy(untilOffset = untilOffsetsMap(tp))
           Seq(first) ++ splitOffsetRanges.drop(1).dropRight(1) :+ end
         }
-      }.toArray.toSeq
+      }.toArray.toImmutableArraySeq
     } else {
       offsetRangesBase
     }
@@ -535,7 +536,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList)
+    rangeCalculator.getRanges(ranges, getSortedExecutorList().toImmutableArraySeq)
   }
 
   private def partitionsAssignedToConsumer(

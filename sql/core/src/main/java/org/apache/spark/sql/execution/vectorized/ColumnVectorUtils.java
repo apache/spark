@@ -27,6 +27,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -38,6 +39,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Utilities to help manipulate data associate with ColumnVectors. These should be used mostly
@@ -75,8 +77,7 @@ public class ColumnVectorUtils {
       } else if (pdt instanceof PhysicalStringType) {
         UTF8String v = row.getUTF8String(fieldIdx);
         col.setUtf8String(v);
-      } else if (pdt instanceof PhysicalDecimalType) {
-        PhysicalDecimalType dt = (PhysicalDecimalType) pdt;
+      } else if (pdt instanceof PhysicalDecimalType dt) {
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           col.setInt((int)d.toUnscaledLong());
@@ -90,6 +91,8 @@ public class ColumnVectorUtils {
       } else if (pdt instanceof PhysicalCalendarIntervalType) {
         // The value of `numRows` is irrelevant.
         col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
+      } else if (pdt instanceof PhysicalVariantType) {
+        col.setVariant((VariantVal)row.get(fieldIdx, t));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
             " in column vectorized reader.", t.sql()));
@@ -125,7 +128,7 @@ public class ColumnVectorUtils {
 
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
-      if (t instanceof CalendarIntervalType) {
+      if (t instanceof CalendarIntervalType || t instanceof VariantType) {
         dst.appendStruct(true);
       } else {
         dst.appendNull();
@@ -151,8 +154,7 @@ public class ColumnVectorUtils {
       } else if (t == DataTypes.BinaryType) {
         byte[] b = (byte[]) o;
         dst.appendByteArray(b, 0, b.length);
-      } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType) t;
+      } else if (t instanceof DecimalType dt) {
         Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           dst.appendInt((int) d.toUnscaledLong());
@@ -169,6 +171,11 @@ public class ColumnVectorUtils {
         dst.getChild(0).appendInt(c.months);
         dst.getChild(1).appendInt(c.days);
         dst.getChild(2).appendLong(c.microseconds);
+      } else if (t instanceof VariantType) {
+        VariantVal v = (VariantVal) o;
+        dst.appendStruct(false);
+        dst.getChild(0).appendByteArray(v.getValue(), 0, v.getValue().length);
+        dst.getChild(1).appendByteArray(v.getMetadata(), 0, v.getMetadata().length);
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
       } else if (t instanceof TimestampType) {
@@ -176,14 +183,14 @@ public class ColumnVectorUtils {
       } else if (t instanceof TimestampNTZType) {
         dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
       } else {
-        throw new UnsupportedOperationException("Type " + t);
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", t.toString()));
       }
     }
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
-    if (t instanceof ArrayType) {
-      ArrayType at = (ArrayType)t;
+    if (t instanceof ArrayType at) {
       if (src.isNullAt(fieldIdx)) {
         dst.appendNull();
       } else {
@@ -193,8 +200,7 @@ public class ColumnVectorUtils {
           appendValue(dst.arrayData(), at.elementType(), o);
         }
       }
-    } else if (t instanceof StructType) {
-      StructType st = (StructType)t;
+    } else if (t instanceof StructType st) {
       if (src.isNullAt(fieldIdx)) {
         dst.appendStruct(true);
       } else {

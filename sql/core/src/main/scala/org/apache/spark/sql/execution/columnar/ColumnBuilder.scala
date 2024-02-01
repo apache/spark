@@ -82,7 +82,7 @@ private[columnar] class BasicColumnBuilder[JvmType](
         .order(ByteOrder.nativeOrder())
         .put(buffer.array(), 0, buffer.position())
     }
-    buffer.flip().asInstanceOf[ByteBuffer]
+    buffer.flip()
   }
 }
 

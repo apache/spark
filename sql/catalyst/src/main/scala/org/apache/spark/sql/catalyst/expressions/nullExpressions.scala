@@ -70,6 +70,10 @@ case class Coalesce(children: Seq[Expression])
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
 
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): Coalesce = {
+    withNewChildrenInternal(alwaysEvaluatedInputs.toIndexedSeq ++ children.drop(1))
+  }
+
   override def branchGroups: Seq[Seq[Expression]] = if (children.length > 1) {
     // If there is only one child, the first child is already covered by
     // `alwaysEvaluatedInputs` and we should exclude it here.
@@ -154,7 +158,11 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
-    this(left, right, If(EqualTo(left, right), Literal.create(null, left.dataType), left))
+    this(left, right, {
+      val commonExpr = CommonExpressionDef(left)
+      val ref = new CommonExpressionRef(commonExpr)
+      With(If(EqualTo(ref, right), Literal.create(null, left.dataType), ref), Seq(commonExpr))
+    })
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)
@@ -285,6 +293,10 @@ case class NaNvl(left: Expression, right: Expression)
    * the right child will not be accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = left :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): NaNvl = {
+    copy(left = alwaysEvaluatedInputs.head)
+  }
 
   override def branchGroups: Seq[Seq[Expression]] = Seq(children)
 

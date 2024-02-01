@@ -23,6 +23,7 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -51,7 +52,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udf.example.UDFExampleAdd2"),
           Array(
             AttributeReference("a", IntegerType, nullable = false)(),
-            AttributeReference("b", IntegerType, nullable = false)()))
+            AttributeReference("b", IntegerType, nullable = false)()).toImmutableArraySeq)
       }),
 
     // GenericUDF
@@ -67,7 +68,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveGenericUDF(
           "default.generic_udf_trim2",
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udf.example.GenericUDFTrim2"),
-          Array(AttributeReference("a", StringType, nullable = false)())
+          Array(AttributeReference("a", StringType, nullable = false)()).toImmutableArraySeq
         )
       }
     ),
@@ -89,7 +90,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveUDAFFunction(
           "default.generic_udaf_sum2",
           HiveFunctionWrapper("org.apache.hadoop.hive.ql.udf.generic.GenericUDAFSum2"),
-          Array(AttributeReference("a", IntegerType, nullable = false)())
+          Array(AttributeReference("a", IntegerType, nullable = false)()).toImmutableArraySeq
         )
       }
     ),
@@ -111,7 +112,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveUDAFFunction(
           "default.udaf_max2",
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax2"),
-          Array(AttributeReference("a", IntegerType, nullable = false)()),
+          Array(AttributeReference("a", IntegerType, nullable = false)()).toImmutableArraySeq,
           isUDAFBridgeRequired = true
         )
       }
@@ -133,11 +134,11 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveGenericUDTF(
           "default.udtf_count3",
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udtf.example.GenericUDTFCount3"),
-          Array.empty[Expression]
+          Array.empty[Expression].toImmutableArraySeq
         )
       }
     )
-  )
+  ).toImmutableArraySeq
 
   udfTestInfos.foreach { udfInfo =>
     // The test jars are built from below commit:

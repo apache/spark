@@ -106,7 +106,7 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
     val metrics = getMetrics(dataset)
 
     $(metricName) match {
-      case ("silhouette") => metrics.silhouette
+      case ("silhouette") => metrics.silhouette()
       case (other) =>
         throw new IllegalArgumentException(s"No support for metric $other")
     }

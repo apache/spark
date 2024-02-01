@@ -20,7 +20,7 @@ import java.lang.Math.sqrt
 import java.util.{Map => JMap}
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
@@ -150,14 +150,15 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
    * Since we will choose only first item, the duplication is okay.
    */
   private def outliersFromMultipleDimensions(listWithoutDriver: Seq[v1.ExecutorSummary]) =
-    outliers(listWithoutDriver.filter(_.totalTasks > 0), e => e.totalDuration / e.totalTasks) ++
-      outliers(listWithoutDriver, e => e.totalDuration) ++
-      outliers(listWithoutDriver, e => e.totalGCTime) ++
-      outliers(listWithoutDriver, e => e.failedTasks) ++
-      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMHeapMemory")) ++
-      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory")) ++
-      outliers(listWithoutDriver, e => e.totalShuffleWrite) ++
-      outliers(listWithoutDriver, e => e.diskUsed)
+    outliers(listWithoutDriver.filter(_.totalTasks > 0),
+      e => (e.totalDuration / e.totalTasks).toFloat) ++
+      outliers(listWithoutDriver, e => e.totalDuration.toFloat) ++
+      outliers(listWithoutDriver, e => e.totalGCTime.toFloat) ++
+      outliers(listWithoutDriver, e => e.failedTasks.toFloat) ++
+      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMHeapMemory").toFloat) ++
+      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory").toFloat) ++
+      outliers(listWithoutDriver, e => e.totalShuffleWrite.toFloat) ++
+      outliers(listWithoutDriver, e => e.diskUsed.toFloat)
 
   /**
    * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is

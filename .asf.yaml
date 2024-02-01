@@ -36,3 +36,4 @@ notifications:
   pullrequests: reviews@spark.apache.org
   issues: reviews@spark.apache.org
   commits: commits@spark.apache.org
+  jira_options: link label

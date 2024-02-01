@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf.sql
 import java.lang.{Long => JLong}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row

@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.WrappedArray
+import scala.collection.immutable
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
@@ -107,7 +108,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("MapObjects should make copies of unsafe-backed data") {
     // test UnsafeRow-backed data
-    val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]
+    val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]()
     val structInputRow = InternalRow.fromSeq(Seq(Array((1, 2), (3, 4))))
     val structExpected = new GenericArrayData(
       Array(InternalRow.fromSeq(Seq(1, 2)), InternalRow.fromSeq(Seq(3, 4))))
@@ -115,7 +116,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       structEncoder.serializer.head, structExpected, structInputRow)
 
     // test UnsafeArray-backed data
-    val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]
+    val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]()
     val arrayInputRow = InternalRow.fromSeq(Seq(Array(Array(1, 2), Array(3, 4))))
     val arrayExpected = new GenericArrayData(
       Array(new GenericArrayData(Array(1, 2)), new GenericArrayData(Array(3, 4))))
@@ -123,7 +124,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       arrayEncoder.serializer.head, arrayExpected, arrayInputRow)
 
     // test UnsafeMap-backed data
-    val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]
+    val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]()
     val mapInputRow = InternalRow.fromSeq(Seq(Array(
       Map(1 -> 100, 2 -> 200), Map(3 -> 300, 4 -> 400))))
     val mapExpected = new GenericArrayData(Seq(
@@ -299,7 +300,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   // by scala values instead of catalyst values.
   private def checkObjectExprEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     checkEvaluationWithoutCodegen(expr, expected, inputRow)
@@ -361,8 +362,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
         case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
           assert(result.asInstanceOf[java.util.List[_]].asScala == expected)
-        case a if classOf[WrappedArray[Int]].isAssignableFrom(a) =>
-          assert(result == WrappedArray.make[Int](expected.toArray))
+        case s if classOf[java.util.Set[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[java.util.Set[_]].asScala == expected.toSet)
+        case a if classOf[mutable.ArraySeq[Int]].isAssignableFrom(a) =>
+          assert(result == mutable.ArraySeq.make[Int](expected.toArray))
+        case a if classOf[immutable.ArraySeq[Int]].isAssignableFrom(a) =>
+          assert(result.isInstanceOf[immutable.ArraySeq[_]])
+          assert(result == immutable.ArraySeq.unsafeWrapArray[Int](expected.toArray))
         case s if classOf[Seq[_]].isAssignableFrom(s) =>
           assert(result.asInstanceOf[Seq[_]] == expected)
         case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
@@ -370,11 +376,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    val customCollectionClasses = Seq(classOf[WrappedArray[Int]],
+    val customCollectionClasses = Seq(
+      classOf[mutable.ArraySeq[Int]], classOf[immutable.ArraySeq[Int]],
       classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
       classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
       classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
-      classOf[java.util.Stack[Int]], null)
+      classOf[java.util.Stack[Int]], null,
+      classOf[java.util.Set[Int]])
 
     val list = new java.util.ArrayList[Int]()
     list.add(1)
@@ -391,7 +399,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     stack.add(3)
 
     Seq(
-      (Seq(1, 2, 3), ObjectType(classOf[WrappedArray[Int]])),
+      (Seq(1, 2, 3), ObjectType(classOf[mutable.ArraySeq[Int]])),
+      (Seq(1, 2, 3), ObjectType(classOf[immutable.ArraySeq[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),
       (Array(1, 2, 3), ObjectType(classOf[Array[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Object])),
@@ -404,11 +413,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
 
       // Unsupported custom collection class
-      val errMsg = intercept[RuntimeException] {
-        testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
-      }.getMessage()
-      assert(errMsg.contains("`scala.collection.Map` is not supported by `MapObjects` " +
-        "as resulting collection."))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
+        },
+        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        parameters = Map("cls" -> "scala.collection.Map"))
     }
   }
 
@@ -491,7 +501,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  implicit private def mapIntStrEncoder = ExpressionEncoder[Map[Int, String]]()
+  implicit private def mapIntStrEncoder: ExpressionEncoder[Map[Int, String]] =
+    ExpressionEncoder[Map[Int, String]]()
 
   test("SPARK-23588 CatalystToExternalMap should support interpreted execution") {
     // To get a resolved `CatalystToExternalMap` expression, we build a deserializer plan

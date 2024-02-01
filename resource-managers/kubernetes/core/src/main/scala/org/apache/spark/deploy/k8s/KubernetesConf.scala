@@ -117,6 +117,7 @@ private[spark] class KubernetesDriverConf(
 
   override def annotations: Map[String, String] = {
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
+      .map { case (k, v) => (k, Utils.substituteAppNExecIds(v, appId, "")) }
   }
 
   def serviceLabels: Map[String, String] = {
@@ -188,6 +189,7 @@ private[spark] class KubernetesExecutorConf(
 
   override def annotations: Map[String, String] = {
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
+      .map { case(k, v) => (k, Utils.substituteAppNExecIds(v, appId, executorId)) }
   }
 
   override def secretNamesToMountPaths: Map[String, String] = {

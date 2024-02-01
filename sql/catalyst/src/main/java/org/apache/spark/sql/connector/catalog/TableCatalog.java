@@ -170,10 +170,10 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Create a table in the catalog.
    * <p>
-   * This is deprecated. Please override
+   * @deprecated This is deprecated. Please override
    * {@link #createTable(Identifier, Column[], Transform[], Map)} instead.
    */
-  @Deprecated
+  @Deprecated(since = "3.4.0")
   Table createTable(
       Identifier ident,
       StructType schema,
@@ -187,7 +187,9 @@ public interface TableCatalog extends CatalogPlugin {
    * @param columns the columns of the new table.
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if getting the metadata for the new table
+   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
@@ -221,7 +223,9 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @param changes changes to apply to the table
-   * @return updated metadata for the table
+   * @return updated metadata for the table. This can be null if getting the metadata for the
+   *         updated table is expensive. Spark always discard the returned table here.
+   *
    * @throws NoSuchTableException If the table doesn't exist or is a view
    * @throws IllegalArgumentException If any change is rejected by the implementation.
    */

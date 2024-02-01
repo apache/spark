@@ -32,6 +32,7 @@ import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -143,15 +144,15 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
   }
 
   def logNamedValue(name: String, value: Array[String]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(compact(render(name -> compact(render(value.toImmutableArraySeq)))))
   }
 
   def logNamedValue(name: String, value: Array[Long]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(compact(render(name -> compact(render(value.toImmutableArraySeq)))))
   }
 
   def logNamedValue(name: String, value: Array[Double]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(compact(render(name -> compact(render(value.toImmutableArraySeq)))))
   }
 
 

@@ -23,9 +23,9 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{SparkSession, SQLHelper}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
-import org.apache.spark.sql.connect.client.util.QueryTest
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 case class ClickEvent(id: String, timestamp: Timestamp)

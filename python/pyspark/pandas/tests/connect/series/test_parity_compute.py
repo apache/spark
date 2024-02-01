@@ -21,12 +21,12 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesParityComputeTests(SeriesComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
+class SeriesParityComputeTests(
+    SeriesComputeMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_factorize(self):
-        super().test_factorize()
 
 
 if __name__ == "__main__":

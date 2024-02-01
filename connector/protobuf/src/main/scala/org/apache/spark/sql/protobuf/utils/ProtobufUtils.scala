@@ -22,7 +22,7 @@ import java.io.FileNotFoundException
 import java.nio.file.NoSuchFileException
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
@@ -75,7 +75,7 @@ private[sql] object ProtobufUtils extends Logging {
     private[this] val protoFieldArray = descriptor.getFields.asScala.toArray
     private[this] val fieldMap = descriptor.getFields.asScala
       .groupBy(_.getName.toLowerCase(Locale.ROOT))
-      .mapValues(_.toSeq) // toSeq needed for scala 2.13
+      .transform((_, v) => v.toSeq) // toSeq needed for scala 2.13
 
     /** The fields which have matching equivalents in both Protobuf and Catalyst schemas. */
     val matchedFields: Seq[ProtoMatchedField] = catalystSchema.zipWithIndex.flatMap {

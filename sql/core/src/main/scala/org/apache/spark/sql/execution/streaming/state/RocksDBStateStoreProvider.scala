@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -46,9 +48,15 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
-    override def get(key: UnsafeRow): UnsafeRow = {
+    override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+      verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
+        s"Failed to create column family with reserved_name=$colFamilyName")
+      rocksDB.createColFamilyIfAbsent(colFamilyName)
+    }
+
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
-      val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key)))
+      val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key), colFamilyName))
       if (!isValidated && value != null) {
         StateStoreProvider.validateStateRowFormat(
           key, keySchema, value, valueSchema, storeConf)
@@ -57,21 +65,21 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
-    override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
+    override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
-      rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value))
+      rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value), colFamilyName)
     }
 
-    override def remove(key: UnsafeRow): Unit = {
+    override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
-      rocksDB.remove(encoder.encodeKey(key))
+      rocksDB.remove(encoder.encodeKey(key), colFamilyName)
     }
 
-    override def iterator(): Iterator[UnsafeRowPair] = {
-      rocksDB.iterator().map { kv =>
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+      rocksDB.iterator(colFamilyName).map { kv =>
         val rowPair = encoder.decode(kv)
         if (!isValidated && rowPair.value != null) {
           StateStoreProvider.validateStateRowFormat(
@@ -82,19 +90,25 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       require(encoder.supportPrefixKeyScan, "Prefix scan requires setting prefix key!")
 
       val prefix = encoder.encodePrefixKey(prefixKey)
-      rocksDB.prefixScan(prefix).map(kv => encoder.decode(kv))
+      rocksDB.prefixScan(prefix, colFamilyName).map(kv => encoder.decode(kv))
     }
 
     override def commit(): Long = synchronized {
-      verify(state == UPDATING, "Cannot commit after already committed or aborted")
-      val newVersion = rocksDB.commit()
-      state = COMMITTED
-      logInfo(s"Committed $newVersion for $id")
-      newVersion
+      try {
+        verify(state == UPDATING, "Cannot commit after already committed or aborted")
+        val newVersion = rocksDB.commit()
+        state = COMMITTED
+        logInfo(s"Committed $newVersion for $id")
+        newVersion
+      } catch {
+        case e: Throwable =>
+          throw QueryExecutionErrors.failedToCommitStateFileError(this.toString(), e)
+      }
     }
 
     override def abort(): Unit = {
@@ -105,54 +119,65 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def metrics: StateStoreMetrics = {
-      val rocksDBMetrics = rocksDB.metrics
-      def commitLatencyMs(typ: String): Long = rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
-      def nativeOpsLatencyMillis(typ: String): Long = {
-        rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
-      }
-      def sumNativeOpsLatencyMillis(typ: String): Long = {
-        rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.sum / 1000).getOrElse(0)
-      }
-      def nativeOpsCount(typ: String): Long = {
-        rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.count).getOrElse(0)
-      }
-      def nativeOpsMetrics(typ: String): Long = {
-        rocksDBMetrics.nativeOpsMetrics.getOrElse(typ, 0)
-      }
+      val rocksDBMetricsOpt = rocksDB.metricsOpt
 
-      val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
-        CUSTOM_METRIC_SST_FILE_SIZE -> rocksDBMetrics.totalSSTFilesBytes,
-        CUSTOM_METRIC_GET_TIME -> sumNativeOpsLatencyMillis("get"),
-        CUSTOM_METRIC_PUT_TIME -> sumNativeOpsLatencyMillis("put"),
-        CUSTOM_METRIC_GET_COUNT -> nativeOpsCount("get"),
-        CUSTOM_METRIC_PUT_COUNT -> nativeOpsCount("put"),
-        CUSTOM_METRIC_WRITEBATCH_TIME -> commitLatencyMs("writeBatch"),
-        CUSTOM_METRIC_FLUSH_TIME -> commitLatencyMs("flush"),
-        CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
-        CUSTOM_METRIC_PAUSE_TIME -> commitLatencyMs("pauseBg"),
-        CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
-        CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
-        CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
-        CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
-        CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
-        CUSTOM_METRIC_BLOCK_CACHE_MISS -> nativeOpsMetrics("readBlockCacheMissCount"),
-        CUSTOM_METRIC_BLOCK_CACHE_HITS -> nativeOpsMetrics("readBlockCacheHitCount"),
-        CUSTOM_METRIC_BYTES_READ -> nativeOpsMetrics("totalBytesRead"),
-        CUSTOM_METRIC_BYTES_WRITTEN -> nativeOpsMetrics("totalBytesWritten"),
-        CUSTOM_METRIC_ITERATOR_BYTES_READ -> nativeOpsMetrics("totalBytesReadThroughIterator"),
-        CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
-        CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
-        CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
-        CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
-        CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
-        CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage
-      ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
-        Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
+      if (rocksDBMetricsOpt.isDefined) {
+        val rocksDBMetrics = rocksDBMetricsOpt.get
 
-      StateStoreMetrics(
-        rocksDBMetrics.numUncommittedKeys,
-        rocksDBMetrics.totalMemUsageBytes,
-        stateStoreCustomMetrics)
+        def commitLatencyMs(typ: String): Long =
+          rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
+
+        def nativeOpsLatencyMillis(typ: String): Long = {
+          rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
+        }
+
+        def sumNativeOpsLatencyMillis(typ: String): Long = {
+          rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.sum / 1000).getOrElse(0)
+        }
+
+        def nativeOpsCount(typ: String): Long = {
+          rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.count).getOrElse(0)
+        }
+
+        def nativeOpsMetrics(typ: String): Long = {
+          rocksDBMetrics.nativeOpsMetrics.getOrElse(typ, 0)
+        }
+
+        val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
+          CUSTOM_METRIC_SST_FILE_SIZE -> rocksDBMetrics.totalSSTFilesBytes,
+          CUSTOM_METRIC_GET_TIME -> sumNativeOpsLatencyMillis("get"),
+          CUSTOM_METRIC_PUT_TIME -> sumNativeOpsLatencyMillis("put"),
+          CUSTOM_METRIC_GET_COUNT -> nativeOpsCount("get"),
+          CUSTOM_METRIC_PUT_COUNT -> nativeOpsCount("put"),
+          CUSTOM_METRIC_FLUSH_TIME -> commitLatencyMs("flush"),
+          CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
+          CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
+          CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
+          CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
+          CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
+          CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
+          CUSTOM_METRIC_BLOCK_CACHE_MISS -> nativeOpsMetrics("readBlockCacheMissCount"),
+          CUSTOM_METRIC_BLOCK_CACHE_HITS -> nativeOpsMetrics("readBlockCacheHitCount"),
+          CUSTOM_METRIC_BYTES_READ -> nativeOpsMetrics("totalBytesRead"),
+          CUSTOM_METRIC_BYTES_WRITTEN -> nativeOpsMetrics("totalBytesWritten"),
+          CUSTOM_METRIC_ITERATOR_BYTES_READ -> nativeOpsMetrics("totalBytesReadThroughIterator"),
+          CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
+          CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
+          CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
+          CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
+          CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
+          CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage
+        ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
+          Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
+
+        StateStoreMetrics(
+          rocksDBMetrics.numUncommittedKeys,
+          rocksDBMetrics.totalMemUsageBytes,
+          stateStoreCustomMetrics)
+      } else {
+        logInfo(s"Failed to collect metrics for store_id=$id and version=$version")
+        StateStoreMetrics(0, 0, Map.empty)
+      }
     }
 
     override def hasCommitted: Boolean = state == COMMITTED
@@ -171,6 +196,7 @@ private[sql] class RocksDBStateStoreProvider
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     this.stateStoreId_ = stateStoreId
@@ -178,6 +204,7 @@ private[sql] class RocksDBStateStoreProvider
     this.valueSchema = valueSchema
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
+    this.useColumnFamilies = useColumnFamilies
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
       (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
@@ -217,7 +244,15 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
-    rocksDB.doMaintenance()
+    try {
+      rocksDB.doMaintenance()
+    } catch {
+      // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
+      // maintenance thread and streaming aggregation operator
+      case NonFatal(ex) =>
+        logWarning(s"Ignoring error while performing maintenance operations with exception=",
+          ex)
+    }
   }
 
   override def close(): Unit = {
@@ -235,6 +270,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
+  @volatile private var useColumnFamilies: Boolean = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -242,7 +278,8 @@ private[sql] class RocksDBStateStoreProvider
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr)
+    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+      useColumnFamilies)
   }
 
   @volatile private var encoder: RocksDBStateEncoder = _
@@ -270,14 +307,10 @@ object RocksDBStateStoreProvider {
     "rocksdbPutCount", "RocksDB: number of put calls")
 
   // Commit latency detailed breakdown
-  val CUSTOM_METRIC_WRITEBATCH_TIME = StateStoreCustomTimingMetric(
-    "rocksdbCommitWriteBatchLatency", "RocksDB: commit - write batch time")
   val CUSTOM_METRIC_FLUSH_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitFlushLatency", "RocksDB: commit - flush time")
   val CUSTOM_METRIC_COMMIT_COMPACT_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitCompactLatency", "RocksDB: commit - compact time")
-  val CUSTOM_METRIC_PAUSE_TIME = StateStoreCustomTimingMetric(
-    "rocksdbCommitPauseLatency", "RocksDB: commit - pause bg time")
   val CUSTOM_METRIC_CHECKPOINT_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitCheckpointLatency", "RocksDB: commit - checkpoint time")
   val CUSTOM_METRIC_FILESYNC_TIME = StateStoreCustomTimingMetric(
@@ -332,8 +365,8 @@ object RocksDBStateStoreProvider {
 
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
-    CUSTOM_METRIC_WRITEBATCH_TIME, CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
-    CUSTOM_METRIC_PAUSE_TIME, CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
+    CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
+    CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
     CUSTOM_METRIC_BYTES_COPIED, CUSTOM_METRIC_FILES_COPIED, CUSTOM_METRIC_FILES_REUSED,
     CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
     CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,

@@ -4712,7 +4712,7 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
   "sqlState" : "42601",
@@ -4774,7 +4774,7 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
   "sqlState" : "42601",

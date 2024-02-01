@@ -14,33 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
+
 import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Missing data handling'
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.pandas/frame.html#missing-data-handling
 class FrameMissingDataMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_backfill(self):
         pdf = pd.DataFrame(
             {
@@ -53,28 +40,12 @@ class FrameMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(pdf.backfill(), psdf.backfill())
+        self.assert_eq(pdf.backfill(), psdf.backfill())
 
-            # Test `inplace=True`
-            pdf.backfill(inplace=True)
-            psdf.backfill(inplace=True)
-            self.assert_eq(pdf, psdf)
-        else:
-            expected = ps.DataFrame(
-                {
-                    "A": [3.0, 3.0, None, None],
-                    "B": [2.0, 4.0, 3.0, 3.0],
-                    "C": [1.0, 1.0, 1.0, 1.0],
-                    "D": [0, 1, 5, 4],
-                },
-                columns=["A", "B", "C", "D"],
-            )
-            self.assert_eq(expected, psdf.backfill())
-
-            # Test `inplace=True`
-            psdf.backfill(inplace=True)
-            self.assert_eq(expected, psdf)
+        # Test `inplace=True`
+        pdf.backfill(inplace=True)
+        psdf.backfill(inplace=True)
+        self.assert_eq(pdf, psdf)
 
     def _test_dropna(self, pdf, axis):
         psdf = ps.from_pandas(pdf)
@@ -235,9 +206,7 @@ class FrameMissingDataMixin:
         pdf.fillna({"x": -1, "y": -2, "z": -5}, inplace=True)
         psdf.fillna({"x": -1, "y": -2, "z": -5}, inplace=True)
         self.assert_eq(psdf, pdf)
-        # Skip due to pandas bug: https://github.com/pandas-dev/pandas/issues/47188
-        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
-            self.assert_eq(psser, pser)
+        self.assert_eq(psser, pser)
 
         pser = pdf.z
         psser = psdf.z
@@ -287,15 +256,13 @@ class FrameMissingDataMixin:
         self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
         self.assert_eq(pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2))
 
-        # See also: https://github.com/pandas-dev/pandas/issues/47649
-        if LooseVersion("1.4.3") != LooseVersion(pd.__version__):
-            self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
-            self.assert_eq(
-                psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
-            )
-            self.assert_eq(
-                psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
-            )
+        self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
+        self.assert_eq(
+            psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
+        )
+        self.assert_eq(
+            psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
+        )
 
         # check multi index
         pdf = pdf.set_index([("x", "a"), ("x", "b")])
@@ -480,31 +447,19 @@ class FrameMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(pdf.pad(), psdf.pad())
+        self.assert_eq(pdf.pad(), psdf.pad())
 
-            # Test `inplace=True`
-            pdf.pad(inplace=True)
-            psdf.pad(inplace=True)
-            self.assert_eq(pdf, psdf)
-        else:
-            expected = ps.DataFrame(
-                {
-                    "A": [None, 3, 3, 3],
-                    "B": [2.0, 4.0, 4.0, 3.0],
-                    "C": [None, None, None, 1],
-                    "D": [0, 1, 5, 4],
-                },
-                columns=["A", "B", "C", "D"],
-            )
-            self.assert_eq(expected, psdf.pad())
-
-            # Test `inplace=True`
-            psdf.pad(inplace=True)
-            self.assert_eq(expected, psdf)
+        # Test `inplace=True`
+        pdf.pad(inplace=True)
+        psdf.pad(inplace=True)
+        self.assert_eq(pdf, psdf)
 
 
-class FrameMissingDataTests(FrameMissingDataMixin, ComparisonTestBase, SQLTestUtils):
+class FrameMissingDataTests(
+    FrameMissingDataMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

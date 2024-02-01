@@ -264,7 +264,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   test("SPARK-19841: watermarkPredicate should filter based on keys") {
     val input = MemoryStream[(Int, Int)]
-    val df = input.toDS.toDF("time", "id")
+    val df = input.toDS().toDF("time", "id")
       .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id", "time") // Change the column positions
@@ -283,7 +283,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   test("SPARK-21546: dropDuplicates should ignore watermark when it's not a key") {
     val input = MemoryStream[(Int, Int)]
-    val df = input.toDS.toDF("id", "time")
+    val df = input.toDS().toDF("id", "time")
       .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id")

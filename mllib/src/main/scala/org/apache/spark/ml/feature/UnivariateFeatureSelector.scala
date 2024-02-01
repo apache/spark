@@ -32,6 +32,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -179,11 +180,11 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
 
     val resultDF = ($(featureType), $(labelType)) match {
       case ("categorical", "categorical") =>
-        ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+        ChiSquareTest.test(dataset.toDF(), getFeaturesCol, getLabelCol, true)
       case ("continuous", "categorical") =>
-        ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+        ANOVATest.test(dataset.toDF(), getFeaturesCol, getLabelCol, true)
       case ("continuous", "continuous") =>
-        FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+        FValueTest.test(dataset.toDF(), getFeaturesCol, getLabelCol, true)
       case _ =>
         throw new IllegalArgumentException(s"Unsupported combination:" +
           s" featureType=${$(featureType)}, labelType=${$(labelType)}")
@@ -227,7 +228,7 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
         val maxIndex = resultDF.sort("pValue", "featureIndex")
           .select("pValue")
           .as[Double].rdd
-          .zipWithIndex
+          .zipWithIndex()
           .flatMap { case (pValue, index) =>
             if (pValue <= f * (index + 1)) {
               Iterator.single(index.toInt)
@@ -349,7 +350,7 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.selectedFeatures.toSeq)
+      val data = Data(instance.selectedFeatures.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }

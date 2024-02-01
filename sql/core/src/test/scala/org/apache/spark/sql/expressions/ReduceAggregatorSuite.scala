@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
@@ -72,7 +72,7 @@ class ReduceAggregatorSuite extends SparkFunSuite {
     val func = (v1: Int, v2: Int) => v1 + v2
     val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func)(Encoders.scalaInt)
 
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       aggregator.finish(aggregator.zero)
     }
   }

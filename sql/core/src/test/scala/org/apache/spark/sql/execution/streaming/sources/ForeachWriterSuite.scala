@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeAndAfter {
 
@@ -310,7 +311,7 @@ object ForeachWriterSuite {
   }
 
   def allEvents(): Seq[Seq[Event]] = {
-    _allEvents.toArray(new Array[Seq[Event]](_allEvents.size()))
+    _allEvents.toArray(new Array[Seq[Event]](_allEvents.size())).toImmutableArraySeq
   }
 
   def clear(): Unit = {

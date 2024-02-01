@@ -29,7 +29,5 @@ SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1
 SCALA_VER=`grep "scala.version" "${SPARK_HOME}/pom.xml" | grep ${SCALA_BINARY_VER} | head -n1 | awk -F '[<>]' '{print $3}'`
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
-# Build the jars needed for spark submit and spark connect
-build/sbt "${SCALA_ARG}" -Phive -Pconnect package || exit 1
-# Build the jars needed for spark connect JVM client
-build/sbt "${SCALA_ARG}" "sql/package;connect-client-jvm/assembly" || exit 1
+# Build the jars needed for spark submit and spark connect JVM client
+build/sbt "${SCALA_ARG}" -Phive -Pconnect package "connect-client-jvm/package" || exit 1

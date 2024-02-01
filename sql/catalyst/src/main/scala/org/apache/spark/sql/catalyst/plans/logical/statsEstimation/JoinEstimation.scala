@@ -206,13 +206,12 @@ case class JoinEstimation(join: Join) extends Logging {
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
-        keyStatsAfterJoin += (
+        keyStatsAfterJoin +=
           // Histograms are propagated as unchanged. During future estimation, they should be
           // truncated by the updated max/min. In this way, only pointers of the histograms are
           // propagated and thus reduce memory consumption.
-          leftKey -> joinStat.copy(histogram = leftKeyStat.histogram),
-          rightKey -> joinStat.copy(histogram = rightKeyStat.histogram)
-        )
+          (leftKey -> joinStat.copy(histogram = leftKeyStat.histogram)) +=
+            (rightKey -> joinStat.copy(histogram = rightKeyStat.histogram))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {

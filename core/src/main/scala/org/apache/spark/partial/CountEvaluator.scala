@@ -35,7 +35,7 @@ private[spark] class CountEvaluator(totalOutputs: Int, confidence: Double)
 
   override def currentResult(): BoundedDouble = {
     if (outputsMerged == totalOutputs) {
-      new BoundedDouble(sum, 1.0, sum, sum)
+      new BoundedDouble(sum.toDouble, 1.0, sum.toDouble, sum.toDouble)
     } else if (outputsMerged == 0 || sum == 0) {
       new BoundedDouble(0, 0.0, 0.0, Double.PositiveInfinity)
     } else {
@@ -57,7 +57,8 @@ private[partial] object CountEvaluator {
     val low = dist.inverseCumulativeProbability((1 - confidence) / 2)
     val high = dist.inverseCumulativeProbability((1 + confidence) / 2)
     // Add 'sum' to each because distribution is just of remaining count, not observed
-    new BoundedDouble(sum + dist.getNumericalMean, confidence, sum + low, sum + high)
+    new BoundedDouble(
+      sum + dist.getNumericalMean, confidence, (sum + low).toDouble, (sum + high).toDouble)
   }
 
 

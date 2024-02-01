@@ -29,10 +29,10 @@ import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, WrappedArray}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{Cache, CacheBuilder, RemovalListener, RemovalNotification}
@@ -51,8 +51,10 @@ import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.SerializerHelper
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class IsolatedSessionState(
   val sessionUUID: String,
@@ -66,9 +68,8 @@ private[spark] class IsolatedSessionState(
 /**
  * Spark executor, backed by a threadpool to run tasks.
  *
- * This can be used with Mesos, YARN, kubernetes and the standalone scheduler.
- * An internal RPC interface is used for communication with the driver,
- * except in the case of Mesos fine-grained mode.
+ * This can be used with YARN, kubernetes and the standalone scheduler.
+ * An internal RPC interface is used for communication with the driver.
  */
 private[spark] class Executor(
     executorId: String,
@@ -324,18 +325,26 @@ private[spark] class Executor(
   private val Seq(initialUserJars, initialUserFiles, initialUserArchives) =
     Seq("jar", "file", "archive").map { key =>
       conf.getOption(s"spark.app.initial.$key.urls").map { urls =>
-        immutable.Map(urls.split(",").map(url => (url, appStartTime)): _*)
+        import org.apache.spark.util.ArrayImplicits._
+        immutable.Map(urls.split(",").map(url => (url, appStartTime)).toImmutableArraySeq: _*)
       }.getOrElse(immutable.Map.empty)
     }
   updateDependencies(initialUserFiles, initialUserJars, initialUserArchives, defaultSessionState)
 
-  // Plugins need to load using a class loader that includes the executor's user classpath.
-  // Plugins also needs to be initialized after the heartbeater started
-  // to avoid blocking to send heartbeat (see SPARK-32175).
+  // Plugins and shuffle managers need to load using a class loader that includes the executor's
+  // user classpath. Plugins also needs to be initialized after the heartbeater started
+  // to avoid blocking to send heartbeat (see SPARK-32175 and SPARK-45762).
   private val plugins: Option[PluginContainer] =
     Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
       PluginContainer(env, resources.asJava)
     }
+
+  // Skip local mode because the ShuffleManager is already initialized
+  if (!isLocal) {
+    Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
+      env.initializeShuffleManager()
+    }
+  }
 
   metricsPoller.start()
 
@@ -610,13 +619,17 @@ private[spark] class Executor(
           threadMXBean.getCurrentThreadCpuTime
         } else 0L
         var threwException = true
+        // Convert resources amounts info to ResourceInformation
+        val resources = taskDescription.resources.map { case (rName, addressesAmounts) =>
+          rName -> new ResourceInformation(rName, addressesAmounts.keys.toSeq.sorted.toArray)
+        }
         val value = Utils.tryWithSafeFinally {
           val res = task.run(
             taskAttemptId = taskId,
             attemptNumber = taskDescription.attemptNumber,
             metricsSystem = env.metricsSystem,
             cpus = taskDescription.cpus,
-            resources = taskDescription.resources,
+            resources = resources,
             plugins = plugins)
           threwException = false
           res
@@ -741,10 +754,10 @@ private[spark] class Executor(
           logInfo(s"Executor killed $taskName, reason: ${t.reason}")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
-          // without requiring a copy.
-          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val reason = TaskKilled(t.reason, accUpdates, accums, metricPeaks.toSeq)
+          // Here and below, put task metric peaks in an immutable.ArraySeq to expose them as an
+          // immutable.Seq without requiring a copy.
+          val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId).toImmutableArraySeq
+          val reason = TaskKilled(t.reason, accUpdates, accums, metricPeaks)
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
@@ -754,8 +767,8 @@ private[spark] class Executor(
           logInfo(s"Executor interrupted and killed $taskName, reason: $killReason")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val reason = TaskKilled(killReason, accUpdates, accums, metricPeaks.toSeq)
+          val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId).toImmutableArraySeq
+          val reason = TaskKilled(killReason, accUpdates, accums, metricPeaks)
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
@@ -798,18 +811,18 @@ private[spark] class Executor(
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-            val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+            val metricPeaks = metricsPoller.getTaskMetricPeaks(taskId).toImmutableArraySeq
 
             val (taskFailureReason, serializedTaskFailureReason) = {
               try {
                 val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
-                  .withMetricPeaks(metricPeaks.toSeq)
+                  .withMetricPeaks(metricPeaks)
                 (ef, ser.serialize(ef))
               } catch {
                 case _: NotSerializableException =>
                   // t is not serializable so just send the stacktrace
                   val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
-                    .withMetricPeaks(metricPeaks.toSeq)
+                    .withMetricPeaks(metricPeaks)
                   (ef, ser.serialize(ef))
               }
             }
@@ -885,6 +898,10 @@ private[spark] class Executor(
 
     private def hasFetchFailure: Boolean = {
       task != null && task.context != null && task.context.fetchFailed.isDefined
+    }
+
+    private[executor] def theadDump(): Option[ThreadStackTrace] = {
+      Utils.getThreadDumpForThread(getThreadId)
     }
   }
 
@@ -979,9 +996,9 @@ private[spark] class Executor(
             logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
             if (takeThreadDump) {
               try {
-                Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
+                taskRunner.theadDump().foreach { thread =>
                   if (thread.threadName == taskRunner.threadName) {
-                    logWarning(s"Thread dump from task $taskId:\n${thread.stackTrace}")
+                    logWarning(s"Thread dump from task $taskId:\n${thread.toString}")
                   }
                 }
               } catch {
@@ -1232,6 +1249,16 @@ private[spark] class Executor(
             s"more than $HEARTBEAT_MAX_FAILURES times")
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }
+    }
+  }
+
+  def getTaskThreadDump(taskId: Long): Option[ThreadStackTrace] = {
+    val runner = runningTasks.get(taskId)
+    if (runner != null) {
+      runner.theadDump()
+    } else {
+      logWarning(s"Failed to dump thread for task $taskId")
+      None
     }
   }
 }

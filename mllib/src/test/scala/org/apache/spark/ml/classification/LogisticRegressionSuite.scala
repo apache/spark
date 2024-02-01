@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -160,20 +160,20 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
    */
   ignore("export test data into CSV format") {
     binaryDataset.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+      s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
     binaryDatasetWithSmallVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+      s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDatasetWithSmallVar")
     multinomialDataset.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+      s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
     multinomialDatasetWithSmallVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+        s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1)
      .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithSmallVar")
     multinomialDatasetWithZeroVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-        l + "," + w + "," + f.toArray.mkString(",")
+        s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1)
      .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithZeroVar")
   }
@@ -2587,7 +2587,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       blorModel.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
     assert(blorSummary.areaUnderROC === sameBlorSummary.areaUnderROC)
     assert(blorSummary.roc.collect() === sameBlorSummary.roc.collect())
-    assert(blorSummary.pr.collect === sameBlorSummary.pr.collect())
+    assert(blorSummary.pr.collect() === sameBlorSummary.pr.collect())
     assert(
       blorSummary.fMeasureByThreshold.collect() === sameBlorSummary.fMeasureByThreshold.collect())
     assert(
@@ -3143,7 +3143,7 @@ object LogisticRegressionSuite {
         for (i <- 0 until nClasses) {
           if (p < probs(i)) {
             y = i
-            break
+            break()
           }
         }
       }

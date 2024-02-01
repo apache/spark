@@ -30,6 +30,10 @@ class DataSourcesParityTests(DataSourcesTestsMixin, ReusedConnectTestCase):
     def test_json_sampling_ratio(self):
         super().test_json_sampling_ratio()
 
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_xml_sampling_ratio(self):
+        super().test_xml_sampling_ratio()
+
 
 if __name__ == "__main__":
     import unittest

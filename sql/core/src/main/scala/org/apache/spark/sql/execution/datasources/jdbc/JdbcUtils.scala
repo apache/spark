@@ -20,15 +20,14 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
 import java.util
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkThrowable, TaskContext}
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
@@ -47,6 +46,7 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDiale
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
 /**
@@ -78,7 +78,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
-    executeStatement(conn, options, s"DROP TABLE $table")
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.dropTable(table))
   }
 
   /**
@@ -114,22 +115,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
       isCaseSensitive: Boolean,
       dialect: JdbcDialect): String = {
     val columns = if (tableSchema.isEmpty) {
-      rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
+      rddSchema.fields
     } else {
       // The generated insert statement needs to follow rddSchema's column sequence and
       // tableSchema's column names. When appending data into some case-sensitive DBMSs like
       // PostgreSQL/Oracle, we need to respect the existing case-sensitive column names instead of
       // RDD column names for user convenience.
-      val tableColumnNames = tableSchema.get.fieldNames
       rddSchema.fields.map { col =>
-        val normalizedName = tableColumnNames.find(f => conf.resolver(f, col.name)).getOrElse {
+        tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
           throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
         }
-        dialect.quoteIdentifier(normalizedName)
-      }.mkString(",")
+      }
     }
-    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
-    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    dialect.insertIntoTable(table, columns)
   }
 
   /**
@@ -187,6 +185,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
+    case java.sql.Types.CHAR if conf.charVarcharAsString => StringType
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
@@ -216,6 +215,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.TIMESTAMP => TimestampType
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
+    case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
     case _ =>
       // For unmatched types:
@@ -340,7 +340,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
-      private[this] val mutableRow = new SpecificInternalRow(schema.fields.map(x => x.dataType))
+      private[this] val mutableRow =
+        new SpecificInternalRow(schema.fields.map(x => x.dataType).toImmutableArraySeq)
 
       override protected def close(): Unit = {
         try {
@@ -453,7 +454,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case StringType if metadata.contains("rowid") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(pos, UTF8String.fromString(rs.getRowId(pos + 1).toString))
+        val rawRowId = rs.getRowId(pos + 1)
+        if (rawRowId == null) {
+          row.update(pos, null)
+        } else {
+          row.update(pos, UTF8String.fromString(rawRowId.toString))
+        }
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -630,8 +636,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case ArrayType(et, _) =>
       // remove type length parameters from end of type name
-      val typeName = getJdbcType(et, dialect).databaseTypeDefinition
-        .toLowerCase(Locale.ROOT).split("\\(")(0)
+      val typeName = getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0)
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         val array = conn.createArrayOf(
           typeName,
@@ -893,7 +898,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition { iterator => savePartition(
+    repartitionedDF.foreachPartition { iterator => savePartition(
       table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }
@@ -1129,8 +1134,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
           if (containsIndexTypeIgnoreCase(supportedIndexTypeList, v)) {
             indexType = s"USING $v"
           } else {
-            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
-              s" The supported Index Types are: ${supportedIndexTypeList.mkString(" AND ")}")
+            throw new SparkUnsupportedOperationException(
+              errorClass = "_LEGACY_ERROR_TEMP_3175",
+              messageParameters = Map(
+                "v" -> v,
+                "supportedIndexTypeList" -> supportedIndexTypeList.mkString(" AND ")))
           }
         } else {
           indexPropertyList.append(s"$k = $v")
@@ -1142,8 +1150,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
   def containsIndexTypeIgnoreCase(supportedIndexTypeList: Array[String], value: String): Boolean = {
     if (supportedIndexTypeList.isEmpty) {
-      throw new UnsupportedOperationException(
-        "Cannot specify 'USING index_type' in 'CREATE INDEX'")
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3173")
     }
     for (indexType <- supportedIndexTypeList) {
       if (value.equalsIgnoreCase(indexType)) return true
@@ -1175,12 +1182,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def classifyException[T](message: String, dialect: JdbcDialect)(f: => T): T = {
+  def classifyException[T](
+      errorClass: String,
+      messageParameters: Map[String, String],
+      dialect: JdbcDialect,
+      description: String)(f: => T): T = {
     try {
       f
     } catch {
       case e: SparkThrowable with Throwable => throw e
-      case e: Throwable => throw dialect.classifyException(message, e)
+      case e: Throwable =>
+        throw dialect.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

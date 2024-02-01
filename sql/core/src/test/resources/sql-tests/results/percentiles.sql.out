@@ -115,6 +115,309 @@ struct<median(v):double,percentile(v, 0.5, 1):double,percentile_cont(0.5) WITHIN
 
 -- !query
 SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`round`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 46,
+    "fragment" : "round(v, 0) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  round(v, 0) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`round`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 68,
+    "fragment" : "round(v, 0) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`percentile`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 53,
+    "fragment" : "percentile(v, 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile(v, 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "prettyName" : "`percentile`",
+    "syntax" : "WITHIN GROUP (ORDER BY ...)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 75,
+    "fragment" : "percentile(v, 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 64,
+    "fragment" : "percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 86,
+    "fragment" : "percentile_cont(DISTINCT 0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 52,
+    "fragment" : "percentile_cont() WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont() WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 74,
+    "fragment" : "percentile_cont() WITHIN GROUP (ORDER BY v) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 29,
+    "fragment" : "percentile_cont(0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5) OVER (PARTITION BY k)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 51,
+    "fragment" : "percentile_cont(0.5) OVER (PARTITION BY k)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY k, v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "expectedNum" : "1",
+    "funcName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY k, v)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  percentile_cont(k, 0.5) WITHIN GROUP (ORDER BY v)
+FROM aggr
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`percentile_cont`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "percentile_cont(k, 0.5) WITHIN GROUP (ORDER BY v)"
+  } ]
+}
+
+
+-- !query
+SELECT
   k,
   median(v),
   percentile(v, 0.5),
@@ -180,6 +483,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -208,6 +512,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -235,6 +540,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },
@@ -263,6 +569,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -291,6 +598,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -318,6 +626,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },
@@ -410,6 +719,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -439,6 +749,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -467,6 +778,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },
@@ -496,6 +808,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
@@ -525,6 +838,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
@@ -553,6 +867,7 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "aggFunc" : "\"median(salary)\""
   },
@@ -730,3 +1045,146 @@ struct<k:int,median(dt2):interval day to second,percentile(dt2, 0.5, 1):interval
 2	0 00:22:30.000000000	0 00:22:30.000000000	0 00:22:30.000000000
 3	0 01:00:00.000000000	0 01:00:00.000000000	0 01:00:00.000000000
 4	NULL	NULL	NULL
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	0.0	0.0	0.0	1.0	1.0	1.0	1.0	1.0
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1), (2) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	0.0	1.0	1.0	1.0	2.0	2.0	2.0	2.0
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1), (2), (3), (4) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	1.0	1.0	2.0	2.0	3.0	3.0	4.0	4.0
+
+
+-- !query
+SET spark.sql.legacy.percentileDiscCalculation = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.percentileDiscCalculation	true
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1), (2), (3), (4) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	1.0	1.0	2.0	2.0	2.0	3.0	3.0	4.0
+
+
+-- !query
+SELECT
+  percentile_cont(b) WITHIN GROUP (ORDER BY a DESC) as p0
+FROM values (12, 0.25), (13, 0.25), (22, 0.25) as v(a, b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"b\"",
+    "inputName" : "`percentage`",
+    "inputType" : "\"DOUBLE\"",
+    "sqlExpr" : "\"percentile_cont(a, b)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 58,
+    "fragment" : "percentile_cont(b) WITHIN GROUP (ORDER BY a DESC)"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.legacy.percentileDiscCalculation = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.percentileDiscCalculation	false

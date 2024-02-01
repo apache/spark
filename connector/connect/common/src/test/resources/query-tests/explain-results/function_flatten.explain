@@ -1,2 +1,2 @@
-Project [flatten(array(cast(e#0 as array<bigint>), sequence(cast(1 as bigint), cast(10 as bigint), Some(cast(1 as bigint)), Some(America/Los_Angeles)))) AS flatten(array(e, sequence(1, 10, 1)))#0]
+Project [flatten(array(e#0, sequence(1, 10, None, Some(America/Los_Angeles)))) AS flatten(array(e, sequence(1, 10)))#0]
 +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

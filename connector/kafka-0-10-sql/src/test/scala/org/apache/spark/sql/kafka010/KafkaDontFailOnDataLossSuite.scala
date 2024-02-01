@@ -47,7 +47,7 @@ trait KafkaMissingOffsetsTest extends SharedSparkSession {
 
   protected var testUtils: KafkaTestUtils = _
 
-  override def createSparkSession(): TestSparkSession = {
+  override def createSparkSession: TestSparkSession = {
     // Set maxRetries to 3 to handle NPE from `poll` when deleting a topic
     new TestSparkSession(new SparkContext("local[2,3]", "test-sql-context", sparkConf))
   }

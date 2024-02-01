@@ -25,7 +25,7 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -113,7 +113,8 @@ object AgnosticEncoders {
   // This supports both Product and DefinedByConstructorParams
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
-      override val fields: Seq[EncoderField]) extends StructEncoder[K]
+      override val fields: Seq[EncoderField],
+      outerPointerGetter: Option[() => AnyRef]) extends StructEncoder[K]
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
@@ -123,7 +124,7 @@ object AgnosticEncoders {
       }
       val cls = cachedCls.computeIfAbsent(encoders.size,
         _ => SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
-      ProductEncoder[Any](ClassTag(cls), fields)
+      ProductEncoder[Any](ClassTag(cls), fields, None)
     }
 
     private[sql] def isTuple(tag: ClassTag[_]): Boolean = {
@@ -215,6 +216,7 @@ object AgnosticEncoders {
   case object CalendarIntervalEncoder extends LeafEncoder[CalendarInterval](CalendarIntervalType)
   case object DayTimeIntervalEncoder extends LeafEncoder[Duration](DayTimeIntervalType())
   case object YearMonthIntervalEncoder extends LeafEncoder[Period](YearMonthIntervalType())
+  case object VariantEncoder extends LeafEncoder[VariantVal](VariantType)
   case class DateEncoder(override val lenientSerialization: Boolean)
     extends LeafEncoder[jsql.Date](DateType)
   case class LocalDateEncoder(override val lenientSerialization: Boolean)

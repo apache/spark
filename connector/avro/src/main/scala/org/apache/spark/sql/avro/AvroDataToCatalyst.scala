@@ -39,7 +39,10 @@ private[sql] case class AvroDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(expectedSchema, options).dataType
+    val dt = SchemaConverters.toSqlType(
+      expectedSchema,
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -61,7 +64,12 @@ private[sql] case class AvroDataToCatalyst(
   @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
 
   @transient private lazy val deserializer =
-    new AvroDeserializer(expectedSchema, dataType, avroOptions.datetimeRebaseModeInRead)
+    new AvroDeserializer(
+      expectedSchema,
+      dataType,
+      avroOptions.datetimeRebaseModeInRead,
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType)
 
   @transient private var decoder: BinaryDecoder = _
 
@@ -70,14 +78,14 @@ private[sql] case class AvroDataToCatalyst(
   @transient private lazy val parseMode: ParseMode = {
     val mode = avroOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new AnalysisException(unacceptableModeMessage(mode.name))
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3085",
+        messageParameters = Map(
+          "name" -> mode.name,
+          "permissiveMode" -> PermissiveMode.name,
+          "failFastMode" -> FailFastMode.name))
     }
     mode
-  }
-
-  private def unacceptableModeMessage(name: String): String = {
-    s"from_avro() doesn't support the $name mode. " +
-      s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}."
   }
 
   @transient private lazy val nullResultRow: Any = dataType match {
@@ -113,7 +121,12 @@ private[sql] case class AvroDataToCatalyst(
             s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
             "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
         case _ =>
-          throw new AnalysisException(unacceptableModeMessage(parseMode.name))
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3085",
+            messageParameters = Map(
+              "name" -> parseMode.name,
+              "permissiveMode" -> PermissiveMode.name,
+              "failFastMode" -> FailFastMode.name))
       }
     }
   }

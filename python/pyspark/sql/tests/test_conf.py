@@ -16,7 +16,7 @@
 #
 from decimal import Decimal
 
-from pyspark.errors import IllegalArgumentException
+from pyspark.errors import IllegalArgumentException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -62,6 +62,18 @@ class ConfTestsMixin:
 
         with self.assertRaises(Exception):
             spark.conf.set("foo", Decimal(1))
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            spark.conf.get(123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={
+                "arg_name": "key",
+                "arg_type": "int",
+            },
+        )
 
         spark.conf.unset("foo")
 

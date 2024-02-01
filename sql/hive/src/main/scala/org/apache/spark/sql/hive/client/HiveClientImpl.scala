@@ -24,9 +24,9 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{HashMap => JHashMap, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -115,12 +115,6 @@ private[hive] class HiveClientImpl(
   private val outputBuffer = new CircularBuffer()
 
   private val shim = version match {
-    case hive.v12 => new Shim_v0_12()
-    case hive.v13 => new Shim_v0_13()
-    case hive.v14 => new Shim_v0_14()
-    case hive.v1_0 => new Shim_v1_0()
-    case hive.v1_1 => new Shim_v1_1()
-    case hive.v1_2 => new Shim_v1_2()
     case hive.v2_0 => new Shim_v2_0()
     case hive.v2_1 => new Shim_v2_1()
     case hive.v2_2 => new Shim_v2_2()
@@ -848,7 +842,7 @@ private[hive] class HiveClientImpl(
     val maxResults = 100000
     val results = runHive(sql, maxResults)
     // It is very confusing when you only get back some of the results...
-    if (results.size == maxResults) throw new IllegalStateException("RESULTS POSSIBLY TRUNCATED")
+    if (results.size == maxResults) throw SparkException.internalError("RESULTS POSSIBLY TRUNCATED")
     results
   }
 
@@ -1291,7 +1285,7 @@ private[hive] object HiveClientImpl extends Logging {
   def newHiveConf(
       sparkConf: SparkConf,
       hadoopConf: JIterable[JMap.Entry[String, String]],
-      extraConfig: Map[String, String],
+      extraConfig: Map[String, String] = Map.empty,
       classLoader: Option[ClassLoader] = None): HiveConf = {
     val hiveConf = new HiveConf(classOf[SessionState])
     // HiveConf is a Hadoop Configuration, which has a field of classLoader and
@@ -1324,10 +1318,11 @@ private[hive] object HiveClientImpl extends Logging {
         " false to disable useless hive logic")
       hiveConf.setBoolean("hive.session.history.enabled", false)
     }
-    // If this is tez engine, SessionState.start might bring extra logic to initialize tez stuff,
-    // which is useless for spark.
-    if (hiveConf.get("hive.execution.engine") == "tez") {
-      logWarning("Detected HiveConf hive.execution.engine is 'tez' and will be reset to 'mr'" +
+    // If this is non-mr engine, e.g. spark, tez, SessionState.start might bring extra logic to
+    // initialize spark or tez stuff, which is useless for spark.
+    val engine = hiveConf.get("hive.execution.engine")
+    if (engine != "mr") {
+      logWarning(s"Detected HiveConf hive.execution.engine is '$engine' and will be reset to 'mr'" +
         " to disable useless hive logic")
       hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
     }

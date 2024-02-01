@@ -35,6 +35,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Create or replace a view with given query plan. This command will generate some view-specific
@@ -146,7 +147,7 @@ case class CreateViewCommand(
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
       } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-        throw QueryCompilationErrors.tableIsNotViewError(name, replace)
+        throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(name, replace)
       } else if (replace) {
         // Detect cyclic view reference on CREATE OR REPLACE VIEW.
         val viewIdent = tableMetadata.identifier
@@ -167,7 +168,7 @@ case class CreateViewCommand(
       }
     } else {
       // Create the view if it doesn't exist.
-      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
+      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = allowExisting)
     }
     Seq.empty[Row]
   }
@@ -496,14 +497,15 @@ object ViewHelper extends SQLConfHelper with Logging {
 
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
-    SchemaUtils.checkColumnNameDuplication(fieldNames, conf.resolver)
+    SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq, conf.resolver)
 
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
-      catalogAndNamespaceToProps(manager.currentCatalog.name, manager.currentNamespace) ++
+      catalogAndNamespaceToProps(
+        manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf) ++
-      generateQueryColumnNames(queryOutput) ++
+      generateQueryColumnNames(queryOutput.toImmutableArraySeq) ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames)
   }
 

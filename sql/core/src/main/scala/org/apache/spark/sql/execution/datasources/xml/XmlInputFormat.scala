@@ -27,6 +27,8 @@ import org.apache.hadoop.io.compress._
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit, TextInputFormat}
 
+import org.apache.spark.sql.catalyst.xml.XmlOptions
+
 /**
  * Reads records that are delimited by a specific start/end tag.
  */

@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSy
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
@@ -296,7 +297,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   private def readFromResource(dir: String): Seq[SinkFileStatus] = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, input.toString)
-    log.allFiles()
+    log.allFiles().toImmutableArraySeq
   }
 
   private def withCountOpenLocalFileSystemAsLocalFileSystem(body: => Unit): Unit = {
@@ -331,7 +332,7 @@ class CountOpenLocalFileSystem extends RawLocalFileSystem {
 }
 
 object CountOpenLocalFileSystem {
-  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt)}fs"
+  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt())}fs"
   val pathToNumOpenCalled = new ConcurrentHashMap[String, JLong]
 
   def resetCount(): Unit = pathToNumOpenCalled.clear()

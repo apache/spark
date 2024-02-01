@@ -20,8 +20,6 @@ package org.apache.spark.internal.config
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-
 import org.apache.spark.network.util.ByteUnit
 
 private[spark] object UI {
@@ -95,14 +93,22 @@ private[spark] object UI {
     .createWithDefault(true)
 
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
+    .doc("Whether to show a link for executor thread dumps in Stages and Executor pages.")
     .version("1.2.0")
     .booleanConf
     .createWithDefault(true)
 
+  val UI_FLAMEGRAPH_ENABLED = ConfigBuilder("spark.ui.threadDump.flamegraphEnabled")
+    .doc("Whether to render the Flamegraph for executor thread dumps")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
+    .doc("Whether to show a link for executor heap histogram in Executor page.")
     .version("3.5.0")
     .booleanConf
-    .createWithDefault(SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_11))
+    .createWithDefault(true)
 
   val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
     .internal()
@@ -110,7 +116,7 @@ private[spark] object UI {
       "For master/worker/driver metrics, you need to configure `conf/metrics.properties`.")
     .version("3.0.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
     .doc("Value for HTTP X-XSS-Protection response header")
@@ -235,6 +241,7 @@ private[spark] object UI {
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(Set("ALLOW", "LOCAL", "DENY"))
     .createWithDefault("LOCAL")
 
   val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
@@ -243,4 +250,11 @@ private[spark] object UI {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val UI_JETTY_STOP_TIMEOUT = ConfigBuilder("spark.ui.jettyStopTimeout")
+    .internal()
+    .doc("Timeout for Jetty servers started in UIs, such as SparkUI, HistoryUI, etc, to stop.")
+    .version("4.0.0")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefaultString("30s")
 }

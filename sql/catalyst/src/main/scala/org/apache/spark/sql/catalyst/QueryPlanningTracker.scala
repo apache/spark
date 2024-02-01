@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.BoundedPriorityQueue

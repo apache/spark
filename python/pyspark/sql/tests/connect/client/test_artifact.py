@@ -20,6 +20,7 @@ import tempfile
 import unittest
 import os
 
+from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
@@ -28,7 +29,7 @@ from pyspark.sql.functions import udf
 
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
-    from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark.sql.connect.client import DefaultChannelBuilder
 
 
 class ArtifactTestsMixin:
@@ -53,8 +54,29 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_pyfile(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
+
+    def test_artifacts_cannot_be_overwritten(self):
+        with tempfile.TemporaryDirectory() as d:
+            pyfile_path = os.path.join(d, "my_pyfile.py")
+            with open(pyfile_path, "w+") as f:
+                f.write("my_func = lambda: 10")
+
+            self.spark.addArtifacts(pyfile_path, pyfile=True)
+
+            # Writing the same file twice is fine, and should not throw.
+            self.spark.addArtifacts(pyfile_path, pyfile=True)
+
+            with open(pyfile_path, "w+") as f:
+                f.write("my_func = lambda: 11")
+
+            with self.assertRaisesRegex(
+                SparkConnectGrpcException, "\\(java.lang.RuntimeException\\) Duplicate Artifact"
+            ):
+                self.spark.addArtifacts(pyfile_path, pyfile=True)
 
     def check_add_zipped_package(self, spark_session):
         with tempfile.TemporaryDirectory() as d:
@@ -80,7 +102,9 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_zipped_package(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
 
     def check_add_archive(self, spark_session):
@@ -114,7 +138,9 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_archive(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
 
     def check_add_file(self, spark_session):
@@ -142,7 +168,9 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_file(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
 
 
@@ -183,7 +211,7 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
     def conf(cls):
         conf = super().conf()
-        conf.set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+        conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
         return conf
 
     def test_basic_requests(self):
@@ -387,6 +415,13 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         actualHash = self.artifact_manager.cache_artifact(blob)
         self.assertEqual(actualHash, expected_hash)
         self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
+
+    def test_add_not_existing_artifact(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(FileNotFoundError):
+                self.artifact_manager.add_artifacts(
+                    os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
+                )
 
 
 class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):

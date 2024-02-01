@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Resolves the catalog of the name parts for table/view/function/namespace.
@@ -46,20 +49,28 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndIdentifier(catalog, identifier) = nameParts
         ResolvedIdentifier(catalog, identifier)
       }
-    case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-    case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-    case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-    case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
-      s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-    case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
-      a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-    case UnresolvedNamespace(Seq()) =>
-      ResolvedNamespace(currentCatalog, Seq.empty[String])
-    case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
-      ResolvedNamespace(catalog, ns)
+
+    case CurrentNamespace =>
+      ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
+    case UnresolvedNamespace(Seq(), fetchMetadata) =>
+      resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
+    case UnresolvedNamespace(CatalogAndNamespace(catalog, ns), fetchMetadata) =>
+      resolveNamespace(catalog, ns, fetchMetadata)
+  }
+
+  private def resolveNamespace(
+      catalog: CatalogPlugin,
+      ns: Seq[String],
+      fetchMetadata: Boolean): ResolvedNamespace = {
+    catalog match {
+      case supportsNS: SupportsNamespaces if fetchMetadata =>
+        ResolvedNamespace(
+          catalog,
+          ns,
+          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
+      case _ =>
+        ResolvedNamespace(catalog, ns)
+    }
   }
 
   private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {

@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -26,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -55,10 +58,15 @@ import org.apache.spark.util.Utils
   """,
   since = "2.0.0",
   group = "misc_funcs")
-case class CallMethodViaReflection(children: Seq[Expression])
+case class CallMethodViaReflection(
+      children: Seq[Expression],
+      failOnError: Boolean = true)
   extends Nondeterministic
   with CodegenFallback
   with QueryErrorsBase {
+
+  def this(children: Seq[Expression]) =
+    this(children, true)
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
@@ -73,20 +81,28 @@ case class CallMethodViaReflection(children: Seq[Expression])
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "class",
+              "inputName" -> toSQLId("class"),
               "inputType" -> toSQLType(StringType),
               "inputExpr" -> toSQLExpr(children.head)
             )
           )
+        case (e, 0) if e.eval() == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> toSQLId("class")))
         case (e, 1) if !(e.dataType == StringType && e.foldable) =>
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "method",
+              "inputName" -> toSQLId("method"),
               "inputType" -> toSQLType(StringType),
               "inputExpr" -> toSQLExpr(children(1))
             )
           )
+        case (e, 1) if e.eval() == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> toSQLId("method")))
         case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -133,8 +149,13 @@ case class CallMethodViaReflection(children: Seq[Expression])
       }
       i += 1
     }
-    val ret = method.invoke(null, buffer : _*)
-    UTF8String.fromString(String.valueOf(ret))
+    try {
+      val ret = method.invoke(null, buffer : _*)
+      UTF8String.fromString(String.valueOf(ret))
+    } catch {
+      case NonFatal(_) if !failOnError =>
+        null
+    }
   }
 
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
@@ -149,8 +170,8 @@ case class CallMethodViaReflection(children: Seq[Expression])
   @transient private lazy val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
 
   /** The reflection method. */
-  @transient lazy val method: Method =
-    CallMethodViaReflection.findMethod(className, methodName, argExprs.map(_.dataType)).orNull
+  @transient lazy val method: Method = CallMethodViaReflection
+    .findMethod(className, methodName, argExprs.map(_.dataType).toImmutableArraySeq).orNull
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)

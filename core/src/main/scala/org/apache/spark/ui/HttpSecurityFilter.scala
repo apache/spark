@@ -21,7 +21,7 @@ import java.util.{Enumeration, Map => JMap}
 import javax.servlet._
 import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils
 

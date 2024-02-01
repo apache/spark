@@ -36,7 +36,9 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "SCALA_PROFILE": "scala2.13"
+          "SCALA_PROFILE": "scala2.13",
+          "PYTHON_TO_TEST": "",
+          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-xe:21.3.0"
         }
       jobs: >-
         {

@@ -101,12 +101,12 @@ private[spark] class MetricsSystem private (
       registerSources()
     }
     registerSinks()
-    sinks.foreach(_.start)
+    sinks.foreach(_.start())
   }
 
   def stop(): Unit = {
     if (running) {
-      sinks.foreach(_.stop)
+      sinks.foreach(_.stop())
       registry.removeMatching((_: String, _: Metric) => true)
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
@@ -278,7 +278,4 @@ private[spark] object MetricsSystemInstances {
 
   // The Spark ApplicationMaster when running on YARN
   val APPLICATION_MASTER = "applicationMaster"
-
-  // The Spark cluster scheduler when running on Mesos
-  val MESOS_CLUSTER = "mesos_cluster"
 }

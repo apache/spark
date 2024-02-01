@@ -19,12 +19,12 @@ import importlib
 
 import pandas as pd
 import numpy as np
-from pyspark.ml.feature import Bucketizer
-from pyspark.mllib.stat import KernelDensity
-from pyspark.sql import functions as F
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
+from pyspark.ml.feature import Bucketizer
+from pyspark.mllib.stat import KernelDensity
+from pyspark.sql import functions as F
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string

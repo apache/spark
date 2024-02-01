@@ -26,6 +26,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -39,7 +40,8 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     StructType.fromDDL("a INT, b STRING"), ObjectType(classOf[java.lang.Integer]))
 
   def createMutableProjection(dataTypes: Array[DataType]): MutableProjection = {
-    MutableProjection.create(dataTypes.zipWithIndex.map(x => BoundReference(x._2, x._1, true)))
+    MutableProjection.create(
+      dataTypes.zipWithIndex.map(x => BoundReference(x._2, x._1, true)).toImmutableArraySeq)
   }
 
   testBothCodegenAndInterpreted("fixed-length types") {

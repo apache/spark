@@ -20,9 +20,9 @@ package org.apache.spark.deploy.yarn
 import java.nio.ByteBuffer
 import java.util.Collections
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -153,7 +153,7 @@ private[yarn] class ExecutorRunnable(
     val javaOpts = ListBuffer[String]()
 
     // Set the JVM memory
-    val executorMemoryString = executorMemory + "m"
+    val executorMemoryString = s"${executorMemory}m"
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
@@ -205,7 +205,7 @@ private[yarn] class ExecutorRunnable(
     val env = new HashMap[String, String]()
     Client.populateClasspath(null, conf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
-    System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
+    System.getenv().asScala.filter { case (k, _) => k.startsWith("SPARK") }
       .foreach { case (k, v) => env(k) = v }
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>

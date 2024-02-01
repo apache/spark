@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.UpdatingSessionsIterator
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -84,15 +85,15 @@ case class AggregateInPandasExec(
   }
 
   private def collectFunctions(
-      udf: PythonFuncExpression): (ChainedPythonFunctions, Seq[Expression]) = {
+      udf: PythonFuncExpression): ((ChainedPythonFunctions, Long), Seq[Expression]) = {
     udf.children match {
       case Seq(u: PythonFuncExpression) =>
-        val (chained, children) = collectFunctions(u)
-        (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
+        val ((chained, _), children) = collectFunctions(u)
+        ((ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), udf.resultId.id), children)
       case children =>
         // There should not be any other UDFs, or the children can't be evaluated directly.
         assert(children.forall(!_.exists(_.isInstanceOf[PythonFuncExpression])))
-        (ChainedPythonFunctions(Seq(udf.func)), udf.children)
+        ((ChainedPythonFunctions(Seq(udf.func)), udf.resultId.id), udf.children)
     }
   }
 
@@ -109,14 +110,20 @@ case class AggregateInPandasExec(
     // Also eliminate duplicate UDF inputs.
     val allInputs = new ArrayBuffer[Expression]
     val dataTypes = new ArrayBuffer[DataType]
-    val argOffsets = inputs.map { input =>
+    val argMetas = inputs.map { input =>
       input.map { e =>
-        if (allInputs.exists(_.semanticEquals(e))) {
-          allInputs.indexWhere(_.semanticEquals(e))
+        val (key, value) = e match {
+          case NamedArgumentExpression(key, value) =>
+            (Some(key), value)
+          case _ =>
+            (None, e)
+        }
+        if (allInputs.exists(_.semanticEquals(value))) {
+          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
         } else {
-          allInputs += e
-          dataTypes += e.dataType
-          allInputs.length - 1
+          allInputs += value
+          dataTypes += value.dataType
+          ArgumentMetadata(allInputs.length - 1, key)
         }
       }.toArray
     }.toArray
@@ -164,16 +171,18 @@ case class AggregateInPandasExec(
         rows
       }
 
-      val columnarBatchIter = new ArrowPythonRunner(
+      val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        argOffsets,
+        argMetas,
         aggInputSchema,
         sessionLocalTimeZone,
         largeVarTypes,
         pythonRunnerConf,
         pythonMetrics,
-        jobArtifactUUID).compute(projectedRowIter, context.partitionId(), context)
+        jobArtifactUUID,
+        None) // TODO(SPARK-46688): Support profiling on AggregateInPandasExec
+        .compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ aggExpressions.map(_.resultAttribute)

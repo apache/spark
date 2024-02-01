@@ -14,33 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyHeadTailMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
     def test_head(self):
         pdf = pd.DataFrame(
             {
@@ -218,7 +202,11 @@ class GroupbyHeadTailMixin:
             )
 
 
-class GroupbyHeadTailTests(GroupbyHeadTailMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbyHeadTailTests(
+    GroupbyHeadTailMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

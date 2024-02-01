@@ -51,4 +51,4 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
   }
 }
 
-object CompilationErrors extends CompilationErrors
+private[sql] object CompilationErrors extends CompilationErrors

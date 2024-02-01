@@ -23,6 +23,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.util.ArrayImplicits._
 
 class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
 
@@ -49,9 +50,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
 
     val (handler, allocatorConf) = createAllocator(2)
     handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
+    handler.handleAllocatedContainers(
+      Array(createContainer("host1"), createContainer("host2")).toImmutableArraySeq)
 
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host3" -> 15, "host4" -> 15, "host5" -> 10),
@@ -74,9 +76,9 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host1"),
       createContainer("host1"),
       createContainer("host2")
-    ))
+    ).toImmutableArraySeq)
 
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
 
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
@@ -98,9 +100,9 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host1"),
       createContainer("host1"),
       createContainer("host2")
-    ))
+    ).toImmutableArraySeq)
 
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
@@ -120,9 +122,9 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host2"),
       createContainer("host2"),
       createContainer("host3")
-    ))
+    ).toImmutableArraySeq)
 
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       3, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),
@@ -136,9 +138,10 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
 
     val (handler, allocatorConf) = createAllocator(2)
     handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
+    handler.handleAllocatedContainers(
+      Array(createContainer("host1"), createContainer("host2")).toImmutableArraySeq)
 
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 0, Map.empty,
@@ -154,13 +157,13 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host1"),
       createContainer("host1"),
       createContainer("host2")
-    ))
+    ).toImmutableArraySeq)
 
     val pendingAllocationRequests = Seq(
       createContainerRequest(Array("host2", "host3")),
       createContainerRequest(Array("host1", "host4")))
 
-    ResourceProfile.clearDefaultProfile
+    ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
     val localities = handler.containerPlacementStrategy.localityOfRequestedContainers(
       1, 15, Map("host1" -> 15, "host2" -> 15, "host3" -> 10),

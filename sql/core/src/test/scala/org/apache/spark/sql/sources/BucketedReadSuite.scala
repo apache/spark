@@ -449,7 +449,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
           df1.join(df2, joinCondition(df1, df2), joinType).sort("df1.k", "df2.k"))
 
-        val joinOperator = if (joined.sqlContext.conf.adaptiveExecutionEnabled) {
+        val joinOperator = if (joined.sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
           val executedPlan =
             joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           assert(executedPlan.isInstanceOf[SortMergeJoinExec])
@@ -1077,6 +1077,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
             |        FROM   t1 LEFT JOIN t3 ON t1.i = t3.i AND t1.j = t3.j) t
             |       LEFT JOIN t2 ON t.i = t2.i AND t.j = t2.j
             |""".stripMargin, 2, None)
+        // join keys also match PartitioningCollection
+        verify(
+          """
+            |SELECT *
+            |FROM   (SELECT /*+ BROADCAST(t3) */ t1.i AS t1i, t1.j AS t1j, t3.*
+            |        FROM   t1 JOIN t3 ON t1.i = t3.i AND t1.j = t3.j) t
+            |       JOIN t2 ON t.t1i = t2.i AND t.t1j = t2.j
+            |""".stripMargin, 0, Some(4))
       }
     }
   }

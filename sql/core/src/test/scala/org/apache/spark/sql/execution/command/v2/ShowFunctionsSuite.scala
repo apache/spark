@@ -23,6 +23,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrL
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.execution.command
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The class contains tests for the `SHOW FUNCTIONS` command to check V2 table catalogs.
@@ -37,7 +38,7 @@ class ShowFunctionsSuite extends command.ShowFunctionsSuiteBase with CommandSuit
   private def funNameToId(name: String): Identifier = {
     val parts = name.split('.')
     assert(parts.head == funCatalog, s"${parts.head} is wrong catalog. Expected: $funCatalog.")
-    new MultipartIdentifierHelper(parts.tail).asIdentifier
+    new MultipartIdentifierHelper(parts.tail.toImmutableArraySeq).asIdentifier
   }
 
   override protected def createFunction(name: String): Unit = {

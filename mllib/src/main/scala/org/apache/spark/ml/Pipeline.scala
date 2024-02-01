@@ -19,8 +19,8 @@ package org.apache.spark.ml
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -34,6 +34,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
@@ -246,7 +247,7 @@ object Pipeline extends MLReadable[Pipeline] {
         sc: SparkContext,
         path: String): Unit = instrumented { instr =>
       val stageUids = stages.map(_.uid)
-      val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toSeq))))
+      val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toImmutableArraySeq))))
       DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = Some(jsonParams))
 
       // Save stages
@@ -307,7 +308,7 @@ class PipelineModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = instrumented(instr =>
       instr.withTransformEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
-    stages.foldLeft(dataset.toDF)((cur, transformer) =>
+    stages.foldLeft(dataset.toDF())((cur, transformer) =>
       instr.withTransformEvent(transformer, cur)(transformer.transform(cur)))
   })
 

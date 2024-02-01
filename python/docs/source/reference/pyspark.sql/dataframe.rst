@@ -63,6 +63,7 @@ DataFrame
     DataFrame.foreachPartition
     DataFrame.freqItems
     DataFrame.groupBy
+    DataFrame.groupingSets
     DataFrame.head
     DataFrame.hint
     DataFrame.inputFiles
@@ -112,7 +113,6 @@ DataFrame
     DataFrame.toJSON
     DataFrame.toLocalIterator
     DataFrame.toPandas
-    DataFrame.to_pandas_on_spark
     DataFrame.transform
     DataFrame.union
     DataFrame.unionAll

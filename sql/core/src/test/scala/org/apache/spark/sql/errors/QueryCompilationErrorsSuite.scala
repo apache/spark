@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SPARK_DOC_ROOT
-import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{array, from_json, grouping, grouping_id, lit, struct, sum, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
@@ -169,7 +170,7 @@ class QueryCompilationErrorsSuite
     ).toDF("CustomerName", "CustomerID")
 
     val e = intercept[AnalysisException] {
-      val pythonTestUDF = TestPythonUDF(name = "python_udf")
+      val pythonTestUDF = TestPythonUDF(name = "python_udf", Some(BooleanType))
       df1.join(
         df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
     }
@@ -402,7 +403,7 @@ class QueryCompilationErrorsSuite
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
       errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
-      parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT>>\"")
+      parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
     )
   }
 
@@ -621,7 +622,7 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       parameters = Map(
-        "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+        "schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {
@@ -630,7 +631,7 @@ class QueryCompilationErrorsSuite
     checkError(
       exception = e2,
       errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "1"))
   }
 
@@ -696,7 +697,9 @@ class QueryCompilationErrorsSuite
         Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
       },
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
-      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""),
+      context =
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
@@ -767,7 +770,8 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
-      parameters = Map("field" -> "`firstname`", "count" -> "2")
+      parameters = Map("field" -> "`firstname`", "count" -> "2"),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -780,7 +784,9 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
       sqlState = "42000",
-      parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""))
+      parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""),
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("INVALID_EXTRACT_FIELD_TYPE: extract not string literal field") {
@@ -828,7 +834,7 @@ class QueryCompilationErrorsSuite
             sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
           },
           errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
-          sqlState = "46110",
+          sqlState = "0A000",
           parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
       }
     }
@@ -851,7 +857,7 @@ class QueryCompilationErrorsSuite
               sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
             },
             errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "46110",
+            sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
               "property" -> toSQLConf("location")))
@@ -861,7 +867,7 @@ class QueryCompilationErrorsSuite
               sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
             },
             errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "46110",
+            sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
               "property" -> toSQLConf("a")))
@@ -912,6 +918,42 @@ class QueryCompilationErrorsSuite
           start = 7, stop = 7)
       )
     }
+  }
+
+  test("ComplexTypeMergingExpression should throw exception if no children") {
+    val coalesce = Coalesce(Seq.empty)
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        coalesce.dataType
+      },
+      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
+      parameters = Map("expression" -> "\"coalesce()\""))
+  }
+
+  test("ComplexTypeMergingExpression should throw " +
+    "exception if children have different data types") {
+    val coalesce = Coalesce(Seq(Literal(1), Literal("a"), Literal("a")))
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        coalesce.dataType
+      },
+      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
+      parameters = Map(
+        "expression" -> "\"coalesce(1, a, a)\"",
+        "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
+  }
+
+  test("UNSUPPORTED_CALL: call the unsupported method update()") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        new UnsafeRow(1).update(0, 1)
+      },
+      errorClass = "UNSUPPORTED_CALL",
+      parameters = Map(
+        "methodName" -> "update",
+        "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 }
 

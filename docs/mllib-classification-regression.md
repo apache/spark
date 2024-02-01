@@ -26,7 +26,7 @@ classification](http://en.wikipedia.org/wiki/Multiclass_classification), and
 [regression analysis](http://en.wikipedia.org/wiki/Regression_analysis). The table below outlines
 the supported algorithms for each type of problem.
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>Problem Type</th><th>Supported Methods</th></tr>
   </thead>

@@ -50,7 +50,7 @@ class OrcDeserializer(
     // existence default value to the columns whose IDs are not explicitly requested.
     val existingValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
     if (ResolveDefaultColumns.hasExistenceDefaultValues(requiredSchema)) {
-      for (i <- 0 until existingValues.size) {
+      for (i <- 0 until existingValues.length) {
         bitmask(i) =
           if (requestedColIds(i) != -1) {
             false

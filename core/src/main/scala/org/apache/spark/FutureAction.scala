@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent._
@@ -187,7 +186,7 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
   @volatile private var subActions: List[FutureAction[_]] = Nil
 
   // A promise used to signal the future.
-  private val p = Promise[T]().tryCompleteWith(run(jobSubmitter))
+  private val p = Promise[T]().completeWith(run(jobSubmitter))
 
   override def cancel(): Unit = synchronized {
     _cancelled = true
@@ -255,8 +254,6 @@ private[spark]
 class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S => T)
   extends JavaFutureAction[T] {
 
-  import scala.collection.JavaConverters._
-
   override def isCancelled: Boolean = futureAction.isCancelled
 
   override def isDone: Boolean = {
@@ -266,7 +263,7 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
   }
 
   override def jobIds(): java.util.List[java.lang.Integer] = {
-    Collections.unmodifiableList(futureAction.jobIds.map(Integer.valueOf).asJava)
+    java.util.List.of(futureAction.jobIds.map(Integer.valueOf): _*)
   }
 
   private def getImpl(timeout: Duration): T = {

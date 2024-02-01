@@ -14,33 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Combining / joining / merging'
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.pandas/frame.html#combining-joining-merging
 class FrameCombineMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_concat(self):
         pdf = pd.DataFrame([[1, 2], [3, 4]], columns=list("AB"))
         psdf = ps.from_pandas(pdf)
@@ -556,9 +542,7 @@ class FrameCombineMixin:
         left_pdf.update(right_pdf)
         left_psdf.update(right_psdf)
         self.assert_eq(left_pdf.sort_values(by=["A", "B"]), left_psdf.sort_values(by=["A", "B"]))
-        # Skip due to pandas bug: https://github.com/pandas-dev/pandas/issues/47188
-        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
-            self.assert_eq(psser.sort_index(), pser.sort_index())
+        self.assert_eq(psser.sort_index(), pser.sort_index())
 
         left_psdf, left_pdf, right_psdf, right_pdf = get_data()
         left_pdf.update(right_pdf, overwrite=False)
@@ -604,7 +588,11 @@ class FrameCombineMixin:
         )
 
 
-class FrameCombineTests(FrameCombineMixin, ComparisonTestBase, SQLTestUtils):
+class FrameCombineTests(
+    FrameCombineMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

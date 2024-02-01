@@ -80,7 +80,7 @@ private[spark] object CoarseGrainedClusterMessages {
       state: TaskState,
       data: SerializableBuffer,
       taskCpus: Int,
-      resources: Map[String, ResourceInformation] = Map.empty)
+      resources: Map[String, Map[String, Long]] = Map.empty)
     extends CoarseGrainedClusterMessage
 
   object StatusUpdate {
@@ -91,7 +91,7 @@ private[spark] object CoarseGrainedClusterMessages {
         state: TaskState,
         data: ByteBuffer,
         taskCpus: Int,
-        resources: Map[String, ResourceInformation]): StatusUpdate = {
+        resources: Map[String, Map[String, Long]]): StatusUpdate = {
       StatusUpdate(executorId, taskId, state, new SerializableBuffer(data), taskCpus, resources)
     }
   }
@@ -166,4 +166,6 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // The message to check if `CoarseGrainedSchedulerBackend` thinks the executor is alive or not.
   case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
+
+  case class TaskThreadDump(taskId: Long) extends CoarseGrainedClusterMessage
 }

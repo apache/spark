@@ -76,7 +76,7 @@ plots (recall, false positive rate) points.
 
 **Available metrics**
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>
@@ -179,7 +179,7 @@ For this section, a modified delta function $\hat{\delta}(x)$ will prove useful
 
 $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>
@@ -296,7 +296,7 @@ The following definition of indicator function $I_A(x)$ on a set $A$ will be nec
 
 $$I_A(x) = \begin{cases}1 & \text{if $x \in A$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>
@@ -447,7 +447,7 @@ documents, returns a relevance score for the recommended document.
 
 $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>Metric</th><th>Definition</th><th>Notes</th></tr>
   </thead>
@@ -460,7 +460,7 @@ $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{
         $p(k)=\frac{1}{M} \sum_{i=0}^{M-1} {\frac{1}{k} \sum_{j=0}^{\text{min}(Q_i, k) - 1} rel_{D_i}(R_i(j))}$
       </td>
       <td>
-        <a href="https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Precision_at_K">Precision at k</a> is a measure of
+        <a href="https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Precision_at_k">Precision at k</a> is a measure of
          how many of the first k recommended documents are in the set of true relevant documents averaged across all
          users. In this metric, the order of the recommendations is not taken into account.
       </td>
@@ -553,7 +553,7 @@ variable from a number of independent variables.
 
 **Available metrics**
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>

@@ -23,7 +23,7 @@ import java.nio.file.Files
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.{Logger, LoggerContext}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -148,30 +148,6 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
 
-  if (System.getenv("MESOS_NATIVE_JAVA_LIBRARY") != null) {
-    test("running on Mesos") {
-      val output = runInterpreter("localquiet",
-        """
-          |var v = 7
-          |def getV() = v
-          |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-          |v = 10
-          |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-          |var array = new Array[Int](5)
-          |val broadcastArray = sc.broadcast(array)
-          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
-          |array(0) = 5
-          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
-        """.stripMargin)
-      assertDoesNotContain("error:", output)
-      assertDoesNotContain("Exception", output)
-      assertContains("res0: Int = 70", output)
-      assertContains("res1: Int = 100", output)
-      assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-      assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-    }
-  }
-
   test("line wrapper only initialized once when used as encoder outer scope") {
     val output = runInterpreter("local",
       """
@@ -284,7 +260,7 @@ class ReplSuite extends SparkFunSuite {
         |appender.console.target = SYSTEM_ERR
         |appender.console.follow = true
         |appender.console.layout.type = PatternLayout
-        |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
+        |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
         |
         |# Set the log level for this class to ERROR same as the default setting.
         |logger.repl.name = org.apache.spark.repl.Main
@@ -397,5 +373,27 @@ class ReplSuite extends SparkFunSuite {
     assertContains(infoLogMessage1, out)
     assertContains(infoLogMessage2, out)
     assertContains(debugLogMessage1, out)
+  }
+
+  test("propagation of local properties") {
+    // A mock ILoop that doesn't install the SIGINT handler.
+    class ILoop(out: PrintWriter) extends SparkILoop(null, out)
+
+    val out = new StringWriter()
+    Main.interp = new ILoop(new PrintWriter(out))
+    Main.sparkContext = new SparkContext("local", "repl-test")
+    val settings = new scala.tools.nsc.Settings
+    settings.usejavacp.value = true
+    Main.interp.createInterpreter(settings)
+
+    Main.sparkContext.setLocalProperty("someKey", "someValue")
+
+    // Make sure the value we set in the caller to interpret is propagated in the thread that
+    // interprets the command.
+    Main.interp.interpret("org.apache.spark.repl.Main.sparkContext.getLocalProperty(\"someKey\")")
+    assert(out.toString.contains("someValue"))
+
+    Main.sparkContext.stop()
+    System.clearProperty("spark.driver.port")
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.connect.proto

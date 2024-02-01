@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
@@ -104,7 +104,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     SparkSession.clearActiveSession()
     assert(SparkSession.active == session)
     SparkSession.clearDefaultSession()
-    intercept[IllegalStateException](SparkSession.active)
+    intercept[SparkException](SparkSession.active)
     session.stop()
   }
 
@@ -301,7 +301,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
 
     val error = intercept[SparkException] {
       session.range(1).foreach { v =>
-        SparkSession.builder.master("local").getOrCreate()
+        SparkSession.builder().master("local").getOrCreate()
         ()
       }
     }.getMessage()
@@ -313,7 +313,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
 
     session.range(1).foreach { v =>
-      SparkSession.builder.master("local")
+      SparkSession.builder().master("local")
         .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, true).getOrCreate().stop()
       ()
     }

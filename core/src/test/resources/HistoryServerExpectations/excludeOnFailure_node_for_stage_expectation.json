@@ -1021,7 +1021,9 @@
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
         "MajorGCTime" : 0,
-        "TotalGCTime" : 0
+        "TotalGCTime" : 0,
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0
       },
       "isExcludedForStage" : true
     },
@@ -1062,7 +1064,9 @@
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
         "MajorGCTime" : 0,
-        "TotalGCTime" : 0
+        "TotalGCTime" : 0,
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0
       },
       "isExcludedForStage" : true
     },
@@ -1103,7 +1107,9 @@
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
         "MajorGCTime" : 0,
-        "TotalGCTime" : 0
+        "TotalGCTime" : 0,
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0
       },
       "isExcludedForStage" : false
     },
@@ -1144,7 +1150,9 @@
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
         "MajorGCTime" : 0,
-        "TotalGCTime" : 0
+        "TotalGCTime" : 0,
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0
       },
       "isExcludedForStage" : false
     },
@@ -1185,7 +1193,9 @@
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
         "MajorGCTime" : 0,
-        "TotalGCTime" : 0
+        "TotalGCTime" : 0,
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0
       },
       "isExcludedForStage" : true
     }
@@ -1213,6 +1223,8 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
-    "TotalGCTime" : 0
+    "TotalGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0
   }
 }

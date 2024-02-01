@@ -75,7 +75,7 @@ format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int)
 By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
 creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
 
-<table class="table table-striped">
+<table>
   <thead><tr><th>Property Name</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>fileFormat</code></td>
@@ -123,14 +123,14 @@ will compile against built-in Hive and use those classes for internal execution 
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
-<table class="table table-striped">
+<table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
     <td><code>2.3.9</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> through <code>2.3.9</code> and <code>3.0.0</code> through <code>3.1.3</code>.
+      options are <code>2.0.0</code> through <code>2.3.9</code> and <code>3.0.0</code> through <code>3.1.3</code>.
     </td>
     <td>1.4.0</td>
   </tr>

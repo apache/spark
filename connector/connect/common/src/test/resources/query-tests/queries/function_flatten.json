@@ -32,10 +32,6 @@
                   "literal": {
                     "integer": 10
                   }
-                }, {
-                  "literal": {
-                    "long": "1"
-                  }
                 }]
               }
             }]

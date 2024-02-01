@@ -18,8 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.hadoop.fs.FileStatus
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
@@ -89,8 +87,6 @@ class FileStreamSinkLog(
     path: String,
     _retentionMs: Option[Long] = None)
   extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
-
-  private implicit val formats = Serialization.formats(NoTypeHints)
 
   protected override val fileCleanupDelayMs = sparkSession.sessionState.conf.fileSinkLogCleanupDelay
 

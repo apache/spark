@@ -81,7 +81,7 @@ if (!(Test-Path $tools)) {
 # ========================== Maven
 # Push-Location $tools
 #
-# $mavenVer = "3.8.8"
+# $mavenVer = "3.9.6"
 # Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 #
 # # extract
@@ -94,9 +94,20 @@ if (!(Test-Path $tools)) {
 #
 # Pop-Location
 
-# ========================== SBT
 Push-Location $tools
 
+# ========================== Java 17
+$zuluFileName="zulu17.44.53-ca-jdk17.0.8.1-win_x64"
+Start-FileDownload "https://cdn.azul.com/zulu/bin/$zuluFileName.zip" "zulu.zip"
+
+# extract
+Invoke-Expression "7z.exe x zulu.zip"
+
+#add java 17 to environment variables
+$env:JAVA_HOME = "$tools\$zuluFileName"
+$env:PATH = "$JAVA_HOME\bin;" + $env:PATH
+
+# ========================== SBT
 $sbtVer = "1.9.3"
 Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 
@@ -109,8 +120,8 @@ $env:PATH = "$tools\sbt\bin;" + $env:PATH
 Pop-Location
 
 # ========================== Hadoop bin package
-# This must match the version at https://github.com/cdarlint/winutils/tree/master/hadoop-3.2.0
-$hadoopVer = "3.2.0"
+# This must match the version at https://github.com/cdarlint/winutils/tree/master/hadoop-3.3.5
+$hadoopVer = "3.3.5"
 $hadoopPath = "$tools\hadoop"
 if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null
@@ -129,7 +140,7 @@ $env:PATH = "$env:HADOOP_HOME\bin;" + $env:PATH
 Pop-Location
 
 # ========================== R
-$rVer = "4.3.1"
+$rVer = "4.3.2"
 $rToolsVer = "4.0.2"
 
 InstallR

@@ -26,7 +26,6 @@ from pandas.api.types import CategoricalDtype
 from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, DateType, StringType
 from pyspark.sql.utils import get_column_class
-
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (

@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import scala.collection.generic.CanBuildFrom
+import scala.collection.BuildFrom
 import scala.collection.immutable.Iterable
 import scala.concurrent.Future
 
@@ -261,7 +261,7 @@ class BlockManagerMaster(
     val (blockManagerIds, futures) = response.unzip
     val cbf =
       implicitly[
-        CanBuildFrom[Iterable[Future[Option[BlockStatus]]],
+        BuildFrom[Iterable[Future[Option[BlockStatus]]],
         Option[BlockStatus],
         Iterable[Option[BlockStatus]]]]
     val blockStatus = timeout.awaitResult(

@@ -40,11 +40,18 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SslTestUtils, ThreadUtils}
 
 class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with Matchers {
+
+  def createSparkConf(): SparkConf = {
+    new SparkConf()
+  }
+
+  def isRunningWithSSL(): Boolean = false
+
   test("security default off") {
-    val conf = new SparkConf()
+    val conf = createSparkConf()
       .set("spark.app.id", "app-id")
     testConnection(conf, conf) match {
       case Success(_) => // expected
@@ -53,7 +60,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
   }
 
   test("security on same password") {
-    val conf = new SparkConf()
+    val conf = createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
@@ -64,7 +71,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
   }
 
   test("security on mismatch password") {
-    val conf0 = new SparkConf()
+    val conf0 = createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
@@ -76,7 +83,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
   }
 
   test("security mismatch auth off on server") {
-    val conf0 = new SparkConf()
+    val conf0 = createSparkConf()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
@@ -100,15 +107,17 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
   }
 
   test("security with aes encryption") {
-    val conf = new SparkConf()
-      .set(NETWORK_AUTH_ENABLED, true)
-      .set(AUTH_SECRET, "good")
-      .set("spark.app.id", "app-id")
-      .set(Network.NETWORK_CRYPTO_ENABLED, true)
-      .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
-    testConnection(conf, conf) match {
-      case Success(_) => // expected
-      case Failure(t) => fail(t)
+    if (!isRunningWithSSL()) {
+      val conf = new SparkConf()
+        .set(NETWORK_AUTH_ENABLED, true)
+        .set(AUTH_SECRET, "good")
+        .set("spark.app.id", "app-id")
+        .set(Network.NETWORK_CRYPTO_ENABLED, true)
+        .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
+      testConnection(conf, conf) match {
+        case Success(_) => // expected
+        case Failure(t) => fail(t)
+      }
     }
   }
 
@@ -179,3 +188,11 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
   }
 }
 
+class SslNettyBlockTransferSecuritySuite extends NettyBlockTransferSecuritySuite {
+
+  override def isRunningWithSSL(): Boolean = true
+
+  override def createSparkConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
+  }
+}

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.{Locale, Properties}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -40,6 +40,7 @@ import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -87,8 +88,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "append" => mode(SaveMode.Append)
       case "ignore" => mode(SaveMode.Ignore)
       case "error" | "errorifexists" | "default" => mode(SaveMode.ErrorIfExists)
-      case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. Accepted " +
-        "save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists', 'default'.")
+      case _ => throw QueryCompilationErrors.invalidSaveModeError(saveMode)
     }
   }
 
@@ -262,7 +262,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       val optionsWithPath = getOptionsWithPath(path)
 
-      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+      val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
         optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
@@ -337,7 +337,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 external = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
-                  UnresolvedIdentifier(catalog.name +: ident.namespace.toSeq :+ ident.name),
+                  UnresolvedIdentifier(
+                    catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
                   partitioningAsV2,
                   df.queryExecution.analyzed,
                   tableSpec,
@@ -461,7 +462,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
-        val dynamicPartitionOverwrite = table.table.partitioning.size > 0 &&
+        val dynamicPartitionOverwrite = table.table.partitioning.length > 0 &&
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {
@@ -848,6 +849,38 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def csv(path: String): Unit = {
     format("csv").save(path)
+  }
+
+  /**
+   * Saves the content of the `DataFrame` in XML format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("xml").save(path)
+   * }}}
+   *
+   * Note that writing a XML file from `DataFrame` having a field `ArrayType` with
+   * its element as `ArrayType` would have an additional nested field for the element.
+   * For example, the `DataFrame` having a field below,
+   *
+   *    {@code fieldA [[data1], [data2]]}
+   *
+   * would produce a XML file below.
+   *    {@code
+   *    <fieldA>
+   *        <item>data1</item>
+   *    </fieldA>
+   *    <fieldA>
+   *        <item>data2</item>
+   *    </fieldA>}
+   *
+   * Namely, roundtrip in writing and reading can end up in different schema structure.
+   *
+   * You can find the XML-specific options for writing XML files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   */
+  def xml(path: String): Unit = {
+    format("xml").save(path)
   }
 
   /**

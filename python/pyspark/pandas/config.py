@@ -23,7 +23,6 @@ import json
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
-
 from pyspark.pandas.utils import default_session
 
 
@@ -259,6 +258,15 @@ _options: List[Option] = [
             lambda v: v >= 0,
             "'compute.isin_limit' should be greater than or equal to 0.",
         ),
+    ),
+    Option(
+        key="compute.pandas_fallback",
+        doc=(
+            "'compute.pandas_fallback' sets whether or not to fallback automatically "
+            "to Pandas' implementation."
+        ),
+        default=False,
+        types=bool,
     ),
     Option(
         key="plotting.max_rows",

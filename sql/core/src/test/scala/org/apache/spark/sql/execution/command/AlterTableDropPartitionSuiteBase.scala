@@ -47,7 +47,8 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       t: String,
       ifExists: String,
       specs: Map[String, Any]*): Unit = {
-    checkPartitions(t, specs.map(_.mapValues(_.toString).toMap): _*)
+    checkPartitions(t,
+      specs.map(_.map { case (k, v) => (k, v.toString) }.toMap): _*)
     val specStr = specs.map(partSpecToString).mkString(", ")
     sql(s"ALTER TABLE $t DROP $ifExists $specStr")
     checkPartitions(t)
@@ -155,7 +156,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     }
   }
 
-  test("SPARK-33990: don not return data from dropped partition") {
+  test("SPARK-33990: do not return data from dropped partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")

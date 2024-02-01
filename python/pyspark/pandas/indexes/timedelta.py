@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from typing import cast, no_type_check, Any
 from functools import partial
 
@@ -100,6 +101,12 @@ class TimedeltaIndex(Index):
         copy=False,
         name=None,
     ) -> "TimedeltaIndex":
+        if closed is not None:
+            warnings.warn(
+                "The 'closed' keyword in TimedeltaIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 

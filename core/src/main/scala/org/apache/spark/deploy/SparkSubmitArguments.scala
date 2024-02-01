@@ -18,13 +18,12 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
-import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
@@ -503,7 +502,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     logInfo(
       s"""
         |Options:
-        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn,
+        |  --master MASTER_URL         spark://host:port, yarn,
         |                              k8s://https://host:port, or local (Default: local[*]).
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
         |                              on one of the worker machines inside the cluster ("cluster")
@@ -560,14 +559,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
         |                              (Default: 1).
         |
-        | Spark standalone or Mesos with cluster deploy mode only:
+        | Spark standalone with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
         |
-        | Spark standalone, Mesos or K8s with cluster deploy mode only:
+        | Spark standalone or K8s with cluster deploy mode only:
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
-        | Spark standalone, Mesos and Kubernetes only:
+        | Spark standalone only:
         |  --total-executor-cores NUM  Total cores for all executors.
         |
         | Spark standalone, YARN and Kubernetes only:
@@ -599,49 +598,26 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   /**
    * Run the Spark SQL CLI main class with the "--help" option and catch its output. Then filter
    * the results to remove unwanted lines.
-   *
-   * Since the CLI will call `System.exit()`, we install a security manager to prevent that call
-   * from working, and restore the original one afterwards.
    */
   private def getSqlShellOptions(): String = {
     val currentOut = System.out
     val currentErr = System.err
-    val currentSm = System.getSecurityManager()
     try {
       val out = new ByteArrayOutputStream()
       val stream = new PrintStream(out)
       System.setOut(stream)
       System.setErr(stream)
 
-      val sm = new SecurityManager() {
-        override def checkExit(status: Int): Unit = {
-          throw new SecurityException()
-        }
-
-        override def checkPermission(perm: java.security.Permission): Unit = {}
-      }
-      System.setSecurityManager(sm)
-
-      try {
-        Utils.classForName(mainClass).getMethod("printUsage").invoke(null)
-      } catch {
-        case e: InvocationTargetException =>
-          // Ignore SecurityException, since we throw it above.
-          if (!e.getCause().isInstanceOf[SecurityException]) {
-            throw e
-          }
-      }
-
+      Utils.classForName(mainClass).getMethod("printUsage").invoke(null)
       stream.flush()
 
       // Get the output and discard any unnecessary lines from it.
-      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines
+      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines()
         .filter { line =>
           !line.startsWith("log4j") && !line.startsWith("usage")
         }
         .mkString("\n")
     } finally {
-      System.setSecurityManager(currentSm)
       System.setOut(currentOut)
       System.setErr(currentErr)
     }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
@@ -109,15 +109,18 @@ trait StreamingQuery {
   def lastProgress: StreamingQueryProgress
 
   /**
-   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception. If
+   * the query has terminated with an exception, then the exception will be thrown.
    *
    * If the query has terminated, then all subsequent calls to this method will either return
-   * immediately (if the query was terminated by `stop()`).
+   * immediately (if the query was terminated by `stop()`), or throw the exception immediately (if
+   * the query has terminated with exception).
    *
+   * @throws StreamingQueryException
+   *   if the query has terminated with an exception.
    * @since 3.5.0
    */
-  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
-  // framework is supported and modify the doc accordingly.
+  @throws[StreamingQueryException]
   def awaitTermination(): Unit
 
   /**
@@ -125,13 +128,15 @@ trait StreamingQuery {
    * the query has terminated with an exception, then the exception will be thrown. Otherwise, it
    * returns whether the query has terminated or not within the `timeoutMs` milliseconds.
    *
-   * If the query has terminated, then all subsequent calls to this method will return `true`
-   * immediately.
+   * If the query has terminated, then all subsequent calls to this method will either return
+   * `true` immediately (if the query was terminated by `stop()`), or throw the exception
+   * immediately (if the query has terminated with exception).
    *
+   * @throws StreamingQueryException
+   *   if the query has terminated with an exception
    * @since 3.5.0
    */
-  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
-  // framework is supported and modify the doc accordingly.
+  @throws[StreamingQueryException]
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**
@@ -242,17 +247,15 @@ class RemoteStreamingQuery(
   }
 
   override def exception: Option[StreamingQueryException] = {
-    val exception = executeQueryCmd(_.setException(true)).getException
-    if (exception.hasExceptionMessage) {
-      Some(
-        new StreamingQueryException(
-          // message maps to the return value of original StreamingQueryException's toString method
-          message = exception.getExceptionMessage,
-          errorClass = exception.getErrorClass,
-          stackTrace = exception.getStackTrace))
-    } else {
-      None
+    try {
+      // When exception field is set to false, the server throws a StreamingQueryException
+      // to the client.
+      executeQueryCmd(_.setException(false))
+    } catch {
+      case e: StreamingQueryException => return Some(e)
     }
+
+    None
   }
 
   private def executeQueryCmd(

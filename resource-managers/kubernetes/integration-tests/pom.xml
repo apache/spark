@@ -19,12 +19,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
+    <artifactId>spark-parent_2.13</artifactId>
     <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-kubernetes-integration-tests_2.12</artifactId>
+  <artifactId>spark-kubernetes-integration-tests_2.13</artifactId>
   <properties>
     <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
 
@@ -210,9 +210,9 @@
       </activation>
       <dependencies>
         <dependency>
-          <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk-bundle</artifactId>
-          <version>1.11.375</version>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>bundle</artifactId>
+          <version>${aws.java.sdk.v2.version}</version>
           <scope>test</scope>
         </dependency>
       </dependencies>

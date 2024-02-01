@@ -20,8 +20,8 @@ import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
@@ -37,11 +37,10 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.sql.connect.client.util.IntegrationTestUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.SparkFileUtils
@@ -113,8 +112,7 @@ class PlanGenerationTestSuite
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
-    session =
-      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+    session = new SparkSession(client, planIdGenerator = new AtomicLong)
   }
 
   override protected def beforeEach(): Unit = {
@@ -122,7 +120,9 @@ class PlanGenerationTestSuite
   }
 
   override protected def afterAll(): Unit = {
-    session.close()
+    // Don't call client.releaseSession on close(), because the connection details are dummy.
+    session.releaseSessionOnClose = false
+    session.stop()
     if (cleanOrphanedGoldenFiles) {
       cleanOrphanedGoldenFile()
     }
@@ -486,7 +486,7 @@ class PlanGenerationTestSuite
   }
 
   test("as symbol") {
-    simple.as('bar)
+    simple.as(Symbol("bar"))
   }
   test("alias string") {
     simple.alias("fooz")
@@ -514,6 +514,10 @@ class PlanGenerationTestSuite
 
   test("where expr") {
     simple.where("a + id < 1000")
+  }
+
+  test("between expr") {
+    simple.selectExpr("rand(123) BETWEEN 0.1 AND 0.2")
   }
 
   test("unpivot values") {
@@ -1565,6 +1569,10 @@ class PlanGenerationTestSuite
     fn.user()
   }
 
+  functionTest("session_user") {
+    fn.session_user()
+  }
+
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -2115,6 +2123,14 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("months_between with roundoff") {
     fn.months_between(fn.current_date(), fn.col("d"), roundOff = true)
+  }
+
+  temporalFunctionTest("monthname") {
+    fn.monthname(fn.col("d"))
+  }
+
+  temporalFunctionTest("dayname") {
+    fn.dayname(fn.col("d"))
   }
 
   temporalFunctionTest("next_day") {
@@ -2861,6 +2877,10 @@ class PlanGenerationTestSuite
     fn.java_method(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
   }
 
+  functionTest("try_reflect") {
+    fn.try_reflect(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
   functionTest("typeof") {
     fn.typeof(fn.col("g"))
   }
@@ -3009,6 +3029,12 @@ class PlanGenerationTestSuite
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
   }
 
+  test("groupingSets") {
+    simple
+      .groupingSets(Seq(Seq(fn.col("a")), Seq.empty[Column]), fn.col("a"))
+      .agg("a" -> "max", "a" -> "count")
+  }
+
   test("width_bucket") {
     simple.select(fn.width_bucket(fn.col("b"), fn.col("b"), fn.col("b"), fn.col("a")))
   }
@@ -3020,7 +3046,7 @@ class PlanGenerationTestSuite
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
-      fn.lit('id),
+      fn.lit(Symbol("id")),
       fn.lit(true),
       fn.lit(68.toByte),
       fn.lit(9872.toShort),
@@ -3034,7 +3060,8 @@ class PlanGenerationTestSuite
       fn.lit('T'),
       fn.lit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.lit(Array.tabulate(23)(i => (i + 120).toByte)),
-      fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.lit(mutable.ArraySeq.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.lit(immutable.ArraySeq.unsafeWrapArray(Array[Int](8, 6))),
       fn.lit(null),
       fn.lit(java.time.LocalDate.of(2020, 10, 10)),
       fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
@@ -3087,7 +3114,7 @@ class PlanGenerationTestSuite
   test("function typedLit") {
     simple.select(
       fn.typedLit(fn.col("id")),
-      fn.typedLit('id),
+      fn.typedLit(Symbol("id")),
       fn.typedLit(1),
       fn.typedLit[String](null),
       fn.typedLit(true),
@@ -3103,7 +3130,8 @@ class PlanGenerationTestSuite
       fn.typedLit('T'),
       fn.typedLit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.typedLit(Array.tabulate(23)(i => (i + 120).toByte)),
-      fn.typedLit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.typedLit(mutable.ArraySeq.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.typedLit(immutable.ArraySeq.unsafeWrapArray(Array[Int](8, 6))),
       fn.typedLit(null),
       fn.typedLit(java.time.LocalDate.of(2020, 10, 10)),
       fn.typedLit(Decimal.apply(BigDecimal(8997620, 6))),
@@ -3232,11 +3260,15 @@ class PlanGenerationTestSuite
   private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
     "connect/common/src/test/resources/protobuf-tests/common.desc"
 
-  test("from_protobuf messageClassName") {
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName") {
     binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
   }
 
-  test("from_protobuf messageClassName options") {
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),

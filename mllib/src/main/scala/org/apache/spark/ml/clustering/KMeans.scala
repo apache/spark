@@ -37,6 +37,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -225,7 +226,7 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
         ClusterData(idx, center)
     }
     val dataPath = new Path(path, "data").toString
-    sparkSession.createDataFrame(data).repartition(1).write.parquet(dataPath)
+    sparkSession.createDataFrame(data.toImmutableArraySeq).repartition(1).write.parquet(dataPath)
   }
 }
 
@@ -499,7 +500,7 @@ class KMeans @Since("1.5.0") (
     // Execute iterations of Lloyd's algorithm until converged
     while (iteration < $(maxIter) && !converged) {
       // Find the new centers
-      val bcCenters = sc.broadcast(DenseMatrix.fromVectors(centers))
+      val bcCenters = sc.broadcast(DenseMatrix.fromVectors(centers.toImmutableArraySeq))
       val countSumAccum = if (iteration == 0) sc.longAccumulator else null
       val weightSumAccum = if (iteration == 0) sc.doubleAccumulator else null
       val costSumAccum = sc.doubleAccumulator

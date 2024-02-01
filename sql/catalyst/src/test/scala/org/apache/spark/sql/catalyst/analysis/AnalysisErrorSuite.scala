@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -118,7 +119,7 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
-class AnalysisErrorSuite extends AnalysisTest {
+class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   import TestRelations._
 
   def errorTest(
@@ -241,56 +242,105 @@ class AnalysisErrorSuite extends AnalysisTest {
     "window aggregate function with filter predicate is not supported" :: Nil
   )
 
-  errorTest(
-    "distinct function",
-    CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
-    "Function hex does not support DISTINCT" :: Nil)
+  test("distinct function") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("hex"),
+        "syntax" -> toSQLStmt("DISTINCT")),
+      Array(ExpectedContext("hex(DISTINCT a)", 7, 21)))
+  }
 
-  errorTest(
-    "non aggregate function with filter predicate",
-    CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
-    "Function hex does not support FILTER clause" :: Nil)
+  test("non aggregate function with filter predicate") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("hex"),
+        "syntax" -> toSQLStmt("FILTER CLAUSE")),
+      Array(ExpectedContext("hex(a) FILTER (WHERE c = 1)", 7, 33)))
+  }
 
-  errorTest(
-    "distinct window function",
-    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) OVER () FROM TaBlE"),
-    "Function percent_rank does not support DISTINCT" :: Nil)
+  test("distinct window function") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) OVER () FROM TaBlE"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("percent_rank"),
+        "syntax" -> toSQLStmt("DISTINCT")),
+      Array(ExpectedContext("percent_rank(DISTINCT a) OVER ()", 7, 38)))
+  }
 
-  errorTest(
-    "window function with filter predicate",
-    CatalystSqlParser.parsePlan("SELECT percent_rank(a) FILTER (WHERE c > 1) OVER () FROM TaBlE2"),
-    "Function percent_rank does not support FILTER clause" :: Nil)
+  test("window function with filter predicate") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan(
+        "SELECT percent_rank(a) FILTER (WHERE c > 1) OVER () FROM TaBlE2"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("percent_rank"),
+        "syntax" -> toSQLStmt("FILTER CLAUSE")),
+      Array(ExpectedContext("percent_rank(a) FILTER (WHERE c > 1) OVER ()", 7, 50)))
+  }
 
-  errorTest(
-    "higher order function with filter predicate",
-    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
-      "FILTER (WHERE c > 1)"),
-    "Function aggregate does not support FILTER clause" :: Nil)
+  test("higher order function with filter predicate") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+        "FILTER (WHERE c > 1)"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("aggregate"),
+        "syntax" -> toSQLStmt("FILTER CLAUSE")),
+      Array(ExpectedContext(
+        "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) FILTER (WHERE c > 1)", 7, 76)))
+  }
 
   errorTest(
     "non-deterministic filter predicate in aggregate functions",
     CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
 
-  errorTest(
-    "function don't support ignore nulls",
-    CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
-    "Function hex does not support IGNORE NULLS" :: Nil)
+  test("function don't support ignore nulls") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("hex"),
+        "syntax" -> toSQLStmt("IGNORE NULLS")),
+      Array(ExpectedContext("hex(a) IGNORE NULLS", 7, 25)))
+  }
 
-  errorTest(
-    "some window function don't support ignore nulls",
-    CatalystSqlParser.parsePlan("SELECT percent_rank(a) IGNORE NULLS FROM TaBlE2"),
-    "Function percent_rank does not support IGNORE NULLS" :: Nil)
+  test("some window function don't support ignore nulls") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan("SELECT percent_rank(a) IGNORE NULLS FROM TaBlE2"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("percent_rank"),
+        "syntax" -> toSQLStmt("IGNORE NULLS")),
+      Array(ExpectedContext("percent_rank(a) IGNORE NULLS", 7, 34)))
+  }
 
-  errorTest(
-    "aggregate function don't support ignore nulls",
-    CatalystSqlParser.parsePlan("SELECT count(a) IGNORE NULLS FROM TaBlE2"),
-    "Function count does not support IGNORE NULLS" :: Nil)
+  test("aggregate function don't support ignore nulls") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan("SELECT count(a) IGNORE NULLS FROM TaBlE2"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("count"),
+        "syntax" -> toSQLStmt("IGNORE NULLS")),
+      Array(ExpectedContext("count(a) IGNORE NULLS", 7, 27)))
+  }
 
-  errorTest(
-    "higher order function don't support ignore nulls",
-    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
-      "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
+  test("higher order function don't support ignore nulls") {
+    assertAnalysisErrorClass(
+      CatalystSqlParser.parsePlan(
+        "SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) IGNORE NULLS"),
+      expectedErrorClass = "INVALID_SQL_SYNTAX.FUNCTION_WITH_UNSUPPORTED_SYNTAX",
+      expectedMessageParameters = Map(
+        "prettyName" -> toSQLId("aggregate"),
+        "syntax" -> toSQLStmt("IGNORE NULLS")),
+      Array(ExpectedContext(
+        "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) IGNORE NULLS", 7, 68)))
+  }
 
   errorClassTest(
     name = "nested aggregate functions",
@@ -785,6 +835,76 @@ class AnalysisErrorSuite extends AnalysisTest {
        "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
     "FILTER expression contains window function" :: Nil)
 
+  errorClassTest(
+    "EXEC IMMEDIATE - nested execute immediate not allowed",
+    CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \\\'SELECT 42\\\''"),
+    "NESTED_EXECUTE_IMMEDIATE",
+    Map(
+      "sqlString" -> "EXECUTE IMMEDIATE 'SELECT 42'"))
+
+  errorClassTest(
+    "EXEC IMMEDIATE - both positional and named used",
+    CatalystSqlParser.parsePlan("EXECUTE IMMEDIATE 'SELECT 42 where ? = :first'" +
+      " USING 1, 2 as first"),
+    "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+    Map.empty)
+
+  test("EXEC IMMEDIATE - non string variable as sqlString parameter") {
+    var execImmediatePlan = ExecuteImmediateQuery(
+      Seq.empty,
+      scala.util.Right(UnresolvedAttribute("testVarA")),
+      Seq(UnresolvedAttribute("testVarA")))
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediatePlan,
+      expectedErrorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      expectedMessageParameters = Map(
+        "varType" -> "\"INT\""
+      ))
+  }
+
+  test("EXEC IMMEDIATE - Unsupported expr for parameter") {
+    var execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
+      Seq(UnresolvedAttribute("testVarA"), NaNvl(Literal(1), Literal(1))),
+      scala.util.Left("SELECT ?"),
+      Seq.empty)
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediatePlan,
+      expectedErrorClass = "UNSUPPORTED_EXPR_FOR_PARAMETER",
+      expectedMessageParameters = Map(
+        "invalidExprSql" -> "\"nanvl(1, 1)\""
+      ))
+  }
+
+  test("EXEC IMMEDIATE - Name Parametrize query with non named parameters") {
+    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+      Seq(Literal(2), new Alias(UnresolvedAttribute("testVarA"), "first")(), Literal(3)),
+      scala.util.Left("SELECT :first"),
+      Seq.empty)
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediateSetVariablePlan,
+      expectedErrorClass = "ALL_PARAMETERS_MUST_BE_NAMED",
+      expectedMessageParameters = Map(
+        "exprs" -> "\"2\", \"3\""
+      ))
+  }
+
+  test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
+    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+      Seq.empty,
+      scala.util.Left("SET VAR testVarA = 1"),
+      Seq(UnresolvedAttribute("testVarA")))
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediateSetVariablePlan,
+      expectedErrorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+      expectedMessageParameters = Map(
+        "sqlString" -> "SET VAR TESTVARA = 1"
+      ))
+  }
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
@@ -1022,26 +1142,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Intersect(LocalRelation(b),
-        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)), isAll = true)),
-      LocalRelation(a))
-    assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
-
-    val plan4 = Filter(
-      Exists(
-        Limit(1,
-          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
-      ),
-      LocalRelation(a))
-    assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
-
-    val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
           Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select("b")
       ),
       LocalRelation(a))
-    assertAnalysisError(plan5,
+    assertAnalysisError(plan3,
                         "Accessing outer query column is not allowed in" :: Nil)
   }
 
@@ -1164,31 +1270,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     messageParameters = Map(
       "objectName" -> "`top.aField`",
       "proposal" -> "`top`"))
-
-  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val c = AttributeReference("c", IntegerType)()
-    val d = AttributeReference("d", DoubleType)()
-    val t1 = LocalRelation(a, b, d)
-    val t2 = LocalRelation(c)
-    val conditions = Seq(
-      (abs($"a") === $"c", "abs(a#x) = outer(c#x)"),
-      (abs($"a") <=> $"c", "abs(a#x) <=> outer(c#x)"),
-      ($"a" + 1 === $"c", "(a#x + 1) = outer(c#x)"),
-      ($"a" + $"b" === $"c", "(a#x + b#x) = outer(c#x)"),
-      ($"a" + $"c" === $"b", "(a#x + outer(c#x)) = b#x"),
-      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
-    conditions.foreach { case (cond, msg) =>
-      val plan = Project(
-        Exists(
-          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
-            Filter(cond, t1))
-        ).as("sub") :: Nil,
-        t2)
-      assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
-    }
-  }
 
   test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
     val hintName = "some_random_hint_that_does_not_exist"

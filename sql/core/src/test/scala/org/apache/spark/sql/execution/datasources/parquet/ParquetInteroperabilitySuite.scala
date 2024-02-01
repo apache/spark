@@ -187,7 +187,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString())
           ) {
             val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect()
-            assert(readBack.size === 6)
+            assert(readBack.length === 6)
             // if we apply the conversion, we'll get the "right" values, as saved by impala in the
             // original file.  Otherwise, they're off by the local timezone offset, set to
             // America/Los_Angeles in tests

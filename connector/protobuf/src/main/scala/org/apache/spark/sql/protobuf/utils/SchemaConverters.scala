@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.protobuf.utils
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import com.google.protobuf.{BoolValue, BytesValue, DoubleValue, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+import com.google.protobuf.WireFormat
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
@@ -49,12 +51,13 @@ object SchemaConverters extends Logging {
   def toSqlTypeHelper(
       descriptor: Descriptor,
       protobufOptions: ProtobufOptions): SchemaType = {
-    SchemaType(
-      StructType(descriptor.getFields.asScala.flatMap(
-        structFieldFor(_,
-          Map(descriptor.getFullName -> 1),
-          protobufOptions: ProtobufOptions)).toArray),
-      nullable = true)
+    val fields = descriptor.getFields.asScala.flatMap(
+      structFieldFor(_,
+        Map(descriptor.getFullName -> 1),
+        protobufOptions: ProtobufOptions)).toSeq
+    if (fields.isEmpty && protobufOptions.retainEmptyMessage) {
+      SchemaType(convertEmptyProtoToStructWithDummyField(descriptor.getFullName), nullable = true)
+    } else SchemaType(StructType(fields), nullable = true)
   }
 
   // existingRecordNames: Map[String, Int] used to track the depth of recursive fields and to
@@ -67,9 +70,22 @@ object SchemaConverters extends Logging {
       existingRecordNames: Map[String, Int],
       protobufOptions: ProtobufOptions): Option[StructField] = {
     import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+
     val dataType = fd.getJavaType match {
-      case INT => Some(IntegerType)
-      case LONG => Some(LongType)
+      // When the protobuf type is unsigned and upcastUnsignedIntegers has been set,
+      // use a larger type (LongType and Decimal(20,0) for uint32 and uint64).
+      case INT =>
+        if (fd.getLiteType == WireFormat.FieldType.UINT32 && protobufOptions.upcastUnsignedInts) {
+          Some(LongType)
+        } else {
+          Some(IntegerType)
+        }
+      case LONG => if (fd.getLiteType == WireFormat.FieldType.UINT64
+          && protobufOptions.upcastUnsignedInts) {
+        Some(DecimalType.LongDecimal)
+      } else {
+        Some(LongType)
+      }
       case FLOAT => Some(FloatType)
       case DOUBLE => Some(DoubleType)
       case BOOLEAN => Some(BooleanType)
@@ -89,8 +105,46 @@ object SchemaConverters extends Logging {
           fd.getMessageType.getFields.get(1).getName.equals("nanos")) =>
         Some(TimestampType)
       case MESSAGE if protobufOptions.convertAnyFieldsToJson &&
-            fd.getMessageType.getFullName == "google.protobuf.Any" =>
+        fd.getMessageType.getFullName == "google.protobuf.Any" =>
         Some(StringType) // Any protobuf will be parsed and converted to json string.
+
+      // Unwrap well known primitive wrapper types if the option has been set.
+      case MESSAGE if fd.getMessageType.getFullName == BoolValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(BooleanType)
+      case MESSAGE if fd.getMessageType.getFullName == Int32Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(IntegerType)
+      case MESSAGE if fd.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        if (protobufOptions.upcastUnsignedInts) {
+          Some(LongType)
+        } else {
+          Some(IntegerType)
+        }
+      case MESSAGE if fd.getMessageType.getFullName == Int64Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(LongType)
+      case MESSAGE if fd.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        if (protobufOptions.upcastUnsignedInts) {
+          Some(DecimalType.LongDecimal)
+        } else {
+          Some(LongType)
+        }
+      case MESSAGE if fd.getMessageType.getFullName == StringValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(StringType)
+      case MESSAGE if fd.getMessageType.getFullName == BytesValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(BinaryType)
+      case MESSAGE if fd.getMessageType.getFullName == FloatValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(FloatType)
+      case MESSAGE if fd.getMessageType.getFullName == DoubleValue.getDescriptor.getFullName
+        && protobufOptions.unwrapWellKnownTypes =>
+        Some(DoubleType)
+
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: Option[DataType] = None
         var valueType: Option[DataType] = None
@@ -159,11 +213,15 @@ object SchemaConverters extends Logging {
           ).toSeq
           fields match {
             case Nil =>
-              log.info(
-                s"Dropping ${fd.getFullName} as it does not have any fields left " +
-                "likely due to recursive depth limit."
-              )
-              None
+              if (protobufOptions.retainEmptyMessage) {
+                Some(convertEmptyProtoToStructWithDummyField(fd.getFullName))
+              } else {
+                log.info(
+                  s"Dropping ${fd.getFullName} as it does not have any fields left " +
+                    "likely due to recursive depth limit."
+                )
+                None
+              }
             case fds => Some(StructType(fds))
           }
         }
@@ -176,5 +234,12 @@ object SchemaConverters extends Logging {
         StructField(fd.getName, ArrayType(dt, containsNull = false))
       case dt => StructField(fd.getName, dt, nullable = !fd.isRequired)
     }
+  }
+
+  // Insert a dummy column to retain the empty message because
+  // spark doesn't allow empty struct type.
+  private def convertEmptyProtoToStructWithDummyField(desc: String): StructType = {
+    log.info(s"Keep $desc which is empty struct by inserting a dummy field.")
+    StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
   }
 }

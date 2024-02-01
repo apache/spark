@@ -236,7 +236,7 @@ private[spark] class BufferedStreamThread(
   val lines = new Array[String](errBufferSize)
   var lineIdx = 0
   override def run(): Unit = {
-    for (line <- Source.fromInputStream(in).getLines) {
+    for (line <- Source.fromInputStream(in).getLines()) {
       synchronized {
         lines(lineIdx) = line
         lineIdx = (lineIdx + 1) % errBufferSize

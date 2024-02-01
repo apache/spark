@@ -39,23 +39,26 @@ import org.apache.spark.util.Utils
  * groups them in Python, and receive it back in JVM as batches of single DataFrame.
  */
 class CoGroupedArrowPythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
+    funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
     leftSchema: StructType,
     rightSchema: StructType,
     timeZoneId: String,
     conf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    override val pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    profiler: Option[String])
   extends BasePythonRunner[
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
-    funcs, evalType, argOffsets, jobArtifactUUID)
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with BasicPythonArrowOutput {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
-      funcs.head.funcs.head.pythonExec)
+      funcs.head._1.funcs.head.pythonExec)
+
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
@@ -77,7 +80,7 @@ class CoGroupedArrowPythonRunner(
           PythonRDD.writeUTF(v, dataOut)
         }
 
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {

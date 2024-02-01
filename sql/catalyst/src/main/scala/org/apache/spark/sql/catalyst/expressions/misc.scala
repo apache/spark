@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -60,65 +61,101 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
 /**
  * Throw with the result of an expression (used for debugging).
+ * Caller can specify the errorClass to be thrown and parameters to be passed to this error class.
+ * Default is to throw USER_RAISED_EXCEPTION with provided string literal.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Throws an exception with `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('custom error message');
-       java.lang.RuntimeException
-       custom error message
-  """,
-  since = "3.1.0",
-  group = "misc_funcs")
-case class RaiseError(child: Expression, dataType: DataType)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: DataType)
+  extends BinaryExpression with ImplicitCastInputTypes {
 
-  def this(child: Expression) = this(child, NullType)
+  def this(str: Expression) = {
+    this(Literal(
+      if (SQLConf.get.getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)) {
+        "_LEGACY_ERROR_USER_RAISED_EXCEPTION"
+      } else {
+        "USER_RAISED_EXCEPTION"
+      }),
+      CreateMap(Seq(Literal("errorMessage"), str)), NullType)
+  }
+
+  def this(errorClass: Expression, errorParms: Expression) = {
+    this(errorClass, errorParms, NullType)
+  }
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringType, MapType(StringType, StringType))
+
+  override def left: Expression = errorClass
+  override def right: Expression = errorParms
 
   override def prettyName: String = "raise_error"
 
   override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      throw new RuntimeException()
-    }
-    throw new RuntimeException(value.toString)
+    val error = errorClass.eval(input).asInstanceOf[UTF8String]
+    val parms: MapData = errorParms.eval(input).asInstanceOf[MapData]
+    throw raiseError(error, parms)
   }
 
   // if (true) is to avoid codegen compilation exception that statement is unreachable
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
+    val error = errorClass.genCode(ctx)
+    val parms = errorParms.genCode(ctx)
     ExprCode(
-      code = code"""${eval.code}
+      code = code"""${error.code}
+        |${parms.code}
         |if (true) {
-        |  if (${eval.isNull}) {
-        |    throw new RuntimeException();
-        |  }
-        |  throw new RuntimeException(${eval.value}.toString());
+        |  throw QueryExecutionErrors.raiseError(
+        |    ${error.value},
+        |    ${parms.value});
         |}""".stripMargin,
       isNull = TrueLiteral,
       value = JavaCode.defaultLiteral(dataType)
     )
   }
 
-  override protected def withNewChildInternal(newChild: Expression): RaiseError =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): RaiseError = {
+    copy(errorClass = newLeft, errorParms = newRight)
+  }
 }
 
 object RaiseError {
-  def apply(child: Expression): RaiseError = new RaiseError(child)
+  def apply(str: Expression): RaiseError = new RaiseError(str)
+
+  def apply(errorClass: Expression, parms: Expression): RaiseError =
+    new RaiseError(errorClass, parms)
+}
+
+/**
+ * Throw with the result of an expression (used for debugging).
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_( expr ) - Throws a USER_RAISED_EXCEPTION with `expr` as message.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('custom error message');
+       [USER_RAISED_EXCEPTION] custom error message
+  """,
+  since = "3.1.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+object RaiseErrorExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.length != 1) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), expressions.length)
+    } else {
+      RaiseError(expressions.head)
+    }
+  }
 }
 
 /**
  * A function that throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
+  usage = "_FUNC_(expr [, message]) - Throws an exception if `expr` is not true.",
   examples = """
     Examples:
       > SELECT _FUNC_(0 < 1);
@@ -164,7 +201,7 @@ object AssertTrue {
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def nullable: Boolean = false
-  override def prettyName: String = "current_database"
+  override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
@@ -250,14 +287,14 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
   since = "3.0.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class SparkVersion() extends LeafExpression with CodegenFallback {
-  override def nullable: Boolean = false
-  override def foldable: Boolean = true
-  override def dataType: DataType = StringType
+case class SparkVersion() extends LeafExpression with RuntimeReplaceable {
   override def prettyName: String = "version"
-  override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(SPARK_VERSION_SHORT + " " + SPARK_REVISION)
-  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    StringType,
+    "getSparkVersion",
+    returnNullable = false)
 }
 
 @ExpressionDescription(
@@ -298,14 +335,13 @@ case class TypeOf(child: Expression) extends UnaryExpression {
 case class CurrentUser() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
-  override def prettyName: String = "current_user"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_user")
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
  * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
- * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */
@@ -388,8 +424,6 @@ case class AesEncrypt(
 
 /**
  * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
- * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */

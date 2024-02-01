@@ -23,14 +23,17 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
-class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
+class DataFrameSetOperationsSuite extends QueryTest
+  with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("except") {
@@ -319,7 +322,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         case (data, index) =>
           val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
           data.map(_ => rng.nextDouble()).map(i => Row(i))
-      }
+      }.toImmutableArraySeq
     )
 
     val intersect = df1.intersect(df2)
@@ -371,8 +374,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\"")
-    )
+        "dataType" -> "\"MAP<STRING, BIGINT>\""))
     withTempView("v") {
       df.createOrReplaceTempView("v")
       checkError(
@@ -631,7 +633,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         (1, 1)
       )).toDF("a", "b").withColumn("c", newCol)
 
-      val df2 = df1.union(df1).withColumn("d", spark_partition_id).filter(filter)
+      val df2 = df1.union(df1).withColumn("d", spark_partition_id()).filter(filter)
       checkAnswer(df2, result)
     }
 
@@ -1037,7 +1039,8 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "third",
-        "dataType2" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT>>\"",
+        "dataType2" ->
+          "\"STRUCT<c1: INT NOT NULL, c2: INT NOT NULL, c3: STRUCT<c3: INT NOT NULL>>\"",
         "operator" -> "UNION",
         "hint" -> "",
         "dataType1" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT, c5: INT>>\"")
@@ -1401,7 +1404,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         plan: SparkPlan,
         targetPlan: (SparkPlan) => Boolean,
         isColumnar: Boolean): Unit = {
-      val target = plan.collect {
+      val target = collect(plan) {
         case p if targetPlan(p) => p
       }
       assert(target.nonEmpty)
@@ -1414,6 +1417,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         val df2 = Seq(4, 5, 6).toDF("j").cache()
 
         val union = df1.union(df2)
+        union.collect()
         checkIfColumnar(union.queryExecution.executedPlan,
           _.isInstanceOf[InMemoryTableScanExec], supported)
         checkIfColumnar(union.queryExecution.executedPlan,

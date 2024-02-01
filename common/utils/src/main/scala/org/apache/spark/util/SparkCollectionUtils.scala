@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.util
 
 import scala.collection.immutable
 
-trait SparkCollectionUtils {
+private[spark] trait SparkCollectionUtils {
   /**
    * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
    */
@@ -34,4 +34,4 @@ trait SparkCollectionUtils {
   }
 }
 
-object SparkCollectionUtils extends SparkCollectionUtils
+private[spark] object SparkCollectionUtils extends SparkCollectionUtils

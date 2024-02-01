@@ -17,10 +17,11 @@
 
 import unittest
 
-from pyspark.errors import PythonException
+from pyspark.errors import PythonException, PySparkNotImplementedError
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
+from pyspark.sql.types import VarcharType
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -59,9 +60,9 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
 
-        self.assertEquals(row[0], "[1, 2, 3]")
-        self.assertEquals(row[1], "{'a': 'b'}")
-        self.assertEquals(row[2], "Row(col1=1, col2=2)")
+        self.assertEqual(row[0], "[1, 2, 3]")
+        self.assertEqual(row[1], "{'a': 'b'}")
+        self.assertEqual(row[2], "Row(col1=1, col2=2)")
 
     def test_use_arrow(self):
         # useArrow=True
@@ -88,7 +89,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
 
-        self.assertEquals(row_true[0], row_none[0])  # "[1, 2, 3]"
+        self.assertEqual(row_true[0], row_none[0])  # "[1, 2, 3]"
 
         # useArrow=False
         row_false = (
@@ -101,13 +102,13 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             )
             .first()
         )
-        self.assertEquals(row_false[0], "[1, 2, 3]")
+        self.assertEqual(row_false[0], "[1, 2, 3]")
 
     def test_eval_type(self):
-        self.assertEquals(
+        self.assertEqual(
             udf(lambda x: str(x), useArrow=True).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
         )
-        self.assertEquals(
+        self.assertEqual(
             udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
         )
 
@@ -118,7 +119,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
 
         # To verify that Arrow optimization is on
-        self.assertEquals(
+        self.assertEqual(
             df.selectExpr("str_repr(array) AS str_id").first()[0],
             "[1, 2, 3]",  # The input is a NumPy array when the Arrow optimization is on
         )
@@ -131,7 +132,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
 
     def test_nested_array_input(self):
         df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
-        self.assertEquals(
+        self.assertEqual(
             df.select(
                 udf(lambda x: str(x), returnType="string", useArrow=True)("nested_array")
             ).first()[0],
@@ -148,8 +149,8 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         for ddl_type in int_ddl_types:
             # df_int_value
             res = df_int_value.select(udf(lambda x: x, ddl_type)("value").alias("res"))
-            self.assertEquals(res.collect(), [Row(res=1), Row(res=2)])
-            self.assertEquals(res.dtypes[0][1], ddl_type)
+            self.assertEqual(res.collect(), [Row(res=1), Row(res=2)])
+            self.assertEqual(res.dtypes[0][1], ddl_type)
 
         floating_results = [
             [Row(res=1.1), Row(res=2.2)],
@@ -158,12 +159,12 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         for ddl_type, floating_res in zip(floating_ddl_types, floating_results):
             # df_int_value
             res = df_int_value.select(udf(lambda x: x, ddl_type)("value").alias("res"))
-            self.assertEquals(res.collect(), [Row(res=1.0), Row(res=2.0)])
-            self.assertEquals(res.dtypes[0][1], ddl_type)
+            self.assertEqual(res.collect(), [Row(res=1.0), Row(res=2.0)])
+            self.assertEqual(res.dtypes[0][1], ddl_type)
             # df_floating_value
             res = df_floating_value.select(udf(lambda x: x, ddl_type)("value").alias("res"))
-            self.assertEquals(res.collect(), floating_res)
-            self.assertEquals(res.dtypes[0][1], ddl_type)
+            self.assertEqual(res.collect(), floating_res)
+            self.assertEqual(res.dtypes[0][1], ddl_type)
 
         # invalid
         with self.assertRaises(PythonException):
@@ -174,6 +175,27 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
 
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+
+    def test_err_return_type(self):
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udf(lambda x: x, VarcharType(10), useArrow=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={
+                "feature": "Invalid return type with Arrow-optimized Python UDF: VarcharType(10)"
+            },
+        )
+
+    def test_warn_no_args(self):
+        with self.assertWarns(UserWarning) as w:
+            udf(lambda: print("do"), useArrow=True)
+        self.assertEqual(
+            str(w.warning),
+            "Arrow optimization for Python UDFs cannot be enabled for functions"
+            " without arguments.",
+        )
 
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):

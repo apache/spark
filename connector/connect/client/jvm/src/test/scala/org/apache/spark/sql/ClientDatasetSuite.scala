@@ -26,8 +26,9 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.util.SparkSerDeUtils
 
 // Add sample tests.
 // - sample fraction: simple.sample(0.1)
@@ -42,7 +43,7 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def newSparkSession(): SparkSession = {
     val client = SparkConnectClient(
       InProcessChannelBuilder.forName(getClass.getName).directExecutor().build())
-    new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+    new SparkSession(client, planIdGenerator = new AtomicLong)
   }
 
   private def startDummyServer(): Unit = {
@@ -171,5 +172,12 @@ class ClientDatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     ss.execute(com.google.protobuf.Any.pack(extension))
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
+  }
+
+  test("serialize as null") {
+    val session = newSparkSession()
+    val ds = session.range(10)
+    val bytes = SparkSerDeUtils.serialize(ds)
+    assert(SparkSerDeUtils.deserialize[Dataset[Long]](bytes) == null)
   }
 }

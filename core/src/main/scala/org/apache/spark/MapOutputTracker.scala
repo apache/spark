@@ -23,10 +23,10 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -42,6 +42,7 @@ import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
@@ -680,6 +681,9 @@ private[spark] class MapOutputTrackerMaster(
   /** Whether to compute locality preferences for reduce tasks */
   private val shuffleLocalityEnabled = conf.get(SHUFFLE_REDUCE_LOCALITY_ENABLE)
 
+  private val shuffleMigrationEnabled = conf.get(DECOMMISSION_ENABLED) &&
+    conf.get(STORAGE_DECOMMISSION_ENABLED) && conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
+
   // Number of map and reduce tasks above which we do not assign preferred locations based on map
   // output sizes. We limit the size of jobs for which assign preferred locations as computing the
   // top locations by size becomes expensive.
@@ -740,7 +744,7 @@ private[spark] class MapOutputTrackerMaster(
         needMergeOutput: Boolean): Unit = {
       val hostPort = context.senderAddress.hostPort
       val shuffleStatus = shuffleStatuses.get(shuffleId).head
-      logDebug(s"Handling request to send ${if (needMergeOutput) "map" else "map/merge"}" +
+      logDebug(s"Handling request to send ${if (needMergeOutput) "map/merge" else "map"}" +
         s" output locations for shuffle $shuffleId to $hostPort")
       if (needMergeOutput) {
         context.reply(
@@ -808,6 +812,8 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.updateMapOutput(mapId, bmAddress)
+      case None if shuffleMigrationEnabled =>
+        logWarning(s"Asked to update map output for unknown shuffle ${shuffleId}")
       case None =>
         logError(s"Asked to update map output for unknown shuffle ${shuffleId}")
     }
@@ -901,12 +907,8 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      // SPARK-39553: Add protection for Scala 2.13 due to https://github.com/scala/bug/issues/12613
-      // We should revert this if Scala 2.13 solves this issue.
-      if (shuffleStatus != null) {
-        shuffleStatus.invalidateSerializedMapOutputStatusCache()
-        shuffleStatus.invalidateSerializedMergeOutputStatusCache()
-      }
+      shuffleStatus.invalidateSerializedMapOutputStatusCache()
+      shuffleStatus.invalidateSerializedMergeOutputStatusCache()
     }
   }
 
@@ -1053,7 +1055,7 @@ private[spark] class MapOutputTrackerMaster(
           val blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
             dep.partitioner.numPartitions, REDUCER_PREF_LOCS_FRACTION)
           if (blockManagerIds.nonEmpty) {
-            blockManagerIds.get.map(_.host).distinct.toSeq
+            blockManagerIds.get.map(_.host).distinct.toImmutableArraySeq
           } else {
             Nil
           }
@@ -1141,7 +1143,7 @@ private[spark] class MapOutputTrackerMaster(
         if (startMapIndex < endMapIndex &&
           (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
           val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
-          statusesPicked.map(_.location.host).distinct.toSeq
+          statusesPicked.map(_.location.host).distinct.toImmutableArraySeq
         } else {
           Nil
         }

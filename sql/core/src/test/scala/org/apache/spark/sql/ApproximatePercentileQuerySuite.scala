@@ -339,4 +339,35 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
           Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
     }
   }
+
+  test("SPARK-45079: NULL arguments of percentile_approx") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT percentile_approx(col, array(0.5, 0.4, 0.1), NULL)
+            |FROM VALUES (0), (1), (2), (10) AS tab(col);
+            |""".stripMargin).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "accuracy",
+        "sqlExpr" -> "\"percentile_approx(col, array(0.5, 0.4, 0.1), NULL)\""),
+      context = ExpectedContext(
+        "", "", 8, 57, "percentile_approx(col, array(0.5, 0.4, 0.1), NULL)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT percentile_approx(col, NULL, 100)
+            |FROM VALUES (0), (1), (2), (10) AS tab(col);
+            |""".stripMargin).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "percentage",
+        "sqlExpr" -> "\"percentile_approx(col, NULL, 100)\""),
+      context = ExpectedContext(
+        "", "", 8, 40, "percentile_approx(col, NULL, 100)"))
+  }
 }

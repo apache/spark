@@ -59,7 +59,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
     sc.parallelize(1 to 100, 4).map(_.toString).count()
 
     sc.listenerBus.waitUntilEmpty()
-    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
+    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]()
     assert(listeners.size === 1)
     val listener = listeners(0)
     listener.addedExecutorInfos.values.foreach { info =>

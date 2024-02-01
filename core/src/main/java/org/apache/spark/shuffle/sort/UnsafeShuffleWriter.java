@@ -28,7 +28,7 @@ import java.util.Iterator;
 
 import scala.Option;
 import scala.Product2;
-import scala.collection.JavaConverters;
+import scala.jdk.javaapi.CollectionConverters;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
@@ -166,7 +166,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   @VisibleForTesting
   public void write(Iterator<Product2<K, V>> records) throws IOException {
-    write(JavaConverters.asScalaIteratorConverter(records).asScala());
+    write(CollectionConverters.asScala(records));
   }
 
   @Override
@@ -327,12 +327,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.debug("Using slow merge");
         mergeSpillsWithFileStream(spills, mapWriter, compressionCodec);
       }
-      // When closing an UnsafeShuffleExternalSorter that has already spilled once but also has
-      // in-memory records, we write out the in-memory records to a file but do not count that
-      // final write as bytes spilled (instead, it's accounted as shuffle write). The merge needs
-      // to be counted as shuffle write, but this will lead to double-counting of the final
-      // SpillInfo's bytes.
-      writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
       partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
     } catch (Exception e) {
       try {

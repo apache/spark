@@ -20,7 +20,9 @@ import unittest
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.util import _parse_memory
+from pyspark.loose_version import LooseVersion
+from pyspark.testing.utils import PySparkTestCase, eventually
 from pyspark.find_spark_home import _find_spark_home
 
 
@@ -80,9 +82,47 @@ class UtilTests(PySparkTestCase):
         origin = os.environ["SPARK_HOME"]
         try:
             del os.environ["SPARK_HOME"]
-            self.assertEquals(origin, _find_spark_home())
+            self.assertEqual(origin, _find_spark_home())
         finally:
             os.environ["SPARK_HOME"] = origin
+
+    @eventually(timeout=180, catch_assertions=True)
+    def test_eventually_decorator(self):
+        import random
+
+        self.assertTrue(random.random() < 0.1)
+
+    def test_eventually_function(self):
+        import random
+
+        def condition():
+            self.assertTrue(random.random() < 0.1)
+
+        eventually(timeout=180, catch_assertions=True)(condition)()
+
+    def test_eventually_lambda(self):
+        import random
+
+        eventually(timeout=180, catch_assertions=True)(
+            lambda: self.assertTrue(random.random() < 0.1)
+        )()
+
+    def test_loose_version(self):
+        v1 = LooseVersion("1.2.3")
+        self.assertEqual(str(v1), "1.2.3")
+        self.assertEqual(repr(v1), "LooseVersion ('1.2.3')")
+        v2 = "1.2.3"
+        self.assertTrue(v1 == v2)
+        v3 = 1.1
+        with self.assertRaises(TypeError):
+            v1 > v3
+        v4 = LooseVersion("1.2.4")
+        self.assertTrue(v1 <= v4)
+
+    def test_parse_memory(self):
+        self.assertEqual(_parse_memory("1g"), 1024)
+        with self.assertRaisesRegex(ValueError, "invalid format"):
+            _parse_memory("2gs")
 
 
 if __name__ == "__main__":

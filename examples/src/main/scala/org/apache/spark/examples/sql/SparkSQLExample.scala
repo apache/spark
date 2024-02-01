@@ -17,7 +17,7 @@
 package org.apache.spark.examples.sql
 
 // $example on:programmatic_schema$
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Encoder, Row}
 // $example off:programmatic_schema$
 // $example on:init_session$
 import org.apache.spark.sql.SparkSession
@@ -220,7 +220,8 @@ object SparkSQLExample {
     // +------------+
 
     // No pre-defined encoders for Dataset[Map[K,V]], define explicitly
-    implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Map[String, Any]]
+    implicit val mapEncoder: Encoder[Map[String, Any]] =
+      org.apache.spark.sql.Encoders.kryo[Map[String, Any]]
     // Primitive types and case classes can be also defined as
     // implicit val stringIntMapEncoder: Encoder[Map[String, Any]] = ExpressionEncoder()
 

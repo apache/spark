@@ -18,8 +18,8 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{PersistentVolumeClaim,
   PersistentVolumeClaimBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec}

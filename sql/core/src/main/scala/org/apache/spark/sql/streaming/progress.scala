@@ -21,7 +21,7 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}

@@ -317,10 +317,9 @@ class LauncherServer implements Closeable {
     @Override
     protected void handle(Message msg) throws IOException {
       try {
-        if (msg instanceof Hello) {
+        if (msg instanceof Hello hello) {
           timeout.cancel();
           timeout = null;
-          Hello hello = (Hello) msg;
           AbstractAppHandle handle = secretToPendingApps.remove(hello.secret);
           if (handle != null) {
             handle.setConnection(this);
@@ -334,11 +333,10 @@ class LauncherServer implements Closeable {
           if (handle == null) {
             throw new IllegalArgumentException("Expected hello, got: " + msgClassName);
           }
-          if (msg instanceof SetAppId) {
-            SetAppId set = (SetAppId) msg;
+          if (msg instanceof SetAppId set) {
             handle.setAppId(set.appId);
-          } else if (msg instanceof SetState) {
-            handle.setState(((SetState)msg).state);
+          } else if (msg instanceof SetState setState) {
+            handle.setState(setState.state);
           } else {
             throw new IllegalArgumentException("Invalid message: " + msgClassName);
           }

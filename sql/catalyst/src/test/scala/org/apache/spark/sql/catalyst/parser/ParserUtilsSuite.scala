@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
 

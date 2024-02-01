@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
@@ -51,7 +51,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  * and output along with data, which requires different struct on Arrow RecordBatch.
  */
 class ApplyInPandasWithStatePythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
+    funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
     inputSchema: StructType,
@@ -61,15 +61,17 @@ class ApplyInPandasWithStatePythonRunner(
     keySchema: StructType,
     outputSchema: StructType,
     stateValueSchema: StructType,
-    val pythonMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets, jobArtifactUUID)
+  extends BasePythonRunner[InType, OutType](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
-      funcs.head.funcs.head.pythonExec)
+      funcs.head._1.funcs.head.pythonExec)
+
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
   private val sqlConf = SQLConf.get
 
@@ -104,6 +106,10 @@ class ApplyInPandasWithStatePythonRunner(
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, None)
+  }
 
   /**
    * This method sends out the additional metadata before sending out actual data.
@@ -210,7 +216,7 @@ class ApplyInPandasWithStatePythonRunner(
         STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER)
 
       stateMetadataBatch.rowIterator().asScala.take(numRows).flatMap { row =>
-        implicit val formats = org.json4s.DefaultFormats
+        implicit val formats: Formats = org.json4s.DefaultFormats
 
         // NOTE: See ApplyInPandasWithStatePythonRunner.STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER
         // for the schema.

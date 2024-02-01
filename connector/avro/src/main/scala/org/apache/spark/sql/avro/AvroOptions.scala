@@ -81,14 +81,14 @@ private[sql] class AvroOptions(
 
   /**
    * Top level record name in write result, which is required in Avro spec.
-   * See https://avro.apache.org/docs/1.11.2/specification/#schema-record .
+   * See https://avro.apache.org/docs/1.11.3/specification/#schema-record .
    * Default value is "topLevelRecord"
    */
   val recordName: String = parameters.getOrElse(RECORD_NAME, "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
-   * See Avro spec for details: https://avro.apache.org/docs/1.11.2/specification/#schema-record .
+   * See Avro spec for details: https://avro.apache.org/docs/1.11.3/specification/#schema-record .
    */
   val recordNamespace: String = parameters.getOrElse(RECORD_NAMESPACE, "")
 
@@ -133,6 +133,9 @@ private[sql] class AvroOptions(
 
   val useStableIdForUnionType: Boolean =
     parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
+
+  val stableIdPrefixForUnionType: String = parameters
+    .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
 }
 
 private[sql] object AvroOptions extends DataSourceOptions {
@@ -164,4 +167,7 @@ private[sql] object AvroOptions extends DataSourceOptions {
   // type name are identical regardless of case, an exception will be raised. However, in other
   // cases, the field names can be uniquely identified.
   val STABLE_ID_FOR_UNION_TYPE = newOption("enableStableIdentifiersForUnionType")
+  // When STABLE_ID_FOR_UNION_TYPE is enabled, the option allows to configure the prefix for fields
+  // of Avro Union type.
+  val STABLE_ID_PREFIX_FOR_UNION_TYPE = newOption("stableIdentifierPrefixForUnionType")
 }

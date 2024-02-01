@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.ExternalCommandRunner

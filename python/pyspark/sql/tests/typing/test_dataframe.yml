@@ -71,7 +71,7 @@
     df.groupby(["name", "age"])
     df.groupBy([col("name"), col("age")])
     df.groupby([col("name"), col("age")])
-    df.groupBy(["name", col("age")])  # E: Argument 1 to "groupBy" of "DataFrame" has incompatible type "List[object]"; expected "Union[List[Column], List[str]]"  [arg-type]
+    df.groupBy(["name", col("age")])  # E: Argument 1 to "groupBy" of "DataFrame" has incompatible type "List[object]"; expected "Union[List[Column], List[str], List[int]]"  [arg-type]
 
 
 - case: rollup

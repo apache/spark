@@ -97,27 +97,28 @@ class ListTests(MLlibTestCase):
             # TODO: Allow small numeric difference.
             self.assertTrue(array_equal(c1, c2))
 
+    @eventually(timeout=60, catch_assertions=True)
     def test_gmm(self):
         from pyspark.mllib.clustering import GaussianMixture
 
-        def condition():
-            data = self.sc.parallelize(
-                [
-                    [1, 2],
-                    [8, 9],
-                    [-4, -3],
-                    [-6, -7],
-                ]
-            )
-            clusters = GaussianMixture.train(
-                data, 2, convergenceTol=0.001, maxIterations=10, seed=1
-            )
-            labels = clusters.predict(data).collect()
-            self.assertEqual(labels[0], labels[1])
-            self.assertEqual(labels[2], labels[3])
-            return True
-
-        eventually(condition, timeout=60, catch_assertions=True)
+        data = self.sc.parallelize(
+            [
+                [1, 2],
+                [8, 9],
+                [-4, -3],
+                [-6, -7],
+            ]
+        )
+        clusters = GaussianMixture.train(
+            data,
+            2,
+            convergenceTol=0.001,
+            maxIterations=10,
+            seed=1,
+        )
+        labels = clusters.predict(data).collect()
+        self.assertEqual(labels[0], labels[1])
+        self.assertEqual(labels[2], labels[3])
 
     def test_gmm_deterministic(self):
         from pyspark.mllib.clustering import GaussianMixture

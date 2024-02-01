@@ -152,7 +152,6 @@ trait FileScan extends Scan
       }
       partition.files.flatMap { file =>
         PartitionedFileUtil.splitFiles(
-          sparkSession = sparkSession,
           file = file,
           isSplitable = isSplitable(file.getPath),
           maxSplitBytes = maxSplitBytes,

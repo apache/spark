@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 
 import java.io.{IOException, OutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -55,7 +56,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Set(
       "PartitionPruning",
       "RewriteSubquery",
-      "Extract Python UDFs")
+      "Extract Python UDFs",
+      "Infer Filters")
 
   protected def fixedPoint =
     FixedPoint(
@@ -94,6 +96,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
+        EliminateWindowPartitions,
         TransposeWindow,
         NullPropagation,
         // NullPropagation may introduce Exists subqueries, so RewriteNonCorrelatedExists must run
@@ -146,6 +149,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
 
     val batches = (
     Batch("Finish Analysis", Once, FinishAnalysis) ::
+    // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
+    // may produce `With` expressions that need to be rewritten.
+    Batch("Rewrite With expression", Once, RewriteWithExpression) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -206,7 +212,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
     Batch("Eliminate Sorts", Once,
-      EliminateSorts) :+
+      EliminateSorts,
+      RemoveRedundantSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     // This batch must run after "Decimal Optimizations", as that one may change the
@@ -288,7 +295,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
-      RewriteAsOfJoin)
+      RewriteAsOfJoin,
+      EvalInlineTables
+    )
 
     override def apply(plan: LogicalPlan): LogicalPlan = {
       rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
@@ -575,10 +584,20 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         }
 
       case _ =>
+        val subQueryAttributes = if (conf.getConf(SQLConf
+          .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
+          // Collect the references for all the subquery expressions in the plan.
+          AttributeSet.fromAttributeSets(plan.expressions.collect {
+            case e: SubqueryExpression => e.references
+          })
+        } else {
+          AttributeSet.empty
+        }
+
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
         val newNode = plan.mapChildren { child =>
-          val newChild = removeRedundantAliases(child, excluded)
+          val newChild = removeRedundantAliases(child, excluded ++ subQueryAttributes)
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
@@ -764,9 +783,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
+      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
+      Limit(le, Project(newAgg.aggregateExpressions, newAgg.child))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
-      Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
+      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
+      Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
@@ -1054,7 +1075,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .filter(_.references.exists(producerMap.contains))
       .flatMap(collectReferences)
       .groupBy(identity)
-      .mapValues(_.size)
+      .transform((_, v) => v.size)
       .forall {
         case (reference, count) =>
           val producer = producerMap.getOrElse(reference, reference)
@@ -1528,10 +1549,11 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
-    // We only can combine them if and only if both are deterministic.
+    // We only can combine them if and only if both are deterministic and the outer condition is not
+    // throwable (inner can be throwable as it was going to be evaluated first anyways).
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (combineCandidates, nonDeterministic) =
-        splitConjunctivePredicates(fc).partition(_.deterministic)
+      val (combineCandidates, rest) =
+        splitConjunctivePredicates(fc).partition(p => p.deterministic && !p.throwable)
       val mergedFilter = (ExpressionSet(combineCandidates) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
@@ -1539,7 +1561,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
         case None =>
           nf
       }
-      nonDeterministic.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
+      rest.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 
@@ -1548,30 +1570,24 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
  * 1) if the sort order is empty or the sort order does not have any reference
- * 2) if the Sort operator is a local sort and the child is already sorted
- * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ * 2) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators
- * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ * 3) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the Join condition is deterministic
- * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ * 4) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(SORT))(applyLocally)
-
-  private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(_.containsPattern(SORT)) {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
-        applyLocally.lift(child).getOrElse(child)
+        child
       } else {
         s.copy(order = newOrders)
       }
-    case Sort(orders, false, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
-      applyLocally.lift(child).getOrElse(child)
     case s @ Sort(_, global, child) => s.copy(child = recursiveRemoveSort(child, global))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft, true),
@@ -1593,12 +1609,6 @@ object EliminateSorts extends Rule[LogicalPlan] {
     plan match {
       case Sort(_, global, child) if canRemoveGlobalSort || !global =>
         recursiveRemoveSort(child, canRemoveGlobalSort)
-      case Sort(sortOrder, true, child) =>
-        // For this case, the upper sort is local so the ordering of present sort is unnecessary,
-        // so here we only preserve its output partitioning using `RepartitionByExpression`.
-        // We should use `None` as the optNumPartitions so AQE can coalesce shuffle partitions.
-        // This behavior is same with original global sort.
-        RepartitionByExpression(sortOrder, recursiveRemoveSort(child, true), None)
       case other if canEliminateSort(other) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
       case other if canEliminateGlobalSort(other) =>
@@ -1721,15 +1731,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (candidates, nonDeterministic) =
-        splitConjunctivePredicates(condition).partition(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.deterministic && !cond.throwable &&
+          cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
-
-      val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -1895,13 +1901,14 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
+    val (pushDownCandidates, stayUp) =
+      condition.partition(cond => cond.deterministic && !cond.throwable)
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
   }
 
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
@@ -1924,8 +1931,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          // don't push throwable expressions into join condition
           val (newJoinConditions, others) =
-            commonFilterCondition.partition(canEvaluateWithinJoin)
+            commonFilterCondition.partition(cond => canEvaluateWithinJoin(cond) && !cond.throwable)
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
           val join = Join(newLeft, newRight, joinType, newJoinCond, hint)
@@ -1956,7 +1964,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
 
         case other =>
-          throw new IllegalStateException(s"Unexpected join type: $other")
+          throw SparkException.internalError(s"Unexpected join type: $other")
       }
 
     // push down the join filter into sub query scanning if applicable
@@ -1992,7 +2000,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           Join(newLeft, newRight, joinType, newJoinCond, hint)
 
         case other =>
-          throw new IllegalStateException(s"Unexpected join type: $other")
+          throw SparkException.internalError(s"Unexpected join type: $other")
       }
   }
 }
@@ -2184,11 +2192,15 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case d @ Deduplicate(keys, child) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
+      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr
         } else {
-          Alias(new First(attr).toAggregateExpression(), attr.name)()
+          // Keep track of the generated aliases to avoid generating multiple aliases
+          // for the same attribute (in case the attribute is duplicated)
+          generatedAliasesMap.getOrElseUpdate(attr,
+            Alias(new First(attr).toAggregateExpression(), attr.name)())
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping

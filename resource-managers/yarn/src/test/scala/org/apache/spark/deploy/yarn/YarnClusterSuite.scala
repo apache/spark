@@ -602,7 +602,7 @@ private object YarnClusterDriver extends Logging with Matchers {
       assert(configFromExecutors.find(_ == null) === None)
 
       // verify log urls are present
-      val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
+      val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]()
       assert(listeners.size === 1)
       val listener = listeners(0)
       val executorInfos = listener.addedExecutorInfos.values

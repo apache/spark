@@ -25,8 +25,8 @@ import java.util.Set;
 import scala.util.hashing.MurmurHash3$;
 
 import org.apache.spark.unsafe.Platform;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 /**
  * Test file based on Guava's Murmur3Hash32Test.
@@ -37,36 +37,36 @@ public class Murmur3_x86_32Suite {
 
   @Test
   public void testKnownIntegerInputs() {
-    Assert.assertEquals(593689054, hasher.hashInt(0));
-    Assert.assertEquals(-189366624, hasher.hashInt(-42));
-    Assert.assertEquals(-1134849565, hasher.hashInt(42));
-    Assert.assertEquals(-1718298732, hasher.hashInt(Integer.MIN_VALUE));
-    Assert.assertEquals(-1653689534, hasher.hashInt(Integer.MAX_VALUE));
+    Assertions.assertEquals(593689054, hasher.hashInt(0));
+    Assertions.assertEquals(-189366624, hasher.hashInt(-42));
+    Assertions.assertEquals(-1134849565, hasher.hashInt(42));
+    Assertions.assertEquals(-1718298732, hasher.hashInt(Integer.MIN_VALUE));
+    Assertions.assertEquals(-1653689534, hasher.hashInt(Integer.MAX_VALUE));
   }
 
   @Test
   public void testKnownLongInputs() {
-    Assert.assertEquals(1669671676, hasher.hashLong(0L));
-    Assert.assertEquals(-846261623, hasher.hashLong(-42L));
-    Assert.assertEquals(1871679806, hasher.hashLong(42L));
-    Assert.assertEquals(1366273829, hasher.hashLong(Long.MIN_VALUE));
-    Assert.assertEquals(-2106506049, hasher.hashLong(Long.MAX_VALUE));
+    Assertions.assertEquals(1669671676, hasher.hashLong(0L));
+    Assertions.assertEquals(-846261623, hasher.hashLong(-42L));
+    Assertions.assertEquals(1871679806, hasher.hashLong(42L));
+    Assertions.assertEquals(1366273829, hasher.hashLong(Long.MIN_VALUE));
+    Assertions.assertEquals(-2106506049, hasher.hashLong(Long.MAX_VALUE));
   }
 
   // SPARK-23381 Check whether the hash of the byte array is the same as another implementations
   @Test
   public void testKnownBytesInputs() {
     byte[] test = "test".getBytes(StandardCharsets.UTF_8);
-    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(test, 0),
+    Assertions.assertEquals(MurmurHash3$.MODULE$.bytesHash(test, 0),
       Murmur3_x86_32.hashUnsafeBytes2(test, Platform.BYTE_ARRAY_OFFSET, test.length, 0));
     byte[] test1 = "test1".getBytes(StandardCharsets.UTF_8);
-    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(test1, 0),
+    Assertions.assertEquals(MurmurHash3$.MODULE$.bytesHash(test1, 0),
       Murmur3_x86_32.hashUnsafeBytes2(test1, Platform.BYTE_ARRAY_OFFSET, test1.length, 0));
     byte[] te = "te".getBytes(StandardCharsets.UTF_8);
-    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(te, 0),
+    Assertions.assertEquals(MurmurHash3$.MODULE$.bytesHash(te, 0),
       Murmur3_x86_32.hashUnsafeBytes2(te, Platform.BYTE_ARRAY_OFFSET, te.length, 0));
     byte[] tes = "tes".getBytes(StandardCharsets.UTF_8);
-    Assert.assertEquals(MurmurHash3$.MODULE$.bytesHash(tes, 0),
+    Assertions.assertEquals(MurmurHash3$.MODULE$.bytesHash(tes, 0),
       Murmur3_x86_32.hashUnsafeBytes2(tes, Platform.BYTE_ARRAY_OFFSET, tes.length, 0));
   }
 
@@ -80,14 +80,14 @@ public class Murmur3_x86_32Suite {
     for (int i = 0; i < size; i++) {
       int vint = rand.nextInt();
       long lint = rand.nextLong();
-      Assert.assertEquals(hasher.hashInt(vint), hasher.hashInt(vint));
-      Assert.assertEquals(hasher.hashLong(lint), hasher.hashLong(lint));
+      Assertions.assertEquals(hasher.hashInt(vint), hasher.hashInt(vint));
+      Assertions.assertEquals(hasher.hashLong(lint), hasher.hashLong(lint));
 
       hashcodes.add(hasher.hashLong(lint));
     }
 
     // A very loose bound.
-    Assert.assertTrue(hashcodes.size() > size * 0.95);
+    Assertions.assertTrue(hashcodes.size() > size * 0.95);
   }
 
   @Test
@@ -102,7 +102,7 @@ public class Murmur3_x86_32Suite {
       byte[] bytes = new byte[byteArrSize];
       rand.nextBytes(bytes);
 
-      Assert.assertEquals(
+      Assertions.assertEquals(
         hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
         hasher.hashUnsafeWords(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
@@ -111,7 +111,7 @@ public class Murmur3_x86_32Suite {
     }
 
     // A very loose bound.
-    Assert.assertTrue(hashcodes.size() > size * 0.95);
+    Assertions.assertTrue(hashcodes.size() > size * 0.95);
   }
 
   @Test
@@ -125,7 +125,7 @@ public class Murmur3_x86_32Suite {
       byte[] paddedBytes = new byte[byteArrSize];
       System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
 
-      Assert.assertEquals(
+      Assertions.assertEquals(
         hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
         hasher.hashUnsafeWords(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
 
@@ -134,6 +134,6 @@ public class Murmur3_x86_32Suite {
     }
 
     // A very loose bound.
-    Assert.assertTrue(hashcodes.size() > size * 0.95);
+    Assertions.assertTrue(hashcodes.size() > size * 0.95);
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -43,7 +44,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       udfs,
       output,
       pythonMetrics,
-      jobArtifactUUID)
+      jobArtifactUUID,
+      conf.pythonUDFProfiler)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonExec =
@@ -55,12 +57,13 @@ class BatchEvalPythonEvaluatorFactory(
     udfs: Seq[PythonUDF],
     output: Seq[Attribute],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
-    extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+    jobArtifactUUID: Option[String],
+    profiler: Option[String])
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
   override def evaluate(
-      funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]],
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
@@ -71,8 +74,8 @@ class BatchEvalPythonEvaluatorFactory(
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDFRunner(
-        funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets, pythonMetrics, jobArtifactUUID)
+      new PythonUDFWithNamedArgumentsRunner(
+        funcs, PythonEvalType.SQL_BATCHED_UDF, argMetas, pythonMetrics, jobArtifactUUID, profiler)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler

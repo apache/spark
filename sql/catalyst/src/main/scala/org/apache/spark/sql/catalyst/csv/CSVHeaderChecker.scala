@@ -58,7 +58,7 @@ class CSVHeaderChecker(
   private def checkHeaderColumnNames(columnNames: Array[String]): Unit = {
     if (columnNames != null) {
       val fieldNames = schema.map(_.name).toIndexedSeq
-      val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
+      val (headerLen, schemaSize) = (columnNames.length, fieldNames.length)
       var errorMessage: Option[String] = None
 
       if (headerLen == schemaSize) {

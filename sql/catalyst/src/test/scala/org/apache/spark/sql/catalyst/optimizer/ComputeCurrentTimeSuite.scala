@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.lang.Thread.sleep
 import java.time.{LocalDateTime, ZoneId}
 
-import scala.collection.JavaConverters.mapAsScalaMap
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -49,6 +50,19 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
+  }
+
+  test("analyzer should respect time flow in current timestamp calls") {
+    val in = Project(Alias(CurrentTimestamp(), "t1")() :: Nil, LocalRelation())
+
+    val planT1 = Optimize.execute(in.analyze).asInstanceOf[Project]
+    sleep(1)
+    val planT2 = Optimize.execute(in.analyze).asInstanceOf[Project]
+
+    val t1 = DateTimeUtils.microsToMillis(literals[Long](planT1)(0))
+    val t2 = DateTimeUtils.microsToMillis(literals[Long](planT2)(0))
+
+    assert(t2 - t1 <= 1000 && t2 - t1 > 0)
   }
 
   test("analyzer should replace current_date with literals") {
@@ -105,7 +119,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
   }
 
   test("analyzer should use consistent timestamps for different timezones") {
-    val localTimestamps = mapAsScalaMap(ZoneId.SHORT_IDS)
+    val localTimestamps = ZoneId.SHORT_IDS.asScala
       .map { case (zoneId, _) => Alias(LocalTimestamp(Some(zoneId)), zoneId)() }.toSeq
     val input = Project(localTimestamps, LocalRelation())
 
@@ -133,6 +147,34 @@ class ComputeCurrentTimeSuite extends PlanTest {
     // there are timezones with a 30 or 45 minute offset
     val offsetsFromQuarterHour = lits.map( _ % Duration(15, MINUTES).toMicros).toSet
     assert(offsetsFromQuarterHour.size == 1)
+  }
+
+  test("No duplicate literals") {
+    def checkLiterals(f: (String) => Expression, expected: Int): Unit = {
+      val timestamps = ZoneId.SHORT_IDS.asScala.flatMap { case (zoneId, _) =>
+        // Request each timestamp multiple times.
+        (1 to 5).map { _ => Alias(f(zoneId), zoneId)() }
+      }.toSeq
+
+      val input = Project(timestamps, LocalRelation())
+      val plan = Optimize.execute(input).asInstanceOf[Project]
+
+      val uniqueLiteralObjectIds = new scala.collection.mutable.HashSet[Int]
+      plan.transformWithSubqueries { case subQuery =>
+        subQuery.transformAllExpressions { case literal: Literal =>
+          uniqueLiteralObjectIds += System.identityHashCode(literal)
+          literal
+        }
+      }
+
+      assert(expected === uniqueLiteralObjectIds.size)
+    }
+
+    val numTimezones = ZoneId.SHORT_IDS.size
+    checkLiterals({ _: String => CurrentTimestamp() }, 1)
+    checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numTimezones)
+    checkLiterals({ _: String => Now() }, 1)
+    checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numTimezones)
   }
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {

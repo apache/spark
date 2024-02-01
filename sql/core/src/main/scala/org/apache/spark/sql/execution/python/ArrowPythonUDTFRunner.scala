@@ -23,7 +23,7 @@ import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDTF
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.EvalPythonUDTFExec.ArgumentMetadata
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -39,24 +39,23 @@ class ArrowPythonUDTFRunner(
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
-    val pythonMetrics: Map[String, SQLMetric],
+    override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-      Seq(ChainedPythonFunctions(Seq(udtf.func))),
-      evalType, Array(argMetas.map(_.offset)), jobArtifactUUID)
+      Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
+      jobArtifactUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 
-  override protected def writeUDF(
-      dataOut: DataOutputStream,
-      funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]]): Unit = {
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)
+
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 

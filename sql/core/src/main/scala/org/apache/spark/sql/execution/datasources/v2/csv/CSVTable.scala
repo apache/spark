@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.FileStatus
 

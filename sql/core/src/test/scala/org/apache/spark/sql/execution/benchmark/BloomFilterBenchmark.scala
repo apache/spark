@@ -40,7 +40,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
 
   private val scaleFactor = 100
   private val N = scaleFactor * 1000 * 1000
-  private val df = spark.range(N).map(_ => Random.nextInt)
+  private val df = spark.range(N).map(_ => Random.nextInt())
 
   private def writeORCBenchmark(): Unit = {
     withTempPath { dir =>

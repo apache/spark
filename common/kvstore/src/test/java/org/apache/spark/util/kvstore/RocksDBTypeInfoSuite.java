@@ -19,8 +19,8 @@ package org.apache.spark.util.kvstore;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class RocksDBTypeInfoSuite {
 
@@ -154,7 +154,7 @@ public class RocksDBTypeInfoSuite {
   }
 
   private void assertBefore(String str1, String str2) {
-    assertTrue(String.format("%s < %s failed", str1, str2), str1.compareTo(str2) < 0);
+    assertTrue(str1.compareTo(str2) < 0, String.format("%s < %s failed", str1, str2));
   }
 
   private void assertSame(byte[] key1, byte[] key2) {

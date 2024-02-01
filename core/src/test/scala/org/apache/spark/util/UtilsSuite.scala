@@ -32,7 +32,7 @@ import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -255,7 +255,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
     val field: Field = obj.getClass().getDeclaredField(fieldName)
-    if (field.isAccessible()) {
+    if (field.canAccess(obj)) {
       field.get(obj)
     } else {
       field.setAccessible(true)
@@ -344,7 +344,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     }
     IOUtils.write(content, outputStream)
     outputStream.close()
-    content.size
+    content.length
   }
 
   private val workerConf = new SparkConf()
@@ -352,7 +352,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   def testOffsetBytes(isCompressed: Boolean): Unit = {
     withTempDir { tmpDir2 =>
       val suffix = getSuffix(isCompressed)
-      val f1Path = tmpDir2 + "/f1" + suffix
+      val f1Path = s"$tmpDir2/f1$suffix"
       writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
       val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
@@ -983,28 +983,22 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // Verify that we can terminate a process even if it is in a bad state. This is only run
     // on UNIX since it does some OS specific things to verify the correct behavior.
     if (SystemUtils.IS_OS_UNIX) {
-      def getPid(p: Process): Int = {
-        val f = p.getClass().getDeclaredField("pid")
-        f.setAccessible(true)
-        f.get(p).asInstanceOf[Int]
-      }
-
-      def pidExists(pid: Int): Boolean = {
-        val p = Runtime.getRuntime.exec(s"kill -0 $pid")
+      def pidExists(pid: Long): Boolean = {
+        val p = Runtime.getRuntime.exec(Array("kill", "-0", s"$pid"))
         p.waitFor()
         p.exitValue() == 0
       }
 
-      def signal(pid: Int, s: String): Unit = {
-        val p = Runtime.getRuntime.exec(s"kill -$s $pid")
+      def signal(pid: Long, s: String): Unit = {
+        val p = Runtime.getRuntime.exec(Array("kill", s"-$s", s"$pid"))
         p.waitFor()
       }
 
       // Start up a process that runs 'sleep 10'. Terminate the process and assert it takes
       // less time and the process is no longer there.
       val startTimeNs = System.nanoTime()
-      val process = new ProcessBuilder("sleep", "10").start()
-      val pid = getPid(process)
+      var process = new ProcessBuilder("sleep", "10").start()
+      var pid = process.toHandle.pid()
       try {
         assert(pidExists(pid))
         val terminated = Utils.terminateProcess(process, 5000)
@@ -1018,37 +1012,34 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
         signal(pid, "SIGKILL")
       }
 
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8)) {
-        // We'll make sure that forcibly terminating a process works by
-        // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
-        // older versions of java, this will *not* terminate.
-        val file = File.createTempFile("temp-file-name", ".tmp")
-        file.deleteOnExit()
-        val cmd =
-          s"""
-             |#!/usr/bin/env bash
-             |trap "" SIGTERM
-             |sleep 10
-           """.stripMargin
-        Files.write(cmd.getBytes(UTF_8), file)
-        file.getAbsoluteFile.setExecutable(true)
+      // We'll make sure that forcibly terminating a process works by
+      // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
+      // older versions of java, this will *not* terminate.
+      val file = File.createTempFile("temp-file-name", ".tmp")
+      file.deleteOnExit()
+      val cmd =
+        s"""
+           |#!/usr/bin/env bash
+           |trap "" SIGTERM
+           |sleep 10
+         """.stripMargin
+      Files.write(cmd.getBytes(UTF_8), file)
+      file.getAbsoluteFile.setExecutable(true)
 
-        val process = new ProcessBuilder(file.getAbsolutePath).start()
-        val pid = getPid(process)
-        assert(pidExists(pid))
-        try {
-          signal(pid, "SIGSTOP")
-          val startNs = System.nanoTime()
-          val terminated = Utils.terminateProcess(process, 5000)
-          assert(terminated.isDefined)
-          process.waitFor(5, TimeUnit.SECONDS)
-          val duration = System.nanoTime() - startNs
-          // add a little extra time to allow a force kill to finish
-          assert(duration < TimeUnit.SECONDS.toNanos(6))
-          assert(!pidExists(pid))
-        } finally {
-          signal(pid, "SIGKILL")
-        }
+      process = new ProcessBuilder(file.getAbsolutePath).start()
+      pid = process.toHandle.pid()
+      try {
+        signal(pid, "SIGSTOP")
+        val startNs = System.nanoTime()
+        val terminated = Utils.terminateProcess(process, 5000)
+        assert(terminated.isDefined)
+        process.waitFor(5, TimeUnit.SECONDS)
+        val duration = System.nanoTime() - startNs
+        // add a little extra time to allow a force kill to finish
+        assert(duration < TimeUnit.SECONDS.toNanos(6))
+        assert(!pidExists(pid))
+      } finally {
+        signal(pid, "SIGKILL")
       }
     }
   }
@@ -1262,7 +1253,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(isErrorOccurred)
     // if the try, catch and finally blocks don't throw exceptions
     Utils.tryWithSafeFinallyAndFailureCallbacks {}(catchBlock = {}, finallyBlock = {})
-    TaskContext.unset
+    TaskContext.unset()
   }
 
   test("load extensions") {

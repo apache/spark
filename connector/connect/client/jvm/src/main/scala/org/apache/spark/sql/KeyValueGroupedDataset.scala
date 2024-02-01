@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Arrays
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.spark.api.java.function._
@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -111,7 +111,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *
    * @since 3.5.0
    */
-  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     flatMapSortedGroups()(f)
   }
 
@@ -162,7 +162,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * @since 3.5.0
    */
   def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
-      f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+      f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     throw new UnsupportedOperationException
   }
 
@@ -194,7 +194,9 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
       SortExprs: Array[Column],
       f: FlatMapGroupsFunction[K, V, U],
       encoder: Encoder[U]): Dataset[U] = {
-    flatMapSortedGroups(SortExprs: _*)(UdfUtils.flatMapGroupsFuncToScalaFunc(f))(encoder)
+    import org.apache.spark.util.ArrayImplicits._
+    flatMapSortedGroups(SortExprs.toImmutableArraySeq: _*)(
+      UdfUtils.flatMapGroupsFuncToScalaFunc(f))(encoder)
   }
 
   /**
@@ -397,7 +399,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * @since 3.5.0
    */
   def cogroup[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     cogroupSorted(other)()()(f)
   }
 
@@ -433,7 +435,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    */
   def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
       otherSortExprs: Column*)(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     throw new UnsupportedOperationException
   }
 
@@ -458,8 +460,9 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
       otherSortExprs: Array[Column],
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
-    cogroupSorted(other)(thisSortExprs: _*)(otherSortExprs: _*)(
-      UdfUtils.coGroupFunctionToScalaFunc(f))(encoder)
+    import org.apache.spark.util.ArrayImplicits._
+    cogroupSorted(other)(thisSortExprs.toImmutableArraySeq: _*)(
+      otherSortExprs.toImmutableArraySeq: _*)(UdfUtils.coGroupFunctionToScalaFunc(f))(encoder)
   }
 
   protected[sql] def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
@@ -811,6 +814,31 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
       stateEncoder,
       outputEncoder)
   }
+
+  /**
+   * (Scala-specific) Invokes methods defined in the stateful processor used in arbitrary state
+   * API v2. We allow the user to act on per-group set of input rows along with keyed state and
+   * the user can choose to output/return 0 or more rows. For a static/batch dataset, this
+   * operator is not supported and will throw an exception. For a streaming dataframe, we will
+   * repeatedly invoke the interface methods for new rows in each trigger and the user's
+   * state/state variables will be stored persistently across invocations. Currently this operator
+   * is not supported with Spark Connect.
+   *
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param statefulProcessor
+   *   Instance of statefulProcessor whose functions will be invoked by the operator.
+   * @param timeoutMode
+   *   The timeout mode of the stateful processor.
+   * @param outputMode
+   *   The output mode of the stateful processor. Defaults to APPEND mode.
+   */
+  def transformWithState[U: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
+    throw new UnsupportedOperationException
+  }
 }
 
 /**
@@ -865,7 +893,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
-      f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+      f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     // Apply mapValues changes to the udf
     val nf =
       if (valueMapFunc == UdfUtils.identical()) f else UdfUtils.mapValuesAdaptor(f, valueMapFunc)
@@ -881,7 +909,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(
       thisSortExprs: Column*)(otherSortExprs: Column*)(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     assert(other.isInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, _]])
     val otherImpl = other.asInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, _]]
     // Apply mapValues changes to the udf
@@ -979,6 +1007,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       outputEncoder = outputEncoder)
     udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
   }
+
+  /**
+   * We cannot deserialize a connect [[KeyValueGroupedDataset]] because of a class clash on the
+   * server side. We null out the instance for now.
+   */
+  private def writeReplace(): Any = null
 }
 
 private object KeyValueGroupedDatasetImpl {

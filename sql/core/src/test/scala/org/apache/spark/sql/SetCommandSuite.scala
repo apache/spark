@@ -30,7 +30,7 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
+    assert(sql("SET").collect().length === TestSQLContext.overrideConfs.size)
     sql("SET").collect().foreach { row =>
       val key = row.getString(0)
       val value = row.getString(1)

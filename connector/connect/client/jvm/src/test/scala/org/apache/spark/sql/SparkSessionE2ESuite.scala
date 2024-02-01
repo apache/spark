@@ -26,7 +26,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.test.RemoteSparkSession
 import org.apache.spark.util.SparkThreadUtils.awaitResult
 
 /**

@@ -129,8 +129,8 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
           FieldReference column = (FieldReference) predicate.children()[0];
           assert(predicate.children()[1] instanceof LiteralValue);
           Literal value = (Literal) predicate.children()[1];
-          if ("i".equals(column.describe()) && value.value() instanceof Integer) {
-            lowerBound = (Integer) value.value();
+          if ("i".equals(column.describe()) && value.value() instanceof Integer integer) {
+            lowerBound = integer;
             break;
           }
         }

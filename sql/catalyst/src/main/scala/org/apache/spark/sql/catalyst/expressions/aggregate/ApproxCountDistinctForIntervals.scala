@@ -85,7 +85,7 @@ case class ApproxCountDistinctForIntervals(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "endpointsExpression",
+          "inputName" -> toSQLId("endpointsExpression"),
           "inputType" -> toSQLType(endpointsExpression.dataType)))
     } else {
       endpointsExpression.dataType match {

@@ -385,4 +385,14 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
       checkAnswer(spark.table("t"), Row(Row("a", 1)))
     }
   }
+
+  test("Alter view with nested struct") {
+    withView("t", "t2") {
+      sql("CREATE OR REPLACE VIEW t AS SELECT " +
+        "struct(id AS `$col2`, struct(id AS `$col`) AS s1) AS s2 FROM RANGE(5)")
+      sql("ALTER VIEW t SET TBLPROPERTIES ('x' = 'y')")
+      sql("ALTER VIEW t RENAME TO t2")
+      checkAnswer(sql("show TBLPROPERTIES t2 (x)"), Row("x", "y"))
+    }
+  }
 }

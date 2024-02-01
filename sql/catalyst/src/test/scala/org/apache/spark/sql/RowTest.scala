@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 class RowTest extends AnyFunSpec with Matchers {
 
@@ -128,7 +129,7 @@ class RowTest extends AnyFunSpec with Matchers {
     def modifyValues(values: Seq[Any]): Seq[Any] = {
       val array = values.toArray
       array(2) = "42"
-      array
+      array.toImmutableArraySeq
     }
 
     it("copy should return same ref for external rows") {

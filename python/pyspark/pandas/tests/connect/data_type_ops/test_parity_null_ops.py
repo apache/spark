@@ -17,17 +17,18 @@
 import unittest
 
 from pyspark.pandas.tests.data_type_ops.test_null_ops import NullOpsTestsMixin
-from pyspark.pandas.tests.connect.data_type_ops.testing_utils import OpsTestBase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class NullOpsParityTests(
-    NullOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
+    NullOpsTestsMixin,
+    PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
 ):
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_astype(self):
-        super().test_astype()
+    pass
 
 
 if __name__ == "__main__":

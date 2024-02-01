@@ -61,7 +61,7 @@ class ContinuousSuiteBase extends StreamTest {
       c.committedOffsets.lastOption.map { case (_, offset) =>
         offset match {
           case o: RateStreamOffset =>
-            o.partitionToValueAndRunTimeMs.mapValues(_.value).toMap
+            o.partitionToValueAndRunTimeMs.transform((_, v) => v.value)
         }
       }
     }

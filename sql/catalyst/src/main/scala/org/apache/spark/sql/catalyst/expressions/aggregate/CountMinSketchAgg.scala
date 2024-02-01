@@ -73,7 +73,7 @@ case class CountMinSketchAgg(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "eps",
+          "inputName" -> toSQLId("eps"),
           "inputType" -> toSQLType(epsExpression.dataType),
           "inputExpr" -> toSQLExpr(epsExpression))
       )
@@ -81,7 +81,7 @@ case class CountMinSketchAgg(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "confidence",
+          "inputName" -> toSQLId("confidence"),
           "inputType" -> toSQLType(confidenceExpression.dataType),
           "inputExpr" -> toSQLExpr(confidenceExpression))
       )
@@ -89,7 +89,7 @@ case class CountMinSketchAgg(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "seed",
+          "inputName" -> toSQLId("seed"),
           "inputType" -> toSQLType(seedExpression.dataType),
           "inputExpr" -> toSQLExpr(seedExpression))
       )

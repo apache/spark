@@ -518,7 +518,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         }
       }
 
-      val parts = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+      val parts = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts))
       val partsToScan = if (takeFromEnd) {
         // Reverse partitions to scan. So, if parts was [1, 2, 3] in 200 partitions (0 to 199),
         // it becomes [198, 197, 196].
@@ -536,13 +536,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         while (buf.length < n && i < res.length) {
           val rows = decodeUnsafeRows(res(i)._2)
           if (n - buf.length >= res(i)._1) {
-            buf.prepend(rows.toArray[InternalRow]: _*)
+            buf.prependAll(rows)
           } else {
             val dropUntil = res(i)._1 - (n - buf.length)
             // Same as Iterator.drop but this only takes a long.
             var j: Long = 0L
             while (j < dropUntil) { rows.next(); j += 1L}
-            buf.prepend(rows.toArray[InternalRow]: _*)
+            buf.prependAll(rows)
           }
           i += 1
         }
@@ -550,9 +550,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         while (buf.length < n && i < res.length) {
           val rows = decodeUnsafeRows(res(i)._2)
           if (n - buf.length >= res(i)._1) {
-            buf ++= rows.toArray[InternalRow]
+            buf ++= rows
           } else {
-            buf ++= rows.take(n - buf.length).toArray[InternalRow]
+            buf ++= rows.take(n - buf.length)
           }
           i += 1
         }

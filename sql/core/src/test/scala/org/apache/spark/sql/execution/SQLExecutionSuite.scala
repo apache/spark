@@ -49,7 +49,7 @@ class SQLExecutionSuite extends SparkFunSuite {
   }
 
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
-    val spark = SparkSession.builder
+    val spark = SparkSession.builder()
       .master("local[*]")
       .appName("test")
       .getOrCreate()
@@ -69,7 +69,7 @@ class SQLExecutionSuite extends SparkFunSuite {
    * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
    */
   private def testConcurrentQueryExecution(sc: SparkContext): Unit = {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
 
     // Initialize local properties. This is necessary for the test to pass.
@@ -103,7 +103,7 @@ class SQLExecutionSuite extends SparkFunSuite {
 
 
   test("Finding QueryExecution for given executionId") {
-    val spark = SparkSession.builder.master("local[*]").appName("test").getOrCreate()
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     import spark.implicits._
 
     var queryExecution: QueryExecution = null
@@ -205,7 +205,7 @@ class SQLExecutionSuite extends SparkFunSuite {
   }
 
   test("SPARK-44591: jobTags property") {
-    val spark = SparkSession.builder.master("local[*]").appName("test").getOrCreate()
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     val jobTag = "jobTag"
     try {
       spark.sparkContext.addJobTag(jobTag)

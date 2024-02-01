@@ -55,7 +55,7 @@ private object ConfigHelpers {
 
   def timeFromString(str: String, unit: TimeUnit): Long = JavaUtils.timeStringAs(str, unit)
 
-  def timeToString(v: Long, unit: TimeUnit): String = TimeUnit.MILLISECONDS.convert(v, unit) + "ms"
+  def timeToString(v: Long, unit: TimeUnit): String = s"${TimeUnit.MILLISECONDS.convert(v, unit)}ms"
 
   def byteFromString(str: String, unit: ByteUnit): Long = {
     val (input, multiplier) =
@@ -67,7 +67,7 @@ private object ConfigHelpers {
     multiplier * JavaUtils.byteStringAs(input, unit)
   }
 
-  def byteToString(v: Long, unit: ByteUnit): String = unit.convertTo(v, ByteUnit.BYTE) + "b"
+  def byteToString(v: Long, unit: ByteUnit): String = s"${unit.convertTo(v, ByteUnit.BYTE)}b"
 
   def regexFromString(str: String, key: String): Regex = {
     try str.r catch {

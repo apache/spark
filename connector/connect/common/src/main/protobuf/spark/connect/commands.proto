@@ -61,10 +61,18 @@ message SqlCommand {
   string sql = 1;
 
   // (Optional) A map of parameter names to literal expressions.
-  map<string, Expression.Literal> args = 2;
+  map<string, Expression.Literal> args = 2 [deprecated=true];
 
   // (Optional) A sequence of literal expressions for positional parameters in the SQL query text.
-  repeated Expression.Literal pos_args = 3;
+  repeated Expression.Literal pos_args = 3 [deprecated=true];
+
+  // (Optional) A map of parameter names to expressions.
+  // It cannot coexist with `pos_arguments`.
+  map<string, Expression> named_arguments = 4;
+
+  // (Optional) A sequence of expressions for positional parameters in the SQL query text.
+  // It cannot coexist with `named_arguments`.
+  repeated Expression pos_arguments = 5;
 }
 
 // A command that can create DataFrame global temp view or local temp view.
@@ -118,6 +126,9 @@ message WriteOperation {
 
   // (Optional) A list of configuration options.
   map<string, string> options = 9;
+
+  // (Optional) Columns used for clustering the table.
+  repeated string clustering_columns = 10;
 
   message SaveTable {
     // (Required) The table name.
@@ -183,6 +194,9 @@ message WriteOperationV2 {
 
   // (Optional) A condition for overwrite saving mode
   Expression overwrite_condition = 8;
+
+  // (Optional) Columns used for clustering the table.
+  repeated string clustering_columns = 9;
 }
 
 // Starts write stream operation as streaming query. Query ID and Run ID of the streaming

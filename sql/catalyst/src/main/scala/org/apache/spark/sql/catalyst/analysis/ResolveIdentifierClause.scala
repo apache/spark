@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StringType
 /**
  * Resolves the identifier expressions and builds the original plans/expressions.
  */
-object ResolveIdentifierClause extends Rule[LogicalPlan] {
+object ResolveIdentifierClause extends Rule[LogicalPlan] with AliasHelper with EvalHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
@@ -41,7 +41,7 @@ object ResolveIdentifierClause extends Rule[LogicalPlan] {
   }
 
   private def evalIdentifierExpr(expr: Expression): Seq[String] = {
-    expr match {
+    trimAliases(prepareForEval(expr)) match {
       case e if !e.foldable => expr.failAnalysis(
         errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
         messageParameters = Map(

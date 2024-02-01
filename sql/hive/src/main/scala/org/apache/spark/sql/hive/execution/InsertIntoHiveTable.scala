@@ -33,9 +33,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileFormat, V1WriteCommand, V1WritesUtils}
-import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClientImpl
-import org.apache.spark.sql.hive.client.hive._
 
 
 /**
@@ -208,56 +206,7 @@ case class InsertIntoHiveTable(
             table.database,
             table.identifier.table,
             partitionSpec)
-
-        var doHiveOverwrite = overwrite
-
         if (oldPart.isEmpty || !ifPartitionNotExists) {
-          // SPARK-29295: When insert overwrite to a Hive external table partition, if the
-          // partition does not exist, Hive will not check if the external partition directory
-          // exists or not before copying files. So if users drop the partition, and then do
-          // insert overwrite to the same partition, the partition will have both old and new
-          // data. We construct partition path. If the path exists, we delete it manually.
-          val partitionPath = if (oldPart.isEmpty && overwrite
-              && table.tableType == CatalogTableType.EXTERNAL) {
-            val partitionColumnNames = table.partitionColumnNames
-            val tablePath = new Path(table.location)
-            Some(ExternalCatalogUtils.generatePartitionPath(partitionSpec,
-              partitionColumnNames, tablePath))
-          } else {
-            oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
-          }
-
-          // SPARK-18107: Insert overwrite runs much slower than hive-client.
-          // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
-          // version and we may not want to catch up new Hive version every time. We delete the
-          // Hive partition first and then load data file into the Hive partition.
-          val hiveVersion = externalCatalog.asInstanceOf[ExternalCatalogWithListener]
-            .unwrapped.asInstanceOf[HiveExternalCatalog]
-            .client
-            .version
-          // SPARK-31684:
-          // For Hive 2.0.0 and onwards, as https://issues.apache.org/jira/browse/HIVE-11940
-          // has been fixed, and there is no performance issue anymore. We should leave the
-          // overwrite logic to hive to avoid failure in `FileSystem#checkPath` when the table
-          // and partition locations do not belong to the same `FileSystem`
-          // TODO(SPARK-31675): For Hive 2.2.0 and earlier, if the table and partition locations
-          // do not belong together, we will still get the same error thrown by hive encryption
-          // check. see https://issues.apache.org/jira/browse/HIVE-14380.
-          // So we still disable for Hive overwrite for Hive 1.x for better performance because
-          // the partition and table are on the same cluster in most cases.
-          if (partitionPath.nonEmpty && overwrite && hiveVersion < v2_0) {
-            partitionPath.foreach { path =>
-              val fs = path.getFileSystem(hadoopConf)
-              if (fs.exists(path)) {
-                if (!fs.delete(path, true)) {
-                  throw QueryExecutionErrors.cannotRemovePartitionDirError(path)
-                }
-                // Don't let Hive do overwrite operation since it is slower.
-                doHiveOverwrite = false
-              }
-            }
-          }
-
           // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
           // which is currently considered as a Hive native command.
           val inheritTableSpecs = true
@@ -266,7 +215,7 @@ case class InsertIntoHiveTable(
             table.identifier.table,
             tmpLocation.toString,
             partitionSpec,
-            isOverwrite = doHiveOverwrite,
+            isOverwrite = overwrite,
             inheritTableSpecs = inheritTableSpecs,
             isSrcLocal = false)
         }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.Admin

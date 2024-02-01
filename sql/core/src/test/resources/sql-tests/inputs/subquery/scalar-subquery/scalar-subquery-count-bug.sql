@@ -1,6 +1,7 @@
 --CONFIG_DIM1 spark.sql.optimizer.decorrelateInnerQuery.enabled=true
 --CONFIG_DIM1 spark.sql.optimizer.decorrelateInnerQuery.enabled=false
 
+--ONLY_IF spark
 create temp view l (a, b)
 as values
     (1, 2.0),

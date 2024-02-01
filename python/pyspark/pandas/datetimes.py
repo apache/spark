@@ -18,7 +18,6 @@
 """
 Date/Time related functions on pandas-on-Spark Series
 """
-import warnings
 from typing import Any, Optional, Union, no_type_check
 
 import numpy as np
@@ -27,7 +26,9 @@ from pandas.tseries.offsets import DateOffset
 
 import pyspark.pandas as ps
 import pyspark.sql.functions as F
-from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType, IntegerType
+from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, IntegerType
+from pyspark.pandas import DataFrame
+from pyspark.pandas.config import option_context
 
 
 class DatetimeMethods:
@@ -116,26 +117,59 @@ class DatetimeMethods:
     def nanosecond(self) -> "ps.Series":
         raise NotImplementedError()
 
-    # TODO(SPARK-42617): Support isocalendar.week and replace it.
-    # See also https://github.com/pandas-dev/pandas/pull/33595.
-    @property
-    def week(self) -> "ps.Series":
+    def isocalendar(self) -> "ps.DataFrame":
         """
-        The week ordinal of the year.
+        Calculate year, week, and day according to the ISO 8601 standard.
 
-        .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        DataFrame
+            With columns year, week and day.
+
+        .. note:: Returns have int64 type instead of UInt32 as is in pandas due to UInt32
+            is not supported by spark
+
+        Examples
+        --------
+        >>> dfs = ps.from_pandas(pd.date_range(start='2019-12-29', freq='D', periods=4).to_series())
+        >>> dfs.dt.isocalendar()
+                    year  week  day
+        2019-12-29  2019    52    7
+        2019-12-30  2020     1    1
+        2019-12-31  2020     1    2
+        2020-01-01  2020     1    3
+
+        >>> dfs.dt.isocalendar().week
+        2019-12-29    52
+        2019-12-30     1
+        2019-12-31     1
+        2020-01-01     1
+        Name: week, dtype: int64
         """
-        warnings.warn(
-            "weekofyear and week have been deprecated.",
-            FutureWarning,
+
+        return_types = [self._data.index.dtype, int, int, int]
+
+        def pandas_isocalendar(  # type: ignore[no-untyped-def]
+            pdf,
+        ) -> ps.DataFrame[return_types]:  # type: ignore[valid-type]
+            # cast to int64 due to UInt32 is not supported by spark
+            return pdf[pdf.columns[0]].dt.isocalendar().astype(np.int64).reset_index()
+
+        with option_context("compute.default_index_type", "distributed"):
+            psdf = self._data.to_frame().pandas_on_spark.apply_batch(pandas_isocalendar)
+
+        return DataFrame(
+            psdf._internal.copy(
+                spark_frame=psdf._internal.spark_frame,
+                index_spark_columns=psdf._internal.data_spark_columns[:1],
+                index_fields=psdf._internal.data_fields[:1],
+                data_spark_columns=psdf._internal.data_spark_columns[1:],
+                data_fields=psdf._internal.data_fields[1:],
+                column_labels=[("year",), ("week",), ("day",)],
+            )
         )
-        return self._data.spark.transform(lambda c: F.weekofyear(c).cast(LongType()))
-
-    @property
-    def weekofyear(self) -> "ps.Series":
-        return self.week
-
-    weekofyear.__doc__ = week.__doc__
 
     @property
     def dayofweek(self) -> "ps.Series":

@@ -18,14 +18,15 @@
 package org.apache.spark.sql
 
 import java.{lang => jl, util => ju}
+import java.io.ByteArrayInputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto.{Relation, StatSampleBy}
 import org.apache.spark.sql.DataFrameStatFunctions.approxQuantileResultEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, PrimitiveDoubleEncoder}
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.util.sketch.CountMinSketch
+import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
  * Statistic functions for `DataFrame`s.
@@ -583,6 +584,73 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
         .addExpressions(agg.expr)
     }
     CountMinSketch.readFrom(ds.head())
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param colName
+   *   name of the column over which the filter is built
+   * @param expectedNumItems
+   *   expected number of items which will be put into the filter.
+   * @param fpp
+   *   expected false positive probability of the filter.
+   * @since 3.5.0
+   */
+  def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
+    bloomFilter(Column(colName), expectedNumItems, fpp)
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param col
+   *   the column over which the filter is built
+   * @param expectedNumItems
+   *   expected number of items which will be put into the filter.
+   * @param fpp
+   *   expected false positive probability of the filter.
+   * @since 3.5.0
+   */
+  def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
+    val numBits = BloomFilter.optimalNumOfBits(expectedNumItems, fpp)
+    bloomFilter(col, expectedNumItems, numBits)
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param colName
+   *   name of the column over which the filter is built
+   * @param expectedNumItems
+   *   expected number of items which will be put into the filter.
+   * @param numBits
+   *   expected number of bits of the filter.
+   * @since 3.5.0
+   */
+  def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
+    bloomFilter(Column(colName), expectedNumItems, numBits)
+  }
+
+  /**
+   * Builds a Bloom filter over a specified column.
+   *
+   * @param col
+   *   the column over which the filter is built
+   * @param expectedNumItems
+   *   expected number of items which will be put into the filter.
+   * @param numBits
+   *   expected number of bits of the filter.
+   * @since 3.5.0
+   */
+  def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
+    val agg = Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(numBits))
+    val ds = sparkSession.newDataset(BinaryEncoder) { builder =>
+      builder.getProjectBuilder
+        .setInput(root)
+        .addExpressions(agg.expr)
+    }
+    BloomFilter.readFrom(new ByteArrayInputStream(ds.head()))
   }
 }
 

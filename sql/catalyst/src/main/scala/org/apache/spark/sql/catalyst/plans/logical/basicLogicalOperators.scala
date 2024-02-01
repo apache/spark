@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
@@ -103,7 +104,8 @@ object Project {
 
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
     assert(plan.resolved)
-    val projectList = reorderFields(plan.output.map(a => (a.name, a)), schema.fields, Nil, conf)
+    val projectList =
+      reorderFields(plan.output.map(a => (a.name, a)), schema.fields.toImmutableArraySeq, Nil, conf)
     Project(projectList, plan)
   }
 
@@ -125,8 +127,8 @@ object Project {
             } else {
               (f.name, GetStructField(col, index))
             }
-          },
-          expected.fields,
+          }.toImmutableArraySeq,
+          expected.fields.toImmutableArraySeq,
           columnPath,
           conf)
         if (col.nullable) {
@@ -233,6 +235,20 @@ object Project {
         }
     }
   }
+}
+
+case class DataFrameDropColumns(dropList: Seq[Expression], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = Nil
+
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(DF_DROP_COLUMNS)
+
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): DataFrameDropColumns =
+    copy(child = newChild)
 }
 
 /**
@@ -720,7 +736,7 @@ case class View(
   override def metadataOutput: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
-    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+    s"View (${desc.identifier}, ${truncatedString(output, "[", ", ", "]", maxFields)})"
   }
 
   override def doCanonicalize(): LogicalPlan = child match {
@@ -762,13 +778,14 @@ object View {
     // as optimization configs but they are still needed during the view resolution.
     // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
     // optimization phase.
-    val retainedConfigs = activeConf.getAllConfs.filterKeys(key =>
+    val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
       Seq(
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key) || key.startsWith("spark.sql.catalog."))
+      ).contains(key) || key.startsWith("spark.sql.catalog.")
+    }
     for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
@@ -846,6 +863,7 @@ case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
+    override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
@@ -947,7 +965,12 @@ object Range {
     if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
   }
 
-  private def castAndEval[T](expression: Expression, dataType: DataType, paramIndex: Int): T = {
+  private def castAndEval[T](
+      expression: Expression, dataType: DataType, paramIndex: Int, paramName: String): T = {
+    if (!expression.foldable) {
+      throw QueryCompilationErrors.nonFoldableArgumentError(
+        "range", paramName, dataType)
+    }
     typeCoercion.implicitCast(expression, dataType)
       .map(_.eval())
       .filter(_ != null)
@@ -957,11 +980,11 @@ object Range {
       }.asInstanceOf[T]
   }
 
-  def toLong(expression: Expression, paramIndex: Int): Long =
-    castAndEval[Long](expression, LongType, paramIndex)
+  def toLong(expression: Expression, paramIndex: Int, paramName: String): Long =
+    castAndEval[Long](expression, LongType, paramIndex, paramName)
 
-  def toInt(expression: Expression, paramIndex: Int): Int =
-    castAndEval[Int](expression, IntegerType, paramIndex)
+  def toInt(expression: Expression, paramIndex: Int, paramName: String): Int =
+    castAndEval[Int](expression, IntegerType, paramIndex, paramName)
 }
 
 @ExpressionDescription(
@@ -1007,12 +1030,19 @@ case class Range(
   require(step != 0, s"step ($step) cannot be 0")
 
   def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) = {
-    this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3),
-      Some(Range.toInt(numSlices, 4)))
+    this(
+      Range.toLong(start, 1, "start"),
+      Range.toLong(end, 2, "end"),
+      Range.toLong(step, 3, "step"),
+      Some(Range.toInt(numSlices, 4, "numSlices")))
   }
 
   def this(start: Expression, end: Expression, step: Expression) =
-    this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3), None)
+    this(
+      Range.toLong(start, 1, "start"),
+      Range.toLong(end, 2, "end"),
+      Range.toLong(step, 3, "step"),
+      None)
 
   def this(start: Expression, end: Expression) = this(start, end, Literal.create(1L, LongType))
 
@@ -1065,10 +1095,12 @@ case class Range(
     if (numElements == 0) {
       Statistics(sizeInBytes = 0, rowCount = Some(0))
     } else {
-      val (minVal, maxVal) = if (step > 0) {
-        (start, start + (numElements - 1) * step)
+      val (minVal, maxVal) = if (!numElements.isValidLong) {
+        (None, None)
+      } else if (step > 0) {
+        (Some(start), Some(start + (numElements.toLong - 1) * step))
       } else {
-        (start + (numElements - 1) * step, start)
+        (Some(start + (numElements.toLong - 1) * step), Some(start))
       }
 
       val histogram = if (conf.histogramEnabled) {
@@ -1079,8 +1111,8 @@ case class Range(
 
       val colStat = ColumnStat(
         distinctCount = Some(numElements),
-        max = Some(maxVal),
-        min = Some(minVal),
+        max = maxVal,
+        min = minVal,
         nullCount = Some(0),
         avgLen = Some(LongType.defaultSize),
         maxLen = Some(LongType.defaultSize),
@@ -1110,7 +1142,8 @@ case class Range(
           val upperBinValue = getRangeValue(math.max(upperIndexPos, 0))
           val ndv = math.max(upperIndexPos - lowerIndexPos, 1)
           // Update the lowerIndex and lowerBinValue with upper ones for the next iteration.
-          (upperIndex, upperBinValue, binAr :+ HistogramBin(lowerBinValue, upperBinValue, ndv))
+          (upperIndex, upperBinValue,
+            binAr :+ HistogramBin(lowerBinValue.toDouble, upperBinValue.toDouble, ndv))
       }
     Histogram(height, binArray.toArray)
   }
@@ -1332,9 +1365,9 @@ object Expand {
     // grouping expression or null, so here we create new instance of it.
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      child.output ++ groupByAttrs.map(_.newInstance) :+ gid :+ gpos
+      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      child.output ++ groupByAttrs.map(_.newInstance) :+ gid
+      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
     Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
@@ -1422,7 +1455,7 @@ case class Pivot(
         pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
       case _ =>
         pivotValues.flatMap { value =>
-          aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
+          aggregates.map(agg => AttributeReference(s"${value}_${agg.sql}", agg.dataType)())
         }
     }
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
@@ -1969,7 +2002,8 @@ trait SupportsSubquery extends LogicalPlan
 case class CollectMetrics(
     name: String,
     metrics: Seq[NamedExpression],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    dataframeId: Long)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
@@ -1982,6 +2016,10 @@ case class CollectMetrics(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
     copy(child = newChild)
+
+  override def doCanonicalize(): LogicalPlan = {
+    super.doCanonicalize().asInstanceOf[CollectMetrics].copy(dataframeId = 0L)
+  }
 }
 
 /**

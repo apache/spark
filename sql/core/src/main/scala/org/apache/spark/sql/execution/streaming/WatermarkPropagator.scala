@@ -181,7 +181,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
   }
 
   private def doSimulate(batchId: Long, plan: SparkPlan, originWatermark: Long): Unit = {
-    val statefulOperatorIdToNodeId = mutable.HashMap[Long, Int]()
     val nodeToOutputWatermark = mutable.HashMap[Int, Option[Long]]()
     val nextStatefulOperatorToWatermark = mutable.HashMap[Long, Option[Long]]()
 
@@ -190,9 +189,9 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       case node: EventTimeWatermarkExec =>
         val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
         if (inputWatermarks.nonEmpty) {
-          throw new AnalysisException("Redefining watermark is disallowed. You can set the " +
-            s"config '${SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key}' to 'false' to restore " +
-            "the previous behavior. Note that multiple stateful operators will be disallowed.")
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3076",
+            messageParameters = Map("config" -> SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
         }
 
         nodeToOutputWatermark.put(node.id, Some(originWatermark))
@@ -200,7 +199,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
 
       case node: StateStoreWriter =>
         val stOpId = node.stateInfo.get.operatorId
-        statefulOperatorIdToNodeId.put(stOpId, node.id)
 
         val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
 

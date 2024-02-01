@@ -75,24 +75,26 @@ class AvroRowReaderSuite
           StructType(new StructField("value", IntegerType, true) :: Nil),
           false,
           RebaseSpec(CORRECTED),
-          new NoopFilters)
+          new NoopFilters,
+          false,
+          "")
         override val stopPosition = fileSize
 
         override def hasNext: Boolean = hasNextRow
 
-        override def next: InternalRow = nextRow
+        override def next(): InternalRow = nextRow
       }
       assert(it.hasNext == true)
-      assert(it.next.getInt(0) == 1)
+      assert(it.next().getInt(0) == 1)
       // test no intervening next
       assert(it.hasNext == true)
       assert(it.hasNext == true)
       // test no intervening hasNext
-      assert(it.next.getInt(0) == 2)
-      assert(it.next.getInt(0) == 3)
+      assert(it.next().getInt(0) == 2)
+      assert(it.next().getInt(0) == 3)
       assert(it.hasNext == false)
       assertThrows[NoSuchElementException] {
-        it.next
+        it.next()
       }
     }
   }

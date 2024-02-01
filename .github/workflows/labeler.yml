@@ -34,20 +34,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-    # In order to get back the negated matches like in the old config,
-    # we need the actinons/labeler concept of `all` and `any` which matches
-    # all of the given constraints / glob patterns for either `all`
-    # files or `any` file in the change set.
-    #
-    # Github issue which requests a timeline for a release with any/all support:
-    #     - https://github.com/actions/labeler/issues/111
-    # This issue also references the issue that mentioned that any/all are only
-    # supported on main branch (previously called master):
-    #    - https://github.com/actions/labeler/issues/73#issuecomment-639034278
-    #
-    # However, these are not in a published release and the current `main` branch
-    # has some issues upon testing.
-    - uses: actions/labeler@v4
+    - uses: actions/labeler@v5
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"
         sync-labels: true

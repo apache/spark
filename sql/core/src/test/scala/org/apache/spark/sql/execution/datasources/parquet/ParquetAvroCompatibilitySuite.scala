@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord

@@ -25,9 +25,9 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.Utils;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class JavaDataFrameReaderWriterSuite {
   private SparkSession spark = new TestSparkSession();
@@ -35,7 +35,7 @@ public class JavaDataFrameReaderWriterSuite {
   private transient String input;
   private transient String output;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
     File f = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "output");
@@ -43,7 +43,7 @@ public class JavaDataFrameReaderWriterSuite {
     output = f.toString();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;

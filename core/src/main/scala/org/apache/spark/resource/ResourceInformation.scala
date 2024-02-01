@@ -19,11 +19,12 @@ package org.apache.spark.resource
 
 import scala.util.control.NonFatal
 
-import org.json4s.{DefaultFormats, Extraction, JValue}
+import org.json4s.{DefaultFormats, Extraction, Formats, JValue}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
@@ -47,17 +48,18 @@ class ResourceInformation(
     obj match {
       case that: ResourceInformation =>
         that.getClass == this.getClass &&
-        that.name == name && that.addresses.toSeq == addresses.toSeq
+        that.name == name &&
+        that.addresses.toImmutableArraySeq == addresses.toImmutableArraySeq
       case _ =>
         false
     }
   }
 
-  override def hashCode(): Int = Seq(name, addresses.toSeq).hashCode()
+  override def hashCode(): Int = Seq(name, addresses.toImmutableArraySeq).hashCode()
 
   // TODO(SPARK-39658): reconsider whether we want to expose a third-party library's
   // symbols as part of a public API:
-  final def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
+  final def toJson(): JValue = ResourceInformationJson(name, addresses.toImmutableArraySeq).toJValue
 }
 
 private[spark] object ResourceInformation {
@@ -69,7 +71,7 @@ private[spark] object ResourceInformation {
    * Parses a JSON string into a [[ResourceInformation]] instance.
    */
   def parseJson(json: String): ResourceInformation = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     try {
       parse(json).extract[ResourceInformationJson].toResourceInformation
     } catch {
@@ -80,7 +82,7 @@ private[spark] object ResourceInformation {
   }
 
   def parseJson(json: JValue): ResourceInformation = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     try {
       json.extract[ResourceInformationJson].toResourceInformation
     } catch {

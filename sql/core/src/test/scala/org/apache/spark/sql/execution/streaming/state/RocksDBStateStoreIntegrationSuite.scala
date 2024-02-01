@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
-import scala.collection.JavaConverters
+import scala.jdk.CollectionConverters.SetHasAsScala
 
 import org.scalatest.time.{Minute, Span}
 
@@ -34,13 +34,14 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithChangelogCheckpointingEnabled {
   import testImplicits._
 
-  test("RocksDBStateStore") {
+  testWithColumnFamilies("RocksDBStateStore",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       val input = MemoryStream[Int]
       val conf = Map(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBStateStoreProvider].getName)
 
-      testStream(input.toDF.groupBy().count(), outputMode = OutputMode.Update)(
+      testStream(input.toDF().groupBy().count(), outputMode = OutputMode.Update)(
         StartStream(checkpointLocation = dir.getAbsolutePath, additionalConfs = conf),
         AddData(input, 1, 2, 3),
         CheckAnswer(3),
@@ -49,9 +50,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           val storeCheckpointDir = StateStoreId(
             dir.getAbsolutePath + "/state", 0, 0).storeCheckpointLocation()
           val storeCheckpointFile = if (isChangelogCheckpointingEnabled) {
-            storeCheckpointDir + "/1.changelog"
+            s"$storeCheckpointDir/1.changelog"
           } else {
-            storeCheckpointDir + "/1.zip"
+            s"$storeCheckpointDir/1.zip"
           }
           new File(storeCheckpointFile).exists()
         }
@@ -59,7 +60,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
   }
 
-  test("SPARK-36236: query progress contains only the expected RocksDB store custom metrics") {
+  testWithColumnFamilies("SPARK-36236: query progress contains only the " +
+    s"expected RocksDB store custom metrics",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     // fails if any new custom metrics are added to remind the author of API changes
     import testImplicits._
 
@@ -90,12 +93,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           eventually(timeout(Span(1, Minute))) {
             val nextProgress = query.lastProgress
             assert(nextProgress != null, "progress is not yet available")
-            assert(nextProgress.stateOperators.length > 0, "state operators are missing in metrics")
+            assert(nextProgress.stateOperators.length > 0,
+              "state operators are missing in metrics")
             val stateOperatorMetrics = nextProgress.stateOperators(0)
-            assert(JavaConverters.asScalaSet(stateOperatorMetrics.customMetrics.keySet) === Set(
+            assert(stateOperatorMetrics.customMetrics.keySet.asScala === Set(
               "rocksdbGetLatency", "rocksdbCommitCompactLatency", "rocksdbBytesCopied",
-              "rocksdbPutLatency", "rocksdbCommitPauseLatency", "rocksdbFilesReused",
-              "rocksdbCommitWriteBatchLatency", "rocksdbFilesCopied", "rocksdbSstFileSize",
+              "rocksdbPutLatency", "rocksdbFilesReused",
+              "rocksdbFilesCopied", "rocksdbSstFileSize",
               "rocksdbCommitCheckpointLatency", "rocksdbZipFileBytesUncompressed",
               "rocksdbCommitFlushLatency", "rocksdbCommitFileSyncLatencyMs", "rocksdbGetCount",
               "rocksdbPutCount", "rocksdbTotalBytesRead", "rocksdbTotalBytesWritten",
@@ -112,12 +116,13 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
   }
 
-  testQuietly("SPARK-36519: store RocksDB format version in the checkpoint") {
-    def getFormatVersion(query: StreamingQuery): Int = {
-      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
-        .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
-    }
+  private def getFormatVersion(query: StreamingQuery): Int = {
+    query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
+      .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+  }
 
+  testWithColumnFamilies("SPARK-36519: store RocksDB format version in the checkpoint",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { dir =>
@@ -154,11 +159,10 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
   }
 
-  testQuietly("SPARK-36519: RocksDB format version can be set by the SQL conf") {
+  testWithColumnFamilies("SPARK-36519: RocksDB format version can be set by the SQL conf",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      // Set an unsupported RocksDB format version and the query should fail if it's passed down
-      // into RocksDB
       SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
       val inputData = MemoryStream[Int]
       val query = inputData.toDS().toDF("value")
@@ -170,12 +174,15 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         .outputMode("complete")
         .start()
       inputData.addData(1, 2)
-      val e = intercept[StreamingQueryException](query.processAllAvailable())
-      assert(e.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
+      query.processAllAvailable()
+      assert(getFormatVersion(query) == 100)
+      query.stop()
     }
   }
 
-  test("SPARK-37224: numRowsTotal = 0 when trackTotalNumberOfRows is turned off") {
+  testWithColumnFamilies("SPARK-37224: numRowsTotal = 0 when " +
+    s"trackTotalNumberOfRows is turned off",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       withSQLConf(
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),

@@ -25,6 +25,7 @@ import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A file status augmented with optional metadata, which tasks and file readers can use however they
@@ -101,7 +102,7 @@ class FilePruningRunner(filters: Seq[Expression]) {
 object PartitionDirectory {
   // For backward compat with code that does not know about extra file metadata
   def apply(values: InternalRow, files: Array[FileStatus]): PartitionDirectory =
-    PartitionDirectory(values, files.map(FileStatusWithMetadata(_)))
+    PartitionDirectory(values, files.map(FileStatusWithMetadata(_)).toImmutableArraySeq)
 }
 
 /**

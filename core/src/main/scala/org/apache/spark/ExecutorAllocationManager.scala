@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
@@ -259,8 +260,7 @@ private[spark] class ExecutorAllocationManager(
    * Stop the allocation manager.
    */
   def stop(): Unit = {
-    executor.shutdown()
-    executor.awaitTermination(10, TimeUnit.SECONDS)
+    ThreadUtils.shutdown(executor, FiniteDuration(10, TimeUnit.SECONDS))
   }
 
   /**
@@ -630,7 +630,7 @@ private[spark] class ExecutorAllocationManager(
   private def onSchedulerQueueEmpty(): Unit = synchronized {
     logDebug("Clearing timer to add executors because there are no more pending tasks")
     addTime = NOT_SET
-    numExecutorsToAddPerResourceProfileId.transform { case (_, _) => 1 }
+    numExecutorsToAddPerResourceProfileId.mapValuesInPlace { case (_, _) => 1 }
   }
 
   private case class StageAttempt(stageId: Int, stageAttemptId: Int) {

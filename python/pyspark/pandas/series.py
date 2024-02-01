@@ -53,6 +53,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
+
 from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -61,16 +62,15 @@ from pyspark.sql.types import (
     DoubleType,
     FloatType,
     IntegerType,
-    IntegralType,
     LongType,
     NumericType,
     Row,
     StructType,
     TimestampType,
+    NullType,
 )
 from pyspark.sql.window import Window
 from pyspark.sql.utils import get_column_class, get_window_class
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
@@ -703,9 +703,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     # create accessor for pandas-on-Spark specific methods.
     pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkSeriesMethods)
 
-    # keep the name "koalas" for backward compatibility.
-    koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
-
     # Comparison Operators
     def eq(self, other: Any) -> "Series":
         """
@@ -893,7 +890,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.rfloordiv(other), self.rmod(other)
 
-    def between(self, left: Any, right: Any, inclusive: Union[bool, str] = "both") -> "Series":
+    def between(self, left: Any, right: Any, inclusive: str = "both") -> "Series":
         """
         Return boolean Series equivalent to left <= series <= right.
         This function returns a boolean vector containing `True` wherever the
@@ -906,9 +903,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Left boundary.
         right : scalar or list-like
             Right boundary.
-        inclusive : {"both", "neither", "left", "right"} or boolean. "both" by default.
+        inclusive : {"both", "neither", "left", "right"}
             Include boundaries. Whether to set each bound as closed or open.
-            Booleans are deprecated in favour of `both` or `neither`.
+
+            .. versionchanged:: 4.0.0
 
         Returns
         -------
@@ -979,17 +977,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    False
         dtype: bool
         """
-        if inclusive is True or inclusive is False:
-            warnings.warn(
-                "Boolean inputs to the `inclusive` argument are deprecated in "
-                "favour of `both` or `neither`.",
-                FutureWarning,
-            )
-            if inclusive:
-                inclusive = "both"
-            else:
-                inclusive = "neither"
-
         if inclusive == "both":
             lmask = self >= left
             rmask = self <= right
@@ -1644,7 +1631,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> from collections import OrderedDict, defaultdict
         >>> s.to_dict(OrderedDict)
-        OrderedDict([(0, 1), (1, 2), (2, 3), (3, 4)])
+        OrderedDict(...)
 
         >>> dd = defaultdict(list)
         >>> s.to_dict(dd)  # doctest: +ELLIPSIS
@@ -1661,7 +1648,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         buf: Optional[IO[str]] = None,
         columns: Optional[List[Name]] = None,
-        col_space: Optional[int] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
@@ -1681,11 +1667,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         multicolumn_format: Optional[str] = None,
         multirow: Optional[bool] = None,
     ) -> Optional[str]:
-        warnings.warn(
-            "Argument `col_space` will be removed in 4.0.0.",
-            FutureWarning,
-        )
-
         args = locals()
         psseries = self
         return validate_arguments_and_invoke_function(
@@ -2090,6 +2071,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Method to use for filling holes in reindexed Series pad / ffill: propagate last valid
             observation forward to next valid backfill / bfill:
             use NEXT valid observation to fill gap
+
+            .. deprecated:: 4.0.0
+
         axis : {0 or `index`}
             1 and `columns` are not supported.
         inplace : boolean, default False
@@ -2100,6 +2084,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             consecutive NaNs, it will only be partially filled. If method is not specified,
             this is the maximum number of entries along the entire axis where NaNs will be filled.
             Must be greater than 0 if not None
+
+            .. deprecated:: 4.0.0
+
 
         Returns
         -------
@@ -2152,6 +2139,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         psser = self._fillna(value=value, method=method, axis=axis, limit=limit)
 
         if method is not None:
+            warnings.warn(
+                "Series.fillna with 'method' is deprecated and will raise in a future version. "
+                "Use Series.ffill() or Series.bfill() instead.",
+                FutureWarning,
+            )
             psser = DataFrame(psser._psdf._internal.resolved_copy)._psser_for(self._column_label)
 
         inplace = validate_bool_kwarg(inplace, "inplace")
@@ -2239,6 +2231,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         limit_direction: Optional[str] = None,
         limit_area: Optional[str] = None,
     ) -> "Series":
+        if self.dtype == "object":
+            warnings.warn(
+                "Series.interpolate with object dtype is deprecated and will raise in a "
+                "future version. Convert to a specific numeric type before interpolating.",
+                FutureWarning,
+            )
         if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
@@ -2256,7 +2254,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        last_non_null = SF.last_non_null(scol)
+        last_non_null = F.last(scol, True)
         null_index = SF.null_index(scol)
 
         Window = get_window_class()
@@ -2706,6 +2704,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         When having a Series with dates as index, this function can
         select the last few elements based on a date offset.
 
+        .. deprecated:: 4.0.0
+
         Parameters
         ----------
         offset : str or DateOffset
@@ -2744,6 +2744,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-11 was
         not returned.
         """
+        warnings.warn(
+            "last is deprecated and will be removed in a future version. "
+            "Please create a mask and filter using `.loc` instead",
+            FutureWarning,
+        )
         return first_series(self.to_frame().last(offset)).rename(self.name)
 
     def first(self, offset: Union[str, DateOffset]) -> "Series":
@@ -2752,6 +2757,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         When having a Series with dates as index, this function can
         select the first few elements based on a date offset.
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -2791,6 +2798,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-13 was
         not returned.
         """
+        warnings.warn(
+            "first is deprecated and will be removed in a future version. "
+            "Please create a mask and filter using `.loc` instead",
+            FutureWarning,
+        )
         return first_series(self.to_frame().first(offset)).rename(self.name)
 
     # TODO: Categorical type isn't supported (due to PySpark's limitation) and
@@ -3136,6 +3148,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Interchange axes and swap values axes appropriately.
 
+        .. deprecated:: 4.0.0
+
         Parameters
         ----------
         i: {0 or 'index', 1 or 'columns'}. The axis to swap.
@@ -3161,6 +3175,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         z    3
         dtype: int64
         """
+        warnings.warn(
+            "'Series.swapaxes' is deprecated and will be removed in a future version. "
+            "Please use 'Series.transpose' instead.",
+            FutureWarning,
+        )
         assert copy is True
 
         i = validate_axis(i)
@@ -4024,7 +4043,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             def quantile(psser: Series) -> PySparkColumn:
                 spark_type = psser.spark.data_type
                 spark_column = psser.spark.column
-                if isinstance(spark_type, (BooleanType, NumericType)):
+                if isinstance(spark_type, (BooleanType, NumericType, NullType)):
                     return F.percentile_approx(spark_column.cast(DoubleType()), q_float, accuracy)
                 else:
                     raise TypeError(
@@ -4037,7 +4056,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     # TODO: add axis, pct, na_option parameter
     def rank(
-        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+        self, method: str = "average", ascending: bool = True, numeric_only: bool = False
     ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -4058,8 +4077,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
-        numeric_only : bool, optional
-            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
+        numeric_only : bool, default False
+            For DataFrame objects, rank only numeric columns if set to True.
+
+            .. versionchanged:: 4.0.0
+                The default value of ``numeric_only`` is now ``False``.
+
 
         Returns
         -------
@@ -4127,18 +4150,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y    b
         z    c
         Name: A, dtype: object
-
-        >>> s.rank(numeric_only=True)
-        Series([], Name: A, dtype: float64)
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `None` in 4.0.0.",
-            FutureWarning,
-        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
-            return ps.Series([], dtype="float64", name=self.name)
+            raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
         else:
             return self._rank(method, ascending).spark.analyzed
 
@@ -4394,6 +4409,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if results[0][0] is None:
             # This will only happen when skipna is False because we will
             # place nulls first.
+            warnings.warn(
+                "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
+                "is deprecated. In a future version this will raise ValueError",
+                FutureWarning,
+            )
             return np.nan
         values = list(results[0][1:])
         if len(values) == 1:
@@ -4502,6 +4522,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if results[0][0] is None:
             # This will only happen when skipna is False because we will
             # place nulls first.
+            warnings.warn(
+                "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
+                "is deprecated. In a future version this will raise ValueError",
+                FutureWarning,
+            )
             return np.nan
         values = list(results[0][1:])
         if len(values) == 1:
@@ -4828,7 +4853,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.index
 
-    # TODO: introduce 'method', 'limit', 'in_place'; fully support 'regex'
+    # TODO: introduce 'in_place'; fully support 'regex'
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
@@ -6208,6 +6233,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         10    10
         dtype: int64
         """
+        warnings.warn(
+            "The behavior of Series.argsort in the presence of NA values is deprecated. "
+            "In a future version, NA values will be ordered last instead of set to -1.",
+            FutureWarning,
+        )
         notnull = self.loc[self.notnull()]
 
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
@@ -6313,9 +6343,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> s.argmax()
         3
-
-        >>> s.argmax(skipna=False)
-        -1
         """
         axis = validate_axis(axis, none_axis=0)
         if axis == 1:
@@ -6340,7 +6367,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             max_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
-            return -1 if max_value[0] is None else max_value[1]
+            if max_value[0] is None:
+                warnings.warn(
+                    "The behavior of Series.argmax/argmin "
+                    "with skipna=False and NAs, or with all-NAs is deprecated. "
+                    "In a future version this will raise ValueError.",
+                    FutureWarning,
+                )
+                return -1
+            else:
+                return max_value[1]
 
     def argmin(self, axis: Axis = None, skipna: bool = True) -> int:
         """
@@ -6400,7 +6436,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             min_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
-            return -1 if min_value[0] is None else min_value[1]
+            if min_value[0] is None:
+                warnings.warn(
+                    "The behavior of Series.argmax/argmin "
+                    "with skipna=False and NAs, or with all-NAs is deprecated. "
+                    "In a future version this will raise ValueError.",
+                    FutureWarning,
+                )
+                return -1
+            else:
+                return min_value[1]
 
     def compare(
         self, other: "Series", keep_shape: bool = False, keep_equal: bool = False
@@ -6933,36 +6978,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return psser._cum(F.sum, skipna, part_cols)
 
     def _cumprod(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
-        if isinstance(self.spark.data_type, BooleanType):
-            scol = self._cum(
-                lambda scol: F.min(F.coalesce(scol, F.lit(True))), skipna, part_cols
-            ).spark.column.cast(LongType())
-        elif isinstance(self.spark.data_type, NumericType):
-            num_zeros = self._cum(
-                lambda scol: F.sum(F.when(scol == 0, 1).otherwise(0)), skipna, part_cols
-            ).spark.column
-            num_negatives = self._cum(
-                lambda scol: F.sum(F.when(scol < 0, 1).otherwise(0)), skipna, part_cols
-            ).spark.column
-            sign = F.when(num_negatives % 2 == 0, 1).otherwise(-1)
-
-            abs_prod = F.exp(
-                self._cum(lambda scol: F.sum(F.log(F.abs(scol))), skipna, part_cols).spark.column
-            )
-
-            scol = F.when(num_zeros > 0, 0).otherwise(sign * abs_prod)
-
-            if isinstance(self.spark.data_type, IntegralType):
-                scol = F.round(scol).cast(LongType())
-        else:
+        psser = self
+        if isinstance(psser.spark.data_type, BooleanType):
+            psser = psser.spark.transform(lambda scol: scol.cast(LongType()))
+        elif not isinstance(psser.spark.data_type, NumericType):
             raise TypeError(
                 "Could not convert {} ({}) to numeric".format(
-                    spark_type_to_pandas_dtype(self.spark.data_type),
-                    self.spark.data_type.simpleString(),
+                    spark_type_to_pandas_dtype(psser.spark.data_type),
+                    psser.spark.data_type.simpleString(),
                 )
             )
-
-        return self._with_new_scol(scol)
+        return psser._cum(lambda c: SF.product(c, skipna), skipna, part_cols)
 
     # ----------------------------------------------------------------------
     # Accessor Methods
@@ -6993,7 +7019,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sfun: Callable[["Series"], PySparkColumn],
         name: str_type,
         axis: Optional[Axis] = None,
-        numeric_only: bool = True,
+        numeric_only: bool = False,
         skipna: bool = True,
         **kwargs: Any,
     ) -> Scalar:
@@ -7179,6 +7205,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
     def __getitem__(self, key: Any) -> Any:
+        if type(key) == int and not isinstance(self.index.spark.data_type, (IntegerType, LongType)):
+            warnings.warn(
+                "Series.__getitem__ treating keys as positions is deprecated. "
+                "In a future version, integer keys will always be treated as labels "
+                "(consistent with DataFrame behavior). "
+                "To access a value by position, use `ser.iloc[pos]`",
+                FutureWarning,
+            )
         try:
             if (isinstance(key, slice) and any(type(n) == int for n in [key.start, key.stop])) or (
                 type(key) == int

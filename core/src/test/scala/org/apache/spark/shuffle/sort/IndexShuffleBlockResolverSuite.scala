@@ -30,15 +30,19 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SslTestUtils, Utils}
 
 class IndexShuffleBlockResolverSuite extends SparkFunSuite {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var diskBlockManager: DiskBlockManager = _
 
+  def createSparkConf(): SparkConf = {
+    new SparkConf(loadDefaults = false)
+  }
+
   private var tempDir: File = _
-  private val conf: SparkConf = new SparkConf(loadDefaults = false)
+  private val conf: SparkConf = createSparkConf()
   private val appId = "TESTAPP"
 
   override def beforeEach(): Unit = {
@@ -232,7 +236,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
         ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId),
         dirs)
     assert(mergedBlockMeta.getNumChunks === 3)
-    assert(mergedBlockMeta.readChunkBitmaps().size === 3)
+    assert(mergedBlockMeta.readChunkBitmaps().length === 3)
     assert(mergedBlockMeta.readChunkBitmaps()(0).contains(1))
     assert(mergedBlockMeta.readChunkBitmaps()(0).contains(2))
     assert(!mergedBlockMeta.readChunkBitmaps()(0).contains(3))
@@ -273,5 +277,11 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
     assert(checksumAlgo === conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     val checksumsFromFile = resolver.getChecksums(checksumFile, 10)
     assert(checksumsInMemory === checksumsFromFile)
+  }
+}
+
+class SslIndexShuffleBlockResolverSuite extends IndexShuffleBlockResolverSuite {
+  override def createSparkConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

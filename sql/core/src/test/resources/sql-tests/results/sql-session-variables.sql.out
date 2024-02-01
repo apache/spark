@@ -545,6 +545,23 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SET VARIABLE title = 'Test variable in aggregate'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(title)
+-- !query schema
+struct<scalarsubquery(title):bigint>
+-- !query output
+0
+1
+
+
+-- !query
 SET VARIABLE title = 'Test qualifiers - fail'
 -- !query schema
 struct<>
@@ -907,10 +924,11 @@ struct<>
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+  "sqlState" : "42623",
   "messageParameters" : {
     "colName" : "`system`.`session`.`var1`",
     "defaultValue" : "(SELECT c1 FROM VALUES(1) AS T(c1))",
-    "statement" : "CRETE VARIABLE"
+    "statement" : "DECLARE VARIABLE"
   }
 }
 
@@ -2058,7 +2076,7 @@ SELECT c1 AS `2` FROM VALUES(2) AS T(var1), LATERAL(SELECT var1) AS TT(c1)
 -- !query schema
 struct<2:int>
 -- !query output
-1
+2
 
 
 -- !query
@@ -2261,6 +2279,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
     "objName" : "`spark_catalog`.`default`.`v`",

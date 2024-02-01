@@ -13,7 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "format_string",
+        "functionName": "printf",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"

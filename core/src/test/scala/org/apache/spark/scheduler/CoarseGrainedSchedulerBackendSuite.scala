@@ -37,6 +37,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
@@ -62,7 +63,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
     assert(thrown.getMessage.contains("using broadcast variables for large values"))
     val smaller = sc.parallelize(1 to 4).collect()
-    assert(smaller.size === 4)
+    assert(smaller.length === 4)
   }
 
   test("compute max number of concurrent tasks can be launched") {
@@ -254,7 +255,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
     assert(exec3ResourceProfileId === rp.id)
 
-    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    val taskResources = Map(GPU -> Map("0" -> ONE_ENTIRE_RESOURCE))
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
@@ -361,7 +362,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
     assert(exec3ResourceProfileId === rp.id)
 
-    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    val taskResources = Map(GPU -> Map("0" -> ONE_ENTIRE_RESOURCE))
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),

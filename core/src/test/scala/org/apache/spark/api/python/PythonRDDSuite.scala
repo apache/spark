@@ -23,8 +23,8 @@ import java.nio.charset.StandardCharsets
 import java.util
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}

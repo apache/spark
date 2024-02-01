@@ -17,9 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.Set
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
@@ -178,6 +178,6 @@ object InputFormatInfo {
       }
     }
 
-    nodeToSplit.mapValues(_.toSet).toMap
+    nodeToSplit.toMap.transform((_, v) => v.toSet)
   }
 }

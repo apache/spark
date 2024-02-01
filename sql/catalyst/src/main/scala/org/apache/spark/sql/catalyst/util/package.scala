@@ -101,10 +101,10 @@ package object util extends Logging {
       val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
-      PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
+      PrettyAttribute(s"${usePrettyExpression(e.child)}.${e.field.name}", e.dataType)
     case r: InheritAnalysisRules =>
       PrettyAttribute(r.makeSQLString(r.parameters.map(toPrettySQL)), r.dataType)
-    case c: Cast if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
+    case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
       PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
   }

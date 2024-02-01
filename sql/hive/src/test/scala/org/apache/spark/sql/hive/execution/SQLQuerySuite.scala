@@ -149,8 +149,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
         Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
 
-      orders.toDF.createOrReplaceTempView("orders1")
-      orderUpdates.toDF.createOrReplaceTempView("orderupdates1")
+      orders.toDF().createOrReplaceTempView("orders1")
+      orderUpdates.toDF().createOrReplaceTempView("orderupdates1")
 
       withTable("orders", "orderupdates") {
         sql(
@@ -246,8 +246,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
-      "Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-        "evaluate if `expr1` is [not] in between `expr2` and `expr3`")
+      "Usage: input [NOT] BETWEEN lower AND upper - " +
+        "evaluate if `input` is [not] in between `lower` and `upper`")
 
     checkKeywordsExist(sql("describe function  `case`"),
       "Function: case",
@@ -356,7 +356,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("explode nested Field") {
     withTempView("nestedArray") {
-      Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.createOrReplaceTempView("nestedArray")
+      Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF().createOrReplaceTempView("nestedArray")
       checkAnswer(
         sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
         Row(1) :: Row(2) :: Row(3) :: Nil)
@@ -1288,7 +1288,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             |) t
             |SELECT c
           """.stripMargin),
-        (0 until 5).map(i => Row(i + "#")))
+        (0 until 5).map(i => Row(s"$i#")))
     }
   }
 
@@ -1311,7 +1311,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           |WITH SERDEPROPERTIES('field.delim' = '|')
         """.stripMargin)
 
-      checkAnswer(df, (0 until 5).map(i => Row(i + "#", i + "#")))
+      checkAnswer(df, (0 until 5).map(i => Row(s"$i#", s"$i#")))
     }
   }
 
@@ -1410,7 +1410,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("run sql directly on files - hive") {
     withTempPath(f => {
-      spark.range(100).toDF.write.parquet(f.getCanonicalPath)
+      spark.range(100).toDF().write.parquet(f.getCanonicalPath)
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -2143,16 +2143,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("Auto alias construction of get_json_object") {
     val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
-    val expectedMsg = "Cannot create a table having a column whose name contains commas " +
-      s"in Hive metastore. Table: `$SESSION_CATALOG_NAME`.`default`.`t`; Column: " +
-      "get_json_object(jstring, $.f1)"
 
     withTable("t") {
       val e = intercept[AnalysisException] {
         df.select($"key", functions.get_json_object($"jstring", "$.f1"))
           .write.format("hive").saveAsTable("t")
-      }.getMessage
-      assert(e.contains(expectedMsg))
+      }
+      checkError(e,
+        errorClass = "INVALID_HIVE_COLUMN_NAME",
+        parameters = Map(
+          "invalidChars" -> "','",
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`get_json_object(jstring, $`.`f1)`")
+      )
     }
 
     withTempView("tempView") {
@@ -2161,8 +2164,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val e = intercept[AnalysisException] {
           sql("CREATE TABLE t USING hive AS " +
             "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
-        }.getMessage
-        assert(e.contains(expectedMsg))
+        }
+        checkError(e,
+          errorClass = "INVALID_HIVE_COLUMN_NAME",
+          parameters = Map(
+            "invalidChars" -> "','",
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "columnName" -> "`get_json_object(jstring, $`.`f1)`")
+        )
       }
     }
   }
@@ -2658,6 +2667,32 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |""".stripMargin)
       val df = sql("SELECT * FROM t")
       checkAnswer(df, Seq.empty[Row])
+    }
+  }
+
+  test("SPARK-46388: HiveAnalysis convert InsertIntoStatement to InsertIntoHiveTable " +
+    "iff child resolved") {
+    withTable("t") {
+      sql("CREATE TABLE t (a STRING)")
+      checkError(
+        exception = intercept[AnalysisException](sql("INSERT INTO t SELECT a*2 FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 38,
+          stop = 38) )
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("INSERT INTO t SELECT cast(a as short) FROM t where b=1")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`b`", "proposal" -> "`a`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 51,
+          stop = 51))
     }
   }
 }

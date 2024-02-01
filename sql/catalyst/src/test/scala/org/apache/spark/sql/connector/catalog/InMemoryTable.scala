@@ -25,6 +25,7 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A simple in-memory table. Rows are stored as a buffered group produced by each output task.
@@ -50,7 +51,8 @@ class InMemoryTable(
 
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
+    dataMap --= InMemoryTable
+      .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
@@ -116,7 +118,7 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val deleteKeys = InMemoryTable.filtersToKeys(
-        dataMap.keys, partCols.map(_.toSeq.quoted), filters)
+        dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }

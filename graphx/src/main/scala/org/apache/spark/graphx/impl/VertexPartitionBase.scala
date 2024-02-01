@@ -17,7 +17,6 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.language.higherKinds
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._

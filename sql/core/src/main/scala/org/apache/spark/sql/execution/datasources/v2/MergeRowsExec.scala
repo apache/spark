@@ -117,7 +117,9 @@ case class MergeRowsExec(
         SplitExec(createPredicate(cond), createProjection(output), createProjection(otherOutput))
 
       case other =>
-        throw new AnalysisException(s"Unexpected instruction: $other")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3073",
+          messageParameters = Map("other" -> other.toString))
     }
   }
 

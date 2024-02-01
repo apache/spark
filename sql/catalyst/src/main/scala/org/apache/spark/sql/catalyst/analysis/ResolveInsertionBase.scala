@@ -36,10 +36,10 @@ abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
     if (i.userSpecifiedCols.size != i.query.output.size) {
       if (i.userSpecifiedCols.size > i.query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tblName, i.userSpecifiedCols, i.query)
+          tblName, i.userSpecifiedCols, i.query.output)
       } else {
         throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-          tblName, i.userSpecifiedCols, i.query)
+          tblName, i.userSpecifiedCols, i.query.output)
       }
     }
     val projectByName = i.userSpecifiedCols.zip(i.query.output)

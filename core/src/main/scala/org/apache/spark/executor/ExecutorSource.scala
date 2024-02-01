@@ -19,7 +19,7 @@ package org.apache.spark.executor
 
 import java.util.concurrent.ThreadPoolExecutor
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.hadoop.fs.FileSystem

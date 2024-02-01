@@ -29,7 +29,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
+import org.apache.spark.sql.catalyst.optimizer.{ReplaceExpressions, RewriteWithExpression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -181,8 +183,15 @@ class ProtoToParsedPlanTestSuite
       val planner = new SparkConnectPlanner(SessionHolder.forTesting(spark))
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual =
-        removeMemoryAddress(normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString)
+      val finalAnalyzedPlan = {
+        object Helper extends RuleExecutor[LogicalPlan] {
+          val batches =
+            Batch("Finish Analysis", Once, ReplaceExpressions) ::
+              Batch("Rewrite With expression", Once, RewriteWithExpression) :: Nil
+        }
+        Helper.execute(catalystPlan)
+      }
+      val actual = removeMemoryAddress(normalizeExprIds(finalAnalyzedPlan).treeString)
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.

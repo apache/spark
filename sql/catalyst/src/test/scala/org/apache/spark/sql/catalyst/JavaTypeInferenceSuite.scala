@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.util.{LinkedList, List => JList, Map => JMap}
+import java.util.{HashSet, LinkedList, List => JList, Map => JMap, Set => JSet}
 
 import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTForCaseClass}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, StructField, StructType}
@@ -36,6 +37,8 @@ class GenericCollectionBean {
   @BeanProperty var listOfListOfStrings: JList[JList[String]] = _
   @BeanProperty var mapOfDummyBeans: JMap[String, DummyBean] = _
   @BeanProperty var linkedListOfStrings: LinkedList[String] = _
+  @BeanProperty var hashSetOfString: HashSet[String] = _
+  @BeanProperty var setOfSetOfStrings: JSet[JSet[String]] = _
 }
 
 class LeafBean {
@@ -64,9 +67,10 @@ class LeafBean {
   @BeanProperty var localDateTime: java.time.LocalDateTime = _
   @BeanProperty var duration: java.time.Duration = _
   @BeanProperty var period: java.time.Period = _
-  @BeanProperty var enum: java.time.Month = _
+  @BeanProperty var monthEnum: java.time.Month = _
   @BeanProperty val readOnlyString = "read-only"
-  @BeanProperty var genericNestedBean: JavaBeanWithGenerics[String, String] = _
+  @BeanProperty var genericNestedBean: JavaBeanWithGenericBase = _
+  @BeanProperty var genericNestedBean2: JavaBeanWithGenericsABC[Integer] = _
 
   var nonNullString: String = "value"
   @javax.annotation.Nonnull
@@ -137,9 +141,16 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     assert(schema === expected)
   }
 
-  test("resolve type parameters for map and list") {
+  test("resolve type parameters for map, list and set") {
     val encoder = JavaTypeInference.encoderFor(classOf[GenericCollectionBean])
     val expected = JavaBeanEncoder(ClassTag(classOf[GenericCollectionBean]), Seq(
+      encoderField(
+        "hashSetOfString",
+        IterableEncoder(
+          ClassTag(classOf[HashSet[_]]),
+          StringEncoder,
+          containsNull = true,
+          lenientSerialization = false)),
       encoderField(
         "linkedListOfStrings",
         IterableEncoder(
@@ -164,7 +175,18 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
           ClassTag(classOf[JMap[_, _]]),
           StringEncoder,
           expectedDummyBeanEncoder,
-          valueContainsNull = true))))
+          valueContainsNull = true)),
+      encoderField(
+        "setOfSetOfStrings",
+        IterableEncoder(
+          ClassTag(classOf[JSet[_]]),
+          IterableEncoder(
+            ClassTag(classOf[JSet[_]]),
+            StringEncoder,
+            containsNull = true,
+            lenientSerialization = false),
+          containsNull = true,
+          lenientSerialization = false))))
     assert(encoder === expected)
   }
 
@@ -184,13 +206,23 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       encoderField("boxedShort", BoxedShortEncoder),
       encoderField("date", STRICT_DATE_ENCODER),
       encoderField("duration", DayTimeIntervalEncoder),
-      encoderField("enum", JavaEnumEncoder(classTag[java.time.Month])),
       encoderField("genericNestedBean", JavaBeanEncoder(
-        ClassTag(classOf[JavaBeanWithGenerics[String, String]]),
-        Seq(encoderField("attribute", StringEncoder), encoderField("value", StringEncoder)))),
+        ClassTag(classOf[JavaBeanWithGenericBase]),
+        Seq(
+          encoderField("attribute", StringEncoder),
+          encoderField("value", StringEncoder)
+        ))),
+      encoderField("genericNestedBean2", JavaBeanEncoder(
+        ClassTag(classOf[JavaBeanWithGenericsABC[Integer]]),
+        Seq(
+          encoderField("propertyA", StringEncoder),
+          encoderField("propertyB", BoxedLongEncoder),
+          encoderField("propertyC", BoxedIntEncoder)
+        ))),
       encoderField("instant", STRICT_INSTANT_ENCODER),
       encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
       encoderField("localDateTime", LocalDateTimeEncoder),
+      encoderField("monthEnum", JavaEnumEncoder(classTag[java.time.Month])),
       encoderField("nonNullString", StringEncoder, overrideNullable = Option(false)),
       encoderField("period", YearMonthIntervalEncoder),
       encoderField("primitiveBoolean", PrimitiveBooleanEncoder),
@@ -222,6 +254,29 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     val expected = JavaBeanEncoder(ClassTag(classOf[UDTBean]), Seq(
       encoderField("udt", UDTEncoder(new UDTForCaseClass, classOf[UDTForCaseClass]))
     ))
+    assert(encoder === expected)
+  }
+
+  test("SPARK-44910: resolve bean with generic base class") {
+    val encoder =
+      JavaTypeInference.encoderFor(classOf[JavaBeanWithGenericBase])
+    val expected =
+      JavaBeanEncoder(ClassTag(classOf[JavaBeanWithGenericBase]), Seq(
+        encoderField("attribute", StringEncoder),
+        encoderField("value", StringEncoder)
+      ))
+    assert(encoder === expected)
+  }
+
+  test("SPARK-44910: resolve bean with hierarchy of generic classes") {
+    val encoder =
+      JavaTypeInference.encoderFor(classOf[JavaBeanWithGenericHierarchy])
+    val expected =
+      JavaBeanEncoder(ClassTag(classOf[JavaBeanWithGenericHierarchy]), Seq(
+        encoderField("propertyA", StringEncoder),
+        encoderField("propertyB", BoxedLongEncoder),
+        encoderField("propertyC", BoxedIntEncoder)
+      ))
     assert(encoder === expected)
   }
 }

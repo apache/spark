@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -63,7 +64,17 @@ class QueryExecution(
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
-  def assertAnalyzed(): Unit = analyzed
+  def assertAnalyzed(): Unit = {
+    try {
+      analyzed
+    } catch {
+      case e: AnalysisException =>
+        // Because we do eager analysis for Dataframe, there will be no execution created after
+        // AnalysisException occurs. So we need to explicitly create a new execution to post
+        // start/end events to notify the listener and UI components.
+        SQLExecution.withNewExecutionIdOnError(this, Some("analyze"))(e)
+    }
+  }
 
   def assertSupported(): Unit = {
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
@@ -103,14 +114,17 @@ class QueryExecution(
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
-        qe.executedPlan.executeCollect()
+      val name = commandExecutionName(c)
+      val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
+        SQLExecution.withNewExecutionId(qe, Some(name)) {
+          qe.executedPlan.executeCollect()
+        }
       }
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
         qe.executedPlan,
-        result)
+        result.toImmutableArraySeq)
     case other => other
   }
 
@@ -262,7 +276,7 @@ class QueryExecution(
       new IncrementalExecution(
         sparkSession, logical, OutputMode.Append(), "<unknown>",
         UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
-        WatermarkPropagator.noop())
+        WatermarkPropagator.noop(), false)
     } else {
       this
     }

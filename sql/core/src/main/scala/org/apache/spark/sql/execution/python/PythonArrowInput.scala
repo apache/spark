@@ -22,7 +22,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD, PythonWorker}
+import org.apache.spark.api.python.{BasePythonRunner, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -54,11 +54,7 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       dataOut: DataOutputStream,
       inputIterator: Iterator[IN]): Boolean
 
-  protected def writeUDF(
-      dataOut: DataOutputStream,
-      funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]]): Unit =
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+  protected def writeUDF(dataOut: DataOutputStream): Unit
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     // Write config for the worker as a number of key -> value pairs of strings
@@ -94,9 +90,10 @@ protected def close(): Unit = {
       partitionIndex: Int,
       context: TaskContext): Writer = {
     new Writer(env, worker, inputIterator, partitionIndex, context) {
+
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         handleMetadataBeforeExec(dataOut)
-        writeUDF(dataOut, funcs, argOffsets)
+        writeUDF(dataOut)
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {

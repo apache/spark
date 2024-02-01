@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
@@ -284,7 +284,7 @@ class FileBasedDataSourceSuite extends QueryTest
       val textDir = new File(dir, "text").getCanonicalPath
       checkError(
         exception = intercept[AnalysisException] {
-          Seq(1).toDF.write.text(textDir)
+          Seq(1).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
@@ -295,7 +295,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
       checkError(
         exception = intercept[AnalysisException] {
-          Seq(1.2).toDF.write.text(textDir)
+          Seq(1.2).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
@@ -306,7 +306,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
       checkError(
         exception = intercept[AnalysisException] {
-          Seq(true).toDF.write.text(textDir)
+          Seq(true).toDF().write.text(textDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
@@ -322,7 +322,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a)`",
-          "columnType" -> "\"STRUCT<a: INT>\"",
+          "columnType" -> "\"STRUCT<a: INT NOT NULL>\"",
           "format" -> "Text")
       )
 
@@ -350,7 +350,7 @@ class FileBasedDataSourceSuite extends QueryTest
       )
 
       // read path
-      Seq("aaa").toDF.write.mode("overwrite").text(textDir)
+      Seq("aaa").toDF().write.mode("overwrite").text(textDir)
       checkError(
         exception = intercept[AnalysisException] {
           val schema = StructType(StructField("a", IntegerType, true) :: Nil)
@@ -404,7 +404,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a, b)`",
-          "columnType" -> "\"STRUCT<a: INT, b: STRING>\"",
+          "columnType" -> "\"STRUCT<a: INT NOT NULL, b: STRING>\"",
           "format" -> "CSV")
       )
 
@@ -802,7 +802,7 @@ class FileBasedDataSourceSuite extends QueryTest
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           spark.range(10).write.orc(path)
-          val row = spark.read.orc(path).select(input_file_name).first()
+          val row = spark.read.orc(path).select(input_file_name()).first()
           assert(row.getString(0).contains(path))
         }
       }
@@ -1257,9 +1257,9 @@ object TestingUDT {
 
     override def sqlType: DataType = CalendarIntervalType
     override def serialize(obj: IntervalData): Any =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def deserialize(datum: Any): IntervalData =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def userClass: Class[IntervalData] = classOf[IntervalData]
   }
 
@@ -1270,9 +1270,9 @@ object TestingUDT {
 
     override def sqlType: DataType = NullType
     override def serialize(obj: NullData): Any =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def deserialize(datum: Any): NullData =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def userClass: Class[NullData] = classOf[NullData]
   }
 }

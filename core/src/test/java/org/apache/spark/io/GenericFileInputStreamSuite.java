@@ -17,16 +17,16 @@
 package org.apache.spark.io;
 
 import org.apache.commons.io.FileUtils;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Tests functionality of {@link NioBufferedFileInputStream}
@@ -40,14 +40,14 @@ public abstract class GenericFileInputStreamSuite {
 
   protected InputStream[] inputStreams;
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     ThreadLocalRandom.current().nextBytes(randomBytes);
     inputFile = File.createTempFile("temp-file", ".tmp");
     FileUtils.writeByteArrayToFile(inputFile, randomBytes);
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     inputFile.delete();
 

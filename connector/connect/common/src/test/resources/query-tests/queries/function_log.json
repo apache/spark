@@ -13,7 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "log",
+        "functionName": "ln",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "b"

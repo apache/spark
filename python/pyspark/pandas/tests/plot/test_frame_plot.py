@@ -50,7 +50,6 @@ class DataFramePlotTestsMixin:
                 getattr(psdf.plot, name)()
 
     def test_topn_max_rows(self):
-
         pdf = pd.DataFrame(np.random.rand(2500, 4), columns=["a", "b", "c", "d"])
         psdf = ps.from_pandas(pdf)
 

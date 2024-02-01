@@ -21,15 +21,14 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.*;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.sql.Encoders.*;
 import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.RowFactory.create;
-import org.apache.spark.sql.connect.client.SparkConnectClient;
-import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils;
 import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.sql.test.SparkConnectServerUtils;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -38,19 +37,12 @@ import org.apache.spark.sql.types.StructType;
 public class JavaEncoderSuite implements Serializable {
   private static SparkSession spark;
 
-  @BeforeClass
+  @BeforeAll
   public static void setup() {
-    SparkConnectServerUtils.start();
-    spark = SparkSession
-        .builder()
-        .client(SparkConnectClient
-            .builder()
-            .port(SparkConnectServerUtils.port())
-            .build())
-        .create();
+    spark = SparkConnectServerUtils.createSparkSession();
   }
 
-  @AfterClass
+  @AfterAll
   public static void tearDown() {
     spark.stop();
     spark = null;
@@ -112,6 +104,6 @@ public class JavaEncoderSuite implements Serializable {
             Encoders.row(schema))
         .filter(col("a").geq(1));
     final List<Row> expected = Arrays.asList(create(1, "s1"), create(2, "s2"));
-    Assert.assertEquals(expected, df.collectAsList());
+    Assertions.assertEquals(expected, df.collectAsList());
   }
 }

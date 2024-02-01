@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -48,7 +48,6 @@ private[kafka010] object KafkaWriter extends Logging {
 
   def validateQuery(
       schema: Seq[Attribute],
-      kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
     try {
       topicExpression(schema, topic)
@@ -57,17 +56,19 @@ private[kafka010] object KafkaWriter extends Logging {
       headersExpression(schema)
       partitionExpression(schema)
     } catch {
-      case e: IllegalStateException => throw new AnalysisException(e.getMessage)
+      case e: IllegalStateException =>
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3080",
+          messageParameters = Map("msg" -> e.getMessage))
     }
   }
 
   def write(
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
     val schema = queryExecution.analyzed.output
-    validateQuery(schema, kafkaParameters, topic)
+    validateQuery(schema, topic)
     queryExecution.toRdd.foreachPartition { iter =>
       val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic)
       Utils.tryWithSafeFinally(block = writeTask.execute(iter))(

@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build (master, Scala 2.12, Hadoop 3, JDK 21-ea)"
+name: "Build (master, Scala 2.13, Hadoop 3, JDK 21)"
 
 on:
   schedule:
@@ -31,18 +31,19 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 21-ea
+      java: 21
       branch: master
       hadoop: hadoop3
       envs: >-
         {
           "SKIP_MIMA": "true",
           "SKIP_UNIDOC": "true",
+          "DEDICATED_JVM_SBT_TESTS": "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV1Suite,org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV2Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV1Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV2Suite"
         }
       jobs: >-
         {
           "build": "true",
-          "pyspark": "false",
+          "pyspark": "true",
           "sparkr": "true",
           "tpcds-1g": "true",
           "docker-integration-tests": "true"

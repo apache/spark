@@ -247,7 +247,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   private def writePartitionerToCheckpointDir(
     sc: SparkContext, partitioner: Partitioner, checkpointDirPath: Path): Unit = {
     try {
-      val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
+      val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName())
       val bufferSize = sc.conf.get(BUFFER_SIZE)
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileOutputStream = fs.create(partitionerFilePath, false, bufferSize)
@@ -276,14 +276,14 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       checkpointDirPath: String): Option[Partitioner] = {
     try {
       val bufferSize = sc.conf.get(BUFFER_SIZE)
-      val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
+      val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName())
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileInputStream = fs.open(partitionerFilePath, bufferSize)
       val serializer = SparkEnv.get.serializer.newInstance()
       val partitioner = Utils.tryWithSafeFinally {
         val deserializeStream = serializer.deserializeStream(fileInputStream)
         Utils.tryWithSafeFinally {
-          deserializeStream.readObject[Partitioner]
+          deserializeStream.readObject[Partitioner]()
         } {
           deserializeStream.close()
         }

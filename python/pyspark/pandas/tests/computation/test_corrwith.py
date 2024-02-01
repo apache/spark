@@ -14,15 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
-
 import numpy as np
-import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -59,10 +56,7 @@ class FrameCorrwithMixin:
         # Therefore, we only test the pandas 1.5.0 in different way.
         # See https://github.com/pandas-dev/pandas/issues/48826 for the reported issue,
         # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
-        if LooseVersion(pd.__version__) == LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
-            methods = ["kendall"]
-        else:
-            methods = ["pearson", "spearman", "kendall"]
+        methods = ["pearson", "spearman", "kendall"]
         for method in methods:
             for drop in [True, False]:
                 p_corr = pdf.corrwith(pobj, drop=drop, method=method)
@@ -70,7 +64,11 @@ class FrameCorrwithMixin:
                 self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
 
-class FrameCorrwithTests(FrameCorrwithMixin, ComparisonTestBase, SQLTestUtils):
+class FrameCorrwithTests(
+    FrameCorrwithMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

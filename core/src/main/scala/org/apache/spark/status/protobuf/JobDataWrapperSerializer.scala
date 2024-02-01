@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
@@ -107,6 +107,6 @@ private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWr
       numCompletedStages = info.getNumCompletedStages,
       numSkippedStages = info.getNumSkippedStages,
       numFailedStages = info.getNumFailedStages,
-      killedTasksSummary = info.getKillTasksSummaryMap.asScala.mapValues(_.toInt).toMap)
+      killedTasksSummary = info.getKillTasksSummaryMap.asScala.toMap.transform((_, v) => v.toInt))
   }
 }

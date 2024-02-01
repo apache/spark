@@ -44,7 +44,7 @@ object StructuredNetworkWordCount {
     val port = args(1).toInt
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("StructuredNetworkWordCount")
       .getOrCreate()
 

@@ -28,7 +28,7 @@ class AlterTableSetLocationParserSuite extends AnalysisTest with SharedSparkSess
     val sql1 = "ALTER TABLE a.b.c SET LOCATION 'new location'"
     val parsed1 = parsePlan(sql1)
     val expected1 = SetTableLocation(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", true),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ..."),
       None,
       "new location")
     comparePlans(parsed1, expected1)
@@ -36,7 +36,7 @@ class AlterTableSetLocationParserSuite extends AnalysisTest with SharedSparkSess
     val sql2 = "ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"
     val parsed2 = parsePlan(sql2)
     val expected2 = SetTableLocation(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", true),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ..."),
       Some(Map("ds" -> "2017-06-10")),
       "new location")
     comparePlans(parsed2, expected2)

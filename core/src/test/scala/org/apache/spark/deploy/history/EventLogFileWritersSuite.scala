@@ -32,6 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -66,7 +67,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     conf.set(EVENT_LOG_DIR, testDir.toString)
 
     // default config
-    buildWriterAndVerify(conf, classOf[SingleEventLogFileWriter])
+    buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
 
     conf.set(EVENT_LOG_ENABLE_ROLLING, true)
     buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
@@ -99,7 +100,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     }
   }
 
-  test("Use the defalut value of spark.eventLog.compression.codec") {
+  test("Use the default value of spark.eventLog.compression.codec") {
     val conf = new SparkConf
     conf.set(EVENT_LOG_COMPRESS, true)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
@@ -176,7 +177,7 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
       baseDirUri, "app1", None, None))
     // with compression
     assert(s"${baseDirUri.toString}/app1.lzf" ===
-      SingleEventLogFileWriter.getLogPath(baseDirUri, "app1", None, Some("lzf")))
+      SingleEventLogFileWriter.getLogPath(baseDirUri, "app1", None, Some(CompressionCodec.LZF)))
     // illegal characters in app ID
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1" ===
       SingleEventLogFileWriter.getLogPath(baseDirUri,
@@ -184,7 +185,7 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
     // illegal characters in app ID with compression
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
       SingleEventLogFileWriter.getLogPath(baseDirUri,
-        "a fine:mind$dollar{bills}.1", None, Some("lz4")))
+        "a fine:mind$dollar{bills}.1", None, Some(CompressionCodec.LZ4)))
   }
 
   override protected def createWriter(
@@ -239,7 +240,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
     // with compression
     assert(s"$logDir/${EVENT_LOG_FILE_NAME_PREFIX}1_${appId}.lzf" ===
       RollingEventLogFilesWriter.getEventLogFilePath(logDir, appId, appAttemptId,
-        1, Some("lzf")).toString)
+        1, Some(CompressionCodec.LZF)).toString)
 
     // illegal characters in app ID
     assert(s"${baseDirUri.toString}/${EVENT_LOG_DIR_NAME_PREFIX}a-fine-mind_dollar_bills__1" ===
@@ -367,6 +368,6 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
   private def listEventLogFiles(logDirPath: Path): Seq[FileStatus] = {
     fileSystem.listStatus(logDirPath).filter(isEventLogFile)
-      .sortBy { fs => getEventLogFileIndex(fs.getPath.getName) }
+      .sortBy { fs => getEventLogFileIndex(fs.getPath.getName) }.toImmutableArraySeq
   }
 }

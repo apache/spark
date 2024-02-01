@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
+
 import unittest
+from io import StringIO
 
 import numpy as np
 import pandas as pd
@@ -23,7 +24,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import (
     have_tabulate,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     tabulate_requirement_message,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -93,10 +94,6 @@ class FrameIOMixin:
         psdf = ps.DataFrame.from_dict(data, orient="index", columns=["A", "B", "C", "D"])
         self.assert_eq(pdf, psdf)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) < LooseVersion("1.3.0"),
-        "pandas support `Styler.to_latex` since 1.3.0",
-    )
     def test_style(self):
         # Currently, the `style` function returns a pandas object `Styler` as it is,
         # processing only the number of rows declared in `compute.max_rows`.
@@ -120,8 +117,39 @@ class FrameIOMixin:
         with ps.option_context("compute.max_rows", None):
             check_style()
 
+    def test_info(self):
+        pdf, psdf = self.df_pair
+        pdf_io = StringIO()
+        psdf_io = StringIO()
 
-class FrameIOTests(FrameIOMixin, ComparisonTestBase, SQLTestUtils):
+        psdf.info(buf=psdf_io)
+        pdf.info(buf=pdf_io, memory_usage=False)
+
+        # Split is using to filter out first line with class name
+        # <class 'pyspark.pandas.frame.DataFrame'> vs <class 'pandas.core.frame.DataFrame'>
+        self.assert_eq(pdf_io.getvalue().split("\n")[1:], psdf_io.getvalue().split("\n")[1:])
+        psdf_io.truncate(0)
+        pdf_io.truncate(0)
+        psdf.info(buf=psdf_io, max_cols=1)
+        pdf.info(buf=pdf_io, max_cols=1, memory_usage=False)
+        self.assert_eq(pdf_io.getvalue().split("\n")[1:], psdf_io.getvalue().split("\n")[1:])
+        psdf_io.truncate(0)
+        pdf_io.truncate(0)
+        psdf.info(buf=psdf_io, show_counts=True)
+        pdf.info(buf=pdf_io, show_counts=True, memory_usage=False)
+        self.assert_eq(pdf_io.getvalue().split("\n")[1:], psdf_io.getvalue().split("\n")[1:])
+        psdf_io.truncate(0)
+        pdf_io.truncate(0)
+        psdf.info(buf=psdf_io, show_counts=False)
+        pdf.info(buf=pdf_io, show_counts=False, memory_usage=False)
+        self.assert_eq(pdf_io.getvalue().split("\n")[1:], psdf_io.getvalue().split("\n")[1:])
+
+
+class FrameIOTests(
+    FrameIOMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

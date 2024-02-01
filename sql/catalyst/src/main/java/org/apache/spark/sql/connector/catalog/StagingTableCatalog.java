@@ -57,10 +57,10 @@ public interface StagingTableCatalog extends TableCatalog {
   /**
    * Stage the creation of a table, preparing it to be committed into the metastore.
    * <p>
-   * This is deprecated. Please override
+   * @deprecated This is deprecated. Please override
    * {@link #stageCreate(Identifier, Column[], Transform[], Map)} instead.
    */
-  @Deprecated
+  @Deprecated(since = "3.4.0")
   StagedTable stageCreate(
       Identifier ident,
       StructType schema,

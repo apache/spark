@@ -19,18 +19,18 @@ package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Unpickler
 
-import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorker, PythonWorkerUtils}
+import org.apache.spark.{JobArtifactSet, TaskContext}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.EvalPythonUDTFExec.ArgumentMetadata
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -84,7 +84,7 @@ case class BatchEvalPythonUDTFExec(
       val res = results.asInstanceOf[Array[_]]
       pythonMetrics("pythonNumRowsReceived") += res.length
       fromJava(results).asInstanceOf[GenericArrayData]
-        .array.map(_.asInstanceOf[InternalRow]).toIterator
+        .array.map(_.asInstanceOf[InternalRow]).iterator
     }
   }
 
@@ -98,21 +98,11 @@ class PythonUDTFRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(
-    Seq(ChainedPythonFunctions(Seq(udtf.func))),
+    Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
     PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
 
-  protected override def newWriter(
-      env: SparkEnv,
-      worker: PythonWorker,
-      inputIterator: Iterator[Array[Byte]],
-      partitionIndex: Int,
-      context: TaskContext): Writer = {
-    new PythonUDFWriter(env, worker, inputIterator, partitionIndex, context) {
-
-      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
-      }
-    }
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 }
 
@@ -122,6 +112,7 @@ object PythonUDTFRunner {
       dataOut: DataOutputStream,
       udtf: PythonUDTF,
       argMetas: Array[ArgumentMetadata]): Unit = {
+    // Write the argument types of the UDTF.
     dataOut.writeInt(argMetas.length)
     argMetas.foreach {
       case ArgumentMetadata(offset, name) =>
@@ -134,8 +125,24 @@ object PythonUDTFRunner {
             dataOut.writeBoolean(false)
         }
     }
-    dataOut.writeInt(udtf.func.command.length)
-    dataOut.write(udtf.func.command.toArray)
+    // Write the zero-based indexes of the projected results of all PARTITION BY expressions within
+    // the TABLE argument of the Python UDTF call, if applicable.
+    udtf.pythonUDTFPartitionColumnIndexes match {
+      case Some(partitionColumnIndexes) =>
+        dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
+        assert(partitionColumnIndexes.partitionChildIndexes.nonEmpty)
+        partitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
+      case None =>
+        dataOut.writeInt(0)
+    }
+    // Write the pickled AnalyzeResult buffer from the UDTF "analyze" method, if any.
+    dataOut.writeBoolean(udtf.pickledAnalyzeResult.nonEmpty)
+    udtf.pickledAnalyzeResult.foreach(PythonWorkerUtils.writeBytes(_, dataOut))
+    // Write the contents of the Python script itself.
+    PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
+    // Write the result schema of the UDTF call.
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
+    // Write the UDTF name.
+    PythonWorkerUtils.writeUTF(udtf.name, dataOut)
   }
 }

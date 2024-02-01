@@ -39,48 +39,6 @@ package object client {
 
   // scalastyle:off
   private[hive] object hive {
-    case object v12 extends HiveVersion("0.12.0")
-    case object v13 extends HiveVersion("0.13.1")
-
-    // Do not need Calcite because we disabled hive.cbo.enable.
-    //
-    // The other excluded dependencies are nowhere to be found, so exclude them explicitly. If
-    // they're needed by the metastore client, users will have to dig them out of somewhere and use
-    // configuration to point Spark at the correct jars.
-    case object v14 extends HiveVersion("0.14.0",
-      exclusions = Seq("org.apache.calcite:calcite-core",
-        "org.apache.calcite:calcite-avatica",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
-
-    case object v1_0 extends HiveVersion("1.0.1",
-      exclusions = Seq("eigenbase:eigenbase-properties",
-        "org.apache.calcite:calcite-core",
-        "org.apache.calcite:calcite-avatica",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
-        "net.hydromatic:linq4j",
-        "net.hydromatic:quidem"))
-
-    // The curator dependency was added to the exclusions here because it seems to confuse the ivy
-    // library. org.apache.curator:curator is a pom dependency but ivy tries to find the jar for it,
-    // and fails.
-    case object v1_1 extends HiveVersion("1.1.1",
-      exclusions = Seq("eigenbase:eigenbase-properties",
-        "org.apache.calcite:calcite-core",
-        "org.apache.calcite:calcite-avatica",
-        "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
-        "net.hydromatic:linq4j",
-        "net.hydromatic:quidem"))
-
-    case object v1_2 extends HiveVersion("1.2.2",
-      exclusions = Seq("eigenbase:eigenbase-properties",
-        "org.apache.calcite:calcite-core",
-        "org.apache.calcite:calcite-avatica",
-        "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
-        "net.hydromatic:linq4j",
-        "net.hydromatic:quidem"))
-
     case object v2_0 extends HiveVersion("2.0.1",
       exclusions = Seq("org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-avatica",
@@ -131,8 +89,8 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
-    val allSupportedHiveVersions =
-      Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
+    val allSupportedHiveVersions: Set[HiveVersion] =
+      Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
   }
   // scalastyle:on
 

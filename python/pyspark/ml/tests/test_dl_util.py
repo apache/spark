@@ -18,15 +18,15 @@ from contextlib import contextmanager
 import os
 import textwrap
 from typing import Any, BinaryIO, Callable, Iterator
-
 import unittest
+
 from parameterized import parameterized
+
 from pyspark import cloudpickle
 from pyspark.ml.dl_util import FunctionPickler
 
 
 class TestFunctionPickler(unittest.TestCase):
-
     # Function that will be used to test pickling.
     @staticmethod
     def _test_function(x: float, y: float) -> float:

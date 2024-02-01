@@ -45,17 +45,17 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rdd = sc.makeRDD(rows)
     val df = spark.createDataFrame(rdd, imageSchema)
 
-    assert(df.count === 2, "incorrect image count")
+    assert(df.count() === 2, "incorrect image count")
     assert(df.schema("image").dataType == columnSchema, "data do not fit ImageSchema")
   }
 
   // TODO(SPARK-40171): Re-enable the following flaky test case after being fixed.
   ignore("image datasource count test") {
     val df1 = spark.read.format("image").load(imagePath)
-    assert(df1.count === 9)
+    assert(df1.count() === 9)
 
     val df2 = spark.read.format("image").option("dropInvalid", true).load(imagePath)
-    assert(df2.count === 8)
+    assert(df2.count() === 8)
   }
 
   test("image datasource test: read jpg image") {
@@ -95,7 +95,8 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
       .select(substring_index(col("image.origin"), "/", -1).as("origin"), col("cls"), col("date"))
       .collect()
 
-    assert(Set(result: _*) === Set(
+    import org.apache.spark.util.ArrayImplicits._
+    assert(Set(result.toImmutableArraySeq: _*) === Set(
       Row("29.5.a_b_EGDP022204.jpg", "kittens", "2018-01"),
       Row("54893.jpg", "kittens", "2018-02"),
       Row("DP153539.jpg", "kittens", "2018-02"),

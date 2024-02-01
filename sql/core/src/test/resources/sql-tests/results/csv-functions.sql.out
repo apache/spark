@@ -207,7 +207,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"csvField\"",
-    "inputName" : "csv",
+    "inputName" : "`csv`",
     "inputType" : "\"STRING\"",
     "sqlExpr" : "\"schema_of_csv(csvField)\""
   },

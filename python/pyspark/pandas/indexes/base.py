@@ -34,9 +34,7 @@ import pandas as pd
 import numpy as np
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_list_like,
-    is_interval_dtype,
     is_bool_dtype,
-    is_categorical_dtype,
     is_integer_dtype,
     is_float_dtype,
     is_numeric_dtype,
@@ -55,7 +53,6 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
 from pyspark.pandas.config import get_option, option_context
@@ -75,6 +72,7 @@ from pyspark.pandas.utils import (
     validate_index_loc,
     ERROR_MESSAGE_CANNOT_COMBINE,
     log_advice,
+    xor,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -289,7 +287,7 @@ class Index(IndexOpsMixin):
 
         if name is None:
             name = type(self).__name__
-        return "%s: %s entries%s" % (name, total_count, index_summary)
+        return "%s: %s entries%s" % (name, int(total_count), index_summary)
 
     @property
     def size(self) -> int:
@@ -625,44 +623,6 @@ class Index(IndexOpsMixin):
         return self.to_numpy()
 
     @property
-    def asi8(self) -> np.ndarray:
-        """
-        Integer representation of the values.
-
-        .. warning:: We recommend using `Index.to_numpy()` instead.
-
-        .. note:: This method should only be used if the resulting NumPy ndarray is expected
-            to be small, as all the data is loaded into the driver's memory.
-
-        .. deprecated:: 3.4.0
-
-        Returns
-        -------
-        numpy.ndarray
-            An ndarray with int64 dtype.
-
-        Examples
-        --------
-        >>> ps.Index([1, 2, 3]).asi8
-        array([1, 2, 3])
-
-        Returns None for non-int64 dtype
-
-        >>> ps.Index(['a', 'b', 'c']).asi8 is None
-        True
-        """
-        warnings.warn(
-            "Index.asi8 is deprecated and will be removed in 4.0.0. " "Use Index.astype instead.",
-            FutureWarning,
-        )
-        if isinstance(self.spark.data_type, IntegralType):
-            return self.to_numpy()
-        elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
-            return np.array(list(map(lambda x: x.astype(np.int64), self.to_numpy())))
-        else:
-            return None
-
-    @property
     def has_duplicates(self) -> bool:
         """
         If index has duplicates, return True, otherwise False.
@@ -956,7 +916,19 @@ class Index(IndexOpsMixin):
             data_fields=[field],
             column_label_names=None,
         )
-        return first_series(DataFrame(internal))
+
+        result = first_series(DataFrame(internal))
+        if self._internal.index_level == 1:
+            return result
+        else:
+            # MultiIndex
+            def struct_to_array(scol: Column) -> Column:
+                field_names = result._internal.spark_type_for(
+                    scol
+                ).fieldNames()  # type: ignore[attr-defined]
+                return F.array([scol[field] for field in field_names])
+
+            return result.spark.transform(struct_to_array)
 
     def to_frame(self, index: bool = True, name: Optional[Name] = None) -> DataFrame:
         """
@@ -1061,7 +1033,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_categorical()
         False
         """
-        return is_categorical_dtype(self.dtype)
+        return isinstance(self.dtype, pd.CategoricalDtype)
 
     def is_floating(self) -> bool:
         """
@@ -1094,7 +1066,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_interval()
         False
         """
-        return is_interval_dtype(self.dtype)
+        return isinstance(self.dtype, pd.IntervalDtype)
 
     def is_numeric(self) -> bool:
         """
@@ -1117,31 +1089,6 @@ class Index(IndexOpsMixin):
         True
         """
         return is_object_dtype(self.dtype)
-
-    def is_type_compatible(self, kind: str) -> bool:
-        """
-        Whether the index type is compatible with the provided type.
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> psidx = ps.Index([1, 2, 3])
-        >>> psidx.is_type_compatible('integer')
-        True
-
-        >>> psidx = ps.Index([1.0, 2.0, 3.0])
-        >>> psidx.is_type_compatible('integer')
-        False
-        >>> psidx.is_type_compatible('floating')
-        True
-        """
-        warnings.warn(
-            "Index.is_type_compatible is deprecated and will be removed in 4.0.0. "
-            "Use Index.isin instead.",
-            FutureWarning,
-        )
-        return kind == self.inferred_type
 
     def dropna(self, how: str = "any") -> "Index":
         """
@@ -1522,8 +1469,7 @@ class Index(IndexOpsMixin):
 
         sdf_self = self._psdf._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._psdf._internal.spark_frame.select(other._internal.index_spark_columns)
-
-        sdf_symdiff = sdf_self.union(sdf_other).subtract(sdf_self.intersect(sdf_other))
+        sdf_symdiff = xor(sdf_self, sdf_other)
 
         if sort:
             sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_column_names)
@@ -1917,18 +1863,12 @@ class Index(IndexOpsMixin):
         sdf_other = other._internal.spark_frame.select(other._internal.index_spark_columns)
         sdf_appended = sdf_self.union(sdf_other)
 
-        # names should be kept when MultiIndex, but Index wouldn't keep its name.
-        if isinstance(self, MultiIndex):
-            index_names = self._internal.index_names
-        else:
-            index_names = None
-
         internal = InternalFrame(
             spark_frame=sdf_appended,
             index_spark_columns=[
                 scol_for(sdf_appended, col) for col in self._internal.index_spark_column_names
             ],
-            index_names=index_names,
+            index_names=None,
             index_fields=index_fields,
         )
 
@@ -2078,7 +2018,7 @@ class Index(IndexOpsMixin):
 
         if isinstance(self, MultiIndex) and level is not None:
             self_names = self.names
-            self_names[level] = names  # type: ignore[index]
+            self_names[level] = names
             names = self_names
         return self.rename(name=names, inplace=inplace)
 
@@ -2148,7 +2088,7 @@ class Index(IndexOpsMixin):
                 [isinstance(item, tuple) for item in other]
             )
             if is_other_list_of_tuples:
-                other = MultiIndex.from_tuples(other)  # type: ignore[arg-type]
+                other = MultiIndex.from_tuples(other)
             else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
 
@@ -2177,47 +2117,6 @@ class Index(IndexOpsMixin):
             if self.name == other.name:
                 result.name = self.name
         return result if sort is None else cast(Index, result.sort_values())
-
-    @property
-    def is_all_dates(self) -> bool:
-        """
-        Return if all data types of the index are datetime.
-        remember that since pandas-on-Spark does not support multiple data types in an index,
-        so it returns True if any type of data is datetime.
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> from datetime import datetime
-
-        >>> idx = ps.Index([datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 2, 3, 0, 0, 0)])
-        >>> idx
-        DatetimeIndex(['2019-01-01', '2019-02-03'], dtype='datetime64[ns]', freq=None)
-
-        >>> idx.is_all_dates
-        True
-
-        >>> idx = ps.Index([datetime(2019, 1, 1, 0, 0, 0), None])
-        >>> idx
-        DatetimeIndex(['2019-01-01', 'NaT'], dtype='datetime64[ns]', freq=None)
-
-        >>> idx.is_all_dates
-        True
-
-        >>> idx = ps.Index([0, 1, 2])
-        >>> idx
-        Index([0, 1, 2], dtype='int64')
-
-        >>> idx.is_all_dates
-        False
-        """
-        warnings.warn(
-            "Index.is_all_dates is deprecated, will be removed in a future version.  "
-            "check index.inferred_type instead",
-            FutureWarning,
-        )
-        return isinstance(self.spark.data_type, (TimestampType, TimestampNTZType))
 
     def repeat(self, repeats: int) -> "Index":
         """

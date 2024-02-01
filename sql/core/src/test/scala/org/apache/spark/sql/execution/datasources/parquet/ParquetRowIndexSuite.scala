@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.ParquetProperties._
@@ -35,6 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 @SlowSQLTest
 class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
@@ -49,7 +50,7 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
     assert(dir.isDirectory)
     dir.listFiles()
       .filter { f => f.isFile && f.getName.endsWith("parquet") }
-      .map { f => readRowGroupRowCounts(f.getAbsolutePath) }
+      .map { f => readRowGroupRowCounts(f.getAbsolutePath) }.toImmutableArraySeq
   }
 
   /**

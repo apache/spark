@@ -17,8 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Strings
 import org.apache.hadoop.conf.Configuration

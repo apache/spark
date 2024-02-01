@@ -42,11 +42,9 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       return true;
     }
 
-    if (!(other instanceof BloomFilterImpl)) {
+    if (!(other instanceof BloomFilterImpl that)) {
       return false;
     }
-
-    BloomFilterImpl that = (BloomFilterImpl) other;
 
     return this.numHashFunctions == that.numHashFunctions && this.bits.equals(that.bits);
   }
@@ -68,10 +66,10 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean put(Object item) {
-    if (item instanceof String) {
-      return putString((String) item);
-    } else if (item instanceof byte[]) {
-      return putBinary((byte[]) item);
+    if (item instanceof String str) {
+      return putString(str);
+    } else if (item instanceof byte[] bytes) {
+      return putBinary(bytes);
     } else {
       return putLong(Utils.integralToLong(item));
     }
@@ -168,10 +166,10 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean mightContain(Object item) {
-    if (item instanceof String) {
-      return mightContainString((String) item);
-    } else if (item instanceof byte[]) {
-      return mightContainBinary((byte[]) item);
+    if (item instanceof String str) {
+      return mightContainString(str);
+    } else if (item instanceof byte[] bytes) {
+      return mightContainBinary(bytes);
     } else {
       return mightContainLong(Utils.integralToLong(item));
     }
@@ -183,11 +181,10 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       return false;
     }
 
-    if (!(other instanceof BloomFilterImpl)) {
+    if (!(other instanceof BloomFilterImpl that)) {
       return false;
     }
 
-    BloomFilterImpl that = (BloomFilterImpl) other;
     return this.bitSize() == that.bitSize() && this.numHashFunctions == that.numHashFunctions;
   }
 
@@ -219,13 +216,11 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       throw new IncompatibleMergeException("Cannot merge null bloom filter");
     }
 
-    if (!(other instanceof BloomFilterImpl)) {
+    if (!(other instanceof BloomFilterImpl that)) {
       throw new IncompatibleMergeException(
         "Cannot merge bloom filter of class " + other.getClass().getName()
       );
     }
-
-    BloomFilterImpl that = (BloomFilterImpl) other;
 
     if (this.bitSize() != that.bitSize()) {
       throw new IncompatibleMergeException("Cannot merge bloom filters with different bit size");
@@ -264,6 +259,12 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     BloomFilterImpl filter = new BloomFilterImpl();
     filter.readFrom0(in);
     return filter;
+  }
+
+  public static BloomFilterImpl readFrom(byte[] bytes) throws IOException {
+    try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+      return readFrom(bis);
+    }
   }
 
   private void writeObject(ObjectOutputStream out) throws IOException {

@@ -21,7 +21,7 @@ import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStre
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration

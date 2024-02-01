@@ -144,6 +144,11 @@ public class RetryingBlockTransferor {
     this(conf, transferStarter, blockIds, listener, ErrorHandler.NOOP_ERROR_HANDLER);
   }
 
+  @VisibleForTesting
+  synchronized void setCurrentListener(RetryingBlockTransferListener listener) {
+    this.currentListener = listener;
+  }
+
   /**
    * Initiates the transfer of all blocks provided in the constructor, with possible retries
    * in the event of transient IOExceptions.
@@ -176,12 +181,14 @@ public class RetryingBlockTransferor {
         listener.getTransferType(), blockIdsToTransfer.length,
         numRetries > 0 ? "(after " + numRetries + " retries)" : ""), e);
 
-      if (shouldRetry(e)) {
-        initiateRetry(e);
-      } else {
-        for (String bid : blockIdsToTransfer) {
-          listener.onBlockTransferFailure(bid, e);
-        }
+      if (shouldRetry(e) && initiateRetry(e)) {
+        // successfully initiated a retry
+        return;
+      }
+
+      // retry is not possible, so fail remaining blocks
+      for (String bid : blockIdsToTransfer) {
+        listener.onBlockTransferFailure(bid, e);
       }
     }
   }
@@ -189,8 +196,10 @@ public class RetryingBlockTransferor {
   /**
    * Lightweight method which initiates a retry in a different thread. The retry will involve
    * calling transferAllOutstanding() after a configured wait time.
+   * Returns true if the retry was successfully initiated, false otherwise.
    */
-  private synchronized void initiateRetry(Throwable e) {
+  @VisibleForTesting
+  synchronized boolean initiateRetry(Throwable e) {
     if (enableSaslRetries && e instanceof SaslTimeoutException) {
       saslRetryCount += 1;
     }
@@ -201,10 +210,17 @@ public class RetryingBlockTransferor {
       listener.getTransferType(), retryCount, maxRetries, outstandingBlocksIds.size(),
       retryWaitTime);
 
-    executorService.submit(() -> {
-      Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
-      transferAllOutstanding();
-    });
+    try {
+      executorService.execute(() -> {
+        Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
+        transferAllOutstanding();
+      });
+    } catch (Throwable t) {
+      logger.error("Exception while trying to initiate retry", t);
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -240,7 +256,8 @@ public class RetryingBlockTransferor {
    * listener. Note that in the event of a retry, we will immediately replace the 'currentListener'
    * field, indicating that any responses from non-current Listeners should be ignored.
    */
-  private class RetryingBlockTransferListener implements
+  @VisibleForTesting
+  class RetryingBlockTransferListener implements
       BlockFetchingListener, BlockPushingListener {
     private void handleBlockTransferSuccess(String blockId, ManagedBuffer data) {
       // We will only forward this success message to our parent listener if this block request is
@@ -274,7 +291,11 @@ public class RetryingBlockTransferor {
       synchronized (RetryingBlockTransferor.this) {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           if (shouldRetry(exception)) {
-            initiateRetry(exception);
+            if (!initiateRetry(exception)) {
+              // failed to initiate a retry, so fail this block
+              outstandingBlocksIds.remove(blockId);
+              shouldForwardFailure = true;
+            }
           } else {
             if (errorHandler.shouldLogError(exception)) {
               logger.error(

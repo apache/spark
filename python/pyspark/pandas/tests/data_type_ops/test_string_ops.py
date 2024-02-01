@@ -23,6 +23,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 
@@ -34,10 +35,6 @@ class StringOpsTestsMixin:
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": ["x", "y", "z"], "that": ["z", "y", "x"]})
-
-    @property
-    def bool_psdf(self):
-        return ps.from_pandas(self.bool_pdf)
 
     @property
     def bool_non_numeric_pdf(self):
@@ -233,7 +230,11 @@ class StringOpsTestsMixin:
         self.assert_eq(pser >= pser, psser >= psser)
 
 
-class StringOpsTests(StringOpsTestsMixin, OpsTestBase):
+class StringOpsTests(
+    StringOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 
@@ -342,7 +343,6 @@ class StringExtensionOpsTest(StringOpsTests):
 
 
 if __name__ == "__main__":
-
     from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:

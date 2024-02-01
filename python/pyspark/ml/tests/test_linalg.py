@@ -320,7 +320,6 @@ class VectorTests(MLlibTestCase):
 
 
 class VectorUDTTests(MLlibTestCase):
-
     dv0 = DenseVector([])
     dv1 = DenseVector([1.0, 2.0])
     sv0 = SparseVector(2, [], [])
@@ -363,11 +362,10 @@ class VectorUDTTests(MLlibTestCase):
             Row(v2=unwrapped_vec(1, None, None, [1.0, 2.0, 3.0])),
             Row(v2=unwrapped_vec(0, 3, [1, 2], [1.0, 5.5])),
         ]
-        self.assertEquals(results, expected)
+        self.assertEqual(results, expected)
 
 
 class MatrixUDTTests(MLlibTestCase):
-
     dm1 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10])
     dm2 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10], isTransposed=True)
     sm1 = SparseMatrix(1, 1, [0, 1], [0], [2.0])

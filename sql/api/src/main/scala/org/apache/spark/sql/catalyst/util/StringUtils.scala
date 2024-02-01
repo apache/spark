@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.ByteArrayUtils
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Concatenation of sequence of strings to final string with cheap append method
@@ -107,7 +108,7 @@ object SparkStringUtils extends Logging {
   def getHexString(bytes: Array[Byte]): String = bytes.map("%02X".format(_)).mkString("[", " ", "]")
 
   def sideBySide(left: String, right: String): Seq[String] = {
-    sideBySide(left.split("\n"), right.split("\n"))
+    sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)
   }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {

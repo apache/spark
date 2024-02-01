@@ -29,8 +29,8 @@ import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
-import org.junit.*;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -58,7 +58,7 @@ public class RequestTimeoutIntegrationSuite {
   // A large timeout that "shouldn't happen", for the sake of faulty tests not hanging forever.
   private static final int FOREVER = 60 * 1000;
 
-  @Before
+  @BeforeEach
   public void setUp() throws Exception {
     Map<String, String> configMap = new HashMap<>();
     configMap.put("spark.shuffle.io.connectionTimeout", "10s");
@@ -72,7 +72,7 @@ public class RequestTimeoutIntegrationSuite {
     };
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     if (server != null) {
       server.close();

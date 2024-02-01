@@ -21,15 +21,15 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
+
 from pyspark import StorageLevel
 from pyspark.ml.linalg import SparseVector
 from pyspark.sql.types import StructType
-
 from pyspark import pandas as ps
 from pyspark.pandas.frame import CachedDataFrame
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
-from pyspark.testing.pandasutils import ComparisonTestBase, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -44,10 +44,8 @@ class FrameSparkMixin:
         )
 
     @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_empty_dataframe(self):
         pdf = pd.DataFrame({"a": pd.Series([], dtype="i1"), "b": pd.Series([], dtype="str")})
@@ -293,7 +291,11 @@ class FrameSparkMixin:
                 getattr(psdf, name)
 
 
-class FrameSparkTests(FrameSparkMixin, ComparisonTestBase, SQLTestUtils):
+class FrameSparkTests(
+    FrameSparkMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

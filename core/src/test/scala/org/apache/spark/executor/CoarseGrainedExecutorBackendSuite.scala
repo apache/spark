@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 
-import org.json4s.{DefaultFormats, Extraction}
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
 import org.mockito.ArgumentMatchers.any
@@ -45,15 +45,19 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorRemoved, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.{SerializableBuffer, ThreadUtils, Utils}
+import org.apache.spark.util.{SerializableBuffer, SslTestUtils, ThreadUtils, Utils}
 
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
 
-  implicit val formats = DefaultFormats
+  implicit val formats: Formats = DefaultFormats
+
+  def createSparkConf(): SparkConf = {
+    new SparkConf()
+  }
 
   test("parsing no resources") {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf)
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
@@ -75,7 +79,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("parsing one resource") {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     conf.set(EXECUTOR_GPU_ID.amountConf, "2")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
@@ -99,12 +103,12 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val rpBuilder = new ResourceProfileBuilder
     val ereqs = new ExecutorResourceRequests().resource(GPU, 2)
     ereqs.resource(FPGA, 3)
-    val rp = rpBuilder.require(ereqs).build
-    testParsingMultipleResources(new SparkConf, rp)
+    val rp = rpBuilder.require(ereqs).build()
+    testParsingMultipleResources(createSparkConf(), rp)
   }
 
   test("parsing multiple resources") {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     conf.set(EXECUTOR_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_FPGA_ID.amountConf, "3")
     testParsingMultipleResources(conf, ResourceProfile.getOrCreateDefaultProfile(conf))
@@ -136,7 +140,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("error checking parsing resources and executor and task configs") {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     conf.set(EXECUTOR_GPU_ID.amountConf, "2")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
@@ -177,12 +181,12 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val rpBuilder = new ResourceProfileBuilder
     val ereqs = new ExecutorResourceRequests().resource(GPU, 4)
     val treqs = new TaskResourceRequests().resource(GPU, 1)
-    val rp = rpBuilder.require(ereqs).require(treqs).build
-    testExecutorResourceFoundLessThanRequired(new SparkConf, rp)
+    val rp = rpBuilder.require(ereqs).require(treqs).build()
+    testExecutorResourceFoundLessThanRequired(createSparkConf(), rp)
   }
 
   test("executor resource found less than required") {
-    val conf = new SparkConf()
+    val conf = createSparkConf()
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
     conf.set(TASK_GPU_ID.amountConf, "1")
     testExecutorResourceFoundLessThanRequired(conf, ResourceProfile.getOrCreateDefaultProfile(conf))
@@ -213,7 +217,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("use resource discovery") {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     conf.set(EXECUTOR_FPGA_ID.amountConf, "3")
     assume(!(Utils.isWindows))
     withTempDir { dir =>
@@ -245,8 +249,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val rpBuilder = new ResourceProfileBuilder
       val ereqs = new ExecutorResourceRequests().resource(FPGA, 3, scriptPath)
       ereqs.resource(GPU, 2)
-      val rp = rpBuilder.require(ereqs).build
-      allocatedFileAndConfigsResourceDiscoveryTestFpga(dir, new SparkConf, rp)
+      val rp = rpBuilder.require(ereqs).build()
+      allocatedFileAndConfigsResourceDiscoveryTestFpga(dir, createSparkConf(), rp)
     }
   }
 
@@ -255,7 +259,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     withTempDir { dir =>
       val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
         """{"name": "fpga","addresses":["f1", "f2", "f3"]}""")
-      val conf = new SparkConf
+      val conf = createSparkConf()
       conf.set(EXECUTOR_FPGA_ID.amountConf, "3")
       conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, scriptPath)
       conf.set(EXECUTOR_GPU_ID.amountConf, "2")
@@ -289,7 +293,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   }
 
   test("track allocated resources by taskId") {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     val securityMgr = new SecurityManager(conf)
     val serializer = new JavaSerializer(conf)
     var backend: CoarseGrainedExecutorBackend = null
@@ -300,14 +304,15 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
         "host1", "host1", 4, env, None,
           resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf))
-      assert(backend.taskResources.isEmpty)
 
-      val taskId = 1000000
+      val taskId = 1000000L
+      val resourcesAmounts = Map(GPU -> Map(
+        "0" -> ResourceAmountUtils.toInternalResource(0.15),
+        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
-        1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
-        Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+        1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1, resourcesAmounts, data)
       val serializedTaskDescription = TaskDescription.encode(taskDescription)
       backend.rpcEnv.setupEndpoint("Executor 1", backend)
       backend.executor = mock[Executor](CALLS_REAL_METHODS)
@@ -322,11 +327,11 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
-            logInfo(s"task ${taskDescription.taskId} runs.")
+            logInfo(s"task ${this.taskDescription.taskId} runs.")
           }
 
           override def kill(interruptThread: Boolean, reason: String): Unit = {
-            logInfo(s"task ${taskDescription.taskId} killed.")
+            logInfo(s"task ${this.taskDescription.taskId} killed.")
           }
         }
       }
@@ -338,20 +343,22 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       // Launch a new task shall add an entry to `taskResources` map.
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
       eventually(timeout(10.seconds)) {
-        assert(backend.taskResources.size == 1)
-        val resources = backend.taskResources(taskId)
-        assert(resources(GPU).addresses sameElements Array("0", "1"))
+        assert(runningTasks.size == 1)
+        val resources = backend.executor.runningTasks.get(taskId).taskDescription.resources
+        assert(resources(GPU).keys.toArray.sorted sameElements Array("0", "1"))
+        assert(executor.runningTasks.get(taskId).taskDescription.resources
+          === resourcesAmounts)
       }
 
       // Update the status of a running task shall not affect `taskResources` map.
       backend.statusUpdate(taskId, TaskState.RUNNING, data)
-      assert(backend.taskResources.size == 1)
-      val resources = backend.taskResources(taskId)
-      assert(resources(GPU).addresses sameElements Array("0", "1"))
+      val resources = backend.executor.runningTasks.get(taskId).taskDescription.resources
+      assert(resources(GPU).keys.toArray.sorted sameElements Array("0", "1"))
+      assert(executor.runningTasks.get(taskId).taskDescription.resources
+        === resourcesAmounts)
 
       // Update the status of a finished task shall remove the entry from `taskResources` map.
       backend.statusUpdate(taskId, TaskState.FINISHED, data)
-      assert(backend.taskResources.isEmpty)
     } finally {
       if (backend != null) {
         backend.rpcEnv.shutdown()
@@ -389,7 +396,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
    * being executed in [[Executor.TaskRunner]].
    */
   test(s"Tasks launched should always be cancelled.")  {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     val securityMgr = new SecurityManager(conf)
     val serializer = new JavaSerializer(conf)
     val threadPool = ThreadUtils.newDaemonFixedThreadPool(32, "test-executor")
@@ -419,24 +426,27 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
+      val resourcesAmounts = Map(GPU -> Map(
+        "0" -> ResourceAmountUtils.toInternalResource(0.15),
+        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
+
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
         taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
-          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
-          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1, resourcesAmounts, data)
       }
       assert(taskDescriptions.length == numTasks)
 
       def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
-            tasksExecuted.put(taskDescription.taskId, true)
-            logInfo(s"task ${taskDescription.taskId} runs.")
+            tasksExecuted.put(this.taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} runs.")
           }
 
           override def kill(interruptThread: Boolean, reason: String): Unit = {
-            logInfo(s"task ${taskDescription.taskId} killed.")
-            tasksKilled.put(taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} killed.")
+            tasksKilled.put(this.taskDescription.taskId, true)
           }
         }
       }
@@ -478,7 +488,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
    * it has not been launched yet.
    */
   test(s"Tasks not launched should always be cancelled.")  {
-    val conf = new SparkConf
+    val conf = createSparkConf()
     val securityMgr = new SecurityManager(conf)
     val serializer = new JavaSerializer(conf)
     val threadPool = ThreadUtils.newDaemonFixedThreadPool(32, "test-executor")
@@ -508,24 +518,27 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
+      val resourcesAmounts = Map(GPU -> Map(
+        "0" -> ResourceAmountUtils.toInternalResource(0.15),
+        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
+
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
         taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
-          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
-          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1, resourcesAmounts, data)
       }
       assert(taskDescriptions.length == numTasks)
 
       def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
         new executor.TaskRunner(backend, taskDescription, None) {
           override def run(): Unit = {
-            tasksExecuted.put(taskDescription.taskId, true)
-            logInfo(s"task ${taskDescription.taskId} runs.")
+            tasksExecuted.put(this.taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} runs.")
           }
 
           override def kill(interruptThread: Boolean, reason: String): Unit = {
-            logInfo(s"task ${taskDescription.taskId} killed.")
-            tasksKilled.put(taskDescription.taskId, true)
+            logInfo(s"task ${this.taskDescription.taskId} killed.")
+            tasksKilled.put(this.taskDescription.taskId, true)
           }
         }
       }
@@ -567,7 +580,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
    * [[SparkUncaughtExceptionHandler]] and [[Executor]] can exit by itself.
    */
   test("SPARK-40320 Executor should exit when initialization failed for fatal error") {
-    val conf = new SparkConf()
+    val conf = createSparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .set(PLUGINS, Seq(classOf[TestFatalErrorPlugin].getName))
       .setAppName("test")
@@ -626,5 +639,13 @@ private class TestErrorExecutorPlugin extends ExecutorPlugin {
      */
     throw new UnsatisfiedLinkError("Mock throws fatal error.")
     // scalastyle:on throwerror
+  }
+}
+
+class SslCoarseGrainedExecutorBackendSuite extends CoarseGrainedExecutorBackendSuite
+  with LocalSparkContext with MockitoSugar {
+
+  override def createSparkConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

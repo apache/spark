@@ -19,8 +19,8 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.TimeUnit
 import java.util.function.UnaryOperator
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
@@ -116,7 +116,7 @@ private[spark] class ExecutorPodsLifecycleManager(
     // This makes sure that we don't keep growing that set indefinitely, in case we end up missing
     // an update for some pod.
     if (inactivatedPods.nonEmpty && snapshots.nonEmpty) {
-      inactivatedPods.retain(snapshots.last.executorPods.contains(_))
+      inactivatedPods.filterInPlace(snapshots.last.executorPods.contains(_))
     }
 
     // Reconcile the case where Spark claims to know about an executor but the corresponding pod

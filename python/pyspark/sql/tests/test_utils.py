@@ -19,11 +19,12 @@ import unittest
 import difflib
 from itertools import zip_longest
 
-from pyspark.sql.functions import sha2, to_timestamp
+from pyspark.errors import QueryContextType
 from pyspark.errors import (
     AnalysisException,
     ParseException,
     PySparkAssertionError,
+    PySparkValueError,
     IllegalArgumentException,
     SparkUpgradeException,
 )
@@ -44,7 +45,7 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.sqlutils import have_pandas, have_pyarrow
 
 
 class UtilsTestsMixin:
@@ -273,8 +274,8 @@ class UtilsTestsMixin:
         )
 
         # cast to DecimalType
-        df1 = df1.withColumn("col_1", F.col("grade").cast("decimal(4,3)"))
-        df2 = df2.withColumn("col_1", F.col("grade").cast("decimal(4,3)"))
+        df1 = df1.withColumn("col_1", F.col("grade").cast("decimal(5,3)"))
+        df2 = df2.withColumn("col_1", F.col("grade").cast("decimal(5,3)"))
 
         assertDataFrameEqual(df1, df2, rtol=1e-1)
 
@@ -589,8 +590,8 @@ class UtilsTestsMixin:
             data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
         )
 
-        df1 = df1.withColumn("timestamp", to_timestamp("timestamp"))
-        df2 = df2.withColumn("timestamp", to_timestamp("timestamp"))
+        df1 = df1.withColumn("timestamp", F.to_timestamp("timestamp"))
+        df2 = df2.withColumn("timestamp", F.to_timestamp("timestamp"))
 
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
@@ -744,7 +745,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_equal_exact_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -759,7 +763,10 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_approx_equal_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -775,7 +782,10 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_approx_equal_fail_exact_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -816,7 +826,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_unequal_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -856,7 +869,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_type_error_pandas_df(self):
         import pyspark.pandas as ps
         import pandas as pd
@@ -895,7 +911,7 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_exact_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -905,7 +921,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_exact_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -914,7 +930,7 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_approx_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -924,7 +940,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
         import pyspark.pandas as ps
         import pandas as pd
@@ -1237,6 +1253,9 @@ class UtilsTestsMixin:
         df2 = self.spark.createDataFrame([(1, "jane"), (2, "john")], s2)
 
         assertDataFrameEqual(df1, df2)
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreNullable=False)
 
     def test_schema_ignore_nullable_array_equal(self):
         s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
@@ -1611,11 +1630,96 @@ class UtilsTestsMixin:
             message_parameters={"error_msg": error_msg},
         )
 
+    def test_dataframe_include_diff_rows(self):
+        df1 = self.spark.createDataFrame(
+            [("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], ["id", "amount"]
+        )
+        df2 = self.spark.createDataFrame(
+            [("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], ["id", "amount"]
+        )
 
-class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, includeDiffRows=True)
+
+        # Extracting the differing rows data from the exception
+        error_data = context.exception.data
+
+        # Expected differences
+        expected_diff = [
+            (Row(id="1", amount=1000.0), Row(id="1", amount=1001.0)),
+            (Row(id="3", amount=2000.0), Row(id="3", amount=2003.0)),
+        ]
+
+        self.assertEqual(error_data, expected_diff)
+
+    def test_dataframe_ignore_column_order(self):
+        df1 = self.spark.createDataFrame([Row(A=1, B=2), Row(A=3, B=4)])
+        df2 = self.spark.createDataFrame([Row(B=2, A=1), Row(B=4, A=3)])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreColumnOrder=False)
+
+        assertDataFrameEqual(df1, df2, ignoreColumnOrder=True)
+
+    def test_dataframe_ignore_column_name(self):
+        df1 = self.spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+        df2 = self.spark.createDataFrame([(1, 2), (3, 4)], ["X", "Y"])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreColumnName=False)
+
+        assertDataFrameEqual(df1, df2, ignoreColumnName=True)
+
+    def test_dataframe_ignore_column_type(self):
+        df1 = self.spark.createDataFrame([(1, "2"), (3, "4")], ["A", "B"])
+        df2 = self.spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(df1, df2, ignoreColumnType=False)
+
+        assertDataFrameEqual(df1, df2, ignoreColumnType=True)
+
+    def test_dataframe_max_errors(self):
+        df1 = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "c"), (4, "d")], ["id", "value"])
+        df2 = self.spark.createDataFrame([(1, "a"), (2, "z"), (3, "x"), (4, "y")], ["id", "value"])
+
+        # We expect differences in rows 2, 3, and 4.
+        # Setting maxErrors to 2 will limit the reported errors.
+        maxErrors = 2
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, maxErrors=maxErrors)
+
+        # Check if the error message contains information about 2 mismatches only.
+        error_message = str(context.exception)
+        self.assertTrue("! Row" in error_message and error_message.count("! Row") == maxErrors * 2)
+
+    def test_dataframe_show_only_diff(self):
+        df1 = self.spark.createDataFrame(
+            [(1, "apple", "red"), (2, "banana", "yellow"), (3, "cherry", "red")],
+            ["id", "fruit", "color"],
+        )
+        df2 = self.spark.createDataFrame(
+            [(1, "apple", "green"), (2, "banana", "yellow"), (3, "cherry", "blue")],
+            ["id", "fruit", "color"],
+        )
+
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, showOnlyDiff=False)
+
+        error_message = str(context.exception)
+
+        self.assertTrue("apple" in error_message and "banana" in error_message)
+
+        with self.assertRaises(PySparkAssertionError) as context:
+            assertDataFrameEqual(df1, df2, showOnlyDiff=True)
+
+        error_message = str(context.exception)
+
+        self.assertTrue("apple" in error_message and "banana" not in error_message)
+
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
-        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
+        self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b").collect())
 
     def test_capture_user_friendly_exception(self):
         try:
@@ -1640,25 +1744,54 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
             "Setting negative mapred.reduce.tasks",
             lambda: self.spark.sql("SET mapred.reduce.tasks=-1"),
         )
+
+    def test_capture_pyspark_value_exception(self):
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegex(
-            IllegalArgumentException,
-            "1024 is not in the permitted values",
-            lambda: df.select(sha2(df.a, 1024)).collect(),
+            PySparkValueError,
+            "Value for `numBits` has to be amongst the following values",
+            lambda: df.select(F.sha2(df.a, 1024)).collect(),
         )
-        try:
-            df.select(sha2(df.a, 1024)).collect()
-        except IllegalArgumentException as e:
-            self.assertRegex(e.desc, "1024 is not in the permitted values")
-            self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
 
     def test_get_error_class_state(self):
         # SPARK-36953: test CapturedException.getErrorClass and getSqlState (from SparkThrowable)
+        exception = None
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
-            self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-            self.assertEquals(e.getSqlState(), "42703")
+            exception = e
+
+        self.assertIsNotNone(exception)
+        self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+        self.assertEqual(exception.getSqlState(), "42703")
+        self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
+        self.assertIn(
+            (
+                "[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column, variable, or function "
+                "parameter with name `a` cannot be resolved.  SQLSTATE: 42703"
+            ),
+            exception.getMessage(),
+        )
+        self.assertEqual(len(exception.getQueryContext()), 1)
+        qc = exception.getQueryContext()[0]
+        self.assertEqual(qc.fragment(), "a")
+        self.assertEqual(qc.stopIndex(), 7)
+        self.assertEqual(qc.startIndex(), 7)
+        self.assertEqual(qc.contextType(), QueryContextType.SQL)
+        self.assertEqual(qc.objectName(), "")
+        self.assertEqual(qc.objectType(), "")
+
+        try:
+            self.spark.sql("""SELECT assert_true(FALSE)""")
+        except AnalysisException as e:
+            self.assertIsNone(e.getErrorClass())
+            self.assertIsNone(e.getSqlState())
+            self.assertEqual(e.getMessageParameters(), {})
+            self.assertEqual(e.getMessage(), "")
+
+
+class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+    pass
 
 
 if __name__ == "__main__":

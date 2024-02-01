@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset =
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
@@ -52,11 +52,46 @@ class MicroBatchExecution(
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
-  protected val triggerExecutor: TriggerExecutor = trigger match {
-    case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
-    case OneTimeTrigger => SingleBatchExecutor()
-    case AvailableNowTrigger => MultiBatchExecutor()
-    case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
+  @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
+
+  protected def getTrigger(): TriggerExecutor = {
+    assert(sources.nonEmpty, "sources should have been retrieved from the plan!")
+    trigger match {
+      case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
+      case OneTimeTrigger => SingleBatchExecutor()
+      case AvailableNowTrigger =>
+        // When the flag is enabled, Spark will wrap sources which do not support
+        // Trigger.AvailableNow with wrapper implementation, so that Trigger.AvailableNow can
+        // take effect.
+        // When the flag is disabled, Spark will fall back to single batch execution, whenever
+        // it figures out any source does not support Trigger.AvailableNow.
+        // See SPARK-45178 for more details.
+        if (sparkSession.sessionState.conf.getConf(
+            SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)) {
+          logInfo("Configured to use the wrapper of Trigger.AvailableNow for query " +
+            s"$prettyIdString.")
+          MultiBatchExecutor()
+        } else {
+          val supportsTriggerAvailableNow = sources.distinct.forall { src =>
+            val supports = src.isInstanceOf[SupportsTriggerAvailableNow]
+            if (!supports) {
+              logWarning(s"source [$src] does not support Trigger.AvailableNow. Falling back to " +
+                "single batch execution. Note that this may not guarantee processing new data if " +
+                "there is an uncommitted batch. Please consult with data source developer to " +
+                "support Trigger.AvailableNow.")
+            }
+
+            supports
+          }
+
+          if (supportsTriggerAvailableNow) {
+            MultiBatchExecutor()
+          } else {
+            SingleBatchExecutor()
+          }
+        }
+      case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
+    }
   }
 
   protected var watermarkTracker: WatermarkTracker = _
@@ -68,7 +103,7 @@ class MicroBatchExecution(
     var nextSourceId = 0L
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
-    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
+    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     // We transform each distinct streaming relation into a StreamingExecutionRelation, keeping a
     // map as we go to ensure each identical relation gets the same StreamingExecutionRelation
     // object. For each microbatch, the StreamingExecutionRelation will be replaced with a logical
@@ -78,7 +113,7 @@ class MicroBatchExecution(
     // transformation is responsible for replacing attributes with their final values.
 
     val disabledSources =
-      Utils.stringToSeq(sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders)
+      Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
@@ -105,11 +140,13 @@ class MicroBatchExecution(
             // TODO: operator pushdown.
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
-            StreamingDataSourceV2Relation(output, scan, stream, catalog, identifier)
+            val relation = StreamingDataSourceV2Relation(
+              table, output, catalog, identifier, options, metadataPath)
+            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
-            srcName, sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders, table)
+            srcName, sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders, table)
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
@@ -128,8 +165,13 @@ class MicroBatchExecution(
       // v1 source
       case s: StreamingExecutionRelation => s.source
       // v2 source
-      case r: StreamingDataSourceV2Relation => r.stream
+      case r: StreamingDataSourceV2ScanRelation => r.stream
     }
+
+    // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
+    // sources.
+    triggerExecutor = getTrigger()
+
     uniqueSources = triggerExecutor match {
       case _: SingleBatchExecutor =>
         sources.distinct.map {
@@ -240,7 +282,7 @@ class MicroBatchExecution(
       if (isActive) {
 
         // check if there are any previous errors and bubble up any existing async operations
-        errorNotifier.throwErrorIfExists
+        errorNotifier.throwErrorIfExists()
 
         var currentBatchHasNewData = false // Whether the current batch had new data
 
@@ -666,7 +708,7 @@ class MicroBatchExecution(
         }
 
       // For v2 sources.
-      case r: StreamingDataSourceV2Relation =>
+      case r: StreamingDataSourceV2ScanRelation =>
         mutableNewData.get(r.stream).map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
@@ -706,6 +748,7 @@ class MicroBatchExecution(
       StreamExecution.IS_CONTINUOUS_PROCESSING, false.toString)
 
     reportTimeTaken("queryPlanning") {
+      val isFirstBatch = lastExecution == null
       lastExecution = new IncrementalExecution(
         sparkSessionToRunBatch,
         triggerLogicalPlan,
@@ -716,7 +759,8 @@ class MicroBatchExecution(
         currentBatchId,
         offsetLog.offsetSeqMetadataForBatchId(currentBatchId - 1),
         offsetSeqMetadata,
-        watermarkPropagator)
+        watermarkPropagator,
+        isFirstBatch)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 

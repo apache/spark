@@ -37,8 +37,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
 
   /**
    * The write process for particular partition, it controls the life circle of [[ShuffleWriter]]
-   * get from [[ShuffleManager]] and triggers rdd compute, finally return the [[MapStatus]] for
-   * this task.
+   * get from [[ShuffleManager]] finally return the [[MapStatus]] for this task.
    */
   def write(
       inputs: Iterator[_],

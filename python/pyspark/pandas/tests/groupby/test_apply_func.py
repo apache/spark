@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -22,30 +21,11 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyApplyFuncMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43708): Enable GroupByTests.test_apply " "for pandas 2.0.0.",
-    )
     def test_apply(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
@@ -87,14 +67,17 @@ class GroupbyApplyFuncMixin:
         self.assert_eq(
             psdf.groupby(psdf.b // 5).apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pdf.b // 5).apply(lambda x: x + x.min()).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)["a"].apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pdf.b // 5)["a"].apply(lambda x: x + x.min()).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)[["a"]].apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pdf.b // 5)[["a"]].apply(lambda x: x + x.min()).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)[["a"]].apply(len).sort_index(),
@@ -139,10 +122,6 @@ class GroupbyApplyFuncMixin:
             pdf.groupby([("x", "a"), ("x", "b")]).apply(len).sort_index(),
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43706): Enable GroupByTests.test_apply_without_shortcut " "for pandas 2.0.0.",
-    )
     def test_apply_without_shortcut(self):
         with option_context("compute.shortcut_limit", 0):
             self.test_apply()
@@ -508,7 +487,11 @@ class GroupbyApplyFuncMixin:
         )
 
 
-class GroupbyApplyFuncTests(GroupbyApplyFuncMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbyApplyFuncTests(
+    GroupbyApplyFuncMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

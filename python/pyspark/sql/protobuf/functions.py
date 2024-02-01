@@ -25,13 +25,14 @@ from typing import Dict, Optional, TYPE_CHECKING, cast
 from py4j.java_gateway import JVMView
 
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, try_remote_protobuf_functions
 from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 
 
+@try_remote_protobuf_functions
 def from_protobuf(
     data: "ColumnOrName",
     messageName: str,
@@ -58,6 +59,7 @@ def from_protobuf(
 
     .. versionchanged:: 3.5.0
         Supports `binaryDescriptorSet` arg to pass binary descriptor directly.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -161,6 +163,7 @@ def from_protobuf(
     return Column(jc)
 
 
+@try_remote_protobuf_functions
 def to_protobuf(
     data: "ColumnOrName",
     messageName: str,
@@ -187,6 +190,7 @@ def to_protobuf(
 
     .. versionchanged:: 3.5.0
         Supports `binaryDescriptorSet` arg to pass binary descriptor directly.
+        Supports Spark Connect.
 
     Parameters
     ----------

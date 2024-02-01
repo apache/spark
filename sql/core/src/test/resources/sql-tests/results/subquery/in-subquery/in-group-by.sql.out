@@ -352,3 +352,19 @@ struct<t1a:string,min(t1b):smallint>
 t1a	16
 t1b	8
 t1c	8
+
+
+-- !query
+select t1a
+from t1
+where t1f IN (SELECT RANK() OVER (partition by t3c  order by t2b) as s
+                             FROM t2, t3 where t2.t2c = t3.t3c and t2.t2a < t1.t1a)
+-- !query schema
+struct<t1a:string>
+-- !query output
+t1d
+t1d
+t1d
+t1e
+t1e
+t1e

@@ -67,7 +67,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
   /**
    * Return a stream of expressions in which the original expression is projected with `aliasMap`.
    */
-  protected def projectExpression(expr: Expression): Stream[Expression] = {
+  protected def projectExpression(expr: Expression): LazyList[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
     expr.multiTransformDown {
       // Mapping with aliases
@@ -103,7 +103,7 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
       // but if only `b AS y` can be projected we can't return `Seq(SortOrder(y))`.
       orderingExpressions.iterator.map { sortOrder =>
         val orderingSet = mutable.Set.empty[Expression]
-        val sameOrderings = sortOrder.children.toStream
+        val sameOrderings = sortOrder.children.to(LazyList)
           .flatMap(projectExpression)
           .filter(e => orderingSet.add(e.canonicalized))
           .take(aliasCandidateLimit)

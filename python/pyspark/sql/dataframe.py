@@ -43,7 +43,12 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkIndexError,
+    PySparkAttributeError,
+)
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -60,14 +65,19 @@ from pyspark.sql.types import (
     Row,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, toJArray
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
 if TYPE_CHECKING:
     from pyspark._typing import PrimitiveType
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
-    from pyspark.sql._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
+    from pyspark.sql._typing import (
+        ColumnOrName,
+        ColumnOrNameOrOrdinal,
+        LiteralType,
+        OptionalPrimitiveType,
+    )
     from pyspark.sql.context import SQLContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.group import GroupedData
@@ -349,31 +359,53 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        Create a local temporary view.
+        Example 1: Creating and querying a local temporary view
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createTempView("people")
-        >>> df2 = spark.sql("SELECT * FROM people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
+        >>> spark.sql("SELECT * FROM people").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
 
-        Throw an exception if the table already exists.
+        Example 2: Attempting to create a temporary view with an existing name
 
         >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
+
+        Example 3: Creating and dropping a local temporary view
+
         >>> spark.catalog.dropTempView("people")
         True
+        >>> df.createTempView("people")
 
+        Example 4: Creating temporary views with multiple DataFrames with
+        :meth:`SparkSession.table`
+
+        >>> df1 = spark.createDataFrame([(1, "John"), (2, "Jane")], schema=["id", "name"])
+        >>> df2 = spark.createDataFrame([(3, "Jake"), (4, "Jill")], schema=["id", "name"])
+        >>> df1.createTempView("table1")
+        >>> df2.createTempView("table2")
+        >>> result_df = spark.table("table1").union(spark.table("table2"))
+        >>> result_df.show()
+        +---+----+
+        | id|name|
+        +---+----+
+        |  1|John|
+        |  2|Jane|
+        |  3|Jake|
+        |  4|Jill|
+        +---+----+
         """
         self._jdf.createTempView(name)
 
     def createOrReplaceTempView(self, name: str) -> None:
         """Creates or replaces a local temporary view with this :class:`DataFrame`.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
 
@@ -385,32 +417,38 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         name : str
             Name of the view.
 
+        Notes
+        -----
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
         Examples
         --------
-        Create a local temporary view named 'people'.
+        Example 1: Creating a local temporary view named 'people'.
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createOrReplaceTempView("people")
 
-        Replace the local temporary view.
+        Example 2: Replacing the local temporary view.
 
         >>> df2 = df.filter(df.age > 3)
+        >>> # Replace the local temporary view with the filtered DataFrame
         >>> df2.createOrReplaceTempView("people")
+        >>> # Query the temporary view
         >>> df3 = spark.sql("SELECT * FROM people")
-        >>> sorted(df3.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-        True
+        >>> # Check if the DataFrames are equal
+        ... assert sorted(df3.collect()) == sorted(df2.collect())
 
+        Example 3: Dropping the temporary view.
+
+        >>> # Drop the local temporary view
+        ... spark.catalog.dropTempView("people")
+        True
         """
         self._jdf.createOrReplaceTempView(name)
 
     def createGlobalTempView(self, name: str) -> None:
         """Creates a global temporary view with this :class:`DataFrame`.
-
-        The lifetime of this temporary view is tied to this Spark application.
-        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
-        catalog.
 
         .. versionadded:: 2.1.0
 
@@ -422,25 +460,38 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         name : str
             Name of the view.
 
+        Notes
+        -----
+        The lifetime of this temporary view is tied to this Spark application.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
         Examples
         --------
-        Create a global temporary view.
+        Example 1: Creating and querying a global temporary view
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createGlobalTempView("people")
         >>> df2 = spark.sql("SELECT * FROM global_temp.people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
+        >>> df2.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
 
-        Throws an exception if the global temporary view already exists.
+        Example 2: Attempting to create a duplicate global temporary view
 
         >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
+
+        Example 3: Dropping a global temporary view
+
         >>> spark.catalog.dropGlobalTempView("people")
         True
-
         """
         self._jdf.createGlobalTempView(name)
 
@@ -461,21 +512,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        Create a global temporary view.
+        Example 1: Creating a global temporary view with a DataFrame
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createOrReplaceGlobalTempView("people")
 
-        Replace the global temporary view.
+        Example 2: Replacing a global temporary view with a filtered DataFrame
 
         >>> df2 = df.filter(df.age > 3)
         >>> df2.createOrReplaceGlobalTempView("people")
-        >>> df3 = spark.sql("SELECT * FROM global_temp.people")
+        >>> df3 = spark.table("global_temp.people")
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
+
+        Example 3: Dropping a global temporary view
         >>> spark.catalog.dropGlobalTempView("people")
         True
-
         """
         self._jdf.createOrReplaceGlobalTempView(name)
 
@@ -557,14 +609,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Retrieve the inferred schema of the current DataFrame.
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-
-        Retrieve the schema of the current DataFrame.
-
         >>> df.schema
         StructType([StructField('age', LongType(), True),
                     StructField('name', StringType(), True)])
+
+        Example 2: Retrieve the schema of the current DataFrame (DDL-formatted schema).
+
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")],
+        ...     "age INT, name STRING")
+        >>> df.schema
+        StructType([StructField('age', IntegerType(), True),
+                    StructField('name', StringType(), True)])
+
+        Example 3: Retrieve the specified schema of the current DataFrame.
+
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> df = spark.createDataFrame(
+        ...     [("a",), ("b",), ("c",)],
+        ...     StructType([StructField("value", StringType(), False)]))
+        >>> df.schema
+        StructType([StructField('value', StringType(), False)])
+
         """
         if self._schema is None:
             try:
@@ -589,14 +659,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        level : int, optional, default None
+        level : int, optional
             How many levels to print for nested schemas.
 
-            .. versionchanged:: 3.5.0
-                Added Level parameter.
+            .. versionadded:: 3.5.0
 
         Examples
         --------
+        Example 1: Printing the schema of a DataFrame with basic columns
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df.printSchema()
@@ -604,11 +675,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          |-- age: long (nullable = true)
          |-- name: string (nullable = true)
 
-        >>> df = spark.createDataFrame([(1, (2,2))], ["a", "b"])
+        Example 2: Printing the schema with a specified level for nested columns
+
+        >>> df = spark.createDataFrame([(1, (2, 2))], ["a", "b"])
         >>> df.printSchema(1)
         root
          |-- a: long (nullable = true)
          |-- b: struct (nullable = true)
+
+        Example 3: Printing the schema with deeper nesting level
 
         >>> df.printSchema(2)
         root
@@ -616,6 +691,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          |-- b: struct (nullable = true)
          |    |-- _1: long (nullable = true)
          |    |-- _2: long (nullable = true)
+
+        Example 4: Printing the schema of a DataFrame with nullable and non-nullable columns
+
+        >>> df = spark.range(1).selectExpr("id AS nonnullable", "NULL AS nullable")
+        >>> df.printSchema()
+        root
+         |-- nonnullable: long (nullable = false)
+         |-- nullable: void (nullable = true)
         """
         if level:
             print(self._jdf.schema().treeString(level))
@@ -653,18 +736,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Print out the physical plan only (default).
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-
-        Print out the physical plan only (default).
-
         >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         *(1) Scan ExistingRDD[age...,name...]
 
-        Print out all of the parsed, analyzed, optimized and physical plans.
+        Example 2: Print out all parsed, analyzed, optimized, and physical plans.
 
-        >>> df.explain(True)
+        >>> df.explain(extended=True)
         == Parsed Logical Plan ==
         ...
         == Analyzed Logical Plan ==
@@ -674,7 +756,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         == Physical Plan ==
         ...
 
-        Print out the plans with two sections: a physical plan outline and node details
+        Example 3: Print out the plans with two sections: a physical plan outline and node details.
 
         >>> df.explain(mode="formatted")  # doctest: +SKIP
         == Physical Plan ==
@@ -683,9 +765,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Output [2]: [age..., name...]
         ...
 
-        Print a logical plan and statistics if they are available.
+        Example 4: Print a logical plan and statistics if they are available.
 
-        >>> df.explain("cost")
+        >>> df.explain(mode="cost")
         == Optimized Logical Plan ==
         ...Statistics...
         ...
@@ -832,7 +914,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self._jdf.isStreaming()
 
     def isEmpty(self) -> bool:
-        """Returns ``True`` if this :class:`DataFrame` is empty.
+        """
+        Checks if the :class:`DataFrame` is empty and returns a boolean value.
 
         .. versionadded:: 3.3.0
 
@@ -842,21 +925,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         bool
-            Whether it's empty DataFrame or not.
+            Returns ``True`` if the DataFrame is empty, ``False`` otherwise.
+
+        See Also
+        --------
+        DataFrame.count : Counts the number of rows in DataFrame.
+
+        Notes
+        -----
+        - Unlike `count()`, this method does not trigger any computation.
+        - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
         --------
+        Example 1: Checking if an empty DataFrame is empty
+
         >>> df_empty = spark.createDataFrame([], 'a STRING')
-        >>> df_non_empty = spark.createDataFrame(["a"], 'STRING')
         >>> df_empty.isEmpty()
         True
+
+        Example 2: Checking if a non-empty DataFrame is empty
+
+        >>> df_non_empty = spark.createDataFrame(["a"], 'STRING')
         >>> df_non_empty.isEmpty()
         False
+
+        Example 3: Checking if a DataFrame with null values is empty
+
+        >>> df_nulls = spark.createDataFrame([(None, None)], 'a STRING, b INT')
+        >>> df_nulls.isEmpty()
+        False
+
+        Example 4: Checking if a DataFrame with no rows but with columns is empty
+
+        >>> df_no_rows = spark.createDataFrame([], 'id INT, value STRING')
+        >>> df_no_rows.isEmpty()
+        True
         """
         return self._jdf.isEmpty()
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
-        """Prints the first ``n`` rows to the console.
+        """
+        Prints the first ``n`` rows of the DataFrame to the console.
 
         .. versionadded:: 1.3.0
 
@@ -865,20 +975,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        n : int, optional
+        n : int, optional, default 20
             Number of rows to show.
-        truncate : bool or int, optional
-            If set to ``True``, truncate strings longer than 20 chars by default.
+        truncate : bool or int, optional, default True
+            If set to ``True``, truncate strings longer than 20 chars.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
         vertical : bool, optional
-            If set to ``True``, print output rows vertically (one line
-            per column value).
+            If set to ``True``, print output rows vertically (one line per column value).
 
         Examples
         --------
         >>> df = spark.createDataFrame([
-        ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        ...     (14, "Tom"), (23, "Alice"), (16, "Bob"), (19, "This is a super long name")],
+        ...     ["age", "name"])
+
+        Show :class:`DataFrame`
+
+        >>> df.show()
+        +---+--------------------+
+        |age|                name|
+        +---+--------------------+
+        | 14|                 Tom|
+        | 23|               Alice|
+        | 16|                 Bob|
+        | 19|This is a super l...|
+        +---+--------------------+
 
         Show only top 2 rows.
 
@@ -891,6 +1013,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         only showing top 2 rows
 
+        Show full column content without truncation.
+
+        >>> df.show(truncate=False)
+        +---+-------------------------+
+        |age|name                     |
+        +---+-------------------------+
+        |14 |Tom                      |
+        |23 |Alice                    |
+        |16 |Bob                      |
+        |19 |This is a super long name|
+        +---+-------------------------+
+
         Show :class:`DataFrame` where the maximum number of characters is 3.
 
         >>> df.show(truncate=3)
@@ -900,22 +1034,30 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 14| Tom|
         | 23| Ali|
         | 16| Bob|
+        | 19| Thi|
         +---+----+
 
         Show :class:`DataFrame` vertically.
 
         >>> df.show(vertical=True)
-        -RECORD 0-----
+        -RECORD 0--------------------
         age  | 14
         name | Tom
-        -RECORD 1-----
+        -RECORD 1--------------------
         age  | 23
         name | Alice
-        -RECORD 2-----
+        -RECORD 2--------------------
         age  | 16
         name | Bob
+        -RECORD 3--------------------
+        age  | 19
+        name | This is a super l...
         """
+        print(self._show_string(n, truncate, vertical))
 
+    def _show_string(
+        self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
+    ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
                 error_class="NOT_INT",
@@ -929,7 +1071,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
 
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20, vertical))
+            return self._jdf.showString(n, 20, vertical)
         else:
             try:
                 int_truncate = int(truncate)
@@ -942,7 +1084,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     },
                 )
 
-            print(self._jdf.showString(n, int_truncate, vertical))
+            return self._jdf.showString(n, int_truncate, vertical)
 
     def __repr__(self) -> str:
         if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
@@ -1117,7 +1259,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     def hint(
-        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+        self, name: str, *parameters: Union["PrimitiveType", "Column", List["PrimitiveType"]]
     ) -> "DataFrame":
         """Specifies some hint on the current :class:`DataFrame`.
 
@@ -1165,7 +1307,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
             )
 
-        allowed_types = (str, list, float, int)
+        allowed_types = (str, float, int, Column, list)
+        allowed_primitive_types = (str, float, int)
+        allowed_types_repr = ", ".join(
+            [t.__name__ for t in allowed_types[:-1]]
+            + ["list[" + t.__name__ + "]" for t in allowed_primitive_types]
+        )
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise PySparkTypeError(
@@ -1173,12 +1320,43 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     message_parameters={
                         "arg_name": "parameters",
                         "arg_type": type(parameters).__name__,
-                        "allowed_types": ", ".join(map(lambda x: x.__name__, allowed_types)),
-                        "return_type": type(p).__name__,
+                        "allowed_types": allowed_types_repr,
+                        "item_type": type(p).__name__,
                     },
                 )
+            if isinstance(p, list):
+                if not all(isinstance(e, allowed_primitive_types) for e in p):
+                    raise PySparkTypeError(
+                        error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+                        message_parameters={
+                            "arg_name": "parameters",
+                            "arg_type": type(parameters).__name__,
+                            "allowed_types": allowed_types_repr,
+                            "item_type": type(p).__name__ + "[" + type(p[0]).__name__ + "]",
+                        },
+                    )
 
-        jdf = self._jdf.hint(name, self._jseq(parameters))
+        def _converter(parameter: Union[str, list, float, int, Column]) -> Any:
+            if isinstance(parameter, Column):
+                return _to_java_column(parameter)
+            elif isinstance(parameter, list):
+                # for list input, we are assuming only one element type exist in the list.
+                # for empty list, we are converting it into an empty long[] in the JVM side.
+                gateway = self._sc._gateway
+                assert gateway is not None
+                jclass = gateway.jvm.long
+                if len(parameter) >= 1:
+                    mapping = {
+                        str: gateway.jvm.java.lang.String,
+                        float: gateway.jvm.double,
+                        int: gateway.jvm.long,
+                    }
+                    jclass = mapping[type(parameter[0])]
+                return toJArray(gateway, jclass, parameter)
+            else:
+                return parameter
+
+        jdf = self._jdf.hint(name, self._jseq(parameters, _converter))
         return DataFrame(jdf, self.sparkSession)
 
     def count(self) -> int:
@@ -1207,7 +1385,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return int(self._jdf.count())
 
     def collect(self) -> List[Row]:
-        """Returns all the records as a list of :class:`Row`.
+        """Returns all the records in the DataFrame as a list of :class:`Row`.
 
         .. versionadded:: 1.3.0
 
@@ -1217,14 +1395,59 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         list
-            List of rows.
+            A list of :class:`Row` objects, each representing a row in the DataFrame.
+
+        See Also
+        --------
+        DataFrame.take : Returns the first `n` rows.
+        DataFrame.head : Returns the first `n` rows.
+        DataFrame.toPandas : Returns the data as a pandas DataFrame.
+
+        Notes
+        -----
+        This method should only be used if the resulting list is expected to be small,
+        as all the data is loaded into the driver's memory.
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        Example: Collecting all rows of a DataFrame
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df.collect()
         [Row(age=14, name='Tom'), Row(age=23, name='Alice'), Row(age=16, name='Bob')]
+
+        Example: Collecting all rows after filtering
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.filter(df.age > 15).collect()
+        [Row(age=23, name='Alice'), Row(age=16, name='Bob')]
+
+        Example: Collecting all rows after selecting specific columns
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.select("name").collect()
+        [Row(name='Tom'), Row(name='Alice'), Row(name='Bob')]
+
+        Example: Collecting all rows after applying a function to a column
+
+        >>> from pyspark.sql.functions import upper
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.select(upper(df.name)).collect()
+        [Row(upper(name)='TOM'), Row(upper(name)='ALICE'), Row(upper(name)='BOB')]
+
+        Example: Collecting all rows from a DataFrame and converting a specific column to a list
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> rows = df.collect()
+        >>> [row["name"] for row in rows]
+        ['Tom', 'Alice', 'Bob']
+
+        Example: Collecting all rows from a DataFrame and converting to a list of dictionaries
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> rows = df.collect()
+        >>> [row.asDict() for row in rows]
+        [{'age': 14, 'name': 'Tom'}, {'age': 23, 'name': 'Alice'}, {'age': 16, 'name': 'Bob'}]
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
@@ -1415,6 +1638,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         f : function
@@ -1439,6 +1665,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         f : function
@@ -1458,7 +1687,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         self.rdd.foreachPartition(f)  # type: ignore[arg-type]
 
     def cache(self) -> "DataFrame":
-        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK`).
+        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK_DESER`).
 
         .. versionadded:: 1.3.0
 
@@ -1467,7 +1696,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+        The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
 
         Returns
         -------
@@ -1482,7 +1711,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        InMemoryTableScan ...
+        AdaptiveSparkPlan isFinalPlan=false
+        +- InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1524,7 +1754,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        InMemoryTableScan ...
+        AdaptiveSparkPlan isFinalPlan=false
+        +- InMemoryTableScan ...
 
         Persists the data in the disk by specifying the storage level.
 
@@ -1644,9 +1875,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.range(10)
-        >>> df.coalesce(1).rdd.getNumPartitions()
-        1
+        >>> from pyspark.sql import functions as sf
+        >>> spark.range(0, 10, 1, 3).select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        +---------+
+
+        >>> from pyspark.sql import functions as sf
+        >>> spark.range(0, 10, 1, 3).coalesce(1).select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        +---------+
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
@@ -1690,23 +1939,78 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> from pyspark.sql import functions as sf
+        >>> df = spark.range(0, 64, 1, 9).withColumn(
+        ...     "name", sf.concat(sf.lit("name_"), sf.col("id").cast("string"))
+        ... ).withColumn(
+        ...     "age", sf.col("id") - 32
+        ... )
+        >>> df.select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        |        3|
+        |        4|
+        |        5|
+        |        6|
+        |        7|
+        |        8|
+        +---------+
 
         Repartition the data into 10 partitions.
 
-        >>> df.repartition(10).rdd.getNumPartitions()
-        10
+        >>> df.repartition(10).select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        |        3|
+        |        4|
+        |        5|
+        |        6|
+        |        7|
+        |        8|
+        |        9|
+        +---------+
 
         Repartition the data into 7 partitions by 'age' column.
 
-        >>> df.repartition(7, "age").rdd.getNumPartitions()
-        7
+        >>> df.repartition(7, "age").select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        |        3|
+        |        4|
+        |        5|
+        |        6|
+        +---------+
 
-        Repartition the data into 7 partitions by 'age' and 'name columns.
+        Repartition the data into 3 partitions by 'age' and 'name' columns.
 
-        >>> df.repartition(3, "name", "age").rdd.getNumPartitions()
-        3
+        >>> df.repartition(3, "name", "age").select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        +---------+
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
@@ -1774,15 +2078,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-
         Repartition the data into 2 partitions by range in 'age' column.
-        For example, the first partition can have ``(14, "Tom")``, and the second
-        partition would have ``(16, "Bob")`` and ``(23, "Alice")``.
+        For example, the first partition can have ``(14, "Tom")`` and ``(16, "Bob")``,
+        and the second partition would have ``(23, "Alice")``.
 
-        >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
-        2
+        >>> from pyspark.sql import functions as sf
+        >>> spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"]
+        ... ).repartitionByRange(2, "age").select(
+        ...     "age", "name", sf.spark_partition_id()
+        ... ).show()
+        +---+-----+--------------------+
+        |age| name|SPARK_PARTITION_ID()|
+        +---+-----+--------------------+
+        | 14|  Tom|                   0|
+        | 16|  Bob|                   0|
+        | 23|Alice|                   1|
+        +---+-----+--------------------+
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
@@ -1820,15 +2132,90 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             DataFrame with distinct records.
 
+        See Also
+        --------
+        DataFrame.dropDuplicates
+
         Examples
         --------
+        Remove duplicate rows from a DataFrame
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (23, "Alice")], ["age", "name"])
+        >>> df.distinct().show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        +---+-----+
 
-        Return the number of distinct rows in the :class:`DataFrame`
+        Count the number of distinct rows in a DataFrame
 
         >>> df.distinct().count()
         2
+
+        Get distinct rows from a DataFrame with multiple columns
+
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom", "M"), (23, "Alice", "F"), (23, "Alice", "F"), (14, "Tom", "M")],
+        ...     ["age", "name", "gender"])
+        >>> df.distinct().show()
+        +---+-----+------+
+        |age| name|gender|
+        +---+-----+------+
+        | 14|  Tom|     M|
+        | 23|Alice|     F|
+        +---+-----+------+
+
+        Get distinct values from a specific column in a DataFrame
+
+        >>> df.select("name").distinct().show()
+        +-----+
+        | name|
+        +-----+
+        |  Tom|
+        |Alice|
+        +-----+
+
+        Count the number of distinct values in a specific column
+
+        >>> df.select("name").distinct().count()
+        2
+
+        Get distinct values from multiple columns in DataFrame
+
+        >>> df.select("name", "gender").distinct().show()
+        +-----+------+
+        | name|gender|
+        +-----+------+
+        |  Tom|     M|
+        |Alice|     F|
+        +-----+------+
+
+        Get distinct rows from a DataFrame with null values
+
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom", "M"), (23, "Alice", "F"), (23, "Alice", "F"), (14, "Tom", None)],
+        ...     ["age", "name", "gender"])
+        >>> df.distinct().show()
+        +---+-----+------+
+        |age| name|gender|
+        +---+-----+------+
+        | 14|  Tom|     M|
+        | 23|Alice|     F|
+        | 14|  Tom|  NULL|
+        +---+-----+------+
+
+        Get distinct non-null values from a DataFrame
+
+        >>> df.distinct().filter(df.gender.isNotNull()).show()
+        +---+-----+------+
+        |age| name|gender|
+        +---+-----+------+
+        | 14|  Tom|     M|
+        | 23|Alice|     F|
+        +---+-----+------+
         """
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
@@ -2000,7 +2387,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         "arg_name": "fractions",
                         "arg_type": type(fractions).__name__,
                         "allowed_types": "float, int, str",
-                        "return_type": type(k).__name__,
+                        "item_type": type(k).__name__,
                     },
                 )
             fractions[k] = float(v)
@@ -2084,7 +2471,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def columns(self) -> List[str]:
-        """Returns all column names as a list.
+        """
+        Retrieves the names of all columns in the :class:`DataFrame` as a list.
+
+        The order of the column names in the list reflects their order in the DataFrame.
 
         .. versionadded:: 1.3.0
 
@@ -2094,14 +2484,65 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         list
-            List of column names.
+            List of column names in the DataFrame.
 
         Examples
         --------
+        Example 1: Retrieve column names of a DataFrame
+
         >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        ...     [(14, "Tom", "CA"), (23, "Alice", "NY"), (16, "Bob", "TX")],
+        ...     ["age", "name", "state"]
+        ... )
         >>> df.columns
-        ['age', 'name']
+        ['age', 'name', 'state']
+
+        Example 2: Using column names to project specific columns
+
+        >>> selected_cols = [col for col in df.columns if col != "age"]
+        >>> df.select(selected_cols).show()
+        +-----+-----+
+        | name|state|
+        +-----+-----+
+        |  Tom|   CA|
+        |Alice|   NY|
+        |  Bob|   TX|
+        +-----+-----+
+
+        Example 3: Checking if a specific column exists in a DataFrame
+
+        >>> "state" in df.columns
+        True
+        >>> "salary" in df.columns
+        False
+
+        Example 4: Iterating over columns to apply a transformation
+
+        >>> import pyspark.sql.functions as f
+        >>> for col_name in df.columns:
+        ...     df = df.withColumn(col_name, f.upper(f.col(col_name)))
+        >>> df.show()
+        +---+-----+-----+
+        |age| name|state|
+        +---+-----+-----+
+        | 14|  TOM|   CA|
+        | 23|ALICE|   NY|
+        | 16|  BOB|   TX|
+        +---+-----+-----+
+
+        Example 5: Renaming columns and checking the updated column names
+
+        >>> df = df.withColumnRenamed("name", "first_name")
+        >>> df.columns
+        ['age', 'first_name', 'state']
+
+        Example 6: Using the `columns` property to ensure two DataFrames have the
+        same columns before a union
+
+        >>> df2 = spark.createDataFrame(
+        ...     [(30, "Eve", "FL"), (40, "Sam", "WA")], ["age", "name", "location"])
+        >>> df.columns == df2.columns
+        False
         """
         return [f.name for f in self.schema.fields]
 
@@ -2151,9 +2592,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         schema : :class:`StructType`
@@ -2181,6 +2619,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         * Fail if the nullability is not compatible. For example, the column and/or inner field
             is nullable but the specified schema requires them to be not nullable.
+
+        Supports Spark Connect.
 
         Examples
         --------
@@ -2290,7 +2730,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
-        """Joins with another :class:`DataFrame`, using the given join expression.
+        """
+        Joins with another :class:`DataFrame`, using the given join expression.
 
         .. versionadded:: 1.3.0
 
@@ -2319,39 +2760,55 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        The following performs a full outer join between ``df1`` and ``df2``.
+        The following examples demonstrate various join types among ``df1``, ``df2``, and ``df3``.
 
+        >>> import pyspark.sql.functions as sf
         >>> from pyspark.sql import Row
-        >>> from pyspark.sql.functions import desc
-        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")]).toDF("age", "name")
-        >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-        >>> df3 = spark.createDataFrame([Row(age=2, name="Alice"), Row(age=5, name="Bob")])
-        >>> df4 = spark.createDataFrame([
-        ...     Row(age=10, height=80, name="Alice"),
-        ...     Row(age=5, height=None, name="Bob"),
-        ...     Row(age=None, height=None, name="Tom"),
-        ...     Row(age=None, height=None, name=None),
+        >>> df = spark.createDataFrame([Row(name="Alice", age=2), Row(name="Bob", age=5)])
+        >>> df2 = spark.createDataFrame([Row(name="Tom", height=80), Row(name="Bob", height=85)])
+        >>> df3 = spark.createDataFrame([
+        ...     Row(name="Alice", age=10, height=80),
+        ...     Row(name="Bob", age=5, height=None),
+        ...     Row(name="Tom", age=None, height=None),
+        ...     Row(name=None, age=None, height=None),
         ... ])
 
         Inner join on columns (default)
 
-        >>> df.join(df2, 'name').select(df.name, df2.height).show()
-        +----+------+
-        |name|height|
-        +----+------+
-        | Bob|    85|
-        +----+------+
-        >>> df.join(df4, ['name', 'age']).select(df.name, df.age).show()
-        +----+---+
-        |name|age|
-        +----+---+
-        | Bob|  5|
-        +----+---+
+        >>> df.join(df2, "name").show()
+        +----+---+------+
+        |name|age|height|
+        +----+---+------+
+        | Bob|  5|    85|
+        +----+---+------+
 
-        Outer join for both DataFrames on the 'name' column.
+        >>> df.join(df3, ["name", "age"]).show()
+        +----+---+------+
+        |name|age|height|
+        +----+---+------+
+        | Bob|  5|  NULL|
+        +----+---+------+
 
-        >>> df.join(df2, df.name == df2.name, 'outer').select(
-        ...     df.name, df2.height).sort(desc("name")).show()
+        Outer join on a single column with an explicit join condition.
+
+        When the join condition is explicited stated: `df.name == df2.name`, this will
+        produce all records where the names match, as well as those that don't (since
+        it's an outer join). If there are names in `df2` that are not present in `df`,
+        they will appear with `NULL` in the `name` column of `df`, and vice versa for `df2`.
+
+        >>> joined = df.join(df2, df.name == df2.name, "outer").sort(sf.desc(df.name))
+        >>> joined.show() # doctest: +SKIP
+        +-----+----+----+------+
+        | name| age|name|height|
+        +-----+----+----+------+
+        |  Bob|   5| Bob|    85|
+        |Alice|   2|NULL|  NULL|
+        | NULL|NULL| Tom|    80|
+        +-----+----+----+------+
+
+        To unambiguously select output columns, specify the dataframe along with the column name:
+
+        >>> joined.select(df.name, df2.height).show() # doctest: +SKIP
         +-----+------+
         | name|height|
         +-----+------+
@@ -2359,27 +2816,91 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  NULL|
         | NULL|    80|
         +-----+------+
-        >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).show()
-        +-----+------+
-        | name|height|
-        +-----+------+
-        |  Tom|    80|
-        |  Bob|    85|
-        |Alice|  NULL|
-        +-----+------+
 
-        Outer join for both DataFrams with multiple columns.
+        However, in self-joins, direct column references can cause ambiguity:
 
-        >>> df.join(
-        ...     df3,
-        ...     [df.name == df3.name, df.age == df3.age],
-        ...     'outer'
-        ... ).select(df.name, df3.age).show()
+        >>> df.join(df, df.name == df.name, "outer").select(df.name).show() # doctest: +SKIP
+        Traceback (most recent call last):
+        ...
+        pyspark.errors.exceptions.captured.AnalysisException: Column name#0 are ambiguous...
+
+        A better approach is to assign aliases to the dataframes, and then reference
+        the ouptut columns from the join operation using these aliases:
+
+        >>> df.alias("a").join(
+        ...     df.alias("b"), sf.col("a.name") == sf.col("b.name"), "outer"
+        ... ).sort(sf.desc("a.name")).select("a.name", "b.age").show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |  Bob|  5|
+        |Alice|  2|
+        +-----+---+
+
+        Outer join on a single column with implicit join condition using column name
+
+        When you provide the column name directly as the join condition, Spark will treat
+        both name columns as one, and will not produce separate columns for `df.name` and
+        `df2.name`. This avoids having duplicate columns in the output.
+
+        >>> df.join(df2, "name", "outer").sort(sf.desc("name")).show()
+        +-----+----+------+
+        | name| age|height|
+        +-----+----+------+
+        |  Tom|NULL|    80|
+        |  Bob|   5|    85|
+        |Alice|   2|  NULL|
+        +-----+----+------+
+
+        Outer join on multiple columns
+
+        >>> df.join(df3, ["name", "age"], "outer").show()
+        +-----+----+------+
+        | name| age|height|
+        +-----+----+------+
+        | NULL|NULL|  NULL|
+        |Alice|   2|  NULL|
+        |Alice|  10|    80|
+        |  Bob|   5|  NULL|
+        |  Tom|NULL|  NULL|
+        +-----+----+------+
+
+        Left outer join on columns
+
+        >>> df.join(df2, "name", "left_outer").show()
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  2|  NULL|
+        |  Bob|  5|    85|
+        +-----+---+------+
+
+        Right outer join on columns
+
+        >>> df.join(df2, "name", "right_outer").show()
+        +----+----+------+
+        |name| age|height|
+        +----+----+------+
+        | Tom|NULL|    80|
+        | Bob|   5|    85|
+        +----+----+------+
+
+        Left semi join on columns
+
+        >>> df.join(df2, "name", "left_semi").show()
+        +----+---+
+        |name|age|
+        +----+---+
+        | Bob|  5|
+        +----+---+
+
+        Left anti join on columns
+
+        >>> df.join(df2, "name", "left_anti").show()
         +-----+---+
         | name|age|
         +-----+---+
         |Alice|  2|
-        |  Bob|  5|
         +-----+---+
         """
 
@@ -2424,6 +2945,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         This is similar to a left-join except that we match on the nearest
         key rather than equal keys.
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         other : :class:`DataFrame`
@@ -2461,14 +2985,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          Row(a=5, left_val='b', right_val=3),
          Row(a=10, left_val='c', right_val=7)]
 
-        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql import functions as sf
         >>> left._joinAsOf(
-        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=F.lit(1)
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=sf.lit(1)
         ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1)]
 
         >>> left._joinAsOf(
-        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=F.lit(1)
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=sf.lit(1)
         ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=None),
@@ -2525,7 +3049,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     def sortWithinPartitions(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
 
@@ -2536,8 +3062,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : str, list or :class:`Column`, optional
-            list of :class:`Column` or column names to sort by.
+        cols : int, str, list or :class:`Column`, optional
+            list of :class:`Column` or column names or column ordinals to sort by.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Other Parameters
         ----------------
@@ -2551,17 +3080,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             DataFrame sorted by partitions.
 
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
+        If a column ordinal is negative, it means sort descending.
+
         Examples
         --------
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.sortWithinPartitions("age", ascending=False)
         DataFrame[age: bigint, name: string]
+
+        >>> df.coalesce(1).sortWithinPartitions(1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        >>> df.coalesce(1).sortWithinPartitions(-1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        +---+-----+
         """
         jdf = self._jdf.sortWithinPartitions(self._sort_cols(cols, kwargs))
         return DataFrame(jdf, self.sparkSession)
 
     def sort(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
@@ -2572,8 +3126,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : str, list, or :class:`Column`, optional
-             list of :class:`Column` or column names to sort by.
+        cols : int, str, list, or :class:`Column`, optional
+             list of :class:`Column` or column names or column ordinals to sort by.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Other Parameters
         ----------------
@@ -2587,15 +3144,29 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             Sorted DataFrame.
 
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
+        If a column ordinal is negative, it means sort descending.
+
         Examples
         --------
-        >>> from pyspark.sql.functions import desc, asc
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (5, "Bob")], schema=["age", "name"])
 
         Sort the DataFrame in ascending order.
 
-        >>> df.sort(asc("age")).show()
+        >>> df.sort(sf.asc("age")).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        >>> df.sort(1).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -2612,6 +3183,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  5|  Bob|
         |  2|Alice|
         +---+-----+
+
         >>> df.orderBy(df.age.desc()).show()
         +---+-----+
         |age| name|
@@ -2619,7 +3191,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  5|  Bob|
         |  2|Alice|
         +---+-----+
+
         >>> df.sort("age", ascending=False).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        +---+-----+
+
+        >>> df.sort(-1).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -2629,9 +3210,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Specify multiple columns
 
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
-        >>> df.orderBy(desc("age"), "name").show()
+        >>> df.orderBy(sf.desc("age"), "name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|  Bob|
+        +---+-----+
+
+        >>> df.orderBy(-1, "name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|  Bob|
+        +---+-----+
+
+        >>> df.orderBy(-1, 2).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -2643,6 +3243,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Specify multiple columns for sorting order at `ascending`.
 
         >>> df.orderBy(["age", "name"], ascending=[False, False]).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|  Bob|
+        |  2|Alice|
+        +---+-----+
+
+        >>> df.orderBy([1, "name"], ascending=[False, False]).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|  Bob|
+        |  2|Alice|
+        +---+-----+
+
+        >>> df.orderBy([1, 2], ascending=[False, False]).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -2677,8 +3295,31 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
 
+    def _jcols_ordinal(self, *cols: "ColumnOrNameOrOrdinal") -> JavaObject:
+        """Return a JVM Seq of Columns from a list of Column or column names or column ordinals.
+
+        If `cols` has only one list in it, cols[0] will be used as the list.
+        """
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
+        _cols = []
+        for c in cols:
+            if isinstance(c, int) and not isinstance(c, bool):
+                if c < 1:
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
+            else:
+                _cols.append(c)  # type: ignore[arg-type]
+        return self._jseq(_cols, _to_java_column)
+
     def _sort_cols(
-        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+        self,
+        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        kwargs: Dict[str, Any],
     ) -> JavaObject:
         """Return a JVM Seq of Columns that describes the sort order"""
         if not cols:
@@ -2688,7 +3329,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
-        jcols = [_to_java_column(cast("ColumnOrName", c)) for c in cols]
+
+        jcols = []
+        for c in cols:
+            if isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                # ordinal is 1-based
+                if c > 0:
+                    _c = self[c - 1]
+                # negative ordinal means sort by desc
+                elif c < 0:
+                    _c = self[-c - 1].desc()
+                else:
+                    raise PySparkIndexError(
+                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                    )
+            else:
+                _c = c  # type: ignore[assignment]
+            jcols.append(_to_java_column(cast("ColumnOrName", _c)))
+
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
             if not ascending:
@@ -3038,8 +3697,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+
         """
         if name not in self.columns:
-            raise AttributeError(
-                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         jc = self._jdf.apply(name)
         return Column(jc)
@@ -3194,48 +3853,145 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         condition : :class:`Column` or str
-            a :class:`Column` of :class:`types.BooleanType`
+            A :class:`Column` of :class:`types.BooleanType`
             or a string of SQL expressions.
 
         Returns
         -------
         :class:`DataFrame`
-            Filtered DataFrame.
+            A new DataFrame with rows that satisfy the condition.
 
         Examples
         --------
         >>> df = spark.createDataFrame([
-        ...     (2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        ...     (2, "Alice", "Math"), (5, "Bob", "Physics"), (7, "Charlie", "Chemistry")],
+        ...     schema=["age", "name", "subject"])
 
         Filter by :class:`Column` instances.
 
         >>> df.filter(df.age > 3).show()
-        +---+----+
-        |age|name|
-        +---+----+
-        |  5| Bob|
-        +---+----+
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  5|    Bob|  Physics|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
         >>> df.where(df.age == 2).show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        +---+-----+
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        +---+-----+-------+
 
         Filter by SQL expression in a string.
 
         >>> df.filter("age > 3").show()
-        +---+----+
-        |age|name|
-        +---+----+
-        |  5| Bob|
-        +---+----+
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  5|    Bob|  Physics|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
         >>> df.where("age = 2").show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        +---+-----+
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        +---+-----+-------+
+
+        Filter by multiple conditions.
+
+        >>> df.filter((df.age > 3) & (df.subject == "Physics")).show()
+        +---+----+-------+
+        |age|name|subject|
+        +---+----+-------+
+        |  5| Bob|Physics|
+        +---+----+-------+
+        >>> df.filter((df.age == 2) | (df.subject == "Chemistry")).show()
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  2|  Alice|     Math|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
+
+        Filter by multiple conditions using SQL expression.
+
+        >>> df.filter("age > 3 AND name = 'Bob'").show()
+        +---+----+-------+
+        |age|name|subject|
+        +---+----+-------+
+        |  5| Bob|Physics|
+        +---+----+-------+
+
+        Filter using the :func:`Column.isin` function.
+
+        >>> df.filter(df.name.isin("Alice", "Bob")).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        |  5|  Bob|Physics|
+        +---+-----+-------+
+
+        Filter by a list of values using the :func:`Column.isin` function.
+
+        >>> df.filter(df.subject.isin(["Math", "Physics"])).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        |  5|  Bob|Physics|
+        +---+-----+-------+
+
+        Filter using the `~` operator to exclude certain values.
+
+        >>> df.filter(~df.name.isin(["Alice", "Charlie"])).show()
+        +---+----+-------+
+        |age|name|subject|
+        +---+----+-------+
+        |  5| Bob|Physics|
+        +---+----+-------+
+
+        Filter using the :func:`Column.isNotNull` function.
+
+        >>> df.filter(df.name.isNotNull()).show()
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  2|  Alice|     Math|
+        |  5|    Bob|  Physics|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
+
+        Filter using the :func:`Column.like` function.
+
+        >>> df.filter(df.name.like("Al%")).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        +---+-----+-------+
+
+        Filter using the :func:`Column.contains` function.
+
+        >>> df.filter(df.name.contains("i")).show()
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  2|  Alice|     Math|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
+
+        Filter using the :func:`Column.between` function.
+
+        >>> df.filter(df.age.between(2, 5)).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        |  5|  Bob|Physics|
+        +---+-----+-------+
         """
         if isinstance(condition, str):
             jdf = self._jdf.filter(condition)
@@ -3249,17 +4005,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     @overload
-    def groupBy(self, *cols: "ColumnOrName") -> "GroupedData":
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         ...
 
     @overload
-    def groupBy(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+    def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
         ...
 
-    def groupBy(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
-        """Groups the :class:`DataFrame` using the specified columns,
-        so we can run aggregation on them. See :class:`GroupedData`
-        for all the available aggregate functions.
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
+        """
+        Groups the :class:`DataFrame` by the specified columns so that aggregation
+        can be performed on them.
+        See :class:`GroupedData` for all the available aggregate functions.
 
         :func:`groupby` is an alias for :func:`groupBy`.
 
@@ -3270,22 +4027,30 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : list, str or :class:`Column`
-            columns to group by.
-            Each element should be a column name (string) or an expression (:class:`Column`)
-            or list of them.
+        cols : list, str, int or :class:`Column`
+            The columns to group by.
+            Each element can be a column name (string) or an expression (:class:`Column`)
+            or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
         :class:`GroupedData`
-            Grouped data by given columns.
+            A :class:`GroupedData` object representing the grouped data by the specified columns.
+
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
 
         Examples
         --------
         >>> df = spark.createDataFrame([
-        ...     (2, "Alice"), (2, "Bob"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
+        ...     ("Alice", 2), ("Bob", 2), ("Bob", 2), ("Bob", 5)], schema=["name", "age"])
 
-        Empty grouping columns triggers a global aggregation.
+        Example 1: Empty grouping columns triggers a global aggregation.
 
         >>> df.groupBy().avg().show()
         +--------+
@@ -3294,7 +4059,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    2.75|
         +--------+
 
-        Group-by 'name', and specify a dictionary to calculate the summation of 'age'.
+        Example 2: Group-by 'name', and specify a dictionary to calculate the summation of 'age'.
 
         >>> df.groupBy("name").agg({"age": "sum"}).sort("name").show()
         +-----+--------+
@@ -3304,7 +4069,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       9|
         +-----+--------+
 
-        Group-by 'name', and calculate maximum values.
+        Example 3: Group-by 'name', and calculate maximum values.
 
         >>> df.groupBy(df.name).max().sort("name").show()
         +-----+--------+
@@ -3314,7 +4079,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       5|
         +-----+--------+
 
-        Group-by 'name' and 'age', and calculate the number of rows in each group.
+        Example 4: Also group-by 'name', but using the column ordinal.
+
+        >>> df.groupBy(1).max().sort("name").show()
+        +-----+--------+
+        | name|max(age)|
+        +-----+--------+
+        |Alice|       2|
+        |  Bob|       5|
+        +-----+--------+
+
+        Example 5: Group-by 'name' and 'age', and calculate the number of rows in each group.
 
         >>> df.groupBy(["name", df.age]).count().sort("name", "age").show()
         +-----+---+-----+
@@ -3324,8 +4099,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|  2|    2|
         |  Bob|  5|    1|
         +-----+---+-----+
+
+        Example 6: Also Group-by 'name' and 'age', but using the column ordinal.
+
+        >>> df.groupBy([df.name, 2]).count().sort("name", "age").show()
+        +-----+---+-----+
+        | name|age|count|
+        +-----+---+-----+
+        |Alice|  2|    1|
+        |  Bob|  2|    2|
+        |  Bob|  5|    1|
+        +-----+---+-----+
         """
-        jgd = self._jdf.groupBy(self._jcols(*cols))
+        jgd = self._jdf.groupBy(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
@@ -3338,10 +4124,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
         ...
 
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         """
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
-        the specified columns, so we can run aggregation on them.
+        the specified columns, allowing for aggregation on them.
 
         .. versionadded:: 1.4.0
 
@@ -3350,19 +4136,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : list, str or :class:`Column`
-            Columns to roll-up by.
+        cols : list, str, int or :class:`Column`
+            The columns to roll-up by.
             Each element should be a column name (string) or an expression (:class:`Column`)
-            or list of them.
+            or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
         :class:`GroupedData`
-            Rolled-up data by given columns.
+            Rolled-up data based on the specified columns.
+
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], schema=["name", "age"])
+
+        Example 1: Rollup-by 'name', and calculate the number of rows in each dimensional.
+
+        >>> df.rollup("name").count().orderBy("name").show()
+        +-----+-----+
+        | name|count|
+        +-----+-----+
+        | NULL|    2|
+        |Alice|    1|
+        |  Bob|    1|
+        +-----+-----+
+
+        Example 2: Rollup-by 'name' and 'age',
+        and calculate the number of rows in each dimensional.
+
         >>> df.rollup("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
@@ -3373,8 +4182,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
+
+        Example 3: Also Rollup-by 'name' and 'age', but using the column ordinal.
+
+        >>> df.rollup(1, 2).count().orderBy(1, 2).show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        | NULL|NULL|    2|
+        |Alice|NULL|    1|
+        |Alice|   2|    1|
+        |  Bob|NULL|    1|
+        |  Bob|   5|    1|
+        +-----+----+-----+
         """
-        jgd = self._jdf.rollup(self._jcols(*cols))
+        jgd = self._jdf.rollup(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
@@ -3390,7 +4212,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def cube(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
-        the specified columns, so we can run aggregations on them.
+        the specified columns, allowing aggregations to be performed on them.
 
         .. versionadded:: 1.4.0
 
@@ -3399,19 +4221,43 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : list, str or :class:`Column`
-            columns to create cube by.
+        cols : list, str, int or :class:`Column`
+            The columns to cube by.
             Each element should be a column name (string) or an expression (:class:`Column`)
-            or list of them.
+            or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
         :class:`GroupedData`
-            Cube of the data by given columns.
+            Cube of the data based on the specified columns.
+
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], schema=["name", "age"])
+
+        Example 1: Creating a cube on 'name',
+        and calculate the number of rows in each dimensional.
+
+        >>> df.cube("name").count().orderBy("name").show()
+        +-----+-----+
+        | name|count|
+        +-----+-----+
+        | NULL|    2|
+        |Alice|    1|
+        |  Bob|    1|
+        +-----+-----+
+
+        Example 2: Creating a cube on 'name' and 'age',
+        and calculate the number of rows in each dimensional.
+
         >>> df.cube("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
@@ -3424,10 +4270,121 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
+
+        Example 3: Also creating a cube on 'name' and 'age', but using the column ordinal.
+
+        >>> df.cube(1, 2).count().orderBy(1, 2).show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        | NULL|NULL|    2|
+        | NULL|   2|    1|
+        | NULL|   5|    1|
+        |Alice|NULL|    1|
+        |Alice|   2|    1|
+        |  Bob|NULL|    1|
+        |  Bob|   5|    1|
+        +-----+----+-----+
         """
-        jgd = self._jdf.cube(self._jcols(*cols))
+        jgd = self._jdf.cube(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
+        return GroupedData(jgd, self)
+
+    def groupingSets(
+        self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
+    ) -> "GroupedData":
+        """
+        Create multi-dimensional aggregation for the current `class`:DataFrame using the specified
+        grouping sets, so we can run aggregation on them.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        groupingSets : sequence of sequence of columns or str
+            Individual set of columns to group on.
+        cols : :class:`Column` or str
+            Addional grouping columns specified by users.
+            Those columns are shown as the output columns after aggregation.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Grouping sets of the data based on the specified columns.
+
+        Examples
+        --------
+        Example 1: Group by city and car_model, city, and all, and calculate the sum of quantity.
+
+        >>> from pyspark.sql import functions as sf
+        >>> df = spark.createDataFrame([
+        ...     (100, 'Fremont', 'Honda Civic', 10),
+        ...     (100, 'Fremont', 'Honda Accord', 15),
+        ...     (100, 'Fremont', 'Honda CRV', 7),
+        ...     (200, 'Dublin', 'Honda Civic', 20),
+        ...     (200, 'Dublin', 'Honda Accord', 10),
+        ...     (200, 'Dublin', 'Honda CRV', 3),
+        ...     (300, 'San Jose', 'Honda Civic', 5),
+        ...     (300, 'San Jose', 'Honda Accord', 8)
+        ... ], schema="id INT, city STRING, car_model STRING, quantity INT")
+
+        >>> df.groupingSets(
+        ...     [("city", "car_model"), ("city",), ()],
+        ...     "city", "car_model"
+        ... ).agg(sf.sum(sf.col("quantity")).alias("sum")).sort("city", "car_model").show()
+        +--------+------------+---+
+        |    city|   car_model|sum|
+        +--------+------------+---+
+        |    NULL|        NULL| 78|
+        |  Dublin|        NULL| 33|
+        |  Dublin|Honda Accord| 10|
+        |  Dublin|   Honda CRV|  3|
+        |  Dublin| Honda Civic| 20|
+        | Fremont|        NULL| 32|
+        | Fremont|Honda Accord| 15|
+        | Fremont|   Honda CRV|  7|
+        | Fremont| Honda Civic| 10|
+        |San Jose|        NULL| 13|
+        |San Jose|Honda Accord|  8|
+        |San Jose| Honda Civic|  5|
+        +--------+------------+---+
+
+        Example 2: Group by multiple columns and calculate both average and sum.
+
+        >>> df.groupingSets(
+        ...     [("city", "car_model"), ("city",), ()],
+        ...     "city", "car_model"
+        ... ).agg(
+        ...     sf.avg(sf.col("quantity")).alias("avg_quantity"),
+        ...     sf.sum(sf.col("quantity")).alias("sum_quantity")
+        ... ).sort("city", "car_model").show()
+        +--------+------------+------------------+------------+
+        |    city|   car_model|      avg_quantity|sum_quantity|
+        +--------+------------+------------------+------------+
+        |    NULL|        NULL|              9.75|          78|
+        |  Dublin|        NULL|              11.0|          33|
+        |  Dublin|Honda Accord|              10.0|          10|
+        |  Dublin|   Honda CRV|               3.0|           3|
+        |  Dublin| Honda Civic|              20.0|          20|
+        | Fremont|        NULL|10.666666666666666|          32|
+        | Fremont|Honda Accord|              15.0|          15|
+        | Fremont|   Honda CRV|               7.0|           7|
+        | Fremont| Honda Civic|              10.0|          10|
+        |San Jose|        NULL|               6.5|          13|
+        |San Jose|Honda Accord|               8.0|           8|
+        |San Jose| Honda Civic|               5.0|           5|
+        +--------+------------+------------------+------------+
+
+        See Also
+        --------
+        GroupedData
+        """
+        from pyspark.sql.group import GroupedData
+
+        jgrouping_sets = _to_seq(self._sc, [self._jcols(*inner) for inner in groupingSets])
+
+        jgd = self._jdf.groupingSets(jgrouping_sets, self._jcols(*cols))
         return GroupedData(jgd, self)
 
     def unpivot(
@@ -3460,9 +4417,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list
@@ -3481,6 +4435,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             Unpivoted DataFrame.
+
+        Notes
+        -----
+        Supports Spark Connect.
 
         Examples
         --------
@@ -3546,9 +4504,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list, optional
@@ -3571,6 +4526,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         DataFrame.unpivot
+
+        Notes
+        -----
+        Supports Spark Connect.
         """
         return self.unpivot(ids, values, variableColumnName, valueColumnName)
 
@@ -3595,7 +4554,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.agg({"age": "max"}).show()
         +--------+
@@ -3603,7 +4562,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +--------+
         |       5|
         +--------+
-        >>> df.agg(F.min(df.age)).show()
+        >>> df.agg(sf.min(df.age)).show()
         +--------+
         |min(age)|
         +--------+
@@ -3741,7 +4700,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
 
     def union(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing union of rows in this and another
+        """Return a new :class:`DataFrame` containing the union of rows in this and another
         :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
@@ -3752,11 +4711,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be unioned
+            Another :class:`DataFrame` that needs to be unioned.
 
         Returns
         -------
         :class:`DataFrame`
+            A new :class:`DataFrame` containing the combined rows with corresponding columns.
 
         See Also
         --------
@@ -3764,34 +4724,81 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
+        This method performs a SQL-style set union of the rows from both `DataFrame` objects,
+        with no automatic deduplication of elements.
 
-        Also as standard in SQL, this function resolves columns by position (not by name).
+        Use the `distinct()` method to perform deduplication of rows.
+
+        The method resolves columns by position (not by name), following the standard behavior
+        in SQL.
 
         Examples
         --------
-        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
-        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
-        >>> df1.union(df2).show()
-        +----+----+----+
-        |col0|col1|col2|
-        +----+----+----+
-        |   1|   2|   3|
-        |   4|   5|   6|
-        +----+----+----+
-        >>> df1.union(df1).show()
-        +----+----+----+
-        |col0|col1|col2|
-        +----+----+----+
-        |   1|   2|   3|
-        |   1|   2|   3|
-        +----+----+----+
+        Example 1: Combining two DataFrames with the same schema
+
+        >>> df1 = spark.createDataFrame([(1, 'A'), (2, 'B')], ['id', 'value'])
+        >>> df2 = spark.createDataFrame([(3, 'C'), (4, 'D')], ['id', 'value'])
+        >>> df3 = df1.union(df2)
+        >>> df3.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  1|    A|
+        |  2|    B|
+        |  3|    C|
+        |  4|    D|
+        +---+-----+
+
+        Example 2: Combining two DataFrames with different schemas
+
+        >>> from pyspark.sql.functions import lit
+        >>> df1 = spark.createDataFrame([(100001, 1), (100002, 2)], schema="id LONG, money INT")
+        >>> df2 = spark.createDataFrame([(3, 100003), (4, 100003)], schema="money INT, id LONG")
+        >>> df1 = df1.withColumn("age", lit(30))
+        >>> df2 = df2.withColumn("age", lit(40))
+        >>> df3 = df1.union(df2)
+        >>> df3.show()
+        +------+------+---+
+        |    id| money|age|
+        +------+------+---+
+        |100001|     1| 30|
+        |100002|     2| 30|
+        |     3|100003| 40|
+        |     4|100003| 40|
+        +------+------+---+
+
+        Example 3: Combining two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(3, 4)], ["C", "D"])
+        >>> df3 = df1.union(df2)
+        >>> df3.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  2|
+        |  3|  4|
+        +---+---+
+
+        Example 4: Combining duplicate rows from two different DataFrames
+
+        >>> df1 = spark.createDataFrame([(1, 'A'), (2, 'B'), (3, 'C')], ['id', 'value'])
+        >>> df2 = spark.createDataFrame([(3, 'C'), (4, 'D')], ['id', 'value'])
+        >>> df3 = df1.union(df2).distinct().sort("id")
+        >>> df3.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  1|    A|
+        |  2|    B|
+        |  3|    C|
+        |  4|    D|
+        +---+-----+
         """
         return DataFrame(self._jdf.union(other._jdf), self.sparkSession)
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing union of rows in this and another
+        """Return a new :class:`DataFrame` containing the union of rows in this and another
         :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
@@ -3807,14 +4814,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrame`
-            Combined DataFrame
+            A new :class:`DataFrame` containing combined rows from both dataframes.
 
         Notes
         -----
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
+        This method combines all rows from both `DataFrame` objects with no automatic
+        deduplication of elements.
 
-        Also as standard in SQL, this function resolves columns by position (not by name).
+        Use the `distinct()` method to perform deduplication of rows.
 
         :func:`unionAll` is an alias to :func:`union`
 
@@ -3828,8 +4835,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
-        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
-        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+        This method performs a union operation on both input DataFrames, resolving columns by
+        name (rather than position). When `allowMissingColumns` is True, missing columns will
+        be filled with null.
 
         .. versionadded:: 2.3.0
 
@@ -3848,12 +4856,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrame`
-            Combined DataFrame.
+            A new :class:`DataFrame` containing the combined rows with corresponding
+            columns of the two given DataFrames.
 
         Examples
         --------
-        The difference between this function and :func:`union` is that this function
-        resolves columns by name (not by position):
+        Example 1: Union of two DataFrames with same columns in different order.
 
         >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
         >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
@@ -3865,10 +4873,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   6|   4|   5|
         +----+----+----+
 
-        When the parameter `allowMissingColumns` is ``True``, the set of column names
-        in this and other :class:`DataFrame` can differ; missing columns will be filled with null.
-        Further, the missing columns of this :class:`DataFrame` will be added at the end
-        in the schema of the union result:
+        Example 2: Union with missing columns and setting `allowMissingColumns=True`.
 
         >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
         >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col3"])
@@ -3879,6 +4884,30 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   1|   2|   3|NULL|
         |NULL|   4|   5|   6|
         +----+----+----+----+
+
+        Example 3: Union of two DataFrames with few common columns.
+
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6, 7]], ["col1", "col2", "col3", "col4"])
+        >>> df1.unionByName(df2, allowMissingColumns=True).show()
+        +----+----+----+----+----+
+        |col0|col1|col2|col3|col4|
+        +----+----+----+----+----+
+        |   1|   2|   3|NULL|NULL|
+        |NULL|   4|   5|   6|   7|
+        +----+----+----+----+----+
+
+        Example 4: Union of two DataFrames with completely different columns.
+
+        >>> df1 = spark.createDataFrame([[0, 1, 2]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[3, 4, 5]], ["col3", "col4", "col5"])
+        >>> df1.unionByName(df2, allowMissingColumns=True).show()
+        +----+----+----+----+----+----+
+        |col0|col1|col2|col3|col4|col5|
+        +----+----+----+----+----+----+
+        |   0|   1|   2|NULL|NULL|NULL|
+        |NULL|NULL|NULL|   3|   4|   5|
+        +----+----+----+----+----+----+
         """
         return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sparkSession)
 
@@ -3909,14 +4938,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Intersecting two DataFrames with the same schema
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.intersect(df2).sort(df1.C1.desc()).show()
+        >>> result_df = df1.intersect(df2).sort("C1", "C2")
+        >>> result_df.show()
         +---+---+
         | C1| C2|
         +---+---+
-        |  b|  3|
         |  a|  1|
+        |  b|  3|
+        +---+---+
+
+        Example 2: Intersecting two DataFrames with different schemas
+
+        >>> df1 = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "value"])
+        >>> df2 = spark.createDataFrame([(2, "B"), (3, "C")], ["id", "value"])
+        >>> result_df = df1.intersect(df2).sort("id", "value")
+        >>> result_df.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  2|    B|
+        +---+-----+
+
+        Example 3: Intersecting all rows from two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2), (1, 2), (3, 4)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2), (1, 2)], ["C", "D"])
+        >>> result_df = df1.intersect(df2).sort("A", "B")
+        >>> result_df.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  2|
         +---+---+
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sparkSession)
@@ -3945,15 +5001,43 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Intersecting two DataFrames with the same schema
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.intersectAll(df2).sort("C1", "C2").show()
+        >>> result_df = df1.intersectAll(df2).sort("C1", "C2")
+        >>> result_df.show()
         +---+---+
         | C1| C2|
         +---+---+
         |  a|  1|
         |  a|  1|
         |  b|  3|
+        +---+---+
+
+        Example 2: Intersecting two DataFrames with different schemas
+
+        >>> df1 = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "value"])
+        >>> df2 = spark.createDataFrame([(2, "B"), (3, "C")], ["id", "value"])
+        >>> result_df = df1.intersectAll(df2).sort("id", "value")
+        >>> result_df.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  2|    B|
+        +---+-----+
+
+        Example 3: Intersecting all rows from two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2), (1, 2), (3, 4)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2), (1, 2)], ["C", "D"])
+        >>> result_df = df1.intersectAll(df2).sort("A", "B")
+        >>> result_df.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  2|
+        |  1|  2|
         +---+---+
         """
         return DataFrame(self._jdf.intersectAll(other._jdf), self.sparkSession)
@@ -3983,13 +5067,39 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        Example 1: Subtracting two DataFrames with the same schema
+
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
         >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
-        >>> df1.subtract(df2).show()
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
         +---+---+
         | C1| C2|
         +---+---+
         |  c|  4|
+        +---+---+
+
+        Example 2: Subtracting two DataFrames with different schemas
+
+        >>> df1 = spark.createDataFrame([(1, "A"), (2, "B")], ["id", "value"])
+        >>> df2 = spark.createDataFrame([(2, "B"), (3, "C")], ["id", "value"])
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  1|    A|
+        +---+-----+
+
+        Example 3: Subtracting two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(1, 2)], ["C", "D"])
+        >>> result_df = df1.subtract(df2)
+        >>> result_df.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
         +---+---+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
@@ -4013,7 +5123,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        subset : List of column names, optional
+        subset : list of column names, optional
             List of columns to use for duplicate comparison (default All columns).
 
         Returns
@@ -4078,9 +5188,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
          .. versionadded:: 3.5.0
 
-        .. versionchanged:: 3.5.0
-            Supports Spark Connect.
-
          Parameters
          ----------
          subset : List of column names, optional
@@ -4090,6 +5197,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          -------
          :class:`DataFrame`
              DataFrame without duplicates.
+
+         Notes
+         -----
+         Supports Spark Connect.
 
          Examples
          --------
@@ -4127,7 +5238,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` omitting rows with null values.
-        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are
+        aliases of each other.
 
         .. versionadded:: 1.3.1
 
@@ -4136,12 +5248,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        how : str, optional
-            'any' or 'all'.
+        how : str, optional, the values that can be 'any' or 'all', default 'any'.
             If 'any', drop a row if it contains any nulls.
             If 'all', drop a row only if all its values are null.
-        thresh: int, optional
-            default None
+        thresh: int, optional, default None.
             If specified, drop rows that have less than `thresh` non-null values.
             This overwrites the `how` parameter.
         subset : str, tuple or list, optional
@@ -4161,11 +5271,45 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     Row(age=None, height=None, name="Tom"),
         ...     Row(age=None, height=None, name=None),
         ... ])
+
+        Example 1: Drop the row if it contains any nulls.
+
         >>> df.na.drop().show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
         | 10|    80|Alice|
+        +---+------+-----+
+
+        Example 2: Drop the row only if all its values are null.
+
+        >>> df.na.drop(how='all').show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  10|    80|Alice|
+        |   5|  NULL|  Bob|
+        |NULL|  NULL|  Tom|
+        +----+------+-----+
+
+        Example 3: Drop rows that have less than `thresh` non-null values.
+
+        >>> df.na.drop(thresh=2).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|  NULL|  Bob|
+        +---+------+-----+
+
+        Example 4: Drop rows with non-null values in the specified columns.
+
+        >>> df.na.drop(subset=['age', 'name']).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        | 10|    80|Alice|
+        |  5|  NULL|  Bob|
         +---+------+-----+
         """
         if how is not None and how not in ["any", "all"]:
@@ -4206,8 +5350,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         value: Union["LiteralType", Dict[str, "LiteralType"]],
         subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> "DataFrame":
-        """Replace null values, alias for ``na.fill()``.
-        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
+        """Returns a new :class:`DataFrame` which null values are filled with new value.
+        :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are
+        aliases of each other.
 
         .. versionadded:: 1.3.1
 
@@ -4216,8 +5361,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        value : int, float, string, bool or dict
-            Value to replace null values with.
+        value : int, float, string, bool or dict, the value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
             an int, float, boolean, or string.
@@ -4237,11 +5381,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.createDataFrame([
         ...     (10, 80.5, "Alice", None),
         ...     (5, None, "Bob", None),
-        ... 	(None, None, "Tom", None),
+        ...     (None, None, "Tom", None),
         ...     (None, None, None, True)],
         ...     schema=["age", "height", "name", "bool"])
 
-        Fill all null values with 50 for numeric columns.
+        Example 1: Fill all null values with 50 for numeric columns.
 
         >>> df.na.fill(50).show()
         +---+------+-----+----+
@@ -4253,7 +5397,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|  50.0| NULL|true|
         +---+------+-----+----+
 
-        Fill all null values with ``False`` for boolean columns.
+        Example 2: Fill all null values with ``False`` for boolean columns.
 
         >>> df.na.fill(False).show()
         +----+------+-----+-----+
@@ -4265,7 +5409,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|  NULL| NULL| true|
         +----+------+-----+-----+
 
-        Fill all null values with to 50 and "unknown" for 'age' and 'name' column respectively.
+        Example 3: Fill all null values with to 50 and "unknown" for
+            'age' and 'name' column respectively.
 
         >>> df.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+----+
@@ -4276,6 +5421,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|  NULL|    Tom|NULL|
         | 50|  NULL|unknown|true|
         +---+------+-------+----+
+
+        Example 4: Fill all null values with "Spark" for 'name' column.
+
+        >>> df.na.fill(value = 'Spark', subset = 'name').show()
+        +----+------+-----+----+
+        | age|height| name|bool|
+        +----+------+-----+----+
+        |  10|  80.5|Alice|NULL|
+        |   5|  NULL|  Bob|NULL|
+        |NULL|  NULL|  Tom|NULL|
+        |NULL|  NULL|Spark|true|
+        +----+------+-----+----+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
             raise PySparkTypeError(
@@ -4366,8 +5523,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        to_replace : bool, int, float, string, list or dict
-            Value to be replaced.
+        to_replace : bool, int, float, string, list or dict, the value to be replaced.
             If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
             must be a mapping between a value and a replacement.
         value : bool, int, float, string or None, optional
@@ -4395,7 +5551,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     (None, None, None)],
         ...     schema=["age", "height", "name"])
 
-        Replace 10 to 20 in all columns.
+        Example 1: Replace 10 to 20 in all columns.
 
         >>> df.na.replace(10, 20).show()
         +----+------+-----+
@@ -4407,7 +5563,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|  NULL| NULL|
         +----+------+-----+
 
-        Replace 'Alice' to null in all columns.
+        Example 2: Replace 'Alice' to null in all columns.
 
         >>> df.na.replace('Alice', None).show()
         +----+------+----+
@@ -4419,7 +5575,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|  NULL|NULL|
         +----+------+----+
 
-        Replace 'Alice' to 'A', and 'Bob' to 'B' in the 'name' column.
+        Example 3: Replace 'Alice' to 'A', and 'Bob' to 'B' in the 'name' column.
 
         >>> df.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
@@ -4430,6 +5586,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |NULL|    10| Tom|
         |NULL|  NULL|NULL|
         +----+------+----+
+
+        Example 4: Replace 10 to 20 in the 'name' column.
+
+        >>> df.na.replace(10, 18, 'age').show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  18|    80|Alice|
+        |   5|  NULL|  Bob|
+        |NULL|    10|  Tom|
+        |NULL|  NULL| NULL|
+        +----+------+-----+
         """
         if value is _NoValue:
             if isinstance(to_replace, dict):
@@ -4591,10 +5759,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
             .. versionchanged:: 2.2.0
                Added support for multiple columns.
-        probabilities : list or tuple
+        probabilities : list or tuple of floats
             a list of quantile probabilities
-            Each number must belong to [0, 1].
-            For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+            Each number must be a float in the range [0, 1].
+            For example 0.0 is the minimum, 0.5 is the median, 1.0 is the maximum.
         relativeError : float
             The relative target precision to achieve
             (>= 0). If set to zero, the exact quantiles are computed, which
@@ -4616,6 +5784,40 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -----
         Null values will be ignored in numerical columns before calculation.
         For columns only containing null values, an empty list is returned.
+
+        Examples
+        --------
+        Example 1: Calculating quantiles for a single column
+
+        >>> data = [(1,), (2,), (3,), (4,), (5,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0.0, 0.5, 1.0], 0.05)
+        >>> quantiles
+        [1.0, 3.0, 5.0]
+
+        Example 2: Calculating quantiles for multiple columns
+
+        >>> data = [(1, 10), (2, 20), (3, 30), (4, 40), (5, 50)]
+        >>> df = spark.createDataFrame(data, ["col1", "col2"])
+        >>> quantiles = df.approxQuantile(["col1", "col2"], [0.0, 0.5, 1.0], 0.05)
+        >>> quantiles
+        [[1.0, 3.0, 5.0], [10.0, 30.0, 50.0]]
+
+        Example 3: Handling null values
+
+        >>> data = [(1,), (None,), (3,), (4,), (None,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0.0, 0.5, 1.0], 0.05)
+        >>> quantiles
+        [1.0, 3.0, 4.0]
+
+        Example 4: Calculating quantiles with low precision
+
+        >>> data = [(1,), (2,), (3,), (4,), (5,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0.0, 0.2, 1.0], 0.1)
+        >>> quantiles
+        [1.0, 1.0, 5.0]
         """
 
         if not isinstance(col, (str, list, tuple)):
@@ -4639,7 +5841,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         "arg_name": "col",
                         "arg_type": type(col).__name__,
                         "allowed_types": "str",
-                        "return_type": type(c).__name__,
+                        "item_type": type(c).__name__,
                     },
                 )
         col = _to_list(self._sc, cast(List["ColumnOrName"], col))
@@ -5015,7 +6217,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sparkSession)
 
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` by renaming an existing column.
+        """
+        Returns a new :class:`DataFrame` by renaming an existing column.
         This is a no-op if the schema doesn't contain the given column name.
 
         .. versionadded:: 1.3.0
@@ -5026,21 +6229,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         existing : str
-            string, name of the existing column to rename.
+            The name of the existing column to be renamed.
         new : str
-            string, new name of the column.
+            The new name to be assigned to the column.
 
         Returns
         -------
         :class:`DataFrame`
-            DataFrame with renamed column.
+            A new DataFrame with renamed column.
+
+        See Also
+        --------
+        :meth:`withColumnsRenamed`
 
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.withColumnRenamed('age', 'age2').show()
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnRenamed("age", "age2").show()
         +----+-----+
         |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename a column that does not exist (no-op)
+
+        >>> df.withColumnRenamed("non_existing", "new_name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 3: Rename multiple columns
+
+        >>> df.withColumnRenamed("age", "age2").withColumnRenamed("name", "name2").show()
+        +----+-----+
+        |age2|name2|
         +----+-----+
         |   2|Alice|
         |   5|  Bob|
@@ -5056,13 +6286,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
            Added support for multiple columns renaming
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         colsMap : dict
-            a dict of existing column names and corresponding desired column names.
+            A dict of existing column names and corresponding desired column names.
             Currently, only a single map is supported.
 
         Returns
@@ -5077,14 +6304,46 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df = df.withColumns({'age2': df.age + 2, 'age3': df.age + 3})
-        >>> df.withColumnsRenamed({'age2': 'age4', 'age3': 'age5'}).show()
-        +---+-----+----+----+
-        |age| name|age4|age5|
-        +---+-----+----+----+
-        |  2|Alice|   4|   5|
-        |  5|  Bob|   7|   8|
-        +---+-----+----+----+
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnsRenamed({"age": "age2"}).show()
+        +----+-----+
+        |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename multiple columns
+
+        >>> df.withColumnsRenamed({"age": "age2", "name": "name2"}).show()
+        +----+-----+
+        |age2|name2|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 3: Rename non-existing column (no-op)
+
+        >>> df.withColumnsRenamed({"non_existing": "new_name"}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 4: Rename with an empty dictionary (no-op)
+
+        >>> df.withColumnsRenamed({}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         """
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
@@ -5092,7 +6351,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 message_parameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
             )
 
-        return DataFrame(self._jdf.withColumnsRenamed(colsMap), self.sparkSession)
+        col_names: List[str] = []
+        new_col_names: List[str] = []
+        for k, v in colsMap.items():
+            col_names.append(k)
+            new_col_names.append(v)
+
+        return DataFrame(
+            self._jdf.withColumnsRenamed(
+                _to_seq(self._sc, col_names), _to_seq(self._sc, new_col_names)
+            ),
+            self.sparkSession,
+        )
 
     def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
         """Returns a new :class:`DataFrame` by updating an existing column with metadata.
@@ -5141,7 +6411,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":  # type: ignore[misc]
-        """Returns a new :class:`DataFrame` without specified columns.
+        """
+        Returns a new :class:`DataFrame` without specified columns.
         This is a no-op if the schema doesn't contain the given column name(s).
 
         .. versionadded:: 1.4.0
@@ -5152,28 +6423,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols: str or :class:`Column`
-            a name of the column, or the :class:`Column` to drop
+            A name of the column, or the :class:`Column` to be dropped.
 
         Returns
         -------
         :class:`DataFrame`
-            DataFrame without given columns.
+            A new :class:`DataFrame` without the specified columns.
 
         Notes
         -----
-        When an input is a column name, it is treated literally without further interpretation.
-        Otherwise, will try to match the equivalent expression.
-        So that dropping column by its name `drop(colName)` has different semantic with directly
-        dropping the column `drop(col(colName))`.
+        - When an input is a column name, it is treated literally without further interpretation.
+          Otherwise, it will try to match the equivalent expression.
+          So dropping a column by its name `drop(colName)` has a different semantic
+          with directly dropping the column `drop(col(colName))`.
 
         Examples
         --------
-        >>> from pyspark.sql import Row
-        >>> from pyspark.sql.functions import col, lit
+        Example 1: Drop a column by name.
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-
         >>> df.drop('age').show()
         +-----+
         | name|
@@ -5182,6 +6451,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|
         |  Bob|
         +-----+
+
+        Example 2: Drop a column by :class:`Column` object.
+
         >>> df.drop(df.age).show()
         +-----+
         | name|
@@ -5191,9 +6463,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|
         +-----+
 
-        Drop the column that joined both DataFrames on.
+        Example 3: Drop the column that joined both DataFrames on.
 
-        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').sort('age').show()
+        >>> df2 = spark.createDataFrame([(80, "Tom"), (85, "Bob")], ["height", "name"])
+        >>> df.join(df2, df.name == df2.name).drop('name').sort('age').show()
         +---+------+
         |age|height|
         +---+------+
@@ -5214,7 +6487,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|    85| Bob|
         +---+-----+------+----+
 
-        Drop two column by the same name.
+        Example 4: Drop two column by the same name.
 
         >>> df3.drop("name").show()
         +---+------+
@@ -5228,14 +6501,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|    85|
         +---+------+
 
-        Can not drop col('name') due to ambiguous reference.
+        Example 5: Can not drop col('name') due to ambiguous reference.
 
-        >>> df3.drop(col("name")).show()
+        >>> from pyspark.sql import functions as sf
+        >>> df3.drop(sf.col("name")).show()
         Traceback (most recent call last):
         ...
         pyspark.errors.exceptions.captured.AnalysisException: [AMBIGUOUS_REFERENCE] Reference...
 
-        >>> df4 = df.withColumn("a.b.c", lit(1))
+        Example 6: Can not find a column matching the expression "a.b.c".
+
+        >>> from pyspark.sql import functions as sf
+        >>> df4 = df.withColumn("a.b.c", sf.lit(1))
         >>> df4.show()
         +---+-----+-----+
         |age| name|a.b.c|
@@ -5254,9 +6531,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
 
-        Can not find a column matching the expression "a.b.c".
-
-        >>> df4.drop(col("a.b.c")).show()
+        >>> df4.drop(sf.col("a.b.c")).show()
         +---+-----+-----+
         |age| name|a.b.c|
         +---+-----+-----+
@@ -5556,16 +6831,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
-    # Keep to_pandas_on_spark for backward compatibility for now.
-    def to_pandas_on_spark(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
-            FutureWarning,
-        )
-        return self.pandas_api(index_col)
-
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
@@ -5585,7 +6850,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        index_col: str or list of str, optional, default: None
+        index_col: str or list of str, optional
             Index column of table in Spark.
 
         Returns
@@ -5627,12 +6892,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             index_names=index_names,  # type: ignore[arg-type]
         )
         return PandasOnSparkDataFrame(internal)
-
-    # Keep to_koalas for backward compatibility for now.
-    def to_koalas(
-        self, index_col: Optional[Union[str, List[str]]] = None
-    ) -> "PandasOnSparkDataFrame":
-        return self.pandas_api(index_col)
 
 
 def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:

@@ -124,6 +124,7 @@ abstract class RemoveRedundantSortsSuiteBase
   test("cached sorted data doesn't need to be re-sorted") {
     withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true") {
       val df = spark.range(1000).select($"id" as "key").sort($"key".desc).cache()
+      df.collect()
       val resorted = df.sort($"key".desc)
       val sortedAsc = df.sort($"key".asc)
       checkNumSorts(df, 0)
@@ -132,6 +133,7 @@ abstract class RemoveRedundantSortsSuiteBase
       val result = resorted.collect()
       withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false") {
         val resorted = df.sort($"key".desc)
+        resorted.collect()
         checkNumSorts(resorted, 1)
         checkAnswer(resorted, result)
       }

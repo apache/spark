@@ -24,9 +24,9 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.Channel;
-import org.junit.After;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.TestUtils;
@@ -48,7 +48,7 @@ public class AuthIntegrationSuite {
 
   private AuthTestCtx ctx;
 
-  @After
+  @AfterEach
   public void cleanUp() throws Exception {
     if (ctx != null) {
       ctx.close();
@@ -142,7 +142,7 @@ public class AuthIntegrationSuite {
     Exception e = assertThrows(Exception.class,
       () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
     assertTrue(ctx.authRpcHandler.isAuthenticated());
-    assertTrue(e.getMessage() + " is not an expected error", e.getMessage().contains("DDDDD"));
+    assertTrue(e.getMessage().contains("DDDDD"), e.getMessage() + " is not an expected error");
     // Verify we receive the complete error message
     int messageStart = e.getMessage().indexOf("DDDDD");
     int messageEnd = e.getMessage().lastIndexOf("DDDDD") + 5;
@@ -199,8 +199,8 @@ public class AuthIntegrationSuite {
     void createServer(String secret, boolean enableAes) throws Exception {
       TransportServerBootstrap introspector = (channel, rpcHandler) -> {
         this.serverChannel = channel;
-        if (rpcHandler instanceof AuthRpcHandler) {
-          this.authRpcHandler = (AuthRpcHandler) rpcHandler;
+        if (rpcHandler instanceof AuthRpcHandler authRpcHandler) {
+          this.authRpcHandler = authRpcHandler;
         }
         return rpcHandler;
       };

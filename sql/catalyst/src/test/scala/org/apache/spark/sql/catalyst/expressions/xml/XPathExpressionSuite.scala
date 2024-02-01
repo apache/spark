@@ -199,7 +199,7 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(nonLitPath.checkInputDataTypes() == DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "path",
+          "inputName" -> "`path`",
           "inputType" -> "\"STRING\"",
           "inputExpr" -> "\"nonfoldableliteral()\"")
       ))

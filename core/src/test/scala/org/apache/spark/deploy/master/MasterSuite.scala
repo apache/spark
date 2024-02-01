@@ -17,25 +17,27 @@
 
 package org.apache.spark.deploy.master
 
+import java.net.{HttpURLConnection, URL}
 import java.util.Date
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{doNothing, mock, when}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{doNothing, mock, times, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+import org.scalatestplus.mockito.MockitoSugar.{mock => smock}
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -43,13 +45,16 @@ import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
+import org.apache.spark.internal.config.Deploy.WorkerSelectionPolicy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
+import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement}
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
 object MockWorker {
@@ -247,6 +252,42 @@ class MasterSuite extends SparkFunSuite
     CustomRecoveryModeFactory.instantiationAttempts should be > instantiationAttempts
   }
 
+  test("SPARK-46664: master should recover quickly in case of zero workers and apps") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "CUSTOM")
+    conf.set(RECOVERY_MODE_FACTORY, classOf[FakeRecoveryModeFactory].getCanonicalName)
+    conf.set(MASTER_REST_SERVER_ENABLED, false)
+
+    val fakeDriverInfo = new DriverInfo(
+      startTime = 0,
+      id = "test_driver",
+      desc = new DriverDescription(
+        jarUrl = "",
+        mem = 1024,
+        cores = 1,
+        supervise = false,
+        command = new Command("", Nil, Map.empty, Nil, Nil, Nil)),
+      submitDate = new Date())
+    FakeRecoveryModeFactory.persistentData.put(s"driver_${fakeDriverInfo.id}", fakeDriverInfo)
+
+    var master: Master = null
+    try {
+      master = makeMaster(conf)
+      master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        getState(master) should be(RecoveryState.ALIVE)
+      }
+      master.workers.size should be(0)
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+        FakeRecoveryModeFactory.persistentData.clear()
+      }
+    }
+  }
+
   test("master correctly recover the application") {
     val conf = new SparkConf(loadDefaults = false)
     conf.set(RECOVERY_MODE, "CUSTOM")
@@ -322,6 +363,105 @@ class MasterSuite extends SparkFunSuite
         master = null
         FakeRecoveryModeFactory.persistentData.clear()
       }
+    }
+  }
+
+  test("SPARK-46205: Recovery with Kryo Serializer") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "FILESYSTEM")
+    conf.set(RECOVERY_SERIALIZER, "Kryo")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      assert(e.serializer.isInstanceOf[KryoSerializer])
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
+  test("SPARK-46216: Recovery without compression") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "FILESYSTEM")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      assert(e.codec.isEmpty)
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
+  test("SPARK-46216: Recovery with compression") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "FILESYSTEM")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+    conf.set(RECOVERY_COMPRESSION_CODEC, "lz4")
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[FileSystemPersistenceEngine]
+      assert(e.codec.get.isInstanceOf[LZ4CompressionCodec])
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
+  test("SPARK-46258: Recovery with RocksDB") {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "ROCKSDB")
+    conf.set(RECOVERY_SERIALIZER, "Kryo")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.invokePrivate(_persistenceEngine()).asInstanceOf[RocksDBPersistenceEngine]
+      assert(e.serializer.isInstanceOf[KryoSerializer])
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
+  test("SPARK-46888: master should reject worker kill request if decommision is disabled") {
+    implicit val formats = org.json4s.DefaultFormats
+    val conf = new SparkConf()
+      .set(DECOMMISSION_ENABLED, false)
+      .set(MASTER_UI_DECOMMISSION_ALLOW_MODE, "ALLOW")
+    val localCluster = LocalSparkCluster(1, 1, 512, conf)
+    localCluster.start()
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
+    try {
+      eventually(timeout(30.seconds), interval(100.milliseconds)) {
+        val url = new URL(s"$masterUrl/workers/kill/?host=${Utils.localHostNameForURI()}")
+        val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+        conn.setRequestMethod("POST")
+        assert(conn.getResponseCode === 405)
+      }
+    } finally {
+      localCluster.stop()
     }
   }
 
@@ -452,7 +592,7 @@ class MasterSuite extends SparkFunSuite
         workerHtml should include ("Spark Worker at")
         workerHtml should include ("Running Executors (0)")
         verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
-      case _ => fail  // make sure we don't accidentially skip the tests
+      case _ => fail()  // make sure we don't accidentially skip the tests
     }
   }
 
@@ -541,6 +681,120 @@ class MasterSuite extends SparkFunSuite
 
   test("scheduling for app with multiple resource profiles with max cores") {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
+  }
+
+
+  private val workerSelectionPolicyTestCases = Seq(
+    (CORES_FREE_ASC, true, List("10001", "10002")),
+    (CORES_FREE_ASC, false, List("10001")),
+    (CORES_FREE_DESC, true, List("10004", "10005")),
+    (CORES_FREE_DESC, false, List("10005")),
+    (MEMORY_FREE_ASC, true, List("10001", "10005")),
+    (MEMORY_FREE_ASC, false, List("10001")),
+    (MEMORY_FREE_DESC, true, List("10002", "10003")),
+    (MEMORY_FREE_DESC, false, Seq("10002")),
+    (WORKER_ID, true, Seq("10001", "10002")),
+    (WORKER_ID, false, Seq("10001")))
+
+  workerSelectionPolicyTestCases.foreach { case (policy, spreadOut, expected) =>
+    test(s"SPARK-46881: scheduling with workerSelectionPolicy - $policy ($spreadOut)") {
+      val conf = new SparkConf()
+        .set(WORKER_SELECTION_POLICY.key, policy.toString)
+        .set(SPREAD_OUT_APPS.key, spreadOut.toString)
+      val master = makeAliveMaster(conf)
+
+      // Use different core and memory values to simplify the tests
+      MockWorker.counter.set(10000)
+      (1 to 5).map { idx =>
+        val worker = new MockWorker(master.self, conf)
+        worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
+        val workerReg = RegisterWorker(
+          worker.id,
+          "localhost",
+          worker.self.address.port,
+          worker.self,
+          idx * 10,
+          10240 * (if (idx < 2) idx else (6 - idx)),
+          "http://localhost:8080",
+          RpcAddress("localhost", 10000))
+        master.self.send(workerReg)
+        worker
+      }
+
+      // An application with two executors
+      val appInfo = makeAppInfo(1024, Some(2), Some(4))
+      master.registerApplication(appInfo)
+      startExecutorsOnWorkers(master)
+      assert(appInfo.executors.map(_._2.worker.id).toSeq.distinct.sorted === expected)
+    }
+  }
+
+  test("SPARK-45174: scheduling with max drivers") {
+    val master = makeMaster(new SparkConf().set(MAX_DRIVERS, 4))
+    master.state = RecoveryState.ALIVE
+    master.workers += workerInfo
+    val drivers = getDrivers(master)
+    val waitingDrivers = master.invokePrivate(_waitingDrivers())
+
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 0 && waitingDrivers.size === 0)
+
+    val command = Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    (1 to 3).foreach { i =>
+      val driver = new DriverInfo(0, "driver" + i, desc, new Date())
+      waitingDrivers += driver
+      drivers.add(driver)
+    }
+    assert(drivers.size === 3 && waitingDrivers.size === 3)
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 3 && waitingDrivers.size === 0)
+
+    (4 to 6).foreach { i =>
+      val driver = new DriverInfo(0, "driver" + i, desc, new Date())
+      waitingDrivers += driver
+      drivers.add(driver)
+    }
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 6 && waitingDrivers.size === 2)
+  }
+
+  test("SPARK-46800: schedule to spread out drivers") {
+    verifyDrivers(true, 1, 1, 1)
+  }
+
+  test("SPARK-46800: schedule not to spread out drivers") {
+    verifyDrivers(false, 3, 0, 0)
+  }
+
+  private def verifyDrivers(spreadOut: Boolean, answer1: Int, answer2: Int, answer3: Int): Unit = {
+    val master = makeMaster(new SparkConf().set(SPREAD_OUT_DRIVERS, spreadOut))
+    val worker1 = makeWorkerInfo(4096, 10)
+    val worker2 = makeWorkerInfo(4096, 10)
+    val worker3 = makeWorkerInfo(4096, 10)
+    master.state = RecoveryState.ALIVE
+    master.workers += worker1
+    master.workers += worker2
+    master.workers += worker3
+    val drivers = getDrivers(master)
+    val waitingDrivers = master.invokePrivate(_waitingDrivers())
+
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 0 && waitingDrivers.size === 0)
+
+    val command = Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    (1 to 3).foreach { i =>
+      val driver = new DriverInfo(0, "driver" + i, desc, new Date())
+      waitingDrivers += driver
+      drivers.add(driver)
+    }
+    assert(drivers.size === 3 && waitingDrivers.size === 3)
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 3 && waitingDrivers.size === 0)
+    assert(worker1.drivers.size === answer1)
+    assert(worker2.drivers.size === answer2)
+    assert(worker3.drivers.size === answer3)
   }
 
   private def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
@@ -763,12 +1017,19 @@ class MasterSuite extends SparkFunSuite
   // | Utility methods and fields for testing |
   // ==========================================
 
+  private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
   private val _scheduleExecutorsOnWorkers =
     PrivateMethod[Array[Int]](Symbol("scheduleExecutorsOnWorkers"))
   private val _startExecutorsOnWorkers =
     PrivateMethod[Unit](Symbol("startExecutorsOnWorkers"))
   private val _drivers = PrivateMethod[HashSet[DriverInfo]](Symbol("drivers"))
+  private val _waitingDrivers =
+    PrivateMethod[mutable.ArrayBuffer[DriverInfo]](Symbol("waitingDrivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
+  private val _newDriverId = PrivateMethod[String](Symbol("newDriverId"))
+  private val _newApplicationId = PrivateMethod[String](Symbol("newApplicationId"))
+  private val _createApplication = PrivateMethod[ApplicationInfo](Symbol("createApplication"))
+  private val _persistenceEngine = PrivateMethod[PersistenceEngine](Symbol("persistenceEngine"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -802,7 +1063,7 @@ class MasterSuite extends SparkFunSuite
 
     val desc = new ApplicationDescription(
       "test", maxCores, null, "", rp, None, None, initialExecutorLimit)
-    val appId = System.currentTimeMillis.toString
+    val appId = System.nanoTime().toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
@@ -811,7 +1072,7 @@ class MasterSuite extends SparkFunSuite
   }
 
   private def makeWorkerInfo(memoryMb: Int, cores: Int): WorkerInfo = {
-    val workerId = System.currentTimeMillis.toString
+    val workerId = System.nanoTime().toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
@@ -1202,6 +1463,112 @@ class MasterSuite extends SparkFunSuite
 
   private def getState(master: Master): RecoveryState.Value = {
     master.invokePrivate(_state())
+  }
+
+  test("SPARK-45753: Support driver id pattern") {
+    val master = makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my-driver-%2$05d"))
+    val submitDate = new Date()
+    assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00000")
+    assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00001")
+  }
+
+  test("SPARK-45753: Prevent invalid driver id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my driver"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("SPARK-45754: Support app id pattern") {
+    val master = makeMaster(new SparkConf().set(APP_ID_PATTERN, "my-app-%2$05d"))
+    val submitDate = new Date()
+    assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00000")
+    assert(master.invokePrivate(_newApplicationId(submitDate)) === "my-app-00001")
+  }
+
+  test("SPARK-45754: Prevent invalid app id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeMaster(new SparkConf().set(APP_ID_PATTERN, "my app"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("SPARK-45785: Rotate app num with modulo operation") {
+    val conf = new SparkConf().set(APP_ID_PATTERN, "%2$d").set(APP_NUMBER_MODULO, 1000)
+    val master = makeMaster(conf)
+    val submitDate = new Date()
+    (0 to 2000).foreach { i =>
+      assert(master.invokePrivate(_newApplicationId(submitDate)) === s"${i % 1000}")
+    }
+  }
+
+  test("SPARK-45756: Use appName for appId") {
+    val conf = new SparkConf()
+      .set(MASTER_USE_APP_NAME_AS_APP_ID, true)
+    val master = makeMaster(conf)
+    val desc = new ApplicationDescription(
+        name = " spark - 45756 ",
+        maxCores = None,
+        command = null,
+        appUiUrl = "",
+        defaultProfile = DeployTestUtils.defaultResourceProfile,
+        eventLogDir = None,
+        eventLogCodec = None)
+    assert(master.invokePrivate(_createApplication(desc, null)).id === "spark-45756")
+  }
+
+  test("SPARK-46353: handleRegisterWorker in STANDBY mode") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+
+    assert(master.state === RecoveryState.STANDBY)
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(1)).send(meq(MasterInStandby))
+    verify(worker, times(0))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = true)))
+    verify(worker, times(0))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = false)))
+    assert(master.workers.isEmpty)
+    assert(master.idToWorker.isEmpty)
+  }
+
+  test("SPARK-46353: handleRegisterWorker in RECOVERING mode without workers") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+
+    master.state = RecoveryState.RECOVERING
+    master.persistenceEngine = new BlackHolePersistenceEngine()
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(0)).send(meq(MasterInStandby))
+    verify(worker, times(1))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = false)))
+    assert(master.workers.size === 1)
+    assert(master.idToWorker.size === 1)
+  }
+
+  test("SPARK-46353: handleRegisterWorker in RECOVERING mode with a unknown worker") {
+    val master = makeMaster()
+    val masterRpcAddress = smock[RpcAddress]
+    val worker = smock[RpcEndpointRef]
+    val workerInfo = smock[WorkerInfo]
+    when(workerInfo.state).thenReturn(WorkerState.UNKNOWN)
+
+    master.state = RecoveryState.RECOVERING
+    master.workers.add(workerInfo)
+    master.idToWorker("worker-0") = workerInfo
+    master.persistenceEngine = new BlackHolePersistenceEngine()
+    master.handleRegisterWorker("worker-0", "localhost", 1024, worker, 10, 4096,
+      "http://localhost:8081", masterRpcAddress, Map.empty)
+    verify(worker, times(0)).send(meq(MasterInStandby))
+    verify(worker, times(1))
+      .send(meq(RegisteredWorker(master.self, null, masterRpcAddress, duplicate = true)))
+    assert(master.state === RecoveryState.RECOVERING)
+    assert(master.workers.nonEmpty)
+    assert(master.idToWorker.nonEmpty)
   }
 }
 

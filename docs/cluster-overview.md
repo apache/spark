@@ -28,7 +28,7 @@ Spark applications run as independent sets of processes on a cluster, coordinate
 object in your main program (called the _driver program_).
 
 Specifically, to run on a cluster, the SparkContext can connect to several types of _cluster managers_
-(either Spark's own standalone cluster manager, Mesos, YARN or Kubernetes), which allocate resources across
+(either Spark's own standalone cluster manager, YARN or Kubernetes), which allocate resources across
 applications. Once connected, Spark acquires *executors* on nodes in the cluster, which are
 processes that run computations and store data for your application.
 Next, it sends your application code (defined by JAR or Python files passed to SparkContext) to
@@ -48,7 +48,7 @@ There are several useful things to note about this architecture:
    writing it to an external storage system.
 2. Spark is agnostic to the underlying cluster manager. As long as it can acquire executor
    processes, and these communicate with each other, it is relatively easy to run it even on a
-   cluster manager that also supports other applications (e.g. Mesos/YARN/Kubernetes).
+   cluster manager that also supports other applications (e.g. YARN/Kubernetes).
 3. The driver program must listen for and accept incoming connections from its executors throughout
    its lifetime (e.g., see [spark.driver.port in the network config
    section](configuration.html#networking)). As such, the driver program must be network
@@ -64,8 +64,6 @@ The system currently supports several cluster managers:
 
 * [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
   easy to set up a cluster.
-* [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
-  and service applications. (Deprecated)
 * [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 3.
 * [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
   and management of containerized applications.
@@ -91,7 +89,7 @@ The [job scheduling overview](job-scheduling.html) describes this in more detail
 
 The following table summarizes terms you'll see used to refer to cluster concepts:
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th style="width: 130px;">Term</th><th>Meaning</th></tr>
   </thead>
@@ -114,7 +112,7 @@ The following table summarizes terms you'll see used to refer to cluster concept
     </tr>
     <tr>
       <td>Cluster manager</td>
-      <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN, Kubernetes)</td>
+      <td>An external service for acquiring resources on the cluster (e.g. standalone manager, YARN, Kubernetes)</td>
     </tr>
     <tr>
       <td>Deploy mode</td>

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -743,7 +744,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-24500: create union with stream of children") {
-    val df = Union(Stream(
+    val df = Union(LazyList(
       Range(1, 1, 1, 1),
       Range(1, 2, 1, 1)))
     df.queryExecution.executedPlan.execute()
@@ -1372,6 +1373,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       assert(numOutputPartitioning.size == 8)
     }
   }
+
+  test("Limit and offset should not drop LocalLimitExec operator") {
+    val df = sql("SELECT * FROM (SELECT * FROM RANGE(100) LIMIT 25 OFFSET 3) WHERE id > 10")
+    val planned = df.queryExecution.sparkPlan
+    assert(planned.exists(_.isInstanceOf[GlobalLimitExec]))
+    assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
+  }
+
+  test("Offset and limit should not drop LocalLimitExec operator") {
+    val df = sql("""SELECT * FROM (SELECT * FROM
+      (SELECT * FROM RANGE(100) LIMIT 25) OFFSET 3) WHERE id > 10""".stripMargin)
+    val planned = df.queryExecution.sparkPlan
+    assert(planned.exists(_.isInstanceOf[GlobalLimitExec]))
+    assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
+  }
 }
 
 // Used for unit-testing EnsureRequirements
@@ -1382,7 +1398,7 @@ private case class DummySparkPlan(
     override val requiredChildDistribution: Seq[Distribution] = Nil,
     override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
   ) extends SparkPlan {
-  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = Seq.empty
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
     copy(children = newChildren)

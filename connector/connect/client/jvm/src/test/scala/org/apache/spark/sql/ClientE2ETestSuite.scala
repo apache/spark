@@ -18,35 +18,200 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.time.DateTimeException
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
-import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
+  test("throw SparkException with null filename in stack trace elements") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => {
+          val testError = new SparkException("test")
+          val stackTrace = testError.getStackTrace()
+          stackTrace(0) = new StackTraceElement(
+            stackTrace(0).getClassName,
+            stackTrace(0).getMethodName,
+            null,
+            stackTrace(0).getLineNumber)
+          testError.setStackTrace(stackTrace)
+          throw testError
+        })
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getStackTrace().length > 0)
+      assert(ex.getCause.getStackTrace()(0).getFileName == null)
+    }
+  }
+
+  for (enrichErrorEnabled <- Seq(false, true)) {
+    test(s"cause exception - ${enrichErrorEnabled}") {
+      withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {
+        val ex = intercept[SparkUpgradeException] {
+          spark
+            .sql("""
+                |select from_json(
+                |  '{"d": "02-29"}',
+                |  'd date',
+                |  map('dateFormat', 'MM-dd'))
+                |""".stripMargin)
+            .collect()
+        }
+        assert(
+          ex.getErrorClass ===
+            "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER")
+        assert(
+          ex.getMessageParameters.asScala == Map(
+            "datetime" -> "'02-29'",
+            "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
+        if (enrichErrorEnabled) {
+          assert(ex.getCause.isInstanceOf[DateTimeException])
+        } else {
+          assert(ex.getCause == null)
+        }
+      }
+    }
+  }
+
+  test("throw SparkException with large cause exception") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => throw new SparkException("test" * 10000))
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getErrorClass != null)
+      assert(!ex.getMessageParameters.isEmpty)
+      assert(ex.getCause.isInstanceOf[SparkException])
+
+      val cause = ex.getCause.asInstanceOf[SparkException]
+      assert(cause.getErrorClass == null)
+      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getMessage.contains("test" * 10000))
+    }
+  }
+
+  for (isServerStackTraceEnabled <- Seq(false, true)) {
+    test(s"server-side stack trace is set in exceptions - ${isServerStackTraceEnabled}") {
+      withSQLConf(
+        "spark.sql.connect.serverStacktrace.enabled" -> isServerStackTraceEnabled.toString,
+        "spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+        val ex = intercept[AnalysisException] {
+          spark.sql("select x").collect()
+        }
+        assert(ex.getErrorClass != null)
+        assert(!ex.messageParameters.isEmpty)
+        assert(ex.getSqlState != null)
+        assert(!ex.isInternalError)
+        assert(ex.getQueryContext.length == 1)
+        assert(ex.getQueryContext.head.startIndex() == 7)
+        assert(ex.getQueryContext.head.stopIndex() == 7)
+        assert(ex.getQueryContext.head.fragment() == "x")
+        assert(
+          ex.getStackTrace
+            .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
+            .isDefined)
+      }
+    }
+  }
+
+  test("throw SparkArithmeticException") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      intercept[SparkArithmeticException] {
+        spark.sql("select 1/0").collect()
+      }
+    }
+  }
+
+  test("throw NoSuchDatabaseException") {
+    val ex = intercept[NoSuchDatabaseException] {
+      spark.sql("use database123")
+    }
+    assert(ex.getErrorClass != null)
+  }
+
+  test("table not found for spark.catalog.getTable") {
+    val ex = intercept[AnalysisException] {
+      spark.catalog.getTable("test_table")
+    }
+    assert(ex.getErrorClass != null)
+  }
+
+  test("throw NamespaceAlreadyExistsException") {
+    try {
+      spark.sql("create database test_db")
+      val ex = intercept[NamespaceAlreadyExistsException] {
+        spark.sql("create database test_db")
+      }
+      assert(ex.getErrorClass != null)
+    } finally {
+      spark.sql("drop database test_db")
+    }
+  }
+
+  test("throw TempTableAlreadyExistsException") {
+    try {
+      spark.sql("create temporary view test_view as select 1")
+      val ex = intercept[TempTableAlreadyExistsException] {
+        spark.sql("create temporary view test_view as select 1")
+      }
+      assert(ex.getErrorClass != null)
+    } finally {
+      spark.sql("drop view test_view")
+    }
+  }
+
+  test("throw TableAlreadyExistsException") {
+    withTable("testcat.test_table") {
+      spark.sql(s"create table testcat.test_table (id int)")
+      val ex = intercept[TableAlreadyExistsException] {
+        spark.sql(s"create table testcat.test_table (id int)")
+      }
+      assert(ex.getErrorClass != null)
+    }
+  }
+
   test("throw ParseException") {
-    intercept[ParseException] {
+    val ex = intercept[ParseException] {
       spark.sql("selet 1").collect()
     }
+    assert(ex.getErrorClass != null)
+    assert(!ex.messageParameters.isEmpty)
+    assert(ex.getSqlState != null)
+    assert(!ex.isInternalError)
   }
 
   test("spark deep recursion") {
@@ -55,6 +220,18 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       df = df.union(spark.range(a, a + 1))
     }
     assert(df.collect().length == 501)
+  }
+
+  test("handle unknown exception") {
+    var df = spark.range(1)
+    val limit = spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt + 1
+    for (a <- 1 to limit) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    val ex = intercept[SparkException] {
+      df.collect()
+    }
+    assert(ex.getMessage.contains("io.grpc.StatusRuntimeException: UNKNOWN"))
   }
 
   test("many tables") {
@@ -261,18 +438,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("write jdbc") {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-      val url = "jdbc:derby:memory:1234"
-      val table = "t1"
-      try {
-        spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
-        val result = spark.read.jdbc(url = url, table, new Properties()).collect()
-        assert(result.length == 10)
-      } finally {
-        // clean up
-        assertThrows[SparkException] {
-          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
-        }
+    val url = "jdbc:derby:memory:1234"
+    val table = "t1"
+    try {
+      spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+      val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+      assert(result.length == 10)
+    } finally {
+      // clean up
+      assertThrows[SparkException] {
+        spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
       }
     }
   }
@@ -481,8 +656,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset result collection") {
-    def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
-      rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {
+    def checkResult(rows: IterableOnce[java.lang.Long], expectedValues: Long*): Unit = {
+      rows.iterator.zipAll(expectedValues.iterator, null, null).foreach {
         case (actual, expected) => assert(actual === expected)
       }
     }
@@ -703,6 +878,89 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
   }
 
+  test("join with dataframe star") {
+    val left = spark.range(100)
+    val right = spark.range(100).select(col("id"), rand(12).as("a"))
+    val join1 = left.join(right, left("id") === right("id"))
+    assert(
+      join1.select(join1.col("*")).schema.catalogString ===
+        "struct<id:bigint,id:bigint,a:double>")
+    assert(join1.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join1.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+
+    val join2 = left.join(right)
+    assert(
+      join2.select(join2.col("*")).schema.catalogString ===
+        "struct<id:bigint,id:bigint,a:double>")
+    assert(join2.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join2.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+
+    val join3 = left.join(right, "id")
+    assert(
+      join3.select(join3.col("*")).schema.catalogString ===
+        "struct<id:bigint,a:double>")
+    assert(join3.select(left.col("*")).schema.catalogString === "struct<id:bigint>")
+    assert(join3.select(right.col("*")).schema.catalogString === "struct<id:bigint,a:double>")
+  }
+
+  test("SPARK-45509: ambiguous column reference") {
+    val session = spark
+    import session.implicits._
+    val df1 = Seq(1 -> "a").toDF("i", "j")
+    val df1_filter = df1.filter(df1("i") > 0)
+    val df2 = Seq(2 -> "b").toDF("i", "y")
+
+    checkSameResult(
+      Seq(Row(1)),
+      // df1("i") is not ambiguous, and it's still valid in the filtered df.
+      df1_filter.select(df1("i")))
+
+    val e1 = intercept[AnalysisException] {
+      // df1("i") is not ambiguous, but it's not valid in the projected df.
+      df1.select((df1("i") + 1).as("plus")).select(df1("i")).collect()
+    }
+    assert(e1.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+
+    checkSameResult(
+      Seq(Row(1, "a")),
+      // All these column references are not ambiguous and are still valid after join.
+      df1.join(df2, df1("i") + 1 === df2("i")).sort(df1("i").desc).select(df1("i"), df1("j")))
+
+    val e2 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both join sides.
+      df1.join(df1, df1("i") === 1).collect()
+    }
+    assert(e2.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    val e3 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both join sides.
+      df1.join(df1).select(df1("i")).collect()
+    }
+    assert(e3.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    val e4 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both join sides (df1_filter contains df1).
+      df1.join(df1_filter, df1("i") === 1).collect()
+    }
+    assert(e4.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    checkSameResult(
+      Seq(Row("a")),
+      // df1_filter("i") is not ambiguous as df1_filter does not exist in the join left side.
+      df1.join(df1_filter, df1_filter("i") === 1).select(df1_filter("j")))
+
+    val e5 = intercept[AnalysisException] {
+      // df1("i") is ambiguous as df1 appears in both sides of the first join.
+      df1.join(df1_filter, df1_filter("i") === 1).join(df2, df1("i") === 1).collect()
+    }
+    assert(e5.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+
+    checkSameResult(
+      Seq(Row("a")),
+      // df1_filter("i") is not ambiguous as df1_filter only appears once.
+      df1.join(df1_filter).join(df2, df1_filter("i") === 1).select(df1_filter("j")))
+  }
+
   test("broadcast join") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
       val left = spark.range(100).select(col("id"), rand(10).as("a"))
@@ -842,9 +1100,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(df1.sameSemantics(df3) === false)
     assert(df3.sameSemantics(df4) === true)
 
-    assert(df1.semanticHash === df2.semanticHash)
-    assert(df1.semanticHash !== df3.semanticHash)
-    assert(df3.semanticHash === df4.semanticHash)
+    assert(df1.semanticHash() === df2.semanticHash())
+    assert(df1.semanticHash() !== df3.semanticHash())
+    assert(df3.semanticHash() === df4.semanticHash())
   }
 
   test("toJSON") {
@@ -984,6 +1242,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result2.length == 1)
     assert(result2(0).getInt(0) === 1)
     assert(result2(0).getString(1) === "abc")
+
+    val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("sql() with named parameters") {
@@ -995,6 +1256,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
     val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
     assert(result2.length == 1 && result2(0).getString(0) === "abc")
+
+    val result3 =
+      spark.sql("select element_at(:m, 'a')", Map("m" -> map(lit("a"), lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("joinWith, flat schema") {
@@ -1202,6 +1467,46 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       .withColumn("newcol", col("id"))
       .dropDuplicatesWithinWatermark("newcol")
     testAndVerify(result2)
+  }
+
+  test("Dataset.metadataColumn") {
+    val session: SparkSession = spark
+    import session.implicits._
+    withTempPath { file =>
+      val path = file.getAbsoluteFile.toURI.toString
+      spark
+        .range(0, 100, 1, 1)
+        .withColumn("_metadata", concat(lit("lol_"), col("id")))
+        .write
+        .parquet(file.toPath.toAbsolutePath.toString)
+
+      val df = spark.read.parquet(path)
+      val (filepath, rc) = df
+        .groupBy(df.metadataColumn("_metadata").getField("file_path"))
+        .count()
+        .as[(String, Long)]
+        .head()
+      assert(filepath.startsWith(path))
+      assert(rc == 100)
+    }
+  }
+
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
+      .collect()
+      .foreach { row =>
+        (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+      }
   }
 }
 

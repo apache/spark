@@ -34,7 +34,7 @@ import org.apache.spark.tags.DockerTest
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
  *     ./build/sbt -Pdocker-integration-tests
- *     "testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
  */
 @DockerTest
@@ -344,7 +344,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
 
     // query option in the create table path.
     sql(
@@ -353,7 +353,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select c1, c3 from queryOption").collect.toSet == expectedResult)
+    assert(sql("select c1, c3 from queryOption").collect().toSet == expectedResult)
   }
 
   test("write byte as smallint") {

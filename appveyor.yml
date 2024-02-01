@@ -66,7 +66,7 @@ environment:
   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
 
 test_script:
-  - cmd: .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configuration=file:///%CD:\=/%/R/log4j.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
+  - cmd: .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configuration=file:///%CD:\=/%/R/log4j2.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
 
 notifications:
   - provider: Email

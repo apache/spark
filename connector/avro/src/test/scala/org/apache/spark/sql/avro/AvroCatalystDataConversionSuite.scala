@@ -35,6 +35,7 @@ import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class AvroCatalystDataConversionSuite extends SparkFunSuite
   with SharedSparkSession
@@ -59,7 +60,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
 
     val expected = {
       val avroSchema = new Schema.Parser().parse(schema)
-      SchemaConverters.toSqlType(avroSchema).dataType match {
+      SchemaConverters.toSqlType(avroSchema, false, "").dataType match {
         case st: StructType => Row.fromSeq((0 until st.length).map(_ => null))
         case _ => null
       }
@@ -90,7 +91,8 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     // Spark byte and short both map to avro int
     case b: Byte => b.toInt
     case s: Short => s.toInt
-    case row: GenericInternalRow => InternalRow.fromSeq(row.values.map(prepareExpectedResult))
+    case row: GenericInternalRow =>
+      InternalRow.fromSeq(row.values.map(prepareExpectedResult).toImmutableArraySeq)
     case array: GenericArrayData => new GenericArrayData(array.array.map(prepareExpectedResult))
     case map: MapData =>
       val keys = new GenericArrayData(
@@ -281,13 +283,15 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       data: GenericData.Record,
       expected: Option[Any],
       filters: StructFilters = new NoopFilters): Unit = {
-    val dataType = SchemaConverters.toSqlType(schema).dataType
+    val dataType = SchemaConverters.toSqlType(schema, false, "").dataType
     val deserializer = new AvroDeserializer(
       schema,
       dataType,
       false,
       RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
-      filters)
+      filters,
+      false,
+      "")
     val deserialized = deserializer.deserialize(data)
     expected match {
       case None => assert(deserialized == None)

@@ -14,55 +14,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class GroupbySplitApplyMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43445): Enable GroupBySlowTests.test_split_apply_combine_on_series "
-        "for pandas 2.0.0.",
-    )
-    def test_split_apply_combine_on_series(self):
+class GroupbySplitApplyTestingFuncMixin:
+    def _test_split_apply_func(self, funcs):
+        # TODO(SPARK-45228): Enabling string type columns for `test_split_apply_combine_on_series`
+        #  when Pandas regression is fixed
+        # There is a regression in Pandas 2.1.0,
+        # so we should manually cast to float until the regression is fixed.
+        # See https://github.com/pandas-dev/pandas/issues/55194.
         pdf = pd.DataFrame(
             {
                 "a": [1, 2, 6, 4, 4, 6, 4, 3, 7],
                 "b": [4, 2, 7, 3, 3, 1, 1, 1, 2],
                 "c": [4, 2, 7, 3, None, 1, 1, 1, 2],
-                "d": list("abcdefght"),
+                # "d": list("abcdefght"),
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
         psdf = ps.from_pandas(pdf)
 
         funcs = [
-            ((True, False), ["sum", "min", "max", "count", "first", "last"]),
-            ((True, True), ["mean"]),
-            ((False, False), ["var", "std", "skew"]),
+            (
+                check_exact,
+                almost,
+                f,
+            )
+            for (check_exact, almost), fs in funcs
+            for f in fs
         ]
-        funcs = [(check_exact, almost, f) for (check_exact, almost), fs in funcs for f in fs]
 
         for as_index in [True, False]:
             if as_index:
@@ -171,7 +158,20 @@ class GroupbySplitApplyMixin:
                     )
 
 
-class GroupbySplitApplyTests(GroupbySplitApplyMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbySplitApplyMixin(GroupbySplitApplyTestingFuncMixin):
+    def test_split_apply_combine_on_series(self):
+        funcs = [
+            ((True, False), ["sum"]),
+            ((True, True), ["mean"]),
+        ]
+        self._test_split_apply_func(funcs)
+
+
+class GroupbySplitApplyTests(
+    GroupbySplitApplyMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

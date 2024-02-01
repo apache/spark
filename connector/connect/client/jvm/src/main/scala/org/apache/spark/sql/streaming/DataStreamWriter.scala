@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.Locale
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 

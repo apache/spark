@@ -24,9 +24,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import scala.Option;
-import scala.collection.JavaConverters;
+import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -359,7 +360,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   private void initializeInternal() throws IOException, UnsupportedOperationException {
     missingColumns = new HashSet<>();
-    for (ParquetColumn column : JavaConverters.seqAsJavaList(parquetColumn.children())) {
+    for (ParquetColumn column : CollectionConverters.asJava(parquetColumn.children())) {
       checkColumn(column);
     }
   }
@@ -369,16 +370,16 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * conforms to the type of the file schema.
    */
   private void checkColumn(ParquetColumn column) throws IOException {
-    String[] path = JavaConverters.seqAsJavaList(column.path()).toArray(new String[0]);
+    String[] path = CollectionConverters.asJava(column.path()).toArray(new String[0]);
     if (containsPath(fileSchema, path)) {
       if (column.isPrimitive()) {
         ColumnDescriptor desc = column.descriptor().get();
         ColumnDescriptor fd = fileSchema.getColumnDescription(desc.getPath());
         if (!fd.equals(desc)) {
-          throw new UnsupportedOperationException("Schema evolution not supported.");
+          throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3185");
         }
       } else {
-        for (ParquetColumn childColumn : JavaConverters.seqAsJavaList(column.children())) {
+        for (ParquetColumn childColumn : CollectionConverters.asJava(column.children())) {
           checkColumn(childColumn);
         }
       }
@@ -403,9 +404,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   private boolean containsPath(Type parquetType, String[] path, int depth) {
     if (path.length == depth) return true;
-    if (parquetType instanceof GroupType) {
+    if (parquetType instanceof GroupType parquetGroupType) {
       String fieldName = path[depth];
-      GroupType parquetGroupType = (GroupType) parquetType;
       if (parquetGroupType.containsField(fieldName)) {
         return containsPath(parquetGroupType.getType(fieldName), path, depth + 1);
       }

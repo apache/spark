@@ -46,6 +46,7 @@ Column
     Column.getField
     Column.getItem
     Column.ilike
+    Column.isNaN
     Column.isNotNull
     Column.isNull
     Column.isin

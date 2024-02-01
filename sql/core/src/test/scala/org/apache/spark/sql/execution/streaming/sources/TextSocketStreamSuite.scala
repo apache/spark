@@ -25,13 +25,13 @@ import java.sql.Timestamp
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
@@ -59,7 +59,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
         "Cannot add data when there is no query for finding the active socket source")
 
       val sources = query.get.logicalPlan.collect {
-        case r: StreamingDataSourceV2Relation
+        case r: StreamingDataSourceV2ScanRelation
             if r.stream.isInstanceOf[TextSocketMicroBatchStream] =>
           r.stream.asInstanceOf[TextSocketMicroBatchStream]
       }
@@ -87,7 +87,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
   test("backward compatibility with old path") {
     val ds = DataSource.lookupDataSource(
       "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider",
-      spark.sqlContext.conf).newInstance()
+      spark.sessionState.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[TextSocketSourceProvider], "Could not find socket source")
   }
 
@@ -358,7 +358,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       numPartitions = 2,
       options = new CaseInsensitiveStringMap(Map("includeTimestamp" -> "true").asJava))
     val partitions = stream.planInputPartitions(stream.initialOffset())
-    assert(partitions.size == 2)
+    assert(partitions.length == 2)
 
     val numRecords = 4
     // inject rows, read and check the data and offsets

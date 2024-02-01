@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import java.lang.reflect.ParameterizedType
 import java.util.ServiceLoader
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 

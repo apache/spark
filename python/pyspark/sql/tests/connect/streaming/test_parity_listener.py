@@ -18,70 +18,160 @@
 import unittest
 import time
 
+import pyspark.cloudpickle
+from pyspark.errors import PySparkPicklingError
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
-from pyspark.sql.streaming.listener import StreamingQueryListener, QueryStartedEvent
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-def get_start_event_schema():
-    return StructType(
-        [
-            StructField("id", StringType(), True),
-            StructField("runId", StringType(), True),
-            StructField("name", StringType(), True),
-            StructField("timestamp", StringType(), True),
-        ]
-    )
-
-
-class TestListener(StreamingQueryListener):
+# V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
+# `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
+class TestListenerV1(StreamingQueryListener):
     def onQueryStarted(self, event):
-        df = self.spark.createDataFrame(
-            data=[(str(event.id), str(event.runId), event.name, event.timestamp)],
-            schema=get_start_event_schema(),
-        )
-        df.write.saveAsTable("listener_start_events")
+        e = pyspark.cloudpickle.dumps(event)
+        df = self.spark.createDataFrame(data=[(e,)])
+        df.write.mode("append").saveAsTable("listener_start_events_v1")
 
     def onQueryProgress(self, event):
-        pass
+        e = pyspark.cloudpickle.dumps(event)
+        df = self.spark.createDataFrame(data=[(e,)])
+        df.write.mode("append").saveAsTable("listener_progress_events_v1")
+
+    def onQueryTerminated(self, event):
+        e = pyspark.cloudpickle.dumps(event)
+        df = self.spark.createDataFrame(data=[(e,)])
+        df.write.mode("append").saveAsTable("listener_terminated_events_v1")
+
+
+# V2: The interface after the method `onQueryIdle` is added. It is Spark 3.5+.
+class TestListenerV2(StreamingQueryListener):
+    def onQueryStarted(self, event):
+        e = pyspark.cloudpickle.dumps(event)
+        df = self.spark.createDataFrame(data=[(e,)])
+        df.write.mode("append").saveAsTable("listener_start_events_v2")
+
+    def onQueryProgress(self, event):
+        e = pyspark.cloudpickle.dumps(event)
+        df = self.spark.createDataFrame(data=[(e,)])
+        df.write.mode("append").saveAsTable("listener_progress_events_v2")
 
     def onQueryIdle(self, event):
         pass
 
     def onQueryTerminated(self, event):
-        pass
+        e = pyspark.cloudpickle.dumps(event)
+        df = self.spark.createDataFrame(data=[(e,)])
+        df.write.mode("append").saveAsTable("listener_terminated_events_v2")
 
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
     def test_listener_events(self):
-        test_listener = TestListener()
+        def verify(test_listener, table_postfix):
+            try:
+                self.spark.streams.addListener(test_listener)
 
+                # This ensures the read socket on the server won't crash (i.e. because of timeout)
+                # when there hasn't been a new event for a long time
+                time.sleep(30)
+
+                df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+                df_observe = df.observe("my_event", count(lit(1)).alias("rc"))
+                df_stateful = df_observe.groupBy().count()  # make query stateful
+                q = (
+                    df_stateful.writeStream.format("noop")
+                    .queryName("test")
+                    .outputMode("complete")
+                    .start()
+                )
+
+                self.assertTrue(q.isActive)
+                # ensure at least one batch is ran
+                while q.lastProgress is None or q.lastProgress["batchId"] == 0:
+                    time.sleep(5)
+                q.stop()
+                self.assertFalse(q.isActive)
+
+                # Sleep to make sure listener_terminated_events is written successfully
+                time.sleep(60)
+
+                start_table_name = "listener_start_events" + table_postfix
+                progress_tbl_name = "listener_progress_events" + table_postfix
+                terminated_tbl_name = "listener_terminated_events" + table_postfix
+
+                start_event = pyspark.cloudpickle.loads(
+                    self.spark.read.table(start_table_name).collect()[0][0]
+                )
+
+                progress_event = pyspark.cloudpickle.loads(
+                    self.spark.read.table(progress_tbl_name).collect()[0][0]
+                )
+
+                terminated_event = pyspark.cloudpickle.loads(
+                    self.spark.read.table(terminated_tbl_name).collect()[0][0]
+                )
+
+                self.check_start_event(start_event)
+                self.check_progress_event(progress_event)
+                self.check_terminated_event(terminated_event)
+
+            finally:
+                self.spark.streams.removeListener(test_listener)
+
+                # Remove again to verify this won't throw any error
+                self.spark.streams.removeListener(test_listener)
+
+        verify(TestListenerV1(), "_v1")
+        verify(TestListenerV2(), "_v2")
+
+    def test_accessing_spark_session(self):
+        spark = self.spark
+
+        class TestListener(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                spark.createDataFrame([("do", "not"), ("serialize", "spark")]).collect()
+
+            def onQueryProgress(self, event):
+                pass
+
+            def onQueryIdle(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                pass
+
+        error_thrown = False
         try:
-            self.spark.streams.addListener(test_listener)
+            self.spark.streams.addListener(TestListener())
+        except PySparkPicklingError as e:
+            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
+            error_thrown = True
+        self.assertTrue(error_thrown)
 
-            # This ensures the read socket on the server won't crash (i.e. because of timeout)
-            # when there hasn't been a new event for a long time
-            time.sleep(30)
+    def test_accessing_spark_session_through_df(self):
+        dataframe = self.spark.createDataFrame([("do", "not"), ("serialize", "dataframe")])
 
-            df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-            q = df.writeStream.format("noop").queryName("test").start()
+        class TestListener(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                dataframe.collect()
 
-            self.assertTrue(q.isActive)
-            time.sleep(10)
-            q.stop()
+            def onQueryProgress(self, event):
+                pass
 
-            start_event = QueryStartedEvent.fromJson(
-                self.spark.read.table("listener_start_events").collect()[0].asDict()
-            )
+            def onQueryIdle(self, event):
+                pass
 
-            self.check_start_event(start_event)
+            def onQueryTerminated(self, event):
+                pass
 
-        finally:
-            self.spark.streams.removeListener(test_listener)
-
-            # Remove again to verify this won't throw any error
-            self.spark.streams.removeListener(test_listener)
+        error_thrown = False
+        try:
+            self.spark.streams.addListener(TestListener())
+        except PySparkPicklingError as e:
+            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
+            error_thrown = True
+        self.assertTrue(error_thrown)
 
 
 if __name__ == "__main__":

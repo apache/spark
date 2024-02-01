@@ -538,7 +538,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
           .build()),
       StructField("c3", BooleanType)))
-    assert(ResolveDefaultColumns.existenceDefaultValues(source1).size == 3)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1).length == 3)
     assert(ResolveDefaultColumns.existenceDefaultValues(source1)(0) == 42)
     assert(ResolveDefaultColumns.existenceDefaultValues(source1)(1) == UTF8String.fromString("abc"))
     assert(ResolveDefaultColumns.existenceDefaultValues(source1)(2) == null)
@@ -553,7 +553,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
           .build())))
     val error = "fails to parse as a valid literal value"
-    assert(ResolveDefaultColumns.existenceDefaultValues(source2).size == 1)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source2).length == 1)
     assert(ResolveDefaultColumns.existenceDefaultValues(source2)(0) == 2)
 
     // Negative test: StructType.defaultValues fails because the existence default value fails to
@@ -583,5 +583,21 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(intercept[AnalysisException] {
       ResolveDefaultColumns.existenceDefaultValues(source4)
     }.getMessage.contains(error))
+  }
+
+  test("SPARK-46629: Test STRUCT DDL with NOT NULL round trip") {
+    val struct = StructType(
+      Seq(
+        StructField(
+          "b",
+          StructType(
+            Seq(StructField("c", StringType, nullable = false).withComment("struct comment"))),
+          nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType).withComment("nullable comment")))
+    assert(
+      struct.toDDL == "b STRUCT<c: STRING NOT NULL COMMENT 'struct comment'> NOT NULL," +
+        "b STRING NOT NULL,c STRING COMMENT 'nullable comment'")
+    assert(fromDDL(struct.toDDL) === struct)
   }
 }

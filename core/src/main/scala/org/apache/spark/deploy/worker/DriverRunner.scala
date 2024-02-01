@@ -21,7 +21,7 @@ import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 

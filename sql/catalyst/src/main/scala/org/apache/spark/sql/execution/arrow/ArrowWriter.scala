@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
@@ -82,6 +82,8 @@ object ArrowWriter {
       case (NullType, vector: NullVector) => new NullWriter(vector)
       case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
+      case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
+        new IntervalMonthDayNanoWriter(vector)
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
@@ -96,7 +98,7 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
 
   def write(row: InternalRow): Unit = {
     var i = 0
-    while (i < fields.size) {
+    while (i < fields.length) {
       fields(i).write(row, i)
       i += 1
     }
@@ -461,6 +463,18 @@ private[arrow] class DurationWriter(val valueVector: DurationVector)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueVector.set(count, input.getLong(ordinal))
+    valueVector.setSafe(count, input.getLong(ordinal))
+  }
+}
+
+private[arrow] class IntervalMonthDayNanoWriter(val valueVector: IntervalMonthDayNanoVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val ci = input.getInterval(ordinal)
+    valueVector.setSafe(count, ci.months, ci.days, Math.multiplyExact(ci.microseconds, 1000L))
   }
 }

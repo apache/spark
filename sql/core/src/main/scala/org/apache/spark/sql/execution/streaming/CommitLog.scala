@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets._
 
 import scala.io.{Source => IOSource}
 
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
@@ -56,8 +56,8 @@ class CommitLog(sparkSession: SparkSession, path: String)
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
-    validateVersion(lines.next.trim, VERSION)
-    val metadataJson = if (lines.hasNext) lines.next else EMPTY_JSON
+    validateVersion(lines.next().trim, VERSION)
+    val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
     CommitMetadata(metadataJson)
   }
 
@@ -82,7 +82,7 @@ case class CommitMetadata(nextBatchWatermarkMs: Long = 0) {
 }
 
 object CommitMetadata {
-  implicit val format = Serialization.formats(NoTypeHints)
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
 
   def apply(json: String): CommitMetadata = Serialization.read[CommitMetadata](json)
 }

@@ -24,11 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class DiffFramesParitySetItemFrameTests(
     DiffFramesSetItemFrameMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43658): Fix unexpected `SparkConnectGrpcException` from Spark Connect client."
-    )
-    def test_frame_iloc_setitem(self):
-        super().test_frame_iloc_setitem()
+    pass
 
 
 if __name__ == "__main__":

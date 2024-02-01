@@ -66,6 +66,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
     "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
 
+  private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+
   /**
    * Similar to the JSON schema inference
    *     1. Infer type of each row
@@ -199,11 +201,12 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseTimestampNTZ(field: String): DataType = {
-    // We can only parse the value as TimestampNTZType if it does not have zone-offset or
-    // time-zone component and can be parsed with the timestamp formatter.
-    // Otherwise, it is likely to be a timestamp with timezone.
-    if (timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-      SQLConf.get.timestampType
+    // For text-based format, it's ambiguous to infer a timestamp string without timezone, as it can
+    // be both TIMESTAMP LTZ and NTZ. To avoid behavior changes with the new support of NTZ, here
+    // we only try to infer NTZ if the config is set to use NTZ by default.
+    if (isDefaultNTZ &&
+      timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+      TimestampNTZType
     } else {
       tryParseTimestamp(field)
     }

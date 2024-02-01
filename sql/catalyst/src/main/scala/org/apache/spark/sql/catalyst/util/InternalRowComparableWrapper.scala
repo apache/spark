@@ -79,6 +79,11 @@ object InternalRowComparableWrapper {
     rightPartitioning.partitionValues
       .map(new InternalRowComparableWrapper(_, partitionDataTypes))
       .foreach(partition => partitionsSet.add(partition))
-    partitionsSet.map(_.row).toSeq
+    // SPARK-41471: We keep to order of partitions to make sure the order of
+    // partitions is deterministic in different case.
+    val partitionOrdering: Ordering[InternalRow] = {
+      RowOrdering.createNaturalAscendingOrdering(partitionDataTypes)
+    }
+    partitionsSet.map(_.row).toSeq.sorted(partitionOrdering)
   }
 }

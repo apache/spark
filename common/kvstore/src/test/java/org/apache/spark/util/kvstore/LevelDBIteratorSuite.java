@@ -21,15 +21,15 @@ import java.io.File;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
-import org.junit.AfterClass;
-import static org.junit.Assume.assumeFalse;
+import org.junit.jupiter.api.AfterAll;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class LevelDBIteratorSuite extends DBIteratorSuite {
 
   private static File dbpath;
   private static LevelDB db;
 
-  @AfterClass
+  @AfterAll
   public static void cleanup() throws Exception {
     if (db != null) {
       db.close();

@@ -33,6 +33,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DayTimeIntervalType,
     YearMonthIntervalType,
+    CalendarIntervalType,
     MapType,
     StringType,
     CharType,
@@ -48,7 +49,7 @@ from pyspark.sql.types import (
     NullType,
     UserDefinedType,
 )
-from pyspark.errors import PySparkAssertionError
+from pyspark.errors import PySparkAssertionError, PySparkValueError
 
 import pyspark.sql.connect.proto as pb2
 
@@ -169,6 +170,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, YearMonthIntervalType):
         ret.year_month_interval.start_field = data_type.startField
         ret.year_month_interval.end_field = data_type.endField
+    elif isinstance(data_type, CalendarIntervalType):
+        ret.calendar_interval.CopyFrom(pb2.DataType.CalendarInterval())
     elif isinstance(data_type, StructType):
         struct = pb2.DataType.Struct()
         for field in data_type.fields:
@@ -202,7 +205,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         data_type_string = data_type.data_type_string
         ret.unparsed.data_type_string = data_type_string
     else:
-        raise Exception(f"Unsupported data type {data_type}")
+        raise PySparkValueError(
+            error_class="UNSUPPORTED_OPERATION",
+            message_parameters={"operation": f"data type {data_type}"},
+        )
     return ret
 
 
@@ -265,6 +271,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             else None
         )
         return YearMonthIntervalType(startField=start, endField=end)
+    elif schema.HasField("calendar_interval"):
+        return CalendarIntervalType()
     elif schema.HasField("array"):
         return ArrayType(
             proto_schema_to_pyspark_data_type(schema.array.element_type),
@@ -298,4 +306,7 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             json_value["serializedClass"] = schema.udt.serialized_python_class
         return UserDefinedType.fromJson(json_value)
     else:
-        raise Exception(f"Unsupported data type {schema}")
+        raise PySparkValueError(
+            error_class="UNSUPPORTED_OPERATION",
+            message_parameters={"operation": f"data type {schema}"},
+        )

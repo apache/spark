@@ -17,12 +17,12 @@
 
 package org.apache.spark.unsafe.types;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Period;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 public class CalendarIntervalSuite {
@@ -74,6 +74,22 @@ public class CalendarIntervalSuite {
     i = new CalendarInterval(34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
     assertEquals("2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
       i.toString());
+  }
+
+  @Test
+  public void compareToTest() {
+   CalendarInterval i = new CalendarInterval(0, 0, 0);
+
+   assertEquals(i.compareTo(new CalendarInterval(0, 0, 0)), 0);
+   assertEquals(i.compareTo(new CalendarInterval(0, 0, 1)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(0, 1, 0)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(0, 1, -1)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(1, 0, 0)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(1, 0, -1)), -1);
+   assertEquals(i.compareTo(new CalendarInterval(0, 0, -1)), 1);
+   assertEquals(i.compareTo(new CalendarInterval(0, -1, 0)), 1);
+   assertEquals(i.compareTo(new CalendarInterval(-1, 0, 0)), 1);
+   assertEquals(i.compareTo(new CalendarInterval(-1, 0, 1)), 1);
   }
 
   @Test

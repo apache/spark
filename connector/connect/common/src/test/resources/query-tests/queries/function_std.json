@@ -13,7 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "stddev",
+        "functionName": "std",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "a"

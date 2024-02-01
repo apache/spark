@@ -1,9 +1,5 @@
-
 <!DOCTYPE html>
-<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
-<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
-<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+<html class="no-js">
     <head>
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
@@ -32,14 +28,28 @@
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.css" />
         <link rel="stylesheet" href="css/docsearch.css">
 
+        {% production %}
+        <!-- Matomo -->
+        <script>
+            var _paq = window._paq = window._paq || [];
+            /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+            _paq.push(["disableCookies"]);
+            _paq.push(['trackPageView']);
+            _paq.push(['enableLinkTracking']);
+            (function() {
+              var u="https://analytics.apache.org/";
+              _paq.push(['setTrackerUrl', u+'matomo.php']);
+              _paq.push(['setSiteId', '40']);
+              var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+              g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+            })();
+        </script>
+        <!-- End Matomo Code -->
+        {% endproduction %}
+
     </head>
     <body class="global">
-        <!--[if lt IE 7]>
-            <p class="chromeframe">You are using an outdated browser. <a href="https://browsehappy.com/">Upgrade your browser today</a> or <a href="http://www.google.com/chromeframe/?redirect=true">install Google Chrome Frame</a> to better experience this site.</p>
-        <![endif]-->
-
         <!-- This code is taken from http://twitter.github.com/bootstrap/examples/hero.html -->
-
         <nav class="navbar navbar-expand-lg navbar-dark p-0 px-4 fixed-top" style="background: #1d6890;" id="topbar">
             <div class="navbar-brand"><a href="index.html">
                 <img src="img/spark-logo-rev.svg" width="141" height="72"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
@@ -71,9 +81,9 @@
                     <li class="nav-item dropdown">
                         <a href="#" class="nav-link dropdown-toggle" id="navbarAPIDocs" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">API Docs</a>
                         <div class="dropdown-menu" aria-labelledby="navbarAPIDocs">
+                            <a class="dropdown-item" href="api/python/index.html">Python</a>
                             <a class="dropdown-item" href="api/scala/org/apache/spark/index.html">Scala</a>
                             <a class="dropdown-item" href="api/java/index.html">Java</a>
-                            <a class="dropdown-item" href="api/python/index.html">Python</a>
                             <a class="dropdown-item" href="api/R/index.html">R</a>
                             <a class="dropdown-item" href="api/sql/index.html">SQL, Built-in Functions</a>
                         </div>
@@ -86,7 +96,6 @@
                             <a class="dropdown-item" href="submitting-applications.html">Submitting Applications</a>
                             <div class="dropdown-divider"></div>
                             <a class="dropdown-item" href="spark-standalone.html">Spark Standalone</a>
-                            <a class="dropdown-item" href="running-on-mesos.html">Mesos</a>
                             <a class="dropdown-item" href="running-on-yarn.html">YARN</a>
                             <a class="dropdown-item" href="running-on-kubernetes.html">Kubernetes</a>
                         </div>
@@ -119,25 +128,21 @@
 
         {% if page.url == "/" %}
             <section class="hero-banner position-relative">
-            <div class="bg">
-            </div>
             <div class="container position-relative">
                 <div class="row">
                   <h1 style="max-width: 680px;">Apache Spark - A Unified engine for large-scale data analytics</h1>
                 </div>
-                <div class="row mt-5">
-                  <div class="col-12 col-lg-6 no-gutters">
-                    Apache Spark is a unified analytics engine for large-scale data processing.
-                    It provides high-level APIs in Java, Scala, Python and R,
-                    and an optimized engine that supports general execution graphs.
-                    It also supports a rich set of higher-level tools including
-                    <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
-                    <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
-                    <a href="ml-guide.html">MLlib</a> for machine learning,
-                    <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
-                     and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
-                     for incremental computation and stream processing.
-                  </div>
+                <div class="content mr-3">
+                  Apache Spark is a unified analytics engine for large-scale data processing.
+                  It provides high-level APIs in Java, Scala, Python and R,
+                  and an optimized engine that supports general execution graphs.
+                  It also supports a rich set of higher-level tools including
+                  <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
+                  <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
+                  <a href="ml-guide.html">MLlib</a> for machine learning,
+                  <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
+                   and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
+                   for incremental computation and stream processing.
                 </div>
             </div>
           </section>

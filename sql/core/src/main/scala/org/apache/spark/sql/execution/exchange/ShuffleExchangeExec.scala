@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import java.util.function.Supplier
 
+import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark._
@@ -29,6 +30,7 @@ import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProces
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -299,7 +301,12 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
+      case k @ KeyGroupedPartitioning(expressions, n, _, _) =>
+        val valueMap = k.uniquePartitionValues.zipWithIndex.map {
+          case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
+        }.toMap
+        new KeyGroupedPartitioner(mutable.Map(valueMap.toSeq: _*), n)
+      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
@@ -325,7 +332,9 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
+      case KeyGroupedPartitioning(expressions, _, _, _) =>
+        row => bindReferences(expressions, outputAttributes).map(_.eval(row))
+      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&

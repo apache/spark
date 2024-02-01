@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -35,10 +35,8 @@ class FrameConversionMixin:
         )
 
     @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_astype(self):
         psdf = self.psdf
@@ -57,7 +55,11 @@ class FrameConversionMixin:
         self.assert_eq(psdf.isnull(), pdf.isnull())
 
 
-class FrameConversionTests(FrameConversionMixin, ComparisonTestBase, SQLTestUtils):
+class FrameConversionTests(
+    FrameConversionMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

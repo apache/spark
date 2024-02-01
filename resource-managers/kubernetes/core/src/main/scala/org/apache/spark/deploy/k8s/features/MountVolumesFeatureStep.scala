@@ -16,8 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
@@ -90,7 +90,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
               .withNewSpec()
                 .withStorageClassName(storageClass.get)
                 .withAccessModes(PVC_ACCESS_MODE)
-                .withResources(new ResourceRequirementsBuilder()
+                .withResources(new VolumeResourceRequirementsBuilder()
                   .withRequests(Map("storage" -> new Quantity(size.get)).asJava).build())
                 .endSpec()
               .build())
@@ -126,5 +126,5 @@ private[spark] object MountVolumesFeatureStep {
   val PVC_ON_DEMAND = "OnDemand"
   val PVC = "PersistentVolumeClaim"
   val PVC_POSTFIX = "-pvc"
-  val PVC_ACCESS_MODE = "ReadWriteOnce"
+  val PVC_ACCESS_MODE = "ReadWriteOncePod"
 }

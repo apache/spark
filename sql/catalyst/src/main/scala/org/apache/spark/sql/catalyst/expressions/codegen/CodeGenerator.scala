@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import java.io.ByteArrayInputStream
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
@@ -30,7 +30,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{TaskContext, TaskKilledException}
+import org.apache.spark.{SparkException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -502,7 +502,7 @@ class CodegenContext extends Logging {
       inlineToOuterClass: Boolean): NewFunctionSpec = {
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
-    } else if (currClassSize > GENERATED_CLASS_SIZE_THRESHOLD) {
+    } else if (currClassSize() > GENERATED_CLASS_SIZE_THRESHOLD) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 
@@ -544,7 +544,7 @@ class CodegenContext extends Logging {
         s"private $className $classInstance = new $className();"
     }
 
-    val declareNestedClasses = classFunctions.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filter { case (k, _) => k != outerClassName }.map {
       case (className, functions) =>
         s"""
            |private class $className {
@@ -627,6 +627,7 @@ class CodegenContext extends Logging {
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
+    case CalendarIntervalType => s"$c1.equals($c2)"
     case NullType => "false"
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError(
@@ -652,6 +653,7 @@ class CodegenContext extends Logging {
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
+    case CalendarIntervalType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -1199,7 +1201,7 @@ class CodegenContext extends Logging {
           "the parameter length of at least one split function went over the JVM limit: " +
           MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw new IllegalStateException(errMsg)
+          throw SparkException.internalError(errMsg)
         } else {
           logInfo(errMsg)
           (localSubExprEliminationExprsForNonSplit, Seq.empty)
@@ -1475,6 +1477,7 @@ object CodeGenerator extends Logging {
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
+      classOf[VariantVal].getName,
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
@@ -1639,8 +1642,9 @@ object CodeGenerator extends Logging {
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
-        case PhysicalStringType => s"$input.getUTF8String($ordinal)"
-        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.size})"
+        case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
+        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
+        case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"
       }
     }
@@ -1926,8 +1930,9 @@ object CodeGenerator extends Logging {
       case PhysicalLongType => JAVA_LONG
       case _: PhysicalMapType => "MapData"
       case PhysicalShortType => JAVA_SHORT
-      case PhysicalStringType => "UTF8String"
+      case _: PhysicalStringType => "UTF8String"
       case _: PhysicalStructType => "InternalRow"
+      case _: PhysicalVariantType => "VariantVal"
       case _ => "Object"
     }
   }
@@ -1951,6 +1956,7 @@ object CodeGenerator extends Logging {
     case _: MapType => classOf[MapData]
     case udt: UserDefinedType[_] => javaClass(udt.sqlType)
     case ObjectType(cls) => cls
+    case VariantType => classOf[VariantVal]
     case _ => classOf[Object]
   }
 

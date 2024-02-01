@@ -15,14 +15,13 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -35,6 +34,10 @@ class FrameIndexingMixin:
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     @property
     def df_pair(self):
@@ -412,7 +415,11 @@ class FrameIndexingMixin:
             self.assert_eq(value_psdf, value_pdf)
 
 
-class FrameIndexingTests(FrameIndexingMixin, ComparisonTestBase, SQLTestUtils):
+class FrameIndexingTests(
+    FrameIndexingMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -26,6 +26,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[QuantileDiscretizer]].
@@ -179,7 +180,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     }
 
     val (inputColNames, outputColNames) = if (isSet(inputCols)) {
-      ($(inputCols).toSeq, $(outputCols).toSeq)
+      ($(inputCols).toImmutableArraySeq, $(outputCols).toImmutableArraySeq)
     } else {
       (Seq($(inputCol)), Seq($(outputCol)))
     }

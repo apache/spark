@@ -17,12 +17,12 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.yarn.api.records.ResourceTypeInfo
 import org.apache.hadoop.yarn.util.resource.ResourceUtils
 
-object ResourceRequestTestHelper {
+trait ResourceRequestTestHelper {
   def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
     // ResourceUtils.reinitializeResources() is the YARN-way
     // to specify resources for the execution of the tests.
@@ -37,5 +37,16 @@ object ResourceRequestTestHelper {
     val allResourceTypes = defaultResourceTypes ++ customResourceTypes
 
     ResourceUtils.reinitializeResources(allResourceTypes.asJava)
+  }
+
+  /**
+   * `initializeResourceTypes` with inputs, call `f` and
+   * restore `resourceTypes`` as default value.
+   */
+  def withResourceTypes(resourceTypes: Seq[String])(f: => Unit): Unit = {
+    initializeResourceTypes(resourceTypes)
+    try f finally {
+      initializeResourceTypes(Seq.empty)
+    }
   }
 }

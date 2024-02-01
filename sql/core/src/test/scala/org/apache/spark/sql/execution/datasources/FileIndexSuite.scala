@@ -167,11 +167,11 @@ class FileIndexSuite extends SharedSparkSession {
 
       val catalog1 = new InMemoryFileIndex(
         spark, Seq(unqualifiedDirPath), Map.empty, None)
-      assert(catalog1.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
+      assert(catalog1.allFiles().map(_.getPath) === Seq(qualifiedFilePath))
 
       val catalog2 = new InMemoryFileIndex(
         spark, Seq(unqualifiedFilePath), Map.empty, None)
-      assert(catalog2.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
+      assert(catalog2.allFiles().map(_.getPath) === Seq(qualifiedFilePath))
 
     }
   }
@@ -285,6 +285,22 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-45452: PartitioningAwareFileIndex uses listFiles API for large child dirs") {
+    withSQLConf(SQLConf.USE_LISTFILES_FILESYSTEM_LIST.key -> "file") {
+      for (scale <- Seq(10, 50)) {
+        withTempDir { dir =>
+          for (i <- 1 to scale) {
+            new File(dir, s"foo=$i.txt").mkdir()
+          }
+          HiveCatalogMetrics.reset()
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+          new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        }
+      }
+    }
+  }
+
   test("PartitioningAwareFileIndex listing parallelized with large, deeply nested child dirs") {
     for ((scale, expectedNumPar) <- Seq((10, 0), (50, 4))) {
       withTempDir { dir =>
@@ -303,6 +319,31 @@ class FileIndexSuite extends SharedSparkSession {
         assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
         new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
         assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == expectedNumPar)
+      }
+    }
+  }
+
+  test("SPARK-45452: PartitioningAwareFileIndex listing parallelized with large, deeply nested " +
+      "child dirs") {
+    withSQLConf(SQLConf.USE_LISTFILES_FILESYSTEM_LIST.key -> "file") {
+      for (scale <- Seq(10, 50)) {
+        withTempDir { dir =>
+          for (i <- 1 to 2) {
+            val subdirA = new File(dir, s"a=$i")
+            subdirA.mkdir()
+            for (j <- 1 to 2) {
+              val subdirB = new File(subdirA, s"b=$j")
+              subdirB.mkdir()
+              for (k <- 1 to scale) {
+                new File(subdirB, s"foo=$k.txt").mkdir()
+              }
+            }
+          }
+          HiveCatalogMetrics.reset()
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+          new InMemoryFileIndex(spark, Seq(new Path(dir.getCanonicalPath)), Map.empty, None)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+        }
       }
     }
   }
@@ -462,7 +503,7 @@ class FileIndexSuite extends SharedSparkSession {
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
       for (i <- 1 to 8) {
-        val file = new File(partitionDirectory, i + ".txt")
+        val file = new File(partitionDirectory, s"$i.txt")
         stringToFile(file, "text")
       }
       val path = new Path(dir.getCanonicalPath)
@@ -500,7 +541,7 @@ class FileIndexSuite extends SharedSparkSession {
     when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
       val iter = statuses.iterator
       override def hasNext: Boolean = iter.hasNext
-      override def next(): LocatedFileStatus = iter.next
+      override def next(): LocatedFileStatus = iter.next()
     })
     val fileIndex = new TestInMemoryFileIndex(spark, path)
     assert(fileIndex.leafFileStatuses.toSeq == statuses)

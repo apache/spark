@@ -125,7 +125,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
-        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql import functions as sf
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")], ["age", "name"])
@@ -154,7 +154,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and calculate the minimum age.
 
-        >>> df.groupBy(df.name).agg(F.min(df.age)).sort("name").show()
+        >>> df.groupBy(df.name).agg(sf.min(df.age)).sort("name").show()
         +-----+--------+
         | name|min(age)|
         +-----+--------+
@@ -430,7 +430,6 @@ class GroupedData(PandasGroupedOpsMixin):
         +--------+-----------+
         """
 
-    # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
     def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.

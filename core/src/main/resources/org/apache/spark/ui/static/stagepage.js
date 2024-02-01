@@ -15,11 +15,25 @@
  * limitations under the License.
  */
 
-/* global $, ConvertDurationString, Mustache, createRESTEndPointForExecutorsPage */
-/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot */
+/* global $, Mustache, uiRoot */
+
+import {
+  ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
+  formatBytes, formatDate, formatDuration, formatLogsCells,
+  getBaseURI, getStandAloneAppId,
+  setDataTableDefaults
+} from './utils.js';
+
+export {setTaskThreadDumpEnabled};
 
 var shouldBlockUI = true;
+var taskThreadDumpEnabled = false;
+
+/* eslint-disable no-unused-vars */
+function setTaskThreadDumpEnabled(enabled){
+  taskThreadDumpEnabled = enabled;
+}
+/* eslint-enable no-unused-vars */
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
@@ -834,11 +848,7 @@ $(document).ready(function () {
                 data.length = totalTasksToShow;
               }
             },
-            "dataSrc": function (jsons) {
-              var jsonStr = JSON.stringify(jsons);
-              var tasksToShow = JSON.parse(jsonStr);
-              return tasksToShow.aaData;
-            },
+            "dataSrc": (jsons) => jsons.aaData,
             "error": function (_ignored_jqXHR, _ignored_textStatus, _ignored_errorThrown) {
               alert("Unable to connect to the server. Looks like the Spark " +
                 "application must have ended. Please Switch to the history UI.");
@@ -846,15 +856,21 @@ $(document).ready(function () {
             }
           },
           "columns": [
-            {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
-              },
-              name: "Index"
-            },
+            {data: "partitionId", name: "Index"},
             {data : "taskId", name: "ID"},
             {data : "attempt", name: "Attempt"},
-            {data : "status", name: "Status"},
+            {
+              data : (row, _ignored_type) => {
+                if (taskThreadDumpEnabled && row.status === "RUNNING") {
+                  var threadUrl =
+                    uiRoot + "/stages/taskThreadDump?executorId=" + row.executorId + "&taskId=" + row.taskId
+                  return '<div><a href=' + threadUrl + '>' + row.status + '</a></div>'
+                } else {
+                  return row.status
+                }
+              },
+              name: "Status"
+            },
             {data : "taskLocality", name: "Locality Level"},
             {data : "executorId", name: "Executor ID"},
             {data : "host", name: "Host"},
@@ -1058,11 +1074,7 @@ $(document).ready(function () {
                 if (typeof msg === 'undefined') {
                   return "";
                 } else {
-                  var indexOfLineSeparator = msg.indexOf("\n");
-                  var formHead = indexOfLineSeparator > 0 ? msg.substring(0, indexOfLineSeparator) : (msg.length > 100 ? msg.substring(0, 100) : msg);
-                  var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
-                  var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                  return formHead + form + formMsg;
+                  return errorMessageCell(msg)
                 }
               },
               name: "Errors"

@@ -48,7 +48,9 @@
     "MinorGCTime" : 55,
     "MajorGCCount" : 3,
     "MajorGCTime" : 144,
-    "TotalGCTime" : 0
+    "TotalGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0
   },
   "attributes" : { },
   "resources" : { },
@@ -108,7 +110,9 @@
     "MinorGCTime" : 145,
     "MajorGCCount" : 2,
     "MajorGCTime" : 63,
-    "TotalGCTime" : 0
+    "TotalGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0
   },
   "attributes" : {
     "NM_HTTP_ADDRESS" : "test-3.vpc.company.com:8042",
@@ -178,7 +182,9 @@
     "MinorGCTime" : 106,
     "MajorGCCount" : 2,
     "MajorGCTime" : 75,
-    "TotalGCTime" : 0
+    "TotalGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0
   },
   "attributes" : {
     "NM_HTTP_ADDRESS" : "test-4.vpc.company.com:8042",
@@ -248,7 +254,9 @@
     "MinorGCTime" : 140,
     "MajorGCCount" : 2,
     "MajorGCTime" : 60,
-    "TotalGCTime" : 0
+    "TotalGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0
   },
   "attributes" : {
     "NM_HTTP_ADDRESS" : "test-2.vpc.company.com:8042",

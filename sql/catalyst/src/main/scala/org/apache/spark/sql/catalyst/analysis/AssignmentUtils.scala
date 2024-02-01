@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueE
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 object AssignmentUtils extends SQLConfHelper with CastSupport {
 
@@ -199,7 +200,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
   private def toNamedStruct(structType: StructType, fieldExprs: Seq[Expression]): Expression = {
     val namedStructExprs = structType.fields.zip(fieldExprs).flatMap { case (field, expr) =>
       Seq(Literal(field.name), expr)
-    }
+    }.toImmutableArraySeq
     CreateNamedStruct(namedStructExprs)
   }
 

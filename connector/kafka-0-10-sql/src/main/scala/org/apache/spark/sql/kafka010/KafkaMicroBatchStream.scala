@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.Optional
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.common.TopicPartition
 
@@ -34,6 +34,7 @@ import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.MockedSystemClock.currentMockSystemTime
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A [[MicroBatchStream]] that reads data from Kafka.
@@ -131,7 +132,7 @@ private[kafka010] class KafkaMicroBatchStream(
     }
 
     val limits: Seq[ReadLimit] = readLimit match {
-      case rows: CompositeReadLimit => rows.getReadLimits
+      case rows: CompositeReadLimit => rows.getReadLimits.toImmutableArraySeq
       case rows => Seq(rows)
     }
 

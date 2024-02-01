@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The ApproximatePercentile function returns the approximate percentile(s) of a column at the given
@@ -97,7 +98,8 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
+  private lazy val accuracyNum = accuracyExpression.eval().asInstanceOf[Number]
+  private lazy val accuracy: Long = accuracyNum.longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
@@ -124,7 +126,7 @@ case class ApproximatePercentile(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage",
+          "inputName" -> toSQLId("percentage"),
           "inputType" -> toSQLType(percentageExpression.dataType),
           "inputExpr" -> toSQLExpr(percentageExpression)
         )
@@ -133,11 +135,15 @@ case class ApproximatePercentile(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "accuracy",
+          "inputName" -> toSQLId("accuracy"),
           "inputType" -> toSQLType(accuracyExpression.dataType),
           "inputExpr" -> toSQLExpr(accuracyExpression)
         )
       )
+    } else if (accuracyNum == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "accuracy"))
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",
@@ -305,9 +311,9 @@ object ApproximatePercentile {
     def getPercentiles(percentages: Array[Double]): Seq[Double] = {
       if (!isCompressed) compress()
       if (summaries.count == 0 || percentages.length == 0) {
-        Array.emptyDoubleArray
+        Array.emptyDoubleArray.toImmutableArraySeq
       } else {
-        summaries.query(percentages).get
+        summaries.query(percentages.toImmutableArraySeq).get
       }
     }
 
