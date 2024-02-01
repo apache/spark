@@ -104,7 +104,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
   private val userSpecifiedLocationPreferences: Map[TopicPartition, Array[String]] = {
-    val partitionDescrs = consumerStrategy.assignedTopicPartitions(admin)
+    val partitionDescrs = consumerStrategy.assignedPartitionDescriptions(admin)
       .toArray
       .sortBy(descr => (descr.topic, descr.partition))
 
@@ -139,7 +139,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
-    val partitions = consumerStrategy.assignedTopicPartitions(admin).map(_.toTopicPartition)
+    val partitions = consumerStrategy.assignedTopicPartitions(admin)
     // Obtain TopicPartition offsets with late binding support
     offsetRangeLimit match {
       case EarliestOffsetRangeLimit => partitions.map {
@@ -516,9 +516,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     : Map[TopicPartition, Long] = {
 
     withRetries {
-      val partitions = consumerStrategy.assignedTopicPartitions(admin)
-        .map(_.toTopicPartition)
-        .asJava
+      val partitions = consumerStrategy.assignedTopicPartitions(admin).asJava
       logDebug(s"Partitions assigned: $partitions.")
       body(partitions)
     }
