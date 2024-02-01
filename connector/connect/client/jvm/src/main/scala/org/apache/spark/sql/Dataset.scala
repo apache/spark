@@ -242,10 +242,19 @@ class Dataset[T] private[sql] (
    * Returns the schema of this Dataset.
    *
    * @group basic
-   * @since 3.4.0
+   * @since 4.0.0
    */
   def schema: StructType = cachedSchema
 
+  /**
+   * The cached schema.
+   *
+   * Schema caching is correct in most cases. Connect is lazy by nature. This means that we only
+   * resolve the plan when it is submitted for execution or analysis. We do not cache intermediate
+   * resolved plans. If the input (changes table, view redefinition, etc...) of the plan changes
+   * between the schema() call, and a subsequent action, the cached schema might be inconsistent
+   * with the end schema.
+   */
   private lazy val cachedSchema: StructType = {
     DataTypeProtoConverter
       .toCatalystType(
