@@ -91,7 +91,7 @@ table_ordering
 
   - **table-partitioning**
 
-    Optionally specifies that the table argument is partitioned. If not specified the partitioning is determined by Databricks.
+    Optionally specifies that the table argument is partitioned. If not specified the partitioning is determined by Spark.
 
     - **WITH SINGLE PARTITION**
 
