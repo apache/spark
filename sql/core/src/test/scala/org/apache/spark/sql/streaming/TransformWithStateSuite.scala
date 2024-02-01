@@ -23,7 +23,6 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -71,10 +70,8 @@ class RunningCountMostRecentStatefulProcessor
       outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
-    _countState = _processorHandle.getValueState[String, Long]("countState",
-      Encoders.STRING)
-    _mostRecent = _processorHandle.getValueState[String, String]("mostRecent",
-      Encoders.STRING)
+    _countState = _processorHandle.getValueState[Long]("countState")
+    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
   }
 
   override def handleInputRows(
@@ -108,8 +105,7 @@ class MostRecentStatefulProcessorWithDeletion
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _processorHandle.deleteIfExists("countState")
-    _mostRecent = _processorHandle.getValueState[String, String]("mostRecent",
-      Encoders.STRING)
+    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
   }
 
   override def handleInputRows(
