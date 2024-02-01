@@ -27,26 +27,26 @@ import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
   test("collationId stability") {
-    val ucsBasic = getInstance.fetchCollationInfo(0)
+    val ucsBasic = getInstance.fetchCollation(0)
     assert(ucsBasic.collationName == "UCS_BASIC")
     assert(ucsBasic.isBinaryCollation)
 
-    val ucsBasicLcase = getInstance.fetchCollationInfo(1)
+    val ucsBasicLcase = getInstance.fetchCollation(1)
     assert(ucsBasicLcase.collationName == "UCS_BASIC_LCASE")
     assert(!ucsBasicLcase.isBinaryCollation)
 
-    val unicode = getInstance.fetchCollationInfo(2)
+    val unicode = getInstance.fetchCollation(2)
     assert(unicode.collationName == "UNICODE")
     assert(unicode.isBinaryCollation);
 
-    val unicodeCi = getInstance.fetchCollationInfo(3)
+    val unicodeCi = getInstance.fetchCollation(3)
     assert(unicodeCi.collationName == "UNICODE_CI")
     assert(!unicodeCi.isBinaryCollation)
   }
 
   test("fetch invalid collation name") {
     intercept[SparkException] {
-      getInstance.fetchCollationInfo("INVALID_COLLATION_NAME")
+      getInstance.fetchCollation("INVALID_COLLATION_NAME")
     }
   }
 
