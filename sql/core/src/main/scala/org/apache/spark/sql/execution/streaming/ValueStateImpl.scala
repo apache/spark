@@ -38,10 +38,10 @@ import org.apache.spark.sql.types._
  * @tparam K - data type of key
  * @tparam S - data type of object that will be stored
  */
-class ValueStateImpl[K, S](
+class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
-    keyEnc: Encoder[K]) extends ValueState[S] with Logging {
+    keyEnc: Encoder[Any]) extends ValueState[S] with Logging {
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
@@ -52,10 +52,10 @@ class ValueStateImpl[K, S](
         s"stateName=$stateName")
     }
 
-    val exprEnc: ExpressionEncoder[K] = encoderFor(keyEnc)
+    val exprEnc: ExpressionEncoder[Any] = encoderFor(keyEnc)
     val toRow = exprEnc.createSerializer()
     val keyByteArr = toRow
-      .apply(keyOption.get.asInstanceOf[K]).asInstanceOf[UnsafeRow].getBytes()
+      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
 
     val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
     val keyEncoder = UnsafeProjection.create(schemaForKeyRow)

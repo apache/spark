@@ -20,7 +20,7 @@ import java.util.UUID
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, ValueState}
 import org.apache.spark.util.Utils
@@ -67,8 +67,13 @@ class QueryInfoImpl(
  * Class that provides a concrete implementation of a StatefulProcessorHandle. Note that we keep
  * track of valid transitions as various functions are invoked to track object lifecycle.
  * @param store - instance of state store
+ * @param runId - unique id for the current run
+ * @param keyEncoder - encoder for the key
  */
-class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
+class StatefulProcessorHandleImpl(
+    store: StateStore,
+    runId: UUID,
+    keyEncoder: ExpressionEncoder[Any])
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -108,11 +113,11 @@ class StatefulProcessorHandleImpl(store: StateStore, runId: UUID)
 
   def getHandleState: StatefulProcessorHandleState = currState
 
-  override def getValueState[K, T](stateName: String, keyEncoder: Encoder[K]): ValueState[T] = {
+  override def getValueState[T](stateName: String): ValueState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
     store.createColFamilyIfAbsent(stateName)
-    val resultState = new ValueStateImpl[K, T](store, stateName, keyEncoder)
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder)
     resultState
   }
 
