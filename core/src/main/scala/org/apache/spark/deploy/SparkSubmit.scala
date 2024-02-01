@@ -24,7 +24,7 @@ import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.util.ServiceLoader
 import java.util.jar.JarInputStream
-import javax.ws.rs.core.UriBuilder
+import jakarta.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer

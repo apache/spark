@@ -144,7 +144,7 @@
     <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.19</jetty.version>
-    <jakartaservlet.version>4.0.3</jakartaservlet.version>
+    <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <!--
       SPARK-44968: don't upgrade Ivy to version 2.5.2 until the test aborted of
@@ -207,7 +207,7 @@
       Please don't upgrade the version to 3.0.0+,
       Because it transitions Jakarta REST API from javax to jakarta package.
     -->
-    <jersey.version>2.41</jersey.version>
+    <jersey.version>3.0.12</jersey.version>
     <joda.version>2.12.6</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>

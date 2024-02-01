@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import javax.ws.rs.core.UriBuilder
+import jakarta.ws.rs.core.UriBuilder
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._

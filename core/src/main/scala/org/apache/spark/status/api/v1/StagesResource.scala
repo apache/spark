@@ -17,8 +17,8 @@
 package org.apache.spark.status.api.v1
 
 import java.util.{HashMap, List => JList, Locale}
-import javax.ws.rs.{NotFoundException => _, _}
-import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
+import jakarta.ws.rs.{NotFoundException => _, _}
+import jakarta.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
 import scala.jdk.CollectionConverters._
 

@@ -16,8 +16,8 @@
  */
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs._
-import javax.ws.rs.core.MediaType
+import jakarta.ws.rs._
+import jakarta.ws.rs.core.MediaType
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
