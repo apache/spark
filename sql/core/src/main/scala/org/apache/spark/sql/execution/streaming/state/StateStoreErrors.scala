@@ -41,12 +41,12 @@ object StateStoreErrors {
     StateStoreRemovingColumnFamiliesNotSupportedException = {
         new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
     }
-  
+
   def cannotRemoveDefaultColumnFamily(colFamilyName: String):
     StateStoreCannotRemoveDefaultColumnFamily = {
         new StateStoreCannotRemoveDefaultColumnFamily(colFamilyName)
     }
-  
+
   def unsupportedOperationException(operationName: String, entity: String):
     StateStoreUnsupportedOperationException = {
       new StateStoreUnsupportedOperationException(operationName, entity)
