@@ -33,8 +33,8 @@ object CSVUtils {
     // might have to be removed in the near future if possible.
     import lines.sqlContext.implicits._
     val aliased = lines.toDF("value")
-    val nonEmptyLines = aliased.filter(length(trim($"value")) > 0)
-//      aliased.filter(length(trim($"value")) > 0 or contains($"value", lit(options.delimiter)))
+    val nonEmptyLines =
+      aliased.filter(length(trim($"value")) > 0 or contains($"value", lit(options.delimiter)))
     if (options.isCommentSet) {
       nonEmptyLines.filter(!$"value".startsWith(options.comment.toString)).as[String]
     } else {
