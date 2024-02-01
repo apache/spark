@@ -1733,8 +1733,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // attributes produced by the aggregate operator's child operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && !cond.throwable &&
-          cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.deterministic && cond.references.nonEmpty &&
+          replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       if (pushDown.nonEmpty) {
