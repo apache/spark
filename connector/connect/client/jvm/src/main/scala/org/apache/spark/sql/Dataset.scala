@@ -242,7 +242,7 @@ class Dataset[T] private[sql] (
    * Returns the schema of this Dataset.
    *
    * @group basic
-   * @since 4.0.0
+   * @since 3.4.0
    */
   def schema: StructType = cachedSchema
 
