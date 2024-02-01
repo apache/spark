@@ -4658,6 +4658,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_IGNORE_PARENTHESES_AROUND_STAR =
+    buildConf("spark.sql.legacy.ignoreParenthesesAroundStar")
+    .internal()
+    .doc("When set to true, SELECT (*) equals SELECT * FROM T instead of SELECT struct(*)." +
+      "SELECT (*) was never documented as defined behavior."
+    )
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5561,6 +5571,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
+
+  def legacyIgnoreParenthesesAroundStar: Boolean =
+    getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)
 
   /** ********************** SQLConf functionality methods ************ */
 

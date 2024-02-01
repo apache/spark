@@ -2582,7 +2582,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
      ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
     val res = expression(ctx.expression())
     res match {
-      case s: UnresolvedStar =>
+      case s: UnresolvedStar if (!conf.getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)) =>
         CreateStruct(Seq(s))
       case o => o
     }

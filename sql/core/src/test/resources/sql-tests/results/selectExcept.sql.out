@@ -497,6 +497,30 @@ struct<x:int>
 
 
 -- !query
+SET spark.sql.legacy.ignoreParenthesesAroundStar = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.ignoreParenthesesAroundStar	true
+
+
+-- !query
+SELECT (*) FROM v1
+-- !query schema
+struct<c1:int,c2:int,c3:void,c4:int,c5:int>
+-- !query output
+1	2	NULL	4	5
+
+
+-- !query
+SET spark.sql.legacy.ignoreParenthesesAroundStar = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.ignoreParenthesesAroundStar	false
+
+
+-- !query
 DROP VIEW v1
 -- !query schema
 struct<>
