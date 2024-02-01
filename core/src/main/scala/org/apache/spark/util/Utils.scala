@@ -2541,7 +2541,7 @@ private[spark] object Utils
       conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS)).max
 
     logInfo(s"Using initial executors = $initialExecutors, max of " +
-      s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key}, ${DYN_ALLOCATION_MIN_EXECUTORS.key}")
+      s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key} and ${DYN_ALLOCATION_MIN_EXECUTORS.key}")
     initialExecutors
   }
 
