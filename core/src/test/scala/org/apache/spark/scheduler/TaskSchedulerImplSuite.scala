@@ -2285,9 +2285,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
           config.EXECUTOR_CORES.key -> executorCpus.toString)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum)
+        } else {
+          FakeTask.createTaskSet(100)
         }
 
         val resources = new ExecutorResourcesAmounts(
@@ -2298,7 +2298,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
         taskScheduler.submitTasks(taskSet)
         // Launch tasks on executor that satisfies resource requirements.
-        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
         assert(4 * taskNum === taskDescriptions.length)
         assert(!failedTaskSet)
         var gpuAddress = -1
@@ -2331,9 +2332,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
           config.EXECUTOR_CORES.key -> executorCpus.toString)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum)
+        } else {
+          FakeTask.createTaskSet(100)
         }
 
         val workerOffers =
@@ -2390,9 +2391,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum, 0, 1, 1, rp.id)
+        } else {
+          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
         }
         val resources = new ExecutorResourcesAmounts(
           Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
@@ -2403,7 +2404,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
         taskScheduler.submitTasks(taskSet)
         // Launch tasks on executor that satisfies resource requirements.
-        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
         assert(4 * taskNum === taskDescriptions.length)
         assert(!failedTaskSet)
         var gpuAddress = -1
@@ -2438,9 +2440,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum, 0, 1, 1, rp.id)
+        } else {
+          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
         }
 
         val workerOffers =

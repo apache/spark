@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.master
 
+import java.net.{HttpURLConnection, URL}
 import java.util.Date
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
@@ -44,6 +45,7 @@ import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
+import org.apache.spark.internal.config.Deploy.WorkerSelectionPolicy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.io.LZ4CompressionCodec
@@ -443,6 +445,26 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-46888: master should reject worker kill request if decommision is disabled") {
+    implicit val formats = org.json4s.DefaultFormats
+    val conf = new SparkConf()
+      .set(DECOMMISSION_ENABLED, false)
+      .set(MASTER_UI_DECOMMISSION_ALLOW_MODE, "ALLOW")
+    val localCluster = LocalSparkCluster(1, 1, 512, conf)
+    localCluster.start()
+    val masterUrl = s"http://${Utils.localHostNameForURI()}:${localCluster.masterWebUIPort}"
+    try {
+      eventually(timeout(30.seconds), interval(100.milliseconds)) {
+        val url = new URL(s"$masterUrl/workers/kill/?host=${Utils.localHostNameForURI()}")
+        val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+        conn.setRequestMethod("POST")
+        assert(conn.getResponseCode === 405)
+      }
+    } finally {
+      localCluster.stop()
+    }
+  }
+
   test("master/worker web ui available") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
@@ -659,6 +681,52 @@ class MasterSuite extends SparkFunSuite
 
   test("scheduling for app with multiple resource profiles with max cores") {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
+  }
+
+
+  private val workerSelectionPolicyTestCases = Seq(
+    (CORES_FREE_ASC, true, List("10001", "10002")),
+    (CORES_FREE_ASC, false, List("10001")),
+    (CORES_FREE_DESC, true, List("10004", "10005")),
+    (CORES_FREE_DESC, false, List("10005")),
+    (MEMORY_FREE_ASC, true, List("10001", "10005")),
+    (MEMORY_FREE_ASC, false, List("10001")),
+    (MEMORY_FREE_DESC, true, List("10002", "10003")),
+    (MEMORY_FREE_DESC, false, Seq("10002")),
+    (WORKER_ID, true, Seq("10001", "10002")),
+    (WORKER_ID, false, Seq("10001")))
+
+  workerSelectionPolicyTestCases.foreach { case (policy, spreadOut, expected) =>
+    test(s"SPARK-46881: scheduling with workerSelectionPolicy - $policy ($spreadOut)") {
+      val conf = new SparkConf()
+        .set(WORKER_SELECTION_POLICY.key, policy.toString)
+        .set(SPREAD_OUT_APPS.key, spreadOut.toString)
+      val master = makeAliveMaster(conf)
+
+      // Use different core and memory values to simplify the tests
+      MockWorker.counter.set(10000)
+      (1 to 5).map { idx =>
+        val worker = new MockWorker(master.self, conf)
+        worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
+        val workerReg = RegisterWorker(
+          worker.id,
+          "localhost",
+          worker.self.address.port,
+          worker.self,
+          idx * 10,
+          10240 * (if (idx < 2) idx else (6 - idx)),
+          "http://localhost:8080",
+          RpcAddress("localhost", 10000))
+        master.self.send(workerReg)
+        worker
+      }
+
+      // An application with two executors
+      val appInfo = makeAppInfo(1024, Some(2), Some(4))
+      master.registerApplication(appInfo)
+      startExecutorsOnWorkers(master)
+      assert(appInfo.executors.map(_._2.worker.id).toSeq.distinct.sorted === expected)
+    }
   }
 
   test("SPARK-45174: scheduling with max drivers") {

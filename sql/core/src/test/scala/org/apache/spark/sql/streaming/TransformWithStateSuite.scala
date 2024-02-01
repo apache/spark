@@ -38,8 +38,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
-    _countState = _processorHandle.getValueState[String, Long]("countState",
-      Encoders.STRING)
+    _countState = _processorHandle.getValueState[Long]("countState")
   }
 
   override def handleInputRows(
@@ -67,8 +66,7 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = _processorHandle.getValueState[String, Long]("tempState",
-      Encoders.STRING)
+    _tempState = _processorHandle.getValueState[Long]("tempState")
     Iterator.empty
   }
 }
