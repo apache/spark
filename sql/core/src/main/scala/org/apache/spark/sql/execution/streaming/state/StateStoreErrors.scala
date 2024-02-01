@@ -64,7 +64,7 @@ class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: 
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
   )
 
-  class StateStoreCannotRemoveDefaultColumnFamily(colFamilyName: String)
+class StateStoreCannotRemoveDefaultColumnFamily(colFamilyName: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY",
     messageParameters = Map("colFamilyName" -> colFamilyName)
