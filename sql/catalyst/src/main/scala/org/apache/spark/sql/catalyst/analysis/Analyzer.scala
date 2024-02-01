@@ -1944,6 +1944,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case s: Star => expand(s, child)
             case o => o :: Nil
           })
+          // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
           throw QueryCompilationErrors.invalidStarUsageError(s"expression `${o.prettyName}`",
             extractStar(o.children))
