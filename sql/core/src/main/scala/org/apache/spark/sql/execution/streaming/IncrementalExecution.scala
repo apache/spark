@@ -73,7 +73,7 @@ class IncrementalExecution(
       StreamingRelationStrategy ::
       StreamingDeduplicationStrategy ::
       StreamingGlobalLimitStrategy(outputMode) ::
-      TransformWithStateStreamingStrategy :: Nil
+      StreamingTransformWithStateStrategy :: Nil
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()

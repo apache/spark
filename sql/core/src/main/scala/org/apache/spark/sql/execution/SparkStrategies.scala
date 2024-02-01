@@ -723,7 +723,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Strategy to convert [[TransformWithState]] logical operator to physical operator
    * in streaming plans.
    */
-  object TransformWithStateStreamingStrategy extends Strategy {
+  object StreamingTransformWithStateStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
