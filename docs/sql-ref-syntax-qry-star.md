@@ -21,14 +21,14 @@ license: |
 
 ### Description
 
-A shorthand to name all the referencable columns in the FROM clause or a specific table reference in the FROM clause.
+A shorthand to name all the referencable columns in the FROM clause or a specific table reference's columns or fields in the FROM clause.
 The star clause clause is most frequently used in the SELECT list.
 Spark also supports its use in function invocation and certain n-ary operations within the SELECT list and WHERE clause.
 
 ### Syntax
 
 ```
-[ { table_name | view_name } . ] * [ except_clause ]
+[ name . ] * [ except_clause ]
 
 except_clause
    EXCEPT ( { column_name | field_name } [, ...] )
@@ -36,13 +36,9 @@ except_clause
 
 ### Parameters
 
-* **table_name**
+* **name**
 
-  If present limits the columns to be named to those in the specified referencable table.
-
-* **view_name**
-
-  If specified limits the columns to be expanded to those in the specified referencable view.
+  If present limits the columns or fields to be named to those in the specified referencable field, columns, or table.
 
 * **`*`**
 
@@ -62,7 +58,7 @@ except_clause
     A reference to a field in a column of the set of columns that you can reference.
     If you exclude all fields from a STRUCT, the result is an empty STRUCT.
     Each name must reference a column included in the set of columns that you can reference or their fields.
-    Otherwise, Databricks SQL raises a UNRESOLVED_COLUMN error. If names overlap or are not unique, Spark raises an EXCEPT_OVERLAPPING_COLUMNS error.
+    Otherwise, Spark SQL raises a UNRESOLVED_COLUMN error. If names overlap or are not unique, Spark raises an EXCEPT_OVERLAPPING_COLUMNS error.
 
 ### Examples
 
@@ -94,6 +90,10 @@ NULL
 -- Return all column as a single struct
 SELECT (*) FROM VALUES(1, 2) AS TA(c1, c2), VALUES(‘a’, b’) AS TB(ca, cb);
 { c1: 1, c2: 2, ca: a, cb: b }
+
+-- Flatten a struct into individual columns
+SELECT c1.* FROM VALUES(named_struct('x', 1, 'y', 2)) AS TA(c1);
+1  2
 ```
 
 ### Related

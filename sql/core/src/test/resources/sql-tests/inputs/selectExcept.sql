@@ -64,6 +64,7 @@ SELECT (*) FROM v1;
 SELECT struct(*) FROM v1;
 SELECT greatest(*) FROM v1;
 SELECT 5 IN (*) FROM v1;
+SELECT c1.* FROM VALUES(named_struct('a', 1, 'b', 2), 10, 20) as t(c1, c2, c3);
 
 -- star outside of select list
 SELECT 1 FROM v1 WHERE coalesce(*) = 1;

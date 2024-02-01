@@ -456,6 +456,14 @@ Project [cast(5 as int) IN (cast(c1#x as int),cast(c2#x as int),cast(c3#x as int
 
 
 -- !query
+SELECT c1.* FROM VALUES(named_struct('a', 1, 'b', 2), 10, 20) as t(c1, c2, c3)
+-- !query analysis
+Project [c1#x.a AS a#x, c1#x.b AS b#x]
++- SubqueryAlias t
+   +- LocalRelation [c1#x, c2#x, c3#x]
+
+
+-- !query
 SELECT 1 FROM v1 WHERE coalesce(*) = 1
 -- !query analysis
 Project [1 AS 1#x]

@@ -449,6 +449,14 @@ true
 
 
 -- !query
+SELECT c1.* FROM VALUES(named_struct('a', 1, 'b', 2), 10, 20) as t(c1, c2, c3)
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+1	2
+
+
+-- !query
 SELECT 1 FROM v1 WHERE coalesce(*) = 1
 -- !query schema
 struct<1:int>

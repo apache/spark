@@ -206,4 +206,4 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
 * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
 * [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)
-* [star (*) Clause](sql-ref-syntax-qry-select-star.html)
+* [star (*) Clause](sql-ref-syntax-qry-star.html)
