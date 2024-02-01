@@ -71,7 +71,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "aaa", "bbb", false))
 
     checks.foreach(testCase => {
-      val collation = getInstance.fetchCollationInfo(testCase.collationName)
+      val collation = getInstance.fetchCollation(testCase.collationName)
       assert(collation.equalsFunction(toUTF8(testCase.s1), toUTF8(testCase.s2)) ==
         testCase.expectedResult)
 
@@ -102,7 +102,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "aaa", "bbb", -1))
 
     checks.foreach(testCase => {
-      val collation = getInstance.fetchCollationInfo(testCase.collationName)
+      val collation = getInstance.fetchCollation(testCase.collationName)
       val result = collation.comparator.compare(toUTF8(testCase.s1), toUTF8(testCase.s2))
       assert(Integer.signum(result) == testCase.expectedResult)
     })

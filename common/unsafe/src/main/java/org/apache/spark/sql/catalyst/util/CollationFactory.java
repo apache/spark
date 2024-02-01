@@ -158,11 +158,11 @@ public final class CollationFactory {
     }
   }
 
-  public Collation fetchCollationInfo(int collationId) {
+  public Collation fetchCollation(int collationId) {
     return collatorTable[collationId];
   }
 
-  public Collation fetchCollationInfo(String collationName) throws SparkException {
+  public Collation fetchCollation(String collationName) throws SparkException {
     int collationId = collationNameToId(collationName);
     return collatorTable[collationId];
   }
