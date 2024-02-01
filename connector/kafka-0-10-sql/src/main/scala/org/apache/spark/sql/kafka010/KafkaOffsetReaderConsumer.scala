@@ -102,7 +102,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
-  private val userSpecifiedLocationPreferences: Map[TopicPartition, Array[String]] = {
+  private lazy val userSpecifiedLocationPreferences: Map[TopicPartition, Array[String]] = {
     val partitionDescrs = fetchTopicPartitions()
       .map(_.topic())
       .toSet

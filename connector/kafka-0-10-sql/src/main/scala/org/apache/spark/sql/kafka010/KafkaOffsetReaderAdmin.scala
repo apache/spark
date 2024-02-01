@@ -103,7 +103,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
-  private val userSpecifiedLocationPreferences: Map[TopicPartition, Array[String]] = {
+  private lazy val userSpecifiedLocationPreferences: Map[TopicPartition, Array[String]] = {
     val partitionDescrs = consumerStrategy.assignedPartitionDescriptions(admin)
       .toArray
       .sortBy(descr => (descr.topic, descr.partition))
