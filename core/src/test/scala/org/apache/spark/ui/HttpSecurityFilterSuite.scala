@@ -18,7 +18,7 @@
 package org.apache.spark.ui
 
 import java.util.UUID
-import javax.servlet.FilterChain
+import jakarta.servlet.FilterChain
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.jdk.CollectionConverters._
