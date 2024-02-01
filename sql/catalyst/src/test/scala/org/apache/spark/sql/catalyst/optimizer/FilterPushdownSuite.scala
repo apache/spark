@@ -221,7 +221,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("Can't push down nondeterministic filter through aggregate") {
     val originalQuery = testRelation
-      .groupBy($"a")($"a")
+      .groupBy($"a")($"a", count($"b") as "c")
       .where(Rand(10) > $"a")
       .analyze
 
