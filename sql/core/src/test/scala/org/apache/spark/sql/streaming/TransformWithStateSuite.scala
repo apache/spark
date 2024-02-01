@@ -67,8 +67,8 @@ class RunningCountMostRecentStatefulProcessor
   @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
-    handle: StatefulProcessorHandle,
-    outputMode: OutputMode) : Unit = {
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _countState = _processorHandle.getValueState[String, Long]("countState",
@@ -78,9 +78,9 @@ class RunningCountMostRecentStatefulProcessor
   }
 
   override def handleInputRows(
-    key: String,
-    inputRows: Iterator[(String, String)],
-    timerValues: TimerValues): Iterator[(String, String, String)] = {
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
@@ -103,8 +103,8 @@ class MostRecentStatefulProcessorWithDeletion
   @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
-     handle: StatefulProcessorHandle,
-     outputMode: OutputMode) : Unit = {
+       handle: StatefulProcessorHandle,
+       outputMode: OutputMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _processorHandle.deleteIfExists("countState")
