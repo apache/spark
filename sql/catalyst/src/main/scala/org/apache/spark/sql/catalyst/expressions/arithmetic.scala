@@ -810,7 +810,7 @@ case class Divide(
       DecimalType.adjustPrecisionScale(prec, scale)
     } else {
       var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
-      var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+      var decDig = min(DecimalType.MAX_SCALE, max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + p2 + 1))
       val diff = (intDig + decDig) - DecimalType.MAX_SCALE
       if (diff > 0) {
         decDig -= diff / 2 + 1

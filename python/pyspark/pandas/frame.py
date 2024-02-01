@@ -13490,7 +13490,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if key.startswith("__"):
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
-            if key in ["asfreq", "asof"] and get_option("compute.pandas_fallback"):
+            if key in [
+                "asfreq",
+                "asof",
+                "convert_dtypes",
+                "infer_objects",
+                "set_axis",
+            ] and get_option("compute.pandas_fallback"):
                 return self._fall_back_frame(key)
 
             property_or_func = getattr(MissingPandasLikeDataFrame, key)

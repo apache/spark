@@ -96,6 +96,14 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udtf import UDTFRegistration
 
 
+try:
+    import memory_profiler  # type: ignore # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
+
+
 class SparkSession:
     # The active SparkSession for the current thread
     _active_session: ClassVar[threading.local] = threading.local()
@@ -704,7 +712,10 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        return StreamingQueryManager(self)
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self)
+        return self._sqm
 
     streams.__doc__ = PySparkSession.streams.__doc__
 
@@ -934,6 +945,18 @@ class SparkSession:
         self._profiler_collector.show_perf_profiles(id)
 
     showPerfProfiles.__doc__ = PySparkSession.showPerfProfiles.__doc__
+
+    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
+        if has_memory_profiler:
+            self._profiler_collector.show_memory_profiles(id)
+        else:
+            warnings.warn(
+                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
+                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
+                UserWarning,
+            )
+
+    showMemoryProfiles.__doc__ = PySparkSession.showMemoryProfiles.__doc__
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

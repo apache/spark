@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexesDropMixin:
@@ -158,7 +158,7 @@ class IndexesDropMixin:
 
 class IndexesDropTests(
     IndexesDropMixin,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     TestUtils,
 ):
     pass

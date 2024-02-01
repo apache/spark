@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ValueState
@@ -88,11 +89,11 @@ class ValueStateSuite extends SharedSparkSession
   test("Implicit key operations") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[String, Long](stateName,
-        Encoders.STRING)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -132,10 +133,10 @@ class ValueStateSuite extends SharedSparkSession
   test("Value state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState: ValueState[Long] = handle.getValueState[String, Long]("testState",
-        Encoders.STRING)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -158,12 +159,11 @@ class ValueStateSuite extends SharedSparkSession
   test("Value state operations for multiple instances") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID())
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState1: ValueState[Long] = handle.getValueState[String, Long]("testState1",
-        Encoders.STRING)
-      val testState2: ValueState[Long] = handle.getValueState[String, Long]("testState2",
-        Encoders.STRING)
+      val testState1: ValueState[Long] = handle.getValueState[Long]("testState1")
+      val testState2: ValueState[Long] = handle.getValueState[Long]("testState2")
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)

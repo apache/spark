@@ -99,6 +99,10 @@ trait DataSourceScanExec extends LeafExecNode {
   def inputRDDs(): Seq[RDD[InternalRow]]
 }
 
+object DataSourceScanExec {
+  val numOutputRowsKey = "numOutputRows"
+}
+
 /** Physical plan node for scanning data from a relation. */
 case class RowDataSourceScanExec(
     output: Seq[Attribute],
@@ -111,8 +115,17 @@ case class RowDataSourceScanExec(
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
-  override lazy val metrics =
-    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  override lazy val metrics: Map[String, SQLMetric] = {
+    val metrics = Map(
+      DataSourceScanExec.numOutputRowsKey ->
+        SQLMetrics.createMetric(sparkContext, "number of output rows")
+    )
+
+    rdd match {
+      case rddWithDSMetrics: DataSourceMetricsMixin => metrics ++ rddWithDSMetrics.getMetrics
+      case _ => metrics
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -645,7 +658,7 @@ case class FileSourceScanExec(
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.map(f => PartitionedFileUtil.getPartitionedFile(f, p.values))
+        p.files.map(f => PartitionedFileUtil.getPartitionedFile(f, p.values, 0, f.getLen))
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(f.toPath.getName)

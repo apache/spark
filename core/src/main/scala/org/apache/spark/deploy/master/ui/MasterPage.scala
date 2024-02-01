@@ -41,6 +41,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   override def renderJson(request: HttpServletRequest): JValue = {
     jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
       case None => JsonProtocol.writeMasterState(getMasterState)
+      case Some(m) if m.group(1) == "clusterutilization" =>
+        JsonProtocol.writeClusterUtilization(getMasterState)
       case Some(m) => JsonProtocol.writeMasterState(getMasterState, Some(m.group(1)))
     }
   }
@@ -168,7 +170,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.completedDrivers.count(_.state == DriverState.ERROR)} Error,
                 {state.completedDrivers.count(_.state == DriverState.RELAUNCHING)} Relaunching)
               </li>
-              <li><strong>Status:</strong> {state.status}</li>
+              <li><strong>Status:</strong>
+                <a href={"/logPage/?self&logType=out"}>{state.status}</a>
+              </li>
             </ul>
           </div>
         </div>
