@@ -62,7 +62,7 @@ except_clause
     A reference to a field in a column of the set of columns that you can reference.
     If you exclude all fields from a STRUCT, the result is an empty STRUCT.
     Each name must reference a column included in the set of columns that you can reference or their fields.
-    Otherwise, Databricks SQL raises a UNRESOLVED_COLUMN error. If names overlap or are not unique, Databricks SQL raises an EXCEPT_OVERLAPPING_COLUMNS error.
+    Otherwise, Databricks SQL raises a UNRESOLVED_COLUMN error. If names overlap or are not unique, Spark raises an EXCEPT_OVERLAPPING_COLUMNS error.
 
 ### Examples
 
