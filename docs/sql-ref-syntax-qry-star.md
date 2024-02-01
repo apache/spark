@@ -40,11 +40,6 @@ except_clause
 
   If present limits the columns or fields to be named to those in the specified referencable field, column, or table.
 
-* **`*`**
-
-  Collects all the referencable columns in the FROM clause or the optionally specified table_name or view_name into a column list.
-  The list of columns is ordered by the order of table_references and the order of columns within each table_reference.
-
 * **except_clause**
 
   Optionally prunes columns or fields from the referencable set of columns identified in the select_star clause.
