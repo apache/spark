@@ -238,6 +238,7 @@ object TransformWithStateExec {
       statefulProcessor: StatefulProcessor[Any, Any, Any],
       timeoutMode: TimeoutMode,
       outputMode: OutputMode,
+      keyEncoder: ExpressionEncoder[Any],
       outputObjAttr: Attribute,
       child: SparkPlan): SparkPlan = {
     val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
@@ -257,6 +258,7 @@ object TransformWithStateExec {
       statefulProcessor,
       timeoutMode,
       outputMode,
+      keyEncoder,
       outputObjAttr,
       Some(statefulOperatorStateInfo),
       Some(System.currentTimeMillis),
