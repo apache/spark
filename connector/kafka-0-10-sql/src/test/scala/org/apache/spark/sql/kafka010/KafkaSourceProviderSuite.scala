@@ -125,7 +125,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
 
   private def buildKafkaSourceCaseInsensitiveStringMap(
       options: (String, String)*): CaseInsensitiveStringMap = {
-    val requiredOptions = Map("kafka.bootstrap.servers" -> "localhost:1234", "subscribe" -> "dummy")
+    val requiredOptions = Map("kafka.bootstrap.servers" -> "dummy", "subscribe" -> "dummy")
     new CaseInsensitiveStringMap((options.toMap ++ requiredOptions).asJava)
   }
 
