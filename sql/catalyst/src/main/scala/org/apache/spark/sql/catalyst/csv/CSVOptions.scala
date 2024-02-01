@@ -292,16 +292,12 @@ class CSVOptions(
    * We disable column pruning when there are any column defaults, instead preferring to reach in
    * each row and then post-process it to substitute the default values after.
    */
-  def isColumnPruningEnabled(schema: StructType): Boolean = {
-    var result = !multiLine && columnPruning
-    if (parameters != null) {
-      result = getBool(COLUMN_PRUNING, result)
-    }
-    if (schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))) {
-      result = false
-    }
-    result
-  }
+  def isColumnPruningEnabled(schema: StructType): Boolean =
+    isColumnPruningOptionEnabled &&
+      schema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+
+  private val isColumnPruningOptionEnabled: Boolean =
+    getBool(COLUMN_PRUNING, !multiLine && columnPruning)
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
