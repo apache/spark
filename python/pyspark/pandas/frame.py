@@ -2648,7 +2648,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             psdf._to_internal_pandas(), self.to_latex, pd.DataFrame.to_latex, args
         )
 
-    def to_feather(self, path: Union[str, IO[str]], **kwargs) -> None:
+    def to_feather(
+        self,
+        path: Union[str, IO[str]],
+        **kwargs: Any,
+    ) -> None:
         """
         Write a DataFrame to the binary Feather format.
 
