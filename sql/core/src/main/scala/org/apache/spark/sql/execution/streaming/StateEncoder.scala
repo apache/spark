@@ -37,9 +37,6 @@ import org.apache.spark.sql.types.{BinaryType, StructType}
  * to Spark [[UnsafeRow]].
  */
 object StateEncoder {
-
-  // TODO: validate places that are trying to encode the key and check if we can eliminate/
-  // add caching for some of these calls.
   def encodeGroupingKey(stateName: String, keyExprEnc: ExpressionEncoder[Any]): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {

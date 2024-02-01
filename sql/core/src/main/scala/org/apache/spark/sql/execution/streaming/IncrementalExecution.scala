@@ -76,8 +76,6 @@ class IncrementalExecution(
       TransformWithStateStrategy :: Nil
   }
 
-  private var opIdToNameMap : Map[Long, String] = _
-
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
