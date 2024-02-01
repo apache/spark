@@ -52,21 +52,21 @@ import org.apache.spark.util.{CompletionIterator, Utils}
  * @param child the physical plan for the underlying data
  */
 case class TransformWithStateExec(
-     keyDeserializer: Expression,
-     valueDeserializer: Expression,
-     groupingAttributes: Seq[Attribute],
-     dataAttributes: Seq[Attribute],
-     statefulProcessor: StatefulProcessor[Any, Any, Any],
-     timeoutMode: TimeoutMode,
-     outputMode: OutputMode,
-     keyEncoder: ExpressionEncoder[Any],
-     outputObjAttr: Attribute,
-     stateInfo: Option[StatefulOperatorStateInfo],
-     batchTimestampMs: Option[Long],
-     eventTimeWatermarkForLateEvents: Option[Long],
-     eventTimeWatermarkForEviction: Option[Long],
-     child: SparkPlan,
-     isStreaming: Boolean = true)
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    statefulProcessor: StatefulProcessor[Any, Any, Any],
+    timeoutMode: TimeoutMode,
+    outputMode: OutputMode,
+    keyEncoder: ExpressionEncoder[Any],
+    outputObjAttr: Attribute,
+    stateInfo: Option[StatefulOperatorStateInfo],
+    batchTimestampMs: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
+    eventTimeWatermarkForEviction: Option[Long],
+    child: SparkPlan,
+    isStreaming: Boolean = true)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
