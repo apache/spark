@@ -591,6 +591,12 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
+  val SHUFFLE_HASH_JOIN_THRESHOLD = buildConf("spark.sql.shuffledHashJoinThreshold")
+    .doc("Configure the maximum size in bytes of the plan that performs shuffle hash join.")
+    .version("4.0.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(Long.MaxValue)
+
   val SHUFFLE_HASH_JOIN_FACTOR = buildConf("spark.sql.shuffledHashJoinFactor")
     .doc("The shuffle hash join can be selected if the data size of small" +
       " side multiplied by this factor is still smaller than the large side.")

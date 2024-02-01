@@ -504,12 +504,14 @@ trait JoinSelectionHelper {
 
   /**
    * Matches a plan whose single partition should be small enough to build a hash table.
+   * And the data size of plan is smaller than SHUFFLE_HASH_JOIN_THRESHOLD.
    *
    * Note: this assume that the number of partition is fixed, requires additional work if it's
    * dynamic.
    */
   private def canBuildLocalHashMapBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
-    plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+    plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions &&
+      plan.stats.sizeInBytes < conf.getConf(SQLConf.SHUFFLE_HASH_JOIN_THRESHOLD)
   }
 
   /**
