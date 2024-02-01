@@ -165,15 +165,32 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
   }
 
   test("getShuffleHashJoinBuildSide (hintOnly = false) return BuildRight when right is smaller") {
-    val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, None),
-      hintOnly = false,
-      SQLConf.get
-    )
-    assert(broadcastSide === Some(BuildRight))
+    withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val broadcastSide = getShuffleHashJoinBuildSide(
+        left,
+        right,
+        Inner,
+        JoinHint(None, None),
+        hintOnly = false,
+        SQLConf.get
+      )
+      assert(broadcastSide === Some(BuildRight))
+    }
+  }
+
+  test("getShuffleHashJoinBuildSide (hintOnly = false) return None when threshold is small") {
+    withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false",
+      SQLConf.SHUFFLE_HASH_JOIN_THRESHOLD.key -> "1") {
+      val broadcastSide = getShuffleHashJoinBuildSide(
+        left,
+        right,
+        Inner,
+        JoinHint(None, None),
+        hintOnly = false,
+        SQLConf.get
+      )
+      assert(broadcastSide === None)
+    }
   }
 
   test("getSmallerSide should return BuildRight") {
