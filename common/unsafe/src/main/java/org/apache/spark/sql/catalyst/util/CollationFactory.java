@@ -18,12 +18,12 @@ package org.apache.spark.sql.catalyst.util;
 
 import java.util.*;
 import java.util.function.BiFunction;
-import java.util.function.Function;
+import java.util.function.ToLongFunction;
 
 import com.ibm.icu.util.ULocale;
 import com.ibm.icu.text.Collator;
 
-import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkException;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -34,7 +34,7 @@ public final class CollationFactory {
   /**
    * Entry encapsulating all information about a collation.
    */
-  public static class CollationInfo {
+  public static class Collation {
     public final String collationName;
     public final Collator collator;
     public final Comparator<UTF8String> comparator;
@@ -49,7 +49,7 @@ public final class CollationFactory {
      * Collation sensitive hash function. Output for two UTF8Strings will be the same if they are
      * equal according to the collation.
      */
-    public final Function<UTF8String, Integer> hashFunction;
+    public final ToLongFunction<UTF8String> hashFunction;
 
     /**
      * Potentially faster way than using comparator to compare two UTF8Strings for equality.
@@ -63,12 +63,12 @@ public final class CollationFactory {
      */
     public final boolean isBinaryCollation;
 
-    public CollationInfo(
+    public Collation(
       String collationName,
       Collator collator,
       Comparator<UTF8String> comparator,
       String version,
-      Function<UTF8String, Integer> hashFunction,
+      ToLongFunction<UTF8String> hashFunction,
       boolean isBinaryCollation) {
       this.collationName = collationName;
       this.collator = collator;
@@ -78,7 +78,7 @@ public final class CollationFactory {
       this.isBinaryCollation = isBinaryCollation;
 
       if (isBinaryCollation) {
-        this.equalsFunction = UTF8String::binaryEquals;
+        this.equalsFunction = UTF8String::equals;
       } else {
         this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
       }
@@ -87,52 +87,52 @@ public final class CollationFactory {
     /**
      * Constructor with comparators that are inherited from the given collator.
      */
-    public CollationInfo(
+    public Collation(
       String collationName, Collator collator, String version, boolean isBinaryCollation) {
       this(
         collationName,
         collator,
         (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
         version,
-        s -> collator.getCollationKey(s.toString()).hashCode(),
+        s -> (long)collator.getCollationKey(s.toString()).hashCode(),
         isBinaryCollation);
     }
   }
 
-  private final CollationInfo[] collatorTable;
-  private final Hashtable<String, Integer> collationNameToIdMap = new Hashtable<>();
+  private final Collation[] collatorTable;
+  private final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
 
   private CollationFactory() {
-    collatorTable = new CollationInfo[4];
+    collatorTable = new Collation[4];
 
     // Binary comparison. This is the default collation.
     // No custom comparators will be used for this collation.
     // Instead, we rely on byte for byte comparison.
-    collatorTable[0] = new CollationInfo(
+    collatorTable[0] = new Collation(
       "UCS_BASIC",
       null,
-      UTF8String::binaryCompare,
+      UTF8String::compareTo,
       "1.0",
-      UTF8String::binaryHash,
+      s -> (long)s.hashCode(),
       true);
 
     // Case-insensitive UTF8 binary collation.
     // TODO: Do in place comparisons instead of creating new strings.
-    collatorTable[1] = new CollationInfo(
+    collatorTable[1] = new Collation(
       "UCS_BASIC_LCASE",
       null,
-      (s1, s2) -> s1.toLowerCase().binaryCompare(s2.toLowerCase()), "1.0",
-      (s) -> s.toLowerCase().binaryHash(),
+            Comparator.comparing(UTF8String::toLowerCase), "1.0",
+      (s) -> (long)s.toLowerCase().hashCode(),
       false);
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
-    collatorTable[2] = new CollationInfo(
+    collatorTable[2] = new Collation(
       "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true);
     collatorTable[2].collator.setStrength(Collator.TERTIARY);
 
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
-    collatorTable[3] = new CollationInfo(
+    collatorTable[3] = new Collation(
             "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
     collatorTable[3].collator.setStrength(Collator.SECONDARY);
 
@@ -146,21 +146,21 @@ public final class CollationFactory {
   /**
    * Returns the collation id for the given collation name.
    */
-  public int collationNameToId(String collationName) {
+  public int collationNameToId(String collationName) throws SparkException {
     String normalizedName = collationName.toUpperCase();
     if (collationNameToIdMap.containsKey(normalizedName)) {
       return collationNameToIdMap.get(normalizedName);
     } else {
-      throw SparkIllegalArgumentException.apply(
+      throw new SparkException(
         "COLLATION_INVALID_NAME", Collections.singletonMap("collationName", collationName));
     }
   }
 
-  public CollationInfo fetchCollationInfo(int collationId) {
+  public Collation fetchCollationInfo(int collationId) {
     return collatorTable[collationId];
   }
 
-  public CollationInfo fetchCollationInfo(String collationName) {
+  public Collation fetchCollationInfo(String collationName) throws SparkException {
     int collationId = collationNameToId(collationName);
     return collatorTable[collationId];
   }
