@@ -122,7 +122,8 @@ public final class CollationFactory {
     collationTable[1] = new Collation(
       "UCS_BASIC_LCASE",
       null,
-            Comparator.comparing(UTF8String::toLowerCase), "1.0",
+      Comparator.comparing(UTF8String::toLowerCase),
+      "1.0",
       (s) -> (long)s.toLowerCase().hashCode(),
       false);
 
