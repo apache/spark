@@ -308,6 +308,22 @@ class XmlSuite
     assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
   }
 
+  test("Limit size of corrupt records") {
+    val badRecordSizeLimit = 1024 * 1024;
+    val corruptXMLString = "<ROW><data>" + "a" * badRecordSizeLimit + "</data><s></ROW>"
+    val xmlRDD = spark.sparkContext.parallelize(Seq(corruptXMLString))
+    val ds = spark.createDataset(xmlRDD)(Encoders.STRING)
+    val df = spark.read
+      .schema("data string, _malformed_records string")
+      .option("rowTag", "ROW")
+      .option("mode", PermissiveMode.name)
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(ds)
+    val malformedRow = df.cache().select("_malformed_records").first().get(0).toString
+    val expectedMalformedRow = corruptXMLString.substring(0, badRecordSizeLimit)
+    assert(malformedRow === expectedMalformedRow)
+  }
+
   test("DSL test with empty file and known schema") {
     val results = spark.read
       .option("rowTag", "ROW")
