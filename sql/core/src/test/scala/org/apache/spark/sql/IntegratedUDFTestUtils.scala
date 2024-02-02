@@ -586,7 +586,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   abstract class TestPythonUDTFPartitionByOrderByBase(
       partitionBy: String,
-      orderBy: String) extends TestUDTF {
+      orderBy: String,
+      select: String) extends TestUDTF {
     val pythonScript: String =
       s"""
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
@@ -611,6 +612,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |            ],
         |            orderBy=[
         |                OrderingColumn("$orderBy")
+        |            ],
+        |            select=[
+        |                $select
         |            ])
         |
         |    def eval(self, row: Row):
@@ -627,22 +631,44 @@ object IntegratedUDFTestUtils extends SQLHelper {
   object UDTFPartitionByOrderBy
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "partition_col",
-      orderBy = "input")
+      orderBy = "input",
+      select = "")
 
   object UDTFPartitionByOrderByComplexExpr
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "partition_col + 1",
-      orderBy = "RANDOM(42)")
+      orderBy = "RANDOM(42)",
+      select = "")
+
+  object UDTFPartitionByOrderBySelectExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "\"partition_col\", \"input\"")
+
+  object UDTFPartitionByOrderBySelectComplexExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col + 1",
+      orderBy = "RANDOM(42)",
+      select = "\"input + 1\"")
 
   object UDTFInvalidPartitionByOrderByParseError
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "unparsable",
-      orderBy = "input")
+      orderBy = "input",
+      select = "")
 
   object UDTFInvalidOrderByAscKeyword
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "partition_col",
-      orderBy = "partition_col ASC")
+      orderBy = "partition_col ASC",
+      select = "")
+
+  object UDTFInvalidSelectExprParseError
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "\"unparsable\"")
 
   object UDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val pythonScript: String =
@@ -1151,12 +1177,15 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFWithSinglePartition,
     UDTFPartitionByOrderBy,
     UDTFInvalidOrderByAscKeyword,
+    UDTFInvalidSelectExprParseError,
     UDTFInvalidPartitionByAndWithSinglePartition,
     UDTFInvalidPartitionByOrderByParseError,
     UDTFInvalidOrderByWithoutPartitionBy,
     UDTFForwardStateFromAnalyze,
     UDTFForwardStateFromAnalyzeWithKwargs,
     UDTFPartitionByOrderByComplexExpr,
+    UDTFPartitionByOrderBySelectExpr,
+    UDTFPartitionByOrderBySelectComplexExpr,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,

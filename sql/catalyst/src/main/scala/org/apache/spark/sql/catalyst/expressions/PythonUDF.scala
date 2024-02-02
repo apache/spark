@@ -246,6 +246,12 @@ case class UnresolvedPolymorphicPythonUDTF(
  * @param orderByExpressions if non-empty, this contains the list of ordering items that the
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
+ * @param selectedInputExpressions If non-empty, this is a list of expressions that the UDTF is
+ *                                 specifying for Catalyst to evaluate against the columns in the
+ *                                 input TABLE argument. In this case, Catalyst will insert a
+ *                                 projection to evaluate these expressions and return the result to
+ *                                 the UDTF. The UDTF then receives one input column for each
+ *                                 expression in the list, in the order they are listed.
  * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
  *                             contains all metadata returned by the Python UDTF 'analyze' method
  *                             including the result schema of the function call as well as optional
@@ -256,6 +262,7 @@ case class PythonUDTFAnalyzeResult(
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
+    selectedInputExpressions: Seq[Expression],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
@@ -291,6 +298,7 @@ case class PythonUDTFAnalyzeResult(
     var newWithSinglePartition = t.withSinglePartition
     var newPartitionByExpressions = t.partitionByExpressions
     var newOrderByExpressions = t.orderByExpressions
+    var newSelectedInputExpressions = t.selectedInputColumns
     if (withSinglePartition) {
       newWithSinglePartition = true
     }
@@ -300,10 +308,14 @@ case class PythonUDTFAnalyzeResult(
     if (orderByExpressions.nonEmpty) {
       newOrderByExpressions = orderByExpressions
     }
+    if (selectedInputExpressions.nonEmpty) {
+      newSelectedInputExpressions = selectedInputExpressions
+    }
     t.copy(
       withSinglePartition = newWithSinglePartition,
       partitionByExpressions = newPartitionByExpressions,
-      orderByExpressions = newOrderByExpressions)
+      orderByExpressions = newOrderByExpressions,
+      selectedInputColumns = newSelectedInputExpressions)
   }
 }
 

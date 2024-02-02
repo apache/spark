@@ -276,11 +276,20 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
         case 2 => orderBy.append(SortOrder(parsed, direction, NullsLast, Seq.empty))
       }
     }
+    // Receive the list of requested input columns to select, if specified.
+    val numSelectedInputExpressions = dataIn.readInt()
+    val selectedInputExpressions = ArrayBuffer.empty[Expression]
+    for (_ <- 0 until numSelectedInputExpressions) {
+      val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
+      val parsed: Expression = parser.parseExpression(expressionSql)
+      selectedInputExpressions.append(parsed)
+    }
     PythonUDTFAnalyzeResult(
       schema = schema,
       withSinglePartition = withSinglePartition,
       partitionByExpressions = partitionByExpressions.toSeq,
       orderByExpressions = orderBy.toSeq,
+      selectedInputExpressions = selectedInputExpressions.toSeq,
       pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }

@@ -3397,6 +3397,12 @@
     ],
     "sqlState" : "42802"
   },
+  "UDTF_INVALID_REQUESTED_SELECTED_COLUMN_STRING_FROM_ANALYZE_METHOD" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' list () that does not contain only simple column references; please update this list and then try the query again."
+    ],
+    "sqlState" : "42802"
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."

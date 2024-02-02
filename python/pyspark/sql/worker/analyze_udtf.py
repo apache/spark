@@ -225,6 +225,10 @@ def main(infile: IO, outfile: IO) -> None:
                 write_int(1, outfile)
             else:
                 write_int(2, outfile)
+        # Return the requested selected input table columns, if specified.
+        write_int(len(result.select), outfile)
+        for col in result.select:
+            write_with_length(col.encode("utf-8"), outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

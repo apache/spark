@@ -118,13 +118,13 @@ class AnalyzeResult:
 
     Parameters
     ----------
-    schema : :class:`StructType`
+    schema: :class:`StructType`
         The schema that the Python UDTF will return.
-    withSinglePartition : bool
+    withSinglePartition: bool
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partitionBy : sequence of :class:`PartitioningColumn`
+    partitionBy: sequence of :class:`PartitioningColumn`
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
@@ -133,12 +133,17 @@ class AnalyzeResult:
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
+    select: sequence of str
+        If non-empty, this is a list of column names that the UDTF is specifying for Catalyst to
+        evaluate against the columns in the input TABLE argument. The UDTF then receives one input
+        column for each name in the list, in the order they are listed.
     """
 
     schema: StructType
     withSinglePartition: bool = False
     partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
     orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+    select: Sequence[str] = field(default_factory=tuple)
 
 
 class SkipRestOfInputTableException(Exception):
