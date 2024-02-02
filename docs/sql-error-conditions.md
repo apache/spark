@@ -388,7 +388,7 @@ Cannot find a short name for the codec `<codecName>`.
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-The value `<collationName>` does not represent correct collation name.
+The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
 
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
