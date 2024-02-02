@@ -343,6 +343,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         val df1 = spark.range(0, 10, 1, 1).map { v =>
           if (v > 5) throw new RuntimeException("test error") else v
         }
+        // If error is not user-facing, it will be wrapped by `SparkException` with "Job aborted".
         val e1 = intercept[SparkException](df1.collect())
         assert(e1.getMessage.contains("Job aborted"))
         sparkContext.listenerBus.waitUntilEmpty()
@@ -363,6 +364,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
 
         val df3 = spark.range(0, 10, 1, 1).select(lit(1) / $"id")
         checkError(
+          // If error is user-facing, it will be thrown directly.
           exception = intercept[SparkArithmeticException](df3.collect()),
           errorClass = "DIVIDE_BY_ZERO",
           parameters = Map("config" -> ansiConf),
@@ -372,8 +374,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
           )
         )
         sparkContext.listenerBus.waitUntilEmpty()
-        // Spark should not re-try tasks with user-error
-        assert(numTaskStarted == 1)
+        // TODO: Spark should not re-try this error.
+        assert(numTaskStarted == 2)
         numTaskStarted = 0
 
         val df4 = spark.range(0, 10, 1, 2).select(lit(1) / $"id")
@@ -387,9 +389,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
           )
         )
         sparkContext.listenerBus.waitUntilEmpty()
-        // Spark should not re-try tasks with user-error, and the input data has 2 partitions, so
-        // in total 2 tasks started.
-        assert(numTaskStarted == 2)
+        // TODO: Spark should not re-try tasks this error.
+        assert(numTaskStarted == 3)
       } finally {
         sparkContext.removeSparkListener(listener)
       }

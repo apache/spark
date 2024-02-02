@@ -2832,8 +2832,8 @@ private[spark] class DAGScheduler(
     updateStageInfoForPushBasedShuffle(failedStage)
     for (job <- dependentJobs) {
       val finalException = exception.collect {
-        // If the error is well defined (has an error class and is not internal error), we treat
-        // it as user-facing, and expose this error to the end users directly.
+        // If the error is user-facing (defines error class and is not internal error), we don't
+        // wrap it with "Job aborted" and expose this error to the end users directly.
         case st: Exception with SparkThrowable if st.getErrorClass != null &&
             !SparkThrowableHelper.isInternalError(st.getErrorClass) =>
           st
