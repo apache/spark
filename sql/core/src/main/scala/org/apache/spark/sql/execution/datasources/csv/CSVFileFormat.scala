@@ -128,8 +128,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       // Use column pruning when specified by Catalyst, except when one or more columns have
       // existence default value(s), since in that case we instruct the CSV parser to disable column
       // pruning and instead read each entire row in order to correctly assign the default value(s).
-      val useColumnPruningForCheckingHeader = isColumnPruningEnabled
-      val schema = if (useColumnPruningForCheckingHeader) actualRequiredSchema else actualDataSchema
+      val schema = if (isColumnPruningEnabled) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
         schema, parsedOptions, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)

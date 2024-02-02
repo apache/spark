@@ -3276,12 +3276,11 @@ abstract class CSVSuite
         expected)
       checkAnswer(
         spark.read.format("csv")
-          .options(
-      Map(
-        "header" -> "true",
-        "inferSchema" -> "true",
-        "enforceSchema" -> "false"))
-        .load(testFile(carsFile))
+          .options(Map(
+            "header" -> "true",
+            "inferSchema" -> "true",
+            "enforceSchema" -> "false"))
+          .load(testFile(carsFile))
           .select("comment")
           .where("year < 2014"),
         expected)
