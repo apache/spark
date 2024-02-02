@@ -1494,14 +1494,13 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-46707: combine predicate with sequence (without step) with other filters") {
     val x = testRelation.subquery("x")
 
-    // do not combine when sequence has step param
+    // Always push down sequence as it's deterministic
     val queryWithStep = x.where($"x.c" > 1)
       .where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
       .analyze
     val optimizedQueryWithStep = Optimize.execute(queryWithStep)
     comparePlans(optimizedQueryWithStep, queryWithStep)
 
-    // combine when sequence does not have step param
     val queryWithoutStep = x.where($"x.c" > 1)
       .where(IsNotNull(Sequence($"x.a", $"x.b", None)))
       .analyze

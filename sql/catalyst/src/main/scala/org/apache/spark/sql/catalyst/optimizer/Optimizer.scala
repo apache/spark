@@ -1726,8 +1726,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
-    // grouping keys. The Aggregate operator can't reduce grouping keys so the filter won't see any
-    // new data after push down.
+    // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
+    // keys so the filter won't see any new data after push down.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
