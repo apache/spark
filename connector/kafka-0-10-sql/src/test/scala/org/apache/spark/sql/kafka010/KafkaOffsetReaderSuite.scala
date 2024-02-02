@@ -31,6 +31,17 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaOffsetRangeLimit.{EARLIEST, LATEST}
 import org.apache.spark.sql.test.SharedSparkSession
 
+object TestKPLReverse extends KafkaPartitionLocationAssigner {
+  def getLocationPreferences(
+    partDescrs: Array[PartitionDescription],
+    knownExecutors: Array[String]): Map[PartitionDescription, Array[String]] = {
+    val cycledExecutorsForever = Iterator.continually(knownExecutors.reverse).flatten
+    partDescrs.zipWith(cycledExecutorsForever.map(Array(_)).toMap
+  }
+
+}
+
+
 class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _

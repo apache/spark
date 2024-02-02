@@ -48,53 +48,58 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
       Seq[KafkaOffsetRange] = {
     val offsetRanges = ranges.filter(_.size > 0)
 
-    // If minPartitions not set or there are enough partitions to satisfy minPartitions
-    if (minPartitions.isEmpty || offsetRanges.size >= minPartitions.get) {
-      // Assign preferred executor locations to each range such that the same topic-partition is
-      // preferentially read from the same executor and the KafkaConsumer can be reused.
-      offsetRanges.map { range =>
-        val loc = locationPreferences.getOrElse(range.topicPartition, executorLocations)
-        range.copy(preferredLoc = getLocation(range.topicPartition, loc))
-      }
-    } else {
+    val maybeSplitOffsetRanges =    
+      if (minPartitions.isEmpty || offsetRanges.size >= minPartitions.get) {
+        // If minPartitions not set or there are enough partitions to
+        // satisfy minPartitions, there's no splitting to do
+        offsetRanges
+      } else {
 
-      // Splits offset ranges with relatively large amount of data to smaller ones.
-      val totalSize = offsetRanges.map(_.size).sum
+        // Splits offset ranges with relatively large amount of data to smaller ones.
+        val totalSize = offsetRanges.map(_.size).sum
 
-      // First distinguish between any small (i.e. unsplit) ranges and large (i.e. split) ranges,
-      // in order to exclude the contents of unsplit ranges from the proportional math applied to
-      // split ranges
-      val unsplitRanges = offsetRanges.filter { range =>
-        getPartCount(range.size, totalSize, minPartitions.get) == 1
-      }
-
-      val unsplitRangeTotalSize = unsplitRanges.map(_.size).sum
-      val splitRangeTotalSize = totalSize - unsplitRangeTotalSize
-      val unsplitRangeTopicPartitions = unsplitRanges.map(_.topicPartition).toSet
-      val splitRangeMinPartitions = math.max(minPartitions.get - unsplitRanges.size, 1)
-
-      // Now we can apply the main calculation logic
-      offsetRanges.flatMap { range =>
-        val tp = range.topicPartition
-        val size = range.size
-        // number of partitions to divvy up this topic partition to
-        val parts = if (unsplitRangeTopicPartitions.contains(tp)) {
-          1
-        } else {
-          getPartCount(size, splitRangeTotalSize, splitRangeMinPartitions)
+        // First distinguish between any small (i.e. unsplit) ranges
+        // and large (i.e. split) ranges, in order to exclude the
+        // contents of unsplit ranges from the proportional math
+        // applied to split ranges
+        val unsplitRanges = offsetRanges.filter { range =>
+          getPartCount(range.size, totalSize, minPartitions.get) == 1
         }
-        var remaining = size
-        var startOffset = range.fromOffset
-        (0 until parts).map { part =>
-          // Fine to do integer division. Last partition will consume all the round off errors
-          val thisPartition = remaining / (parts - part)
-          remaining -= thisPartition
-          val endOffset = math.min(startOffset + thisPartition, range.untilOffset)
-          val offsetRange = KafkaOffsetRange(tp, startOffset, endOffset, None)
-          startOffset = endOffset
-          offsetRange
-        }
-      }.filter(_.size > 0)
+
+        val unsplitRangeTotalSize = unsplitRanges.map(_.size).sum
+        val splitRangeTotalSize = totalSize - unsplitRangeTotalSize
+        val unsplitRangeTopicPartitions = unsplitRanges.map(_.topicPartition).toSet
+        val splitRangeMinPartitions = math.max(minPartitions.get - unsplitRanges.size, 1)
+
+        // Now we can apply the main calculation logic
+        offsetRanges.flatMap { range =>
+          val tp = range.topicPartition
+          val size = range.size
+          // number of partitions to divvy up this topic partition to
+          val parts = if (unsplitRangeTopicPartitions.contains(tp)) {
+            1
+          } else {
+            getPartCount(size, splitRangeTotalSize, splitRangeMinPartitions)
+          }
+          var remaining = size
+          var startOffset = range.fromOffset
+            (0 until parts).map { part =>
+              // Fine to do integer division. Last partition will consume all the round off errors
+              val thisPartition = remaining / (parts - part)
+              remaining -= thisPartition
+              val endOffset = math.min(startOffset + thisPartition, range.untilOffset)
+              val offsetRange = KafkaOffsetRange(tp, startOffset, endOffset, None)
+              startOffset = endOffset
+              offsetRange
+            }
+        }.filter(_.size > 0)
+      }
+
+    // Assign preferred executor locations to each range such that the same topic-partition is
+    // preferentially read from the same executor and the KafkaConsumer can be reused.
+    maybeSplitOffsetRanges.map { range =>
+      val loc = locationPreferences.getOrElse(range.topicPartition, executorLocations)
+      range.copy(preferredLoc = getLocation(range.topicPartition, loc))
     }
   }
 
