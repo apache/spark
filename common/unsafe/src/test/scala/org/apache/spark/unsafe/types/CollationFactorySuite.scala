@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe.types
 
+import scala.jdk.CollectionConverters.MapHasAsScala
+
 import org.apache.spark.SparkException
 // scalastyle:off
 import org.scalatest.funsuite.AnyFunSuite
@@ -49,9 +51,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       fetchCollation("UCS_BASIS")
     }
 
-    assert(error.getMessage.contains(
-      "The value UCS_BASIS does not represent a correct collation name."))
-    assert(error.getMessage.contains("Suggested valid collation name: [UCS_BASIC]"))
+    assert(error.getErrorClass === "COLLATION_INVALID_NAME")
+    assert(error.getMessageParameters.asScala ===
+      Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
   }
 
   case class CollationTestCase[R](collationName: String, s1: String, s2: String, expectedResult: R)
