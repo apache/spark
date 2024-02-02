@@ -816,6 +816,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.series.test_stat",
         "pyspark.pandas.tests.io.test_io",
         "pyspark.pandas.tests.io.test_csv",
+        "pyspark.pandas.tests.io.test_feather",
         "pyspark.pandas.tests.io.test_dataframe_conversion",
         "pyspark.pandas.tests.io.test_dataframe_spark_io",
         "pyspark.pandas.tests.io.test_series_conversion",
@@ -1002,6 +1003,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_readwriter",
         "pyspark.sql.tests.connect.test_parity_udf",
         "pyspark.sql.tests.connect.test_parity_udf_profiler",
+        "pyspark.sql.tests.connect.test_parity_memory_profiler",
         "pyspark.sql.tests.connect.test_parity_udtf",
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_map",
@@ -1296,6 +1298,7 @@ pyspark_pandas_connect_part3 = Module(
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.io.test_parity_io",
         "pyspark.pandas.tests.connect.io.test_parity_csv",
+        "pyspark.pandas.tests.connect.io.test_parity_feather",
         "pyspark.pandas.tests.connect.io.test_parity_dataframe_conversion",
         "pyspark.pandas.tests.connect.io.test_parity_dataframe_spark_io",
         "pyspark.pandas.tests.connect.io.test_parity_series_conversion",

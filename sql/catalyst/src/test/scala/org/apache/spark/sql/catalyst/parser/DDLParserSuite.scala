@@ -23,12 +23,11 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -52,9 +51,10 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType()
-        .add("a", IntegerType, nullable = true, "test")
-        .add("b", StringType, nullable = false)),
+      Some(Seq(
+        ColumnDefinition("a", IntegerType, comment = Some("test")),
+        ColumnDefinition("b", StringType, nullable = false)
+      )),
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
@@ -80,7 +80,7 @@ class DDLParserSuite extends AnalysisTest {
       sql,
       TableSpec(
         Seq("my_tab"),
-        Some(new StructType().add("a", IntegerType).add("b", StringType)),
+        Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
         Seq.empty[Transform],
         Map.empty[String, String],
         Some("parquet"),
@@ -98,9 +98,9 @@ class DDLParserSuite extends AnalysisTest {
       "USING parquet PARTITIONED BY (a)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType()
-        .add("a", IntegerType, nullable = true, "test")
-        .add("b", StringType)),
+      Some(Seq(
+        ColumnDefinition("a", IntegerType, comment = Some("test")),
+        ColumnDefinition("b", StringType))),
       Seq(IdentityTransform(FieldReference("a"))),
       Map.empty[String, String],
       Some("parquet"),
@@ -141,10 +141,11 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType()
-        .add("a", IntegerType)
-        .add("b", StringType)
-        .add("ts", TimestampType)),
+      Some(Seq(
+        ColumnDefinition("a", IntegerType),
+        ColumnDefinition("b", StringType),
+        ColumnDefinition("ts", TimestampType)
+      )),
       Seq(
         IdentityTransform(FieldReference("a")),
         BucketTransform(LiteralValue(16, IntegerType), Seq(FieldReference("b"))),
@@ -176,7 +177,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
       List(bucket(5, Array(FieldReference.column("a")), Array(FieldReference.column("b")))),
       Map.empty[String, String],
       Some("parquet"),
@@ -195,19 +196,19 @@ class DDLParserSuite extends AnalysisTest {
     Seq(
       ("a INT, b STRING, ts TIMESTAMP",
         "a, b",
-        new StructType()
-          .add("a", IntegerType)
-          .add("b", StringType)
-          .add("ts", TimestampType),
+        Seq(
+          ColumnDefinition("a", IntegerType),
+          ColumnDefinition("b", StringType),
+          ColumnDefinition("ts", TimestampType)
+        ),
         ClusterByTransform(Seq(FieldReference("a"), FieldReference("b")))),
       ("a STRUCT<b INT, c STRING>, ts TIMESTAMP",
         "a.b, ts",
-        new StructType()
-          .add("a",
-            new StructType()
-              .add("b", IntegerType)
-              .add("c", StringType))
-          .add("ts", TimestampType),
+        Seq(
+          ColumnDefinition(
+            "a", new StructType().add("b", IntegerType).add("c", StringType)),
+          ColumnDefinition("ts", TimestampType)
+        ),
         ClusterByTransform(Seq(FieldReference(Seq("a", "b")), FieldReference("ts"))))
     ).foreach { case (columns, clusteringColumns, schema, clusterByTransform) =>
       val createSql =
@@ -239,7 +240,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
@@ -259,7 +260,7 @@ class DDLParserSuite extends AnalysisTest {
       " TBLPROPERTIES('test' = 'test')"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
       Seq.empty[Transform],
       Map("test" -> "test"),
       Some("parquet"),
@@ -276,15 +277,15 @@ class DDLParserSuite extends AnalysisTest {
     val createSql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
     val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
     val expectedTableSpec = TableSpec(
-        Seq("my_tab"),
-        Some(new StructType().add("a", IntegerType).add("b", StringType)),
-        Seq.empty[Transform],
-        Map.empty[String, String],
-        Some("parquet"),
-        OptionList(Seq.empty),
-        Some("/tmp/file"),
-        None,
-        None)
+      Seq("my_tab"),
+      Some(Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType))),
+      Seq.empty[Transform],
+      Map.empty[String, String],
+      Some("parquet"),
+      OptionList(Seq.empty),
+      Some("/tmp/file"),
+      None,
+      None)
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
@@ -295,7 +296,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE 1m.2g(a INT) USING parquet"
     val expectedTableSpec = TableSpec(
       Seq("1m", "2g"),
-      Some(new StructType().add("a", IntegerType)),
+      Some(Seq(ColumnDefinition("a", IntegerType))),
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
@@ -313,7 +314,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab (id bigint) PARTITIONED BY (part string)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -331,7 +332,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab PARTITIONED BY (part string)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("part", StringType)),
+      Some(Seq(ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -349,7 +350,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = "REPLACE TABLE my_tab (id bigint) USING parquet PARTITIONED BY (part string)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       Some("parquet"),
@@ -422,7 +423,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -447,7 +448,7 @@ class DDLParserSuite extends AnalysisTest {
       val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
       val expectedTableSpec = TableSpec(
         Seq("my_tab"),
-        Some(new StructType().add("id", LongType).add("part", StringType)),
+        Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
         Seq(IdentityTransform(FieldReference("part"))),
         Map.empty[String, String],
         None,
@@ -504,7 +505,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -555,7 +556,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -578,7 +579,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
-      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Some(Seq(ColumnDefinition("id", LongType), ColumnDefinition("part", StringType))),
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
@@ -941,7 +942,7 @@ class DDLParserSuite extends AnalysisTest {
         sql,
         TableSpec(
           Seq("table_name"),
-          Some(new StructType),
+          Some(Nil),
           Seq.empty[Transform],
           Map.empty,
           Some("json"),
@@ -2554,7 +2555,7 @@ class DDLParserSuite extends AnalysisTest {
 
   private case class TableSpec(
       name: Seq[String],
-      schema: Option[StructType],
+      columns: Option[Seq[ColumnDefinition]],
       partitioning: Seq[Transform],
       properties: Map[String, String],
       provider: Option[String],
@@ -2571,7 +2572,7 @@ class DDLParserSuite extends AnalysisTest {
           val tableSpec = create.tableSpec.asInstanceOf[UnresolvedTableSpec]
           TableSpec(
             create.name.asInstanceOf[UnresolvedIdentifier].nameParts,
-            Some(create.tableSchema),
+            Some(create.columns),
             create.partitioning,
             tableSpec.properties,
             tableSpec.provider,
@@ -2584,7 +2585,7 @@ class DDLParserSuite extends AnalysisTest {
           val tableSpec = replace.tableSpec.asInstanceOf[UnresolvedTableSpec]
           TableSpec(
             replace.name.asInstanceOf[UnresolvedIdentifier].nameParts,
-            Some(replace.tableSchema),
+            Some(replace.columns),
             replace.partitioning,
             tableSpec.properties,
             tableSpec.provider,
@@ -2596,7 +2597,7 @@ class DDLParserSuite extends AnalysisTest {
           val tableSpec = ctas.tableSpec.asInstanceOf[UnresolvedTableSpec]
           TableSpec(
             ctas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
-            Some(ctas.query).filter(_.resolved).map(_.schema),
+            if (ctas.query.resolved) Some(ctas.columns) else None,
             ctas.partitioning,
             tableSpec.properties,
             tableSpec.provider,
@@ -2609,7 +2610,7 @@ class DDLParserSuite extends AnalysisTest {
           val tableSpec = rtas.tableSpec.asInstanceOf[UnresolvedTableSpec]
           TableSpec(
             rtas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
-            Some(rtas.query).filter(_.resolved).map(_.schema),
+            if (rtas.query.resolved) Some(rtas.columns) else None,
             rtas.partitioning,
             tableSpec.properties,
             tableSpec.provider,
@@ -2646,7 +2647,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CREATE TABLE 1m.2g(a INT)"
     val expectedTableSpec = TableSpec(
       Seq("1m", "2g"),
-      Some(new StructType().add("a", IntegerType)),
+      Some(Seq(ColumnDefinition("a", IntegerType))),
       Seq.empty[Transform],
       Map.empty[String, String],
       None,
@@ -2692,27 +2693,29 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
     // These CREATE/REPLACE TABLE statements should parse successfully.
-    val schemaWithDefaultColumn = new StructType()
-      .add("a", IntegerType, true)
-      .add("b", StringType, false,
-        new MetadataBuilder()
-          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"")
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+    val columnsWithDefaultValue = Seq(
+      ColumnDefinition("a", IntegerType),
+      ColumnDefinition(
+        "b",
+        StringType,
+        nullable = false,
+        defaultValue = Some(DefaultValueExpression(Literal("abc"), "'abc'")))
+    )
     val createTableResult =
-      CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
+      CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
-         OptionList(Seq.empty), None, None, None, false), false, Seq(None, Some(Literal("abc"))))
+         OptionList(Seq.empty), None, None, None, false), false)
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
     comparePlans(parsePlan(
-      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT 'abc') USING parquet"),
       createTableResult)
     comparePlans(parsePlan(
-      "CREATE TABLE my_tab(a INT, b STRING DEFAULT \"abc\" NOT NULL) USING parquet"),
+      "CREATE TABLE my_tab(a INT, b STRING DEFAULT 'abc' NOT NULL) USING parquet"),
       createTableResult)
     comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
-      "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
-      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
+      "b STRING NOT NULL DEFAULT 'abc') USING parquet"),
+      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithDefaultValue,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
           OptionList(Seq.empty), None, None, None, false), false))
     // These ALTER TABLE statements should parse successfully.
@@ -2860,20 +2863,23 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-41290: implement parser support for GENERATED ALWAYS AS columns in tables") {
-    val schemaWithGeneratedColumn = new StructType()
-      .add("a", IntegerType, true)
-      .add("b", IntegerType, false,
-        new MetadataBuilder()
-          .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, "a+1")
-          .build())
+    val columnsWithGenerationExpr = Seq(
+      ColumnDefinition("a", IntegerType),
+      ColumnDefinition(
+        "b",
+        IntegerType,
+        nullable = false,
+        generationExpression = Some("a+1")
+      )
+    )
     comparePlans(parsePlan(
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
-      CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+      CreateTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
           OptionList(Seq.empty), None, None, None, false), false))
     comparePlans(parsePlan(
       "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
-      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), columnsWithGenerationExpr,
         Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
           OptionList(Seq.empty), None, None, None, false), false))
     // Two generation expressions

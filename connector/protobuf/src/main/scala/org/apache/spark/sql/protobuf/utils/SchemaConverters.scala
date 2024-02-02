@@ -51,12 +51,13 @@ object SchemaConverters extends Logging {
   def toSqlTypeHelper(
       descriptor: Descriptor,
       protobufOptions: ProtobufOptions): SchemaType = {
-    SchemaType(
-      StructType(descriptor.getFields.asScala.flatMap(
-        structFieldFor(_,
-          Map(descriptor.getFullName -> 1),
-          protobufOptions: ProtobufOptions)).toArray),
-      nullable = true)
+    val fields = descriptor.getFields.asScala.flatMap(
+      structFieldFor(_,
+        Map(descriptor.getFullName -> 1),
+        protobufOptions: ProtobufOptions)).toSeq
+    if (fields.isEmpty && protobufOptions.retainEmptyMessage) {
+      SchemaType(convertEmptyProtoToStructWithDummyField(descriptor.getFullName), nullable = true)
+    } else SchemaType(StructType(fields), nullable = true)
   }
 
   // existingRecordNames: Map[String, Int] used to track the depth of recursive fields and to
@@ -212,11 +213,15 @@ object SchemaConverters extends Logging {
           ).toSeq
           fields match {
             case Nil =>
-              log.info(
-                s"Dropping ${fd.getFullName} as it does not have any fields left " +
-                "likely due to recursive depth limit."
-              )
-              None
+              if (protobufOptions.retainEmptyMessage) {
+                Some(convertEmptyProtoToStructWithDummyField(fd.getFullName))
+              } else {
+                log.info(
+                  s"Dropping ${fd.getFullName} as it does not have any fields left " +
+                    "likely due to recursive depth limit."
+                )
+                None
+              }
             case fds => Some(StructType(fds))
           }
         }
@@ -229,5 +234,12 @@ object SchemaConverters extends Logging {
         StructField(fd.getName, ArrayType(dt, containsNull = false))
       case dt => StructField(fd.getName, dt, nullable = !fd.isRequired)
     }
+  }
+
+  // Insert a dummy column to retain the empty message because
+  // spark doesn't allow empty struct type.
+  private def convertEmptyProtoToStructWithDummyField(desc: String): StructType = {
+    log.info(s"Keep $desc which is empty struct by inserting a dummy field.")
+    StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil)
   }
 }

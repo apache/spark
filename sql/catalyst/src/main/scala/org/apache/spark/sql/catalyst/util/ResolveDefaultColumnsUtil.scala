@@ -95,11 +95,10 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
 
   // Fails if the given catalog does not support column default value.
   def validateCatalogForDefaultValue(
-      schema: StructType,
+      columns: Seq[ColumnDefinition],
       catalog: TableCatalog,
       ident: Identifier): Unit = {
-    if (SQLConf.get.enableDefaultColumns &&
-      schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) &&
+    if (SQLConf.get.enableDefaultColumns && columns.exists(_.defaultValue.isDefined) &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "column default value")
@@ -444,6 +443,31 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
     getExistenceDefaultsBitmask(schema)
   def hasExistenceDefaultValues(schema: StructType): Boolean =
     existenceDefaultValues(schema).exists(_ != null)
+
+  // Called to check default value expressions in the analyzed plan.
+  def validateDefaultValueExpr(
+      default: DefaultValueExpression,
+      statement: String,
+      colName: String,
+      targetType: DataType): Unit = {
+    if (default.containsPattern(PLAN_EXPRESSION)) {
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+        statement, colName, default.originalSQL)
+    } else if (default.resolved) {
+      if (!Cast.canUpCast(default.child.dataType, targetType)) {
+        throw QueryCompilationErrors.defaultValuesDataTypeError(
+          statement, colName, default.originalSQL, targetType, default.child.dataType)
+      }
+      // Our analysis check passes here. We do not further inspect whether the
+      // expression is `foldable` here, as the plan is not optimized yet.
+    } else if (default.references.nonEmpty) {
+      // Ideally we should let the rest of `CheckAnalysis` report errors about why the default
+      // expression is unresolved. But we should report a better error here if the default
+      // expression references columns, which means it's not a constant for sure.
+      throw QueryCompilationErrors.defaultValueNotConstantError(
+        statement, colName, default.originalSQL)
+    }
+  }
 
   /**
    * This is an Analyzer for processing default column values using built-in functions only.

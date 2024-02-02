@@ -557,7 +557,6 @@ pre {
   border-radius: 4px;
 }
 
-code,
 pre {
   font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
 }
@@ -741,7 +740,6 @@ h3 {
   margin: 0;
 }
 
-.global code,
 .global pre {
   font: 1em Menlo, Monaco, Consolas, "Courier New", monospace;
 }
@@ -759,15 +757,6 @@ h3 {
   background-color: #f5f5f5;
   border: 1px solid #ccc;
   border-radius: 4px;
-}
-
-.global code {
-  font: 90% "Menlo", "Lucida Console", Consolas, monospace;
-  white-space: nowrap;
-  background: transparent;
-  border-radius: 4px;
-  padding: 0;
-  color: inherit;
 }
 
 .global pre code {
@@ -936,8 +925,14 @@ img {
 
 table {
   width: 100%;
-  overflow-wrap: normal;
+  overflow-wrap: break-word;
   border-collapse: collapse;
+  white-space: normal;
+}
+
+table code {
+  overflow-wrap: break-word;
+  white-space: normal;
 }
 
 table th,
@@ -955,4 +950,41 @@ table tr {
  */
 table tr:nth-child(2n) {
   background-color: #F1F4F5;
+}
+
+table.spark-config {
+  width: 100%;
+  table-layout: fixed;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* We have long config names and formulas that often show up in tables. To prevent
+ * any table column from become super wide, we allow the browser to break words at
+ * any point.
+ */
+table.spark-config code,
+table.spark-config th,
+table.spark-config td {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* CSS does not respect max-width on tables or table parts (like cells, columns, etc.),
+   so we have to pick a fixed width for each column.
+   See: https://stackoverflow.com/a/8465980
+ */
+table.spark-config th:nth-child(1),
+table.spark-config td:nth-child(1) {
+  width: 30%;
+}
+
+table.spark-config th:nth-child(2),
+table.spark-config td:nth-child(2) {
+  width: 20%;
+}
+
+table.spark-config th:nth-child(4),
+table.spark-config td:nth-child(4) {
+  width: 90px;
 }

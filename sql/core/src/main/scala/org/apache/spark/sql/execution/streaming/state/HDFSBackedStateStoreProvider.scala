@@ -255,7 +255,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
     if (useColumnFamilies) {
-      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3194")
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
     }
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||

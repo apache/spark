@@ -1656,6 +1656,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_TWS" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -1764,6 +1770,11 @@
       "DATA_TYPE" : {
         "message" : [
           "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
+        ]
+      },
+      "NOT_CONSTANT" : {
+        "message" : [
+          "which is not a constant expression whose equivalent value is known at query planning time."
         ]
       },
       "SUBQUERY_EXPRESSION" : {
@@ -3230,6 +3241,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
+    "message" : [
+      "Store does not support multiple values per key"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
       "Static partition column <staticName> is also specified in the column list."
@@ -3382,6 +3405,12 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TWS_VALUE_SHOULD_NOT_BE_NULL" : {
+    "message" : [
+      "New value should be non-null for <typeOfState>"
+    ],
+    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -3914,6 +3943,11 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
+        "message" : [
+          "Creating multiple column families with <stateStoreProvider> is not supported."
         ]
       },
       "TABLE_OPERATION" : {
@@ -7442,29 +7476,9 @@
       "Creating multiple column families with HDFSBackedStateStoreProvider is not supported"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3194" : {
-    "message" : [
-      "Multiple column families are not supported with HDFSBackedStateStoreProvider"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3195" : {
-    "message" : [
-      "Operation not supported with state changelog writer v1"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3196" : {
-    "message" : [
-      "Operation not supported with state changelog writer v2"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3197" : {
     "message" : [
       "Failed to create column family with reserved name=<colFamilyName>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3198" : {
-    "message" : [
-      "Implicit key not found for operation on stateName=<stateName>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
