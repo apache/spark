@@ -2609,14 +2609,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def hllInvalidLgK(function: String, min: Int, max: Int, value: String): Throwable = {
+  def hllInvalidLgK(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_LG_K",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
         "max" -> toSQLValue(max, IntegerType),
-        "value" -> value))
+        "value" -> toSQLValue(value, IntegerType)))
   }
 
   def hllInvalidInputSketchBuffer(function: String): Throwable = {
