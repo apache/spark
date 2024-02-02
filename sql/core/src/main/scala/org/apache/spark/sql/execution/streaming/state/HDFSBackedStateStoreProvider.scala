@@ -201,6 +201,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+
+    override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+      throw StateStoreErrors.removingColumnFamiliesNotSupported(
+        "HDFSBackedStateStoreProvider")
+
+    }
   }
 
   def getMetricsForProvider(): Map[String, Long] = synchronized {

@@ -265,6 +265,22 @@ class RocksDB(
   }
 
   /**
+   * Remove RocksDB column family, if exists
+   */
+  def removeColFamilyIfExists(colFamilyName: String): Unit = {
+    if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+      throw StateStoreErrors.cannotRemoveDefaultColumnFamily(colFamilyName)
+    }
+
+    if (checkColFamilyExists(colFamilyName)) {
+      assert(db != null)
+      val handle = colFamilyNameToHandleMap(colFamilyName)
+      db.dropColumnFamily(handle)
+      colFamilyNameToHandleMap.remove(colFamilyName)
+    }
+  }
+
+  /**
    * Get the value for the given key if present, or null.
    * @note This will return the last written value even if it was uncommitted.
    */
