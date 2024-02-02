@@ -1783,20 +1783,15 @@ class DataFrame:
 
     @property
     def schema(self) -> StructType:
-        if self._plan is not None:
-            # Schema caching is correct in most cases. Connect is lazy by nature. This means that
-            # we only resolve the plan when it is submitted for execution or analysis. We do not
-            # cache intermediate resolved plan. If the input (changes table, view redefinition,
-            # etc...) of the plan changes between the schema() call, and a subsequent action, the
-            # cached schema might be inconsistent with the end schema.
-            if self._cached_schema is None:
-                query = self._plan.to_proto(self._session.client)
-                if self._session is None:
-                    raise Exception("Cannot analyze without SparkSession.")
-                self._cached_schema = self._session.client.schema(query)
-            return self._cached_schema
-        else:
-            raise Exception("Empty plan.")
+        # Schema caching is correct in most cases. Connect is lazy by nature. This means that
+        # we only resolve the plan when it is submitted for execution or analysis. We do not
+        # cache intermediate resolved plan. If the input (changes table, view redefinition,
+        # etc...) of the plan changes between the schema() call, and a subsequent action, the
+        # cached schema might be inconsistent with the end schema.
+        if self._cached_schema is None:
+            query = self._plan.to_proto(self._session.client)
+            self._cached_schema = self._session.client.schema(query)
+        return self._cached_schema
 
     schema.__doc__ = PySparkDataFrame.schema.__doc__
 
