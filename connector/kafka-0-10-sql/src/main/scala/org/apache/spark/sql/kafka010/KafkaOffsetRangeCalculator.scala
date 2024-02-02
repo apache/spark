@@ -48,7 +48,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
       Seq[KafkaOffsetRange] = {
     val offsetRanges = ranges.filter(_.size > 0)
 
-    val maybeSplitOffsetRanges =    
+    val maybeSplitOffsetRanges =
       if (minPartitions.isEmpty || offsetRanges.size >= minPartitions.get) {
         // If minPartitions not set or there are enough partitions to
         // satisfy minPartitions, there's no splitting to do
