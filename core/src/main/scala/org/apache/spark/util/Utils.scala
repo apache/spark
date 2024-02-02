@@ -59,8 +59,7 @@ import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilde
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.Level
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
@@ -2312,17 +2311,10 @@ private[spark] object Utils
   }
 
   /**
-   * configure a new log4j level
+   * configure a new logger level
    */
   def setLogLevel(l: Level): Unit = {
-    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
-    val config = ctx.getConfiguration()
-    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
-    loggerConfig.setLevel(l)
-    ctx.updateLoggers()
-
-    // Setting threshold to null as rootLevel will define log level for spark-shell
-    Logging.sparkShellThresholdLevel = null
+    Logging.setLogLevel(l)
   }
 
   /**
