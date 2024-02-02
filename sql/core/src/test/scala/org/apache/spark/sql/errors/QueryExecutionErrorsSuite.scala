@@ -505,7 +505,7 @@ class QueryExecutionErrorsSuite
       }
       checkError(
         exception = e1,
-        errorClass = "UNSUPPORTED_SAVE_MODE.NON_EXISTENT_PATH",
+        errorClass = "UNSUPPORTED_SAVE_MODE.WITHOUT_SUGGESTION",
         parameters = Map("saveMode" -> "NULL"))
 
       Utils.createDirectory(path)
@@ -516,7 +516,7 @@ class QueryExecutionErrorsSuite
       }
       checkError(
         exception = e2,
-        errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
+        errorClass = "UNSUPPORTED_SAVE_MODE.WITHOUT_SUGGESTION",
         parameters = Map("saveMode" -> "NULL"))
     }
   }

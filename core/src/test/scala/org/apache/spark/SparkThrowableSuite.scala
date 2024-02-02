@@ -568,7 +568,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(SparkThrowableHelper.getMessage(e2, STANDARD) ===
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
-        |  "messageTemplate" : "The save mode <saveMode> is not supported for: an existent path.",
+        |  "messageTemplate" : "The save mode <saveMode> is not supported. for an existent path.",
         |  "sqlState" : "0A000",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"

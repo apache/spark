@@ -21,6 +21,7 @@ import java.util.{Locale, Properties}
 
 import scala.jdk.CollectionConverters._
 
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
@@ -67,6 +68,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def mode(saveMode: SaveMode): DataFrameWriter[T] = {
+    if (saveMode == null) {
+      throw QueryExecutionErrors.saveModeUnsupportedError(saveMode)
+    }
     this.mode = saveMode
     this
   }
@@ -83,6 +87,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter[T] = {
+    if (saveMode == null) {
+      throw QueryExecutionErrors.saveModeUnsupportedError(saveMode)
+    }
     saveMode.toLowerCase(Locale.ROOT) match {
       case "overwrite" => mode(SaveMode.Overwrite)
       case "append" => mode(SaveMode.Append)

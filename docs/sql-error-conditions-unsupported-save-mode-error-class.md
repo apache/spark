@@ -26,16 +26,20 @@ license: |
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-The save mode `<saveMode>` is not supported for:
+The save mode `<saveMode>` is not supported.
 
 This error class has the following derived error classes:
 
 ## EXISTENT_PATH
 
-an existent path.
+for an existent path.
 
 ## NON_EXISTENT_PATH
 
-a non-existent path.
+for a non-existent path.
+
+## WITHOUT_SUGGESTION
+
+
 
 

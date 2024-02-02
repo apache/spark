@@ -2499,7 +2499,7 @@ For more details see [UNSUPPORTED_OVERWRITE](sql-error-conditions-unsupported-ov
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-The save mode `<saveMode>` is not supported for:
+The save mode `<saveMode>` is not supported.
 
 For more details see [UNSUPPORTED_SAVE_MODE](sql-error-conditions-unsupported-save-mode-error-class.html)
 

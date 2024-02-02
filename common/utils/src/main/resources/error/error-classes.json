@@ -4083,17 +4083,22 @@
   },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
-      "The save mode <saveMode> is not supported for:"
+      "The save mode <saveMode> is not supported."
     ],
     "subClass" : {
       "EXISTENT_PATH" : {
         "message" : [
-          "an existent path."
+          "for an existent path."
         ]
       },
       "NON_EXISTENT_PATH" : {
         "message" : [
-          "a non-existent path."
+          "for a non-existent path."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
         ]
       }
     },
