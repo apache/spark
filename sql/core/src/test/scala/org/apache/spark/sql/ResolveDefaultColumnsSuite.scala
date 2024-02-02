@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
@@ -213,6 +214,31 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
             "defaultValue" -> "true",
             "actualType" -> "\"BOOLEAN\""))
       }
+    }
+  }
+
+  test("default values") {
+    withTable("t") {
+      val ddl =
+        s"""
+           |CREATE TABLE t(
+           |  key int,
+           |  v VARCHAR(6) DEFAULT 'apache',
+           |  c CHAR(5) DEFAULT 'spark')
+           |USING parquet""".stripMargin
+      sql(ddl)
+      sql("INSERT INTO t (key) VALUES(1)")
+      checkAnswer(sql("select * from t"), Row(1, "apache", "spark"))
+    }
+  }
+
+  test("default values 2") {
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      checkError(
+        exception = intercept[SparkRuntimeException](
+          sql(s"CREATE TABLE t(c $typeName(3) DEFAULT 'spark') USING parquet")),
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
     }
   }
 }
