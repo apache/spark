@@ -372,11 +372,13 @@ If this problem persists, you may consider using `rdd.checkpoint()` instead, whi
 
 `MapObjects` does not support the class `<cls>` as resulting collection.
 
-### CODEC_NOT_AVAILABLE
+### [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 SQLSTATE: 56038
 
-The codec `<codecName>` is not available. Consider to set the config `<configKey>` to `<configVal>`.
+The codec `<codecName>` is not available.
+
+For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 ### CODEC_SHORT_NAME_NOT_FOUND
 
