@@ -601,14 +601,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def unaryMinusCauseOverflowError(originValue: Int): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2043",
-      messageParameters = Map("sqlValue" -> toSQLValue(originValue, IntegerType)),
-      context = Array.empty,
-      summary = "")
-  }
-
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): SparkArithmeticException = {
     new SparkArithmeticException(
@@ -2609,14 +2601,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def hllInvalidLgK(function: String, min: Int, max: Int, value: String): Throwable = {
+  def hllInvalidLgK(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_LG_K",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
         "max" -> toSQLValue(max, IntegerType),
-        "value" -> value))
+        "value" -> toSQLValue(value, IntegerType)))
   }
 
   def hllInvalidInputSketchBuffer(function: String): Throwable = {

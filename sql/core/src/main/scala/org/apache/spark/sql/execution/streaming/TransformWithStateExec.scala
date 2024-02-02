@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
@@ -38,6 +39,7 @@ import org.apache.spark.util.CompletionIterator
  * @param statefulProcessor processor methods called on underlying data
  * @param timeoutMode defines the timeout mode
  * @param outputMode defines the output mode for the statefulProcessor
+ * @param keyEncoder expression encoder for the key type
  * @param outputObjAttr Defines the output object
  * @param batchTimestampMs processing timestamp of the current batch.
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
@@ -52,6 +54,7 @@ case class TransformWithStateExec(
     statefulProcessor: StatefulProcessor[Any, Any, Any],
     timeoutMode: TimeoutMode,
     outputMode: OutputMode,
+    keyEncoder: ExpressionEncoder[Any],
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     batchTimestampMs: Option[Long],
@@ -162,7 +165,8 @@ case class TransformWithStateExec(
       useColumnFamilies = true
     ) {
       case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId)
+        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
+          keyEncoder)
         assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
         statefulProcessor.init(processorHandle, outputMode)
         processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)

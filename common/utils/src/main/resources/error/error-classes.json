@@ -1656,6 +1656,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_TWS" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -3235,6 +3241,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
+    "message" : [
+      "Failed to remove default column family with reserved name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
+    "message" : [
+      "Store does not support multiple values per key"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
       "Static partition column <staticName> is also specified in the column list."
@@ -3387,6 +3411,12 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TWS_VALUE_SHOULD_NOT_BE_NULL" : {
+    "message" : [
+      "New value should be non-null for <typeOfState>"
+    ],
+    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -3919,6 +3949,16 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
+        "message" : [
+          "Creating multiple column families with <stateStoreProvider> is not supported."
+        ]
+      },
+      "STATE_STORE_REMOVING_COLUMN_FAMILIES" : {
+        "message" : [
+          "Removing column families with <stateStoreProvider> is not supported."
         ]
       },
       "TABLE_OPERATION" : {
@@ -5705,11 +5745,6 @@
   "_LEGACY_ERROR_TEMP_2042" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2043" : {
-    "message" : [
-      "- <sqlValue> caused overflow."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {
