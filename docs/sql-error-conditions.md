@@ -998,6 +998,12 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 `<message>`
 
+### INTERNAL_ERROR_TWS
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
 ### INTERVAL_ARITHMETIC_OVERFLOW
 
 [SQLSTATE: 22015](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -2019,6 +2025,24 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
+### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to remove default column family with reserved name=`<colFamilyName>`.
+
+### STATE_STORE_MULTIPLE_VALUES_PER_KEY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Store does not support multiple values per key
+
+### STATE_STORE_UNSUPPORTED_OPERATION
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<operationType>` operation not supported with `<entity>`
+
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 
 [SQLSTATE: 42713](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2156,6 +2180,12 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
+
+### TWS_VALUE_SHOULD_NOT_BE_NULL
+
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+New value should be non-null for `<typeOfState>`
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 

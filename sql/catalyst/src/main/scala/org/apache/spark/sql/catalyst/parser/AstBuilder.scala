@@ -2580,7 +2580,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitParenthesizedExpression(
      ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
-    expression(ctx.expression)
+    val res = expression(ctx.expression())
+    res match {
+      case s: UnresolvedStar if (!conf.getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)) =>
+        CreateStruct(Seq(s))
+      case o => o
+    }
   }
 
   /**

@@ -1534,6 +1534,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
         p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+      // If the filter list contains Stars, expand it.
+      case p: Filter if containsStar(Seq(p.condition)) =>
+        p.copy(expandStarExpression(p.condition, p.child))
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
@@ -1898,7 +1901,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
-          // results and confuse users if there is any null values. For count(t1.*, t2.*), it is
+          // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
               f1.nameParts == Seq("count") &&
@@ -1932,6 +1935,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           })
         case p: XxHash64 if containsStar(p.children) =>
           p.copy(children = p.children.flatMap {
+            case s: Star => expand(s, child)
+            case o => o :: Nil
+          })
+        case p: In if containsStar(p.children) =>
+          p.copy(list = p.list.flatMap {
             case s: Star => expand(s, child)
             case o => o :: Nil
           })
