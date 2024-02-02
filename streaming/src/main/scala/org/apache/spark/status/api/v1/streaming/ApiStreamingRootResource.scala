@@ -18,6 +18,7 @@
 package org.apache.spark.status.api.v1.streaming
 
 import java.util.{Arrays => JArrays, Collections, Date, List => JList}
+
 import jakarta.ws.rs.{GET, Path, PathParam, Produces, QueryParam}
 import jakarta.ws.rs.core.MediaType
 
