@@ -107,7 +107,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       .map(_.topic())
       .toSet
 
-    val partDescrs = uninterruptibleThreadRunner.runUninterruptibly {
+    val partitionDescrs = uninterruptibleThreadRunner.runUninterruptibly {
       topics
         .flatMap { (topicName: String) =>
           consumer.partitionsFor(topicName).asScala
