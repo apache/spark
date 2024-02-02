@@ -36,7 +36,7 @@ object TestKPLReverse extends KafkaPartitionLocationAssigner {
     partDescrs: Array[PartitionDescription],
     knownExecutors: Array[String]): Map[PartitionDescription, Array[String]] = {
     val cycledExecutorsForever = Iterator.continually(knownExecutors.reverse).flatten
-    partDescrs.zipWith(cycledExecutorsForever.map(Array(_))).toMap
+    partDescrs.zip(cycledExecutorsForever.map(Array(_))).toMap
   }
 }
 
