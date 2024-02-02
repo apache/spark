@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names ] [ , ... ] | TRANSFORM (...) ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names | star ] [ , ... ] | TRANSFORM (...) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ UNPIVOT clause ]
@@ -77,6 +77,10 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
     An expression with an assigned name. In general, it denotes a column expression.
 
     **Syntax:** `expression [[AS] alias]`
+
+* **star**
+
+    The `*` (star) clause is used to select all or most columns from one or all relations in a FROM clause.
 
 * **from_item**
 
@@ -202,3 +206,4 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
 * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
 * [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)
+* [star (*) Clause](sql-ref-syntax-qry-star.html)

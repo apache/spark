@@ -198,7 +198,7 @@ t1b	8
 
 
 -- !query
-SELECT Count(DISTINCT( * ))
+SELECT Count(DISTINCT * )
 FROM   t1
 WHERE  t1b IN (SELECT Min(t2b)
                FROM   t2
