@@ -455,7 +455,7 @@
     "message" : [
       "The value <collationName> does not represent a correct collation name. Suggested valid collation name: [<proposal>]."
     ],
-    "sqlState" : "22018"
+    "sqlState" : "42704"
   },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
