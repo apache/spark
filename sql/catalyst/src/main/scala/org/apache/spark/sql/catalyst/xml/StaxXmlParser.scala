@@ -145,8 +145,7 @@ class StaxXmlParser(
   def doParseColumn(xml: String,
       parseMode: ParseMode,
       xsdSchema: Option[Schema]): Option[InternalRow] = {
-    // limit the size of the XML records to add in bad record exception
-    lazy val xmlRecord = UTF8String.fromString(xml.substring(0, math.min(xml.length, 1024 * 1024)))
+    lazy val xmlRecord = UTF8String.fromString(xml)
     try {
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
