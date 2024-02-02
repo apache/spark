@@ -46,9 +46,6 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
   /** Creates an [[org.apache.kafka.clients.admin.AdminClient]] */
   def createAdmin(kafkaParams: ju.Map[String, Object]): Admin = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
-    // scalastyle:off println
-    println(s"Admin params: ${KafkaRedactionUtil.redactParams(updatedKafkaParams.asScala.toSeq)}")
-    // scalastyle:on println
     Admin.create(updatedKafkaParams)
   }
 

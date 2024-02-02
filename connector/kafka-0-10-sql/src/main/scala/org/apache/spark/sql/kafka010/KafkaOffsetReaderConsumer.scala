@@ -103,10 +103,16 @@ private[kafka010] class KafkaOffsetReaderConsumer(
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
   private def userSpecifiedLocationPreferences: Map[TopicPartition, Array[String]] = {
-    val partitionDescrs = fetchTopicPartitions()
+    val topics = fetchTopicPartitions()
       .map(_.topic())
       .toSet
-      .flatMap((topicName: String) => consumer.partitionsFor(topicName).asScala)
+
+    val partDescrs = uninterruptibleThreadRunner.runUninterruptibly {
+      topics
+        .flatMap { (topicName: String) =>
+          consumer.partitionsFor(topicName).asScala
+        }
+      }
       .map(partInfo => PartitionDescription.fromPartitionInfo(partInfo))
       .toArray
       .sortBy(descr => (descr.topic, descr.partition))
