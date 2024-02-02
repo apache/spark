@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.rest
 
 import java.io.File
+
 import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
