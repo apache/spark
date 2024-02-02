@@ -241,4 +241,19 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         parameters = Map("limit" -> "3"))
     }
   }
+
+  test("SPARK-46949: DDL with default char/varchar values need padding") {
+    withTable("t") {
+      val ddl =
+        s"""
+           |CREATE TABLE t(
+           |  key int,
+           |  v VARCHAR(6) DEFAULT 'apache',
+           |  c CHAR(6) DEFAULT 'spark')
+           |USING parquet""".stripMargin
+      sql(ddl)
+      sql("INSERT INTO t (key) VALUES(1)")
+      checkAnswer(sql("select * from t"), Row(1, "apache", "spark "))
+    }
+  }
 }
