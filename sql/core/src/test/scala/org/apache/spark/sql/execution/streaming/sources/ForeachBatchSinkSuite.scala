@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.SerializeFromObjectExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -187,7 +188,7 @@ class ForeachBatchSinkSuite extends StreamTest {
   }
 
   test("foreachBatch should not fail when AQE is enabled") {
-//    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
     val mem = MemoryStream[Int]
     val ds = mem.toDS().map(_ + 1)
 
