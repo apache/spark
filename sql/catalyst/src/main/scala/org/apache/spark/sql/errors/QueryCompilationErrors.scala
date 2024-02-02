@@ -3980,4 +3980,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = e.origin
     )
   }
+
+  def unsupportedFeatureForStreaming(feature: String, subClass: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = s"UNSUPPORTED_FEATURE_FOR_STREAMING.$subClass",
+      messageParameters = Map("feature" -> feature))
+  }
 }

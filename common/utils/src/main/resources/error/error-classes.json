@@ -4099,6 +4099,19 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_FEATURE_FOR_STREAMING" : {
+    "message" : [
+      "<feature> is not supported in Structured Streaming."
+    ],
+    "subClass" : {
+      "AQE" : {
+        "message" : [
+          "If you want to use AQE in streaming, please use ForeachBatch sink."
+        ]
+      }
+    },
+    "sqlState" : "XXKST"
+  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"

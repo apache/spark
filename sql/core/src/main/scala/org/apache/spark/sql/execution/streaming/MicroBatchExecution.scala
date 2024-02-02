@@ -27,13 +27,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Log
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
+import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
@@ -114,6 +114,8 @@ class MicroBatchExecution(
 
     val disabledSources =
       Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
+
+    verifyIfAQEIsDisabled(sink, sparkSession)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
@@ -228,6 +230,16 @@ class MicroBatchExecution(
 
       case _ =>
         throw new IllegalArgumentException(s"unknown sink type for $sink")
+    }
+  }
+
+  /**
+   * Check if AQE is disabled for non-foreachBatch queries.
+   */
+  private def verifyIfAQEIsDisabled(sink: Table, sparkSession: SparkSession): Unit = {
+    if (!sink.isInstanceOf[ForeachBatchSink[_]] &&
+      sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+      throw QueryCompilationErrors.unsupportedFeatureForStreaming("Adaptive Query Execution", "AQE")
     }
   }
 

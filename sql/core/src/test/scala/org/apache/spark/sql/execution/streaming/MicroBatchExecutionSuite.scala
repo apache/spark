@@ -38,6 +38,10 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
 
   import testImplicits._
 
+  before {
+    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+  }
+
   after {
     sqlContext.streams.active.foreach(_.stop())
   }
@@ -178,6 +182,24 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
         assert(e.getMessage.contains("batch 3 doesn't exist"))
       }
     )
+  }
+
+  test("AQE enabled query should throw error") {
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempDir { checkpointLocation =>
+        val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+        val ds = inputData.toDS()
+        testStream(ds)(
+          StartStream(checkpointLocation = checkpointLocation.getCanonicalPath),
+          Execute { q =>
+            q.exception.get.getMessage should include("Adaptive Query Execution is not supported" +
+              " in Structured Streaming. If you want to use AQE in streaming, please use" +
+              " ForeachBatch sink.")
+          }
+        )
+      }
+    }
   }
 
   test("no-data-batch re-executed after restart should call V1 source.getBatch()") {

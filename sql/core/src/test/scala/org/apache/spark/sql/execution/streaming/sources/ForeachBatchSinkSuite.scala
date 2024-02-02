@@ -186,6 +186,20 @@ class ForeachBatchSinkSuite extends StreamTest {
     assertPlan(mem2, dsUntyped)
   }
 
+  test("foreachBatch should not fail when AQE is enabled") {
+//    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
+    val mem = MemoryStream[Int]
+    val ds = mem.toDS().map(_ + 1)
+
+    val tester = new ForeachBatchTester[Int](mem)
+    val writer = (ds: Dataset[Int], batchId: Long) => tester.record(batchId, ds.map(_ + 1))
+
+    import tester._
+    testWriter(ds, writer)(
+      check(in = 1, 2, 3)(out = 3, 4, 5), // out = in + 2 (i.e. 1 in query, 1 in writer)
+      check(in = 5, 6, 7)(out = 7, 8, 9))
+  }
+
   // ============== Helper classes and methods =================
 
   private class ForeachBatchTester[T: Encoder](memoryStream: MemoryStream[Int]) {
