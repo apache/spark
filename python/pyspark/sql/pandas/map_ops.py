@@ -77,7 +77,7 @@ class PandasMapOpsMixin:
         profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
             to be used for mapInPandas.
 
-            .. versionadded: 3.5.1
+            .. versionadded: 4.0.0
 
 
         Examples
@@ -199,7 +199,7 @@ class PandasMapOpsMixin:
         profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
             to be used for mapInPandas.
 
-            .. versionadded: 3.5.1
+            .. versionadded: 4.0.0
 
         Examples
         --------
