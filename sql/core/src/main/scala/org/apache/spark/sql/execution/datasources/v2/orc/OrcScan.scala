@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters.MapHasAsScala
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
@@ -65,11 +66,16 @@ case class OrcScan(
   override def createReaderFactory(): PartitionReaderFactory = {
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
+    val memoryMode = if (sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
+      MemoryMode.OFF_HEAP
+    } else {
+      MemoryMode.ON_HEAP
+    }
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
-      new OrcOptions(options.asScala.toMap, sparkSession.sessionState.conf))
+      new OrcOptions(options.asScala.toMap, sparkSession.sessionState.conf), memoryMode)
   }
 
   override def equals(obj: Any): Boolean = obj match {

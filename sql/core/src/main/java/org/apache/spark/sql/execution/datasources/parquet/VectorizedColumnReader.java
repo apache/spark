@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 import java.time.ZoneId;
+import java.util.Map;
 
 import org.apache.parquet.CorruptDeltaByteArrays;
 import org.apache.parquet.VersionParser.ParsedVersion;
@@ -37,11 +38,15 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotat
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BOOLEAN;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 /**
  * Decoder to return values from a single column.
@@ -140,21 +145,57 @@ public class VectorizedColumnReader {
     this.writerVersion = writerVersion;
   }
 
-  private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
-    return switch (typeName) {
-      case INT32 ->
-        !(logicalTypeAnnotation instanceof DateLogicalTypeAnnotation) ||
-          "CORRECTED".equals(datetimeRebaseMode);
-      case INT64 -> {
-        if (updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS)) {
-          yield "CORRECTED".equals(datetimeRebaseMode);
-        } else {
-          yield !updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
-        }
+  private boolean isLazyDecodingSupported(
+      PrimitiveType.PrimitiveTypeName typeName,
+      DataType sparkType) {
+    boolean isSupported = false;
+    // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date
+    // rebasing.
+    switch (typeName) {
+      case INT32: {
+        boolean isDecimal = sparkType instanceof DecimalType;
+        boolean needsUpcast = sparkType == LongType || sparkType == DoubleType ||
+          sparkType == TimestampNTZType ||
+          (isDecimal && !DecimalType.is32BitDecimalType(sparkType));
+        boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
+          !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);
+        break;
       }
-      case FLOAT, DOUBLE, BINARY -> true;
-      default -> false;
-    };
+      case INT64: {
+        boolean isDecimal = sparkType instanceof DecimalType;
+        boolean needsUpcast = (isDecimal && !DecimalType.is64BitDecimalType(sparkType)) ||
+          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
+        boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
+          !"CORRECTED".equals(datetimeRebaseMode);
+        isSupported = !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);
+        break;
+      }
+      case FLOAT:
+        isSupported = sparkType == FloatType;
+        break;
+      case DOUBLE:
+        isSupported = true;
+        break;
+      case BINARY:
+        isSupported = !needsDecimalScaleRebase(sparkType);
+        break;
+    }
+    return isSupported;
+  }
+
+  /**
+   * Returns whether the Parquet type of this column and the given spark type are two decimal types
+   * with different scale.
+   */
+  private boolean needsDecimalScaleRebase(DataType sparkType) {
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      if (!(typeAnnotation instanceof DecimalLogicalTypeAnnotation)) return false;
+      if (!(sparkType instanceof DecimalType)) return false;
+      DecimalLogicalTypeAnnotation parquetDecimal = (DecimalLogicalTypeAnnotation) typeAnnotation;
+      DecimalType sparkDecimal = (DecimalType) sparkType;
+      return parquetDecimal.getScale() != sparkDecimal.scale();
   }
 
   /**
@@ -205,7 +246,7 @@ public class VectorizedColumnReader {
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
         if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
-            isLazyDecodingSupported(typeName))) {
+            isLazyDecodingSupported(typeName, column.dataType()))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if startRowId is not the first row index in the page AND the column
           // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
@@ -296,7 +337,8 @@ public class VectorizedColumnReader {
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
       if (dataEncoding != plainDict && dataEncoding != Encoding.RLE_DICTIONARY) {
-        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3189", Map.of("encoding", dataEncoding.toString()));
       }
       this.dataColumn = new VectorizedRleValuesReader();
       this.isCurrentPageDictionaryEncoded = true;
@@ -331,18 +373,21 @@ public class VectorizedColumnReader {
         if (typeName == BOOLEAN) {
           yield new VectorizedRleValuesReader(1);
         } else {
-          throw new UnsupportedOperationException(
-            "RLE encoding is not supported for values of type: " + typeName);
+          throw new SparkUnsupportedOperationException(
+            "_LEGACY_ERROR_TEMP_3190", Map.of("typeName", typeName.toString()));
         }
       }
-      default -> throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
+      default ->
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3189", Map.of("encoding", encoding.toString()));
     };
   }
 
 
   private int readPageV1(DataPageV1 page) throws IOException {
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
-      throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3189", Map.of("encoding", page.getDlEncoding().toString()));
     }
 
     int pageValueCount = page.getValueCount();

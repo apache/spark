@@ -27,6 +27,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
@@ -36,7 +37,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -197,10 +198,21 @@ class V2SessionCatalog(catalog: SessionCatalog)
             s"Partitions should be empty when the schema is empty: ${partitions.mkString(", ")}")
           // Infer the schema and partitions and store them in the catalog.
           (tableProvider.inferSchema(dsOptions), tableProvider.inferPartitioning(dsOptions))
-        } else if (partitions.isEmpty) {
-          (schema, tableProvider.inferPartitioning(dsOptions))
         } else {
-          (schema, partitions)
+          val partitioning = if (partitions.isEmpty) {
+            tableProvider.inferPartitioning(dsOptions)
+          } else {
+            partitions
+          }
+          val table = tableProvider.getTable(schema, partitions, dsOptions)
+          // Check if the schema of the created table matches the given schema.
+          val tableSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+            table.columns().asSchema)
+          if (!DataType.equalsIgnoreNullability(tableSchema, schema)) {
+            throw QueryCompilationErrors.dataSourceTableSchemaMismatchError(
+              tableSchema, schema)
+          }
+          (schema, partitioning)
         }
 
       case _ =>
@@ -232,7 +244,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
 
-    loadTable(ident)
+    null // Return null to save the `loadTable` call for CREATE TABLE without AS SELECT.
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
@@ -273,7 +285,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
-    loadTable(ident)
+    null // Return null to save the `loadTable` call for ALTER TABLE.
   }
 
   override def purgeTable(ident: Identifier): Boolean = {
@@ -317,8 +329,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       throw QueryCompilationErrors.tableAlreadyExistsError(newIdent)
     }
 
-    // Load table to make sure the table exists
-    loadTable(oldIdent)
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
   }
 

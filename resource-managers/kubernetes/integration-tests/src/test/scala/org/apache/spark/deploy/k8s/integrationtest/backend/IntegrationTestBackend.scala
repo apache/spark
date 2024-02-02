@@ -43,7 +43,7 @@ private[spark] object IntegrationTestBackendFactory {
       case BACKEND_MINIKUBE => MinikubeTestBackend
       case BACKEND_CLOUD =>
         new KubeConfigBackend(System.getProperty(CONFIG_KEY_KUBE_CONFIG_CONTEXT))
-      case BACKEND_DOCKER_FOR_DESKTOP | BACKEND_DOCKER_DESKTOP => DockerForDesktopBackend
+      case BACKEND_DOCKER_DESKTOP => DockerForDesktopBackend
       case _ => throw new IllegalArgumentException("Invalid " +
         CONFIG_KEY_DEPLOY_MODE + ": " + deployMode)
     }

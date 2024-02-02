@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.collection.immutable.HashSet
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -28,7 +29,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -2706,6 +2707,12 @@ class DatasetSuite extends QueryTest
       assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
     }
   }
+
+  test("SPARK-46791: Dataset with set field") {
+    val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
+    checkDataset(ds.map(t => t),
+      WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2759,6 +2766,8 @@ case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
 case class WithMapInOption(m: Option[scala.collection.Map[Int, Int]])
 
+case class WithSet(id: Int, values: Set[String])
+
 case class Generic[T](id: T, value: Double)
 
 case class OtherTuple(_1: String, _2: Int)
@@ -2788,11 +2797,11 @@ case class DataSeqOptSeq(a: Seq[Option[Seq[Int]]])
  */
 case class NonSerializableCaseClass(value: String) extends Externalizable {
   override def readExternal(in: ObjectInput): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def writeExternal(out: ObjectOutput): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 

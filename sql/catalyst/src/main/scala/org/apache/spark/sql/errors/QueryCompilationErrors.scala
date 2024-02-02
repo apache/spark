@@ -105,7 +105,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       functionName: String, argumentName: String, candidates: Seq[String]): Throwable = {
     import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 
-    val inputs = candidates.map(candidate => Seq(candidate)).toSeq
+    val inputs = candidates.map(candidate => Seq(candidate))
     val recommendations = orderSuggestedIdentifiersBySimilarity(argumentName, inputs)
       .take(3)
     new AnalysisException(
@@ -764,6 +764,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "searchPath" -> toSQLId(searchPath)))
   }
 
+  def unresolvedVariableError(
+      name: Seq[String],
+      searchPath: Seq[String],
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVED_VARIABLE",
+      messageParameters = Map(
+        "variableName" -> toSQLId(name),
+        "searchPath" -> toSQLId(searchPath)),
+      origin = origin)
+  }
+
   def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_ROUTINE",
@@ -914,8 +926,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(table.name(), "either micro-batch or continuous scan")
   }
 
-  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table.name(), "append in batch mode")
+  def unsupportedAppendInBatchModeError(name: String): Throwable = {
+    unsupportedTableOperationError(name, "append in batch mode")
   }
 
   def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
@@ -2028,9 +2040,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def failToPlanDataSourceError(action: String, tpe: String, msg: String): Throwable = {
+  def pythonDataSourceError(action: String, tpe: String, msg: String): Throwable = {
     new AnalysisException(
-      errorClass = "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON",
+      errorClass = "PYTHON_DATA_SOURCE_ERROR",
       messageParameters = Map("action" -> action, "type" -> tpe, "msg" -> msg)
     )
   }
@@ -3172,12 +3184,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
+  def invalidSaveModeError(saveMode: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SAVE_MODE",
+      messageParameters = Map("mode" -> toDSOption(saveMode))
+    )
+  }
+
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1308",
+      errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
       messageParameters = Map(
         "source" -> source,
-        "createMode" -> createMode))
+        "createMode" -> toDSOption(createMode)))
   }
 
   def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
@@ -3524,6 +3543,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "defaultValue" -> defaultValue))
   }
 
+  def defaultValueNotConstantError(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ))
+  }
+
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -3862,6 +3894,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> provider))
   }
 
+  def foundMultipleXMLDataSourceError(provider: String,
+      sourceNames: Seq[String],
+      externalSource: String): Throwable = {
+    new AnalysisException(
+      errorClass = "MULTIPLE_XML_DATA_SOURCE",
+      messageParameters = Map("provider" -> provider,
+        "sourceNames" -> sourceNames.mkString(", "),
+        "externalSource" -> externalSource)
+    )
+  }
+
   def xmlRowTagRequiredError(optionName: String): Throwable = {
     new AnalysisException(
       errorClass = "XML_ROW_TAG_MISSING",
@@ -3873,5 +3916,68 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new InvalidUDFClassException(
       errorClass = "_LEGACY_ERROR_TEMP_2450",
       messageParameters = Map("invalidClass" -> invalidClass))
+  }
+
+  def unsupportedParameterExpression(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_EXPR_FOR_PARAMETER",
+      messageParameters = Map(
+        "invalidExprSql" -> toSQLExpr(expr)),
+      origin = expr.origin)
+  }
+
+  def invalidQueryAllParametersMustBeNamed(expr: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      errorClass = "ALL_PARAMETERS_MUST_BE_NAMED",
+      messageParameters = Map("exprs" -> expr.map(e => toSQLExpr(e)).mkString(", ")))
+  }
+
+  def invalidQueryMixedQueryParameters(): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+      messageParameters = Map.empty)
+  }
+
+  def invalidExecuteImmediateVariableType(dataType: DataType): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      messageParameters = Map("varType" -> toSQLType(dataType)))
+  }
+
+  def invalidStatementForExecuteInto(queryString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
+  }
+
+  def nestedExecuteImmediate(queryString: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "NESTED_EXECUTE_IMMEDIATE",
+      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
+  }
+
+  def dataSourceTableSchemaMismatchError(
+      dsSchema: StructType, expectedSchema: StructType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+      messageParameters = Map(
+        "dsSchema" -> toSQLType(dsSchema),
+        "expectedSchema" -> toSQLType(expectedSchema)))
+  }
+
+  def cannotResolveDataFrameColumn(e: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
+    )
+  }
+
+  def ambiguousColumnReferences(e: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
+    )
   }
 }

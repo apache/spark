@@ -255,6 +255,18 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-46466: write and read TimestampNTZ with legacy rebase mode") {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+      withTable("ts") {
+        sql("create table ts (c1 timestamp_ntz) using parquet")
+        sql("insert into ts values (timestamp_ntz'0900-01-01 01:10:10')")
+        withAllParquetReaders {
+          checkAnswer(spark.table("ts"), sql("select timestamp_ntz'0900-01-01 01:10:10'"))
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling merging partfiles when merging parquet schema") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
@@ -1025,8 +1037,10 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       withAllParquetReaders {
         // We can read the decimal parquet field with a larger precision, if scale is the same.
-        val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
-        checkAnswer(readParquet(schema, path), df)
+        val schema1 = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(18, 1), b DECIMAL(38, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema2, path), df)
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
@@ -1037,7 +1051,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+       val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(readParquet(schema1, path), df)
+        Seq("a DECIMAL(3, 0)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
           val e = intercept[SparkException] {
             readParquet(schema, path).collect()
           }.getCause.getCause
@@ -1053,10 +1069,12 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("a DECIMAL(11, 2)", path), sql("SELECT 1.00"))
         checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
         checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
         checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
         checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        checkAnswer(readParquet("c DECIMAL(22, 0)", path), df.select("c"))
         val e = intercept[SparkException] {
           readParquet("d DECIMAL(3, 2)", path).collect()
         }.getCause
@@ -1098,19 +1116,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("row group skipping doesn't overflow when reading into larger type") {
     withTempPath { path =>
       Seq(0).toDF("a").write.parquet(path.toString)
-      // The vectorized and non-vectorized readers will produce different exceptions, we don't need
-      // to test both as this covers row group skipping.
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        // Reading integer 'a' as a long isn't supported. Check that an exception is raised instead
-        // of incorrectly skipping the single row group and producing incorrect results.
-        val exception = intercept[SparkException] {
+      withAllParquetReaders {
+        val result =
           spark.read
             .schema("a LONG")
             .parquet(path.toString)
             .where(s"a < ${Long.MaxValue}")
-            .collect()
-        }
-        assert(exception.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        checkAnswer(result, Row(0))
       }
     }
   }

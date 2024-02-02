@@ -132,6 +132,21 @@ case class UnresolvedInlineTable(
 }
 
 /**
+ * An resolved inline table that holds all the expressions that were checked for
+ * the right shape and common data types.
+ * This is a preparation step for [[org.apache.spark.sql.catalyst.optimizer.EvalInlineTables]] which
+ * will produce a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]]
+ * for this inline table.
+ *
+ * @param output list of column attributes
+ * @param rows expressions for the data rows
+ */
+case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute])
+  extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
+}
+
+/**
  * A table-valued function, e.g.
  * {{{
  *   select id from range(10);
@@ -679,6 +694,23 @@ case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Une
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")
+}
+
+/**
+ * Represents all input attributes to a given relational operator.
+ * This is used in Spark Connect dataframe, for example:
+ *    df1 = spark.createDataFrame([{"id": 1}])
+ *    df2 = spark.createDataFrame([{"id": 1, "val": "v"}])
+ *    df1.join(df2, "id").select(df1["*"])
+ * @param planId the plan id of target node.
+ */
+case class UnresolvedDataFrameStar(planId: Long)
+  extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DF_STAR)
+  override def toString: String = "UnresolvedDataFrameStar"
 }
 
 /**

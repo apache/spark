@@ -24,11 +24,13 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkException, SparkSQLException}
+import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
@@ -307,7 +309,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def cacheDataFrameById(dfId: String, df: DataFrame): Unit = {
     if (dataFrameCache.putIfAbsent(dfId, df) != null) {
-      SparkException.internalError(s"A dataframe is already associated with id $dfId")
+      throw SparkException.internalError(s"A dataframe is already associated with id $dfId")
     }
   }
 
@@ -331,7 +333,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def cacheListenerById(id: String, listener: StreamingQueryListener): Unit = {
     if (listenerCache.putIfAbsent(id, listener) != null) {
-      SparkException.internalError(s"A listener is already associated with id $id")
+      throw SparkException.internalError(s"A listener is already associated with id $id")
     }
   }
 
@@ -371,6 +373,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def listListenerIds(): Seq[String] = {
     listenerCache.keySet().asScala.toSeq
   }
+
+  /**
+   * An accumulator for Python executors.
+   *
+   * The accumulated results will be sent to the Python client via observed_metrics message.
+   */
+  private[connect] val pythonAccumulator: Option[PythonAccumulator] =
+    Try(session.sparkContext.collectionAccumulator[Array[Byte]]).toOption
 }
 
 object SessionHolder {

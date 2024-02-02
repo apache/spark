@@ -24,6 +24,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
@@ -807,7 +808,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def description(): String = name()
 
     override def bind(inputType: StructType): BoundFunction = {
-      throw new UnsupportedOperationException(s"Not implemented")
+      throw SparkUnsupportedOperationException()
     }
   }
 }

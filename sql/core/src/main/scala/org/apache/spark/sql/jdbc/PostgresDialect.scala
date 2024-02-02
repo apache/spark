@@ -129,10 +129,6 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case _ => None
   }
 
-  override def getTableExistsQuery(table: String): String = {
-    s"SELECT 1 FROM $table LIMIT 1"
-  }
-
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   /**
@@ -231,7 +227,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
@@ -250,7 +247,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
               if (tblRegexp.nonEmpty) {
                 throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
               } else {
-                super.classifyException(e, errorClass, messageParameters)
+                super.classifyException(e, errorClass, messageParameters, description)
               }
             }
           case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
@@ -262,10 +259,10 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

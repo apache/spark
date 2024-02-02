@@ -302,6 +302,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // general unresolved check below to throw a more tailored error message.
         new ResolveReferencesInAggregate(catalogManager).checkUnresolvedGroupByAll(operator)
 
+        // Early checks for column definitions, to produce better error messages
+        ColumnDefinition.checkColumnDefinitions(operator)
+
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
@@ -1374,11 +1377,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Correlated subquery can have a LIMIT clause
         case l @ Limit(_, input) =>
           failOnInvalidOuterReference(l)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_LIMIT_ENABLED))
 
         case o @ Offset(_, input) =>
           failOnInvalidOuterReference(o)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only

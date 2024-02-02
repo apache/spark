@@ -494,19 +494,23 @@ class ColumnReference(Expression):
 
 
 class UnresolvedStar(Expression):
-    def __init__(self, unparsed_target: Optional[str]):
+    def __init__(self, unparsed_target: Optional[str], plan_id: Optional[int] = None):
         super().__init__()
 
         if unparsed_target is not None:
             assert isinstance(unparsed_target, str) and unparsed_target.endswith(".*")
-
         self._unparsed_target = unparsed_target
+
+        assert plan_id is None or isinstance(plan_id, int)
+        self._plan_id = plan_id
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         expr = proto.Expression()
         expr.unresolved_star.SetInParent()
         if self._unparsed_target is not None:
             expr.unresolved_star.unparsed_target = self._unparsed_target
+        if self._plan_id is not None:
+            expr.unresolved_star.plan_id = self._plan_id
         return expr
 
     def __repr__(self) -> str:

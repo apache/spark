@@ -85,7 +85,8 @@ def _create_py_udf(
             eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         else:
             warnings.warn(
-                "Arrow optimization for Python UDFs cannot be enabled.",
+                "Arrow optimization for Python UDFs cannot be enabled for functions"
+                " without arguments.",
                 UserWarning,
             )
 

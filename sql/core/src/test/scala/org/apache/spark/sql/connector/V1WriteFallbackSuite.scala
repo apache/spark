@@ -249,7 +249,7 @@ private object InMemoryV1Provider {
 }
 
 class InMemoryV1Provider
-  extends FakeV2Provider
+  extends FakeV2ProviderWithCustomSchema
   with DataSourceRegister
   with CreatableRelationProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {

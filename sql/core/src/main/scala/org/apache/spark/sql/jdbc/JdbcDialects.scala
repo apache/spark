@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -159,7 +160,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       val connection =
         ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
       require(connection != null,
-        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+        s"The driver could not open a JDBC connection. Check the URL: ${options.getRedactUrl()}")
       connection
     }
   }
@@ -218,7 +219,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return The SQL query to use for checking the table.
    */
   def getTableExistsQuery(table: String): String = {
-    s"SELECT * FROM $table WHERE 1=0"
+    s"SELECT 1 FROM $table WHERE 1=0"
   }
 
   /**
@@ -325,8 +326,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: $funcName")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
 
@@ -335,8 +339,28 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction(funcName)) {
         super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
+      }
+    }
+
+    override def visitInverseDistributionFunction(
+        funcName: String,
+        isDistinct: Boolean,
+        inputs: Array[String],
+        orderingWithinGroups: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        super.visitInverseDistributionFunction(
+          dialectFunctionName(funcName), isDistinct, inputs, orderingWithinGroups)
+      } else {
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3178",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
 
@@ -346,8 +370,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction("OVERLAY")) {
         super.visitOverlay(inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> "OVERLAY"))
       }
     }
 
@@ -355,8 +382,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction("TRIM")) {
         super.visitTrim(direction, inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: TRIM")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> "TRIM"))
       }
     }
   }
@@ -587,7 +617,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
-    throw new UnsupportedOperationException("createIndex is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3179")
   }
 
   /**
@@ -604,7 +634,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       indexName: String,
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
-    throw new UnsupportedOperationException("indexExists is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3180")
   }
 
   /**
@@ -615,7 +645,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return the SQL statement to use for dropping the index.
    */
   def dropIndex(indexName: String, tableIdent: Identifier): String = {
-    throw new UnsupportedOperationException("dropIndex is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3181")
   }
 
   /**
@@ -625,7 +655,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       conn: Connection,
       tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
-    throw new UnsupportedOperationException("listIndexes is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3182")
   }
 
   /**
@@ -633,13 +663,31 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param e The dialect specific exception.
    * @param errorClass The error class assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
+   * @param description The error description
    * @return `AnalysisException` or its sub-class.
    */
   def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
-    new AnalysisException(errorClass, messageParameters, cause = Some(e))
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    classifyException(description, e)
+  }
+
+  /**
+   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param message The error message to be placed to the returned exception.
+   * @param e The dialect specific exception.
+   * @return `AnalysisException` or its sub-class.
+   */
+  @deprecated("Please override the classifyException method with an error class", "4.0.0")
+  def classifyException(message: String, e: Throwable): AnalysisException = {
+    new AnalysisException(
+      errorClass = "FAILED_JDBC.UNCLASSIFIED",
+      messageParameters = Map(
+        "url" -> "jdbc:",
+        "message" -> message),
+      cause = Some(e))
   }
 
   /**
@@ -683,7 +731,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =
-    throw new UnsupportedOperationException("TableSample is not supported by this data source")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   /**
    * Return the DB-specific quoted and fully qualified table name

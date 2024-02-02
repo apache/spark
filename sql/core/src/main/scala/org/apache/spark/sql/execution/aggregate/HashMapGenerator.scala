@@ -174,6 +174,7 @@ abstract class HashMapGenerator(
           """
         }
       case StringType => hashBytes(s"$input.getBytes()")
+      case CalendarIntervalType => hashInt(s"$input.hashCode()")
     }
   }
 }

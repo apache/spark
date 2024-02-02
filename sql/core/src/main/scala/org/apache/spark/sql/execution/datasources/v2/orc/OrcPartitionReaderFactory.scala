@@ -26,6 +26,7 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
@@ -58,7 +59,8 @@ case class OrcPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
-    options: OrcOptions) extends FilePartitionReaderFactory {
+    options: OrcOptions,
+    memoryMode: MemoryMode) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -87,7 +89,7 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = file.toPath
 
-    val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf))(_.getSchema)
+    val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf)._1)(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
 
@@ -127,8 +129,8 @@ case class OrcPartitionReaderFactory(
       return buildColumnarReaderWithAggregates(file, conf)
     }
     val filePath = file.toPath
-
-    val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf))(_.getSchema)
+    lazy val (reader, readerOptions) = createORCReader(filePath, conf)
+    val orcSchema = Utils.tryWithResource(reader)(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
 
@@ -147,8 +149,8 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val batchReader = new OrcColumnarBatchReader(capacity)
-      batchReader.initialize(fileSplit, taskAttemptContext)
+      val batchReader = new OrcColumnarBatchReader(capacity, memoryMode)
+      batchReader.initialize(fileSplit, taskAttemptContext, readerOptions.getOrcTail)
       val requestedPartitionColIds =
         Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)
 
@@ -162,7 +164,9 @@ case class OrcPartitionReaderFactory(
     }
   }
 
-  private def createORCReader(filePath: Path, conf: Configuration): Reader = {
+  private def createORCReader(
+      filePath: Path,
+      conf: Configuration): (Reader, OrcFile.ReaderOptions) = {
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val fs = filePath.getFileSystem(conf)
@@ -171,7 +175,7 @@ case class OrcPartitionReaderFactory(
 
     pushDownPredicates(reader.getSchema, conf)
 
-    reader
+    (reader, readerOptions)
   }
 
   /**
@@ -184,7 +188,7 @@ case class OrcPartitionReaderFactory(
     new PartitionReader[InternalRow] {
       private var hasNext = true
       private lazy val row: InternalRow = {
-        Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
+        Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
           OrcUtils.createAggInternalRowFromFooter(
             reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
             readDataSchema, file.partitionValues)
@@ -212,7 +216,7 @@ case class OrcPartitionReaderFactory(
     new PartitionReader[ColumnarBatch] {
       private var hasNext = true
       private lazy val batch: ColumnarBatch = {
-        Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
+        Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
           val row = OrcUtils.createAggInternalRowFromFooter(
             reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
             readDataSchema, file.partitionValues)

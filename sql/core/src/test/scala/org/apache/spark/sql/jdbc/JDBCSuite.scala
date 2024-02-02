@@ -1058,10 +1058,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
     val table = "weblogs"
-    val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
-    val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
-    assert(MySQL.getTableExistsQuery(table) == limitQuery)
-    assert(Postgres.getTableExistsQuery(table) == limitQuery)
+    val defaultQuery = s"SELECT 1 FROM $table WHERE 1=0"
+    assert(MySQL.getTableExistsQuery(table) == defaultQuery)
+    assert(Postgres.getTableExistsQuery(table) == defaultQuery)
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
@@ -1277,7 +1276,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
-      map(_.databaseTypeDefinition).get == "CLOB")
+      map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
   }
 
   test("SPARK-16625: General data types to be mapped to Oracle") {
@@ -1295,7 +1294,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getJdbcType(oracleDialect, DoubleType) == "NUMBER(19, 4)")
     assert(getJdbcType(oracleDialect, ByteType) == "NUMBER(3)")
     assert(getJdbcType(oracleDialect, ShortType) == "NUMBER(5)")
-    assert(getJdbcType(oracleDialect, StringType) == "CLOB")
+    assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")

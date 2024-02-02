@@ -103,7 +103,10 @@ class NlargestNsmallestTestsMixin:
             psdf.set_index(["a", "b"]).groupby(["c"])["d"].nsmallest(1)
 
 
-class NlargestNsmallestTests(NlargestNsmallestTestsMixin, PandasOnSparkTestCase):
+class NlargestNsmallestTests(
+    NlargestNsmallestTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 

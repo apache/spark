@@ -82,9 +82,9 @@ case class CreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val table = catalog.createTable(
+    val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)
+      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
@@ -162,9 +162,9 @@ case class ReplaceTableAsSelectExec(
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    val table = catalog.createTable(
+    val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)
+      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
@@ -421,7 +421,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
 trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serializable {
 
-  protected def write(writer: W, row: InternalRow): Unit
+  protected def write(writer: W, iter: java.util.Iterator[InternalRow]): Unit
 
   def run(
       writerFactory: DataWriterFactory,
@@ -436,19 +436,11 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
     val attemptId = context.attemptNumber()
     val dataWriter = writerFactory.createWriter(partId, taskId).asInstanceOf[W]
 
-    var count = 0L
+    val iterWithMetrics = IteratorWithMetrics(iter, dataWriter, customMetrics)
+
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      while (iter.hasNext) {
-        if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-          CustomMetrics.updateMetrics(
-            dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
-        }
-
-        // Count is here.
-        count += 1
-        write(dataWriter, iter.next())
-      }
+      write(dataWriter, iterWithMetrics)
 
       CustomMetrics.updateMetrics(
         dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
@@ -476,7 +468,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId, " +
         s"stage $stageId.$stageAttempt)")
 
-      DataWritingSparkTaskResult(count, msg)
+      DataWritingSparkTaskResult(iterWithMetrics.count, msg)
 
     })(catchBlock = {
       // If there is an error, abort this writer
@@ -489,11 +481,30 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       dataWriter.close()
     })
   }
+
+  private case class IteratorWithMetrics(
+      iter: Iterator[InternalRow],
+      dataWriter: W,
+      customMetrics: Map[String, SQLMetric]) extends java.util.Iterator[InternalRow] {
+    var count = 0L
+
+    override def hasNext: Boolean = iter.hasNext
+
+    override def next(): InternalRow = {
+      if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+        CustomMetrics.updateMetrics(
+          dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
+      }
+      count += 1
+      iter.next()
+    }
+  }
 }
 
 object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
-  override protected def write(writer: DataWriter[InternalRow], row: InternalRow): Unit = {
-    writer.write(row)
+  override protected def write(
+      writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    writer.writeAll(iter)
   }
 }
 
@@ -503,25 +514,29 @@ case class DeltaWritingSparkTask(
   private lazy val rowProjection = projections.rowProjection.orNull
   private lazy val rowIdProjection = projections.rowIdProjection
 
-  override protected def write(writer: DeltaWriter[InternalRow], row: InternalRow): Unit = {
-    val operation = row.getInt(0)
+  override protected def write(
+      writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    while (iter.hasNext) {
+      val row = iter.next()
+      val operation = row.getInt(0)
 
-    operation match {
-      case DELETE_OPERATION =>
-        rowIdProjection.project(row)
-        writer.delete(null, rowIdProjection)
+      operation match {
+        case DELETE_OPERATION =>
+          rowIdProjection.project(row)
+          writer.delete(null, rowIdProjection)
 
-      case UPDATE_OPERATION =>
-        rowProjection.project(row)
-        rowIdProjection.project(row)
-        writer.update(null, rowIdProjection, rowProjection)
+        case UPDATE_OPERATION =>
+          rowProjection.project(row)
+          rowIdProjection.project(row)
+          writer.update(null, rowIdProjection, rowProjection)
 
-      case INSERT_OPERATION =>
-        rowProjection.project(row)
-        writer.insert(rowProjection)
+        case INSERT_OPERATION =>
+          rowProjection.project(row)
+          writer.insert(rowProjection)
 
-      case other =>
-        throw new SparkException(s"Unexpected operation ID: $other")
+        case other =>
+          throw new SparkException(s"Unexpected operation ID: $other")
+      }
     }
   }
 }
@@ -533,27 +548,31 @@ case class DeltaWithMetadataWritingSparkTask(
   private lazy val rowIdProjection = projections.rowIdProjection
   private lazy val metadataProjection = projections.metadataProjection.orNull
 
-  override protected def write(writer: DeltaWriter[InternalRow], row: InternalRow): Unit = {
-    val operation = row.getInt(0)
+  override protected def write(
+      writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    while (iter.hasNext) {
+      val row = iter.next()
+      val operation = row.getInt(0)
 
-    operation match {
-      case DELETE_OPERATION =>
-        rowIdProjection.project(row)
-        metadataProjection.project(row)
-        writer.delete(metadataProjection, rowIdProjection)
+      operation match {
+        case DELETE_OPERATION =>
+          rowIdProjection.project(row)
+          metadataProjection.project(row)
+          writer.delete(metadataProjection, rowIdProjection)
 
-      case UPDATE_OPERATION =>
-        rowProjection.project(row)
-        rowIdProjection.project(row)
-        metadataProjection.project(row)
-        writer.update(metadataProjection, rowIdProjection, rowProjection)
+        case UPDATE_OPERATION =>
+          rowProjection.project(row)
+          rowIdProjection.project(row)
+          metadataProjection.project(row)
+          writer.update(metadataProjection, rowIdProjection, rowProjection)
 
-      case INSERT_OPERATION =>
-        rowProjection.project(row)
-        writer.insert(rowProjection)
+        case INSERT_OPERATION =>
+          rowProjection.project(row)
+          writer.insert(rowProjection)
 
-      case other =>
-        throw new SparkException(s"Unexpected operation ID: $other")
+        case other =>
+          throw new SparkException(s"Unexpected operation ID: $other")
+      }
     }
   }
 }

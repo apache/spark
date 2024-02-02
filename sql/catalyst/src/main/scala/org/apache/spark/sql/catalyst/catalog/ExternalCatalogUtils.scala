@@ -64,7 +64,7 @@ object ExternalCatalogUtils {
   }
 
   def needsEscaping(c: Char): Boolean = {
-    c >= 0 && c < charToEscape.size() && charToEscape.get(c)
+    c < charToEscape.size() && charToEscape.get(c)
   }
 
   def escapePathName(path: String): String = {

@@ -132,7 +132,7 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
       - name: Cache Scala, SBT and Maven
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             build/apache-maven-*
@@ -143,7 +143,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Maven local repository
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -174,7 +174,7 @@ jobs:
         shell: 'script -q -e -c "bash {0}"'
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
-          export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
+          export TERM=vt100
           # `set -e` to make the exit status as expected due to use `script -q -e -c` to run the commands
           set -e
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
@@ -200,13 +200,13 @@ jobs:
           rm -rf ~/.m2/repository/org/apache/spark
       - name: Upload test results to report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: "**/target/test-reports/*.xml"
       - name: Upload unit tests log files
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: "**/target/unit-tests.log"
