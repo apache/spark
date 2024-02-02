@@ -2648,6 +2648,41 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             psdf._to_internal_pandas(), self.to_latex, pd.DataFrame.to_latex, args
         )
 
+    def to_feather(
+        self,
+        path: Union[str, IO[str]],
+        **kwargs: Any,
+    ) -> None:
+        """
+        Write a DataFrame to the binary Feather format.
+
+        .. note:: This method should only be used if the resulting DataFrame is expected
+                  to be small, as all the data is loaded into the driver's memory.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str, path object, file-like object
+            String, path object (implementing ``os.PathLike[str]``), or file-like
+            object implementing a binary ``write()`` function.
+        **kwargs :
+            Additional keywords passed to :func:`pyarrow.feather.write_feather`.
+            This includes the `compression`, `compression_level`, `chunksize`
+            and `version` keywords.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame([[1, 2, 3], [4, 5, 6]])
+        >>> df.to_feather("file.feather")  # doctest: +SKIP
+        """
+        # Make sure locals() call is at the top of the function so we don't capture local variables.
+        args = locals()
+
+        return validate_arguments_and_invoke_function(
+            self._to_internal_pandas(), self.to_feather, pd.DataFrame.to_feather, args
+        )
+
     def transpose(self) -> "DataFrame":
         """
         Transpose index and columns.
