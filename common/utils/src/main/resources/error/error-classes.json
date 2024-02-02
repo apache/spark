@@ -441,8 +441,20 @@
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
-      "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
+      "The codec <codecName> is not available."
     ],
+    "subClass" : {
+      "WITH_AVAILABLE_CODECS_SUGGESTION" : {
+        "message" : [
+          "Available codecs are <availableCodecs>."
+        ]
+      },
+      "WITH_CONF_SUGGESTION" : {
+        "message" : [
+          "Consider to set the config <configKey> to <configVal>."
+        ]
+      }
+    },
     "sqlState" : "56038"
   },
   "CODEC_SHORT_NAME_NOT_FOUND" : {
