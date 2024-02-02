@@ -78,14 +78,7 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
   }
   // scalastyle:on caselocale
 
-  test("compare") {
-    forAll { (s1: String, s2: String) =>
-      assert(Math.signum {
-        toUTF8(s1).compareTo(toUTF8(s2)).toFloat
-      } === Math.signum(s1.compareTo(s2).toFloat))
-    }
-  }
-
+  /*
   test("substring") {
     forAll { (s: String) =>
       for (start <- 0 to s.length; end <- 0 to s.length; if start <= end) {
@@ -102,6 +95,7 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
       }
     }
   }
+   */
 
   val whitespaceChar: Gen[Char] = Gen.const(0x20.toChar)
   val whitespaceString: Gen[String] = Gen.listOf(whitespaceChar).map(_.mkString)

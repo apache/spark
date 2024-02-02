@@ -495,7 +495,7 @@ private[columnar] case class STRING(collationId: Int)
   extends NativeColumnType(PhysicalStringType(), 8) with DirectCopyColumnType[UTF8String] {
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
-    row.getUTF8String(ordinal, collationId).numBytes() + 4
+    row.getUTF8String(ordinal).numBytes() + 4
   }
 
   override def append(v: UTF8String, buffer: ByteBuffer): Unit = {
@@ -520,7 +520,7 @@ private[columnar] case class STRING(collationId: Int)
   }
 
   override def getField(row: InternalRow, ordinal: Int): UTF8String = {
-    row.getUTF8String(ordinal, collationId)
+    row.getUTF8String(ordinal)
   }
 
   override def copyField(from: InternalRow, fromOrdinal: Int,

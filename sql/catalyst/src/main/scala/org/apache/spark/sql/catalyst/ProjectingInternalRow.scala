@@ -87,8 +87,8 @@ case class ProjectingInternalRow(schema: StructType, colOrdinals: Seq[Int]) exte
     row.getDecimal(colOrdinals(ordinal), precision, scale)
   }
 
-  override def getUTF8String(ordinal: Int, collationId: Int): UTF8String = {
-    row.getUTF8String(colOrdinals(ordinal), collationId)
+  override def getUTF8String(ordinal: Int): UTF8String = {
+    row.getUTF8String(colOrdinals(ordinal))
   }
 
   override def getBinary(ordinal: Int): Array[Byte] = {

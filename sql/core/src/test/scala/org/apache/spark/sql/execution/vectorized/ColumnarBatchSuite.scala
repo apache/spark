@@ -811,13 +811,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 17 + (s + s).length)
 
       column.putNull(idx)
-      assert(column.getUTF8String(idx, 0) == null)
+      assert(column.getUTF8String(idx) == null)
       idx += 1
 
       reference.zipWithIndex.foreach { v =>
         val errMsg = "VectorType=" + column.getClass.getSimpleName
         assert(v._1.length == column.getArrayLength(v._2), errMsg)
-        assert(v._1 == column.getUTF8String(v._2, 0).toString, errMsg)
+        assert(v._1 == column.getUTF8String(v._2).toString, errMsg)
       }
 
       column.reset()
@@ -1191,7 +1191,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(1).getDouble(0) == 1.1)
       assert(columns(1).isNullAt(0) == false)
       assert(columns(2).isNullAt(0))
-      assert(columns(3).getUTF8String(0, 0).toString == "Hello")
+      assert(columns(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
       val it = batch.rowIterator()
@@ -1202,7 +1202,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(row.getDouble(1) == 1.1)
       assert(row.isNullAt(1) == false)
       assert(row.isNullAt(2))
-      assert(columns(3).getUTF8String(0, 0).toString == "Hello")
+      assert(columns(3).getUTF8String(0).toString == "Hello")
       assert(it.hasNext == false)
       assert(it.hasNext == false)
 
@@ -1743,8 +1743,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       converter.convert(row3, columns.toArray)
 
       assert(columns(0).dataType() == StringType)
-      assert(columns(0).getUTF8String(0, 0).toString == "a string")
-      assert(columns(0).getUTF8String(1, 0).toString == "second string")
+      assert(columns(0).getUTF8String(0).toString == "a string")
+      assert(columns(0).getUTF8String(1).toString == "second string")
       assert(columns(0).isNullAt(2))
 
       assert(columns(1).dataType() == BooleanType)

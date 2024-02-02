@@ -37,26 +37,22 @@ object UTF8StringBenchmark extends BenchmarkBase {
         val (sourceString, targetString, description) = input
 
         benchmark.addCase(s"Default collation equality $description") { _ =>
-          1.to(10000).foreach(_ => sourceString.equals(targetString))
+          1.to(10000).foreach(_ => sourceString.binaryEquals(targetString))
         }
 
         benchmark.addCase(s"Default collation comparison $description") { _ =>
-          1.to(10000).foreach(_ => sourceString.compare(targetString))
+          1.to(10000).foreach(_ => sourceString.binaryCompare(targetString))
         }
 
         benchmark.addCase(s"Non default collation through id equality $description") { _ =>
           1.to(10000).foreach(_ => {
-            sourceString.installCollationAwareComparator(collationId)
-            targetString.installCollationAwareComparator(collationId)
-            sourceString.equals(targetString)
+            sourceString.collationAwareEquals(targetString, collationId)
           })
         }
 
         benchmark.addCase(s"Non default collation through id comparison $description") { _ =>
           1.to(10000).foreach(_ => {
-            sourceString.installCollationAwareComparator(collationId)
-            targetString.installCollationAwareComparator(collationId)
-            sourceString.compare(targetString)
+            sourceString.collationAwareCompareTo(targetString, collationId)
           })
         }
       })

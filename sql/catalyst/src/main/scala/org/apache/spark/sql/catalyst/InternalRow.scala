@@ -33,7 +33,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   def numFields: Int
 
   // This is only use for test and will throw a null pointer exception if the position is null.
-  def getString(ordinal: Int): String = getUTF8String(ordinal, 0).toString
+  def getString(ordinal: Int): String = getUTF8String(ordinal).toString
 
   def setNullAt(i: Int): Unit
 
@@ -141,7 +141,7 @@ object InternalRow {
         case PhysicalFloatType => (input, ordinal) => input.getFloat(ordinal)
         case PhysicalDoubleType => (input, ordinal) => input.getDouble(ordinal)
         case PhysicalStringType(collationId) => (input, ordinal) =>
-          input.getUTF8String(ordinal, collationId)
+          input.getUTF8String(ordinal)
         case PhysicalBinaryType => (input, ordinal) => input.getBinary(ordinal)
         case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
         case t: PhysicalDecimalType => (input, ordinal) =>
@@ -189,7 +189,6 @@ object InternalRow {
     case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
     case st: StringType => (input, v) =>
       val str = v.asInstanceOf[UTF8String].copy()
-      str.installCollationAwareComparator(st.collationId)
       input.update(ordinal, str)
     case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
     case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())

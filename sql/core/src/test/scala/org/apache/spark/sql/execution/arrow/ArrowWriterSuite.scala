@@ -62,7 +62,7 @@ class ArrowWriterSuite extends SparkFunSuite {
             case FloatType => reader.getFloat(rowId)
             case DoubleType => reader.getDouble(rowId)
             case DecimalType.Fixed(precision, scale) => reader.getDecimal(rowId, precision, scale)
-            case st: StringType => reader.getUTF8String(rowId, st.collationId)
+            case _: StringType => reader.getUTF8String(rowId)
             case BinaryType => reader.getBinary(rowId)
             case DateType => reader.getInt(rowId)
             case TimestampType => reader.getLong(rowId)
@@ -369,7 +369,7 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val struct0 = reader.getStruct(0)
     assert(struct0.getInt(0) === 1)
-    assert(struct0.getUTF8String(1, 0) === UTF8String.fromString("str1"))
+    assert(struct0.getUTF8String(1) === UTF8String.fromString("str1"))
 
     val struct1 = reader.getStruct(1)
     assert(struct1.isNullAt(0))
@@ -383,7 +383,7 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val struct4 = reader.getStruct(4)
     assert(struct4.isNullAt(0))
-    assert(struct4.getUTF8String(1, 0) === UTF8String.fromString("str5"))
+    assert(struct4.getUTF8String(1) === UTF8String.fromString("str5"))
 
     writer.root.close()
   }
@@ -404,7 +404,7 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val struct00 = reader.getStruct(0).getStruct(0, 2)
     assert(struct00.getInt(0) === 1)
-    assert(struct00.getUTF8String(1, 0) === UTF8String.fromString("str1"))
+    assert(struct00.getUTF8String(1) === UTF8String.fromString("str1"))
 
     val struct10 = reader.getStruct(1).getStruct(0, 2)
     assert(struct10.isNullAt(0))

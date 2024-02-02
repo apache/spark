@@ -19,11 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import scala.math.Ordering
-
 import org.apache.logging.log4j.Level
-
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,6 +29,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.types.PhysicalStringType
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.types._
@@ -245,13 +244,13 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val unsafeProj = UnsafeProjection.create(schema)
     val unsafeRow: UnsafeRow = unsafeProj(internalRow)
-    assert(unsafeRow.getUTF8String(0, StringType.DEFAULT_COLLATION_ID)
+    assert(unsafeRow.getUTF8String(0)
       === UTF8String.fromString("a"))
     assert(unsafeRow.getInt(1) === 1)
     assert(unsafeRow.getStruct(2, 2).getUTF8String(
-      0, StringType.DEFAULT_COLLATION_ID) === UTF8String.fromString("b"))
+      0) === UTF8String.fromString("b"))
     assert(unsafeRow.getStruct(2, 2).getInt(1) === 2)
-    assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getUTF8String(0, 0) ===
+    assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getUTF8String(0) ===
       UTF8String.fromString("c"))
     assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getInt(1) === 3)
 
@@ -560,7 +559,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-32624: CodegenContext.addReferenceObj should work for nested Scala class") {
     // emulate TypeUtils.getInterpretedOrdering(StringType)
     val ctx = new CodegenContext
-    val comparator = implicitly[Ordering[UTF8String]]
+    val comparator = PhysicalStringType(0).ordering
     val refTerm = ctx.addReferenceObj("comparator", comparator)
 
     // Expecting result:

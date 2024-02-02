@@ -139,7 +139,7 @@ class JacksonGenerator(
 
     case st: StringType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeString(row.getUTF8String(ordinal, st.collationId).toString)
+        gen.writeString(row.getUTF8String(ordinal).toString)
 
     case TimestampType =>
       (row: SpecializedGetters, ordinal: Int) =>

@@ -66,7 +66,7 @@ public final class ColumnarBatchRow extends InternalRow {
         } else if (pdt instanceof PhysicalDoubleType) {
           row.setDouble(i, getDouble(i));
         } else if (pdt instanceof PhysicalStringType st) {
-          row.update(i, getUTF8String(i, st.collationId()).copy());
+          row.update(i, getUTF8String(i).copy());
         } else if (pdt instanceof PhysicalBinaryType) {
           row.update(i, getBinary(i));
         } else if (pdt instanceof PhysicalDecimalType t) {
@@ -120,8 +120,8 @@ public final class ColumnarBatchRow extends InternalRow {
   }
 
   @Override
-  public UTF8String getUTF8String(int ordinal, int collationId) {
-    return columns[ordinal].getUTF8String(rowId, collationId);
+  public UTF8String getUTF8String(int ordinal) {
+    return columns[ordinal].getUTF8String(rowId);
   }
 
   @Override
@@ -170,8 +170,8 @@ public final class ColumnarBatchRow extends InternalRow {
       return getFloat(ordinal);
     } else if (dataType instanceof DoubleType) {
       return getDouble(ordinal);
-    } else if (dataType instanceof StringType st) {
-      return getUTF8String(ordinal, st.collationId());
+    } else if (dataType instanceof StringType) {
+      return getUTF8String(ordinal);
     } else if (dataType instanceof BinaryType) {
       return getBinary(ordinal);
     } else if (dataType instanceof DecimalType t) {

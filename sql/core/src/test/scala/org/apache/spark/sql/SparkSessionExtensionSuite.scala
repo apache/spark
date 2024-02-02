@@ -682,8 +682,7 @@ case class NoCloseColumnVector(wrapped: ColumnVector) extends ColumnVector(wrapp
   override def getDecimal(rowId: Int, precision: Int, scale: Int): Decimal =
     wrapped.getDecimal(rowId, precision, scale)
 
-  override def getUTF8String(rowId: Int, collationId: Int): UTF8String =
-    wrapped.getUTF8String(rowId, collationId)
+  override def getUTF8String(rowId: Int): UTF8String = wrapped.getUTF8String(rowId)
 
   override def getBinary(rowId: Int): Array[Byte] = wrapped.getBinary(rowId)
 

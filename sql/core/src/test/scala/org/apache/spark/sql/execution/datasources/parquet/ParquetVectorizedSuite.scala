@@ -661,7 +661,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
           case IntegerType =>
             row.getInt(i).toString
           case StringType =>
-            val utf8Str = row.getUTF8String(i, 0)
+            val utf8Str = row.getUTF8String(i)
             if (utf8Str == null) "null"
             else utf8Str.toString
           case ArrayType(_, _) =>

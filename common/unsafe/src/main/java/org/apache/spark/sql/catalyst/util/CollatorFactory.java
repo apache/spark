@@ -79,7 +79,6 @@ public class CollatorFactory {
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
     collatorTable[2] = new CollatorInfo("UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0");
 
-
     // UNICODE case insensitive comparison (ROOT locale, in ICU).
     collatorTable[3] = new CollatorInfo("UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0");
     collatorTable[3].collator.setStrength(Collator.SECONDARY);

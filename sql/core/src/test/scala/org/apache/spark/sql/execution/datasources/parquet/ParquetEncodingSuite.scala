@@ -73,7 +73,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           assert(batch.column(0).getByte(i) == 1)
           assert(batch.column(1).getInt(i) == 2)
           assert(batch.column(2).getLong(i) == 3)
-          assert(batch.column(3).getUTF8String(i, 0).toString == "abc")
+          assert(batch.column(3).getUTF8String(i).toString == "abc")
           assert(batch.column(4).getInt(i) == 13)
           assert(batch.column(5).getLong(i) == 100000)
           assert(batch.column(6).getBoolean(i) == true)
@@ -133,9 +133,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         assert(reader.nextBatch())
 
         (0 until 512).foreach { i =>
-          assert(column.getUTF8String(3 * i, 0).toString == i.toString)
-          assert(column.getUTF8String(3 * i + 1, 0).toString == i.toString)
-          assert(column.getUTF8String(3 * i + 2, 0).toString == i.toString)
+          assert(column.getUTF8String(3 * i).toString == i.toString)
+          assert(column.getUTF8String(3 * i + 1).toString == i.toString)
+          assert(column.getUTF8String(3 * i + 2).toString == i.toString)
         }
         reader.close()
       }

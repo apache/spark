@@ -90,7 +90,7 @@ public class RowBasedKeyValueBatchSuite {
 
   private boolean checkKey(UnsafeRow row, long k1, String k2) {
     return (row.getLong(0) == k1)
-            && (row.getUTF8String(1, 0).equals(UTF8String.fromString(k2)));
+            && (row.getUTF8String(1).equals(UTF8String.fromString(k2)));
   }
 
   private boolean checkKey(UnsafeRow row, long k1, long k2) {

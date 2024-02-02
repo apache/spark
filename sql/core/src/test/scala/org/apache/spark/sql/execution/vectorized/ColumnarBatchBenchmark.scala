@@ -361,7 +361,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
         }
         i = 0
         while (i < count) {
-          sum += column.getUTF8String(i, 0).numBytes()
+          sum += column.getUTF8String(i).numBytes()
           i += 1
         }
         column.reset()

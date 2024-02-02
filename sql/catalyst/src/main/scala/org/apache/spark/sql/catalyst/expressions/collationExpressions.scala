@@ -47,10 +47,7 @@ case class Collate(inputString: Expression, collation: Expression)
 
   // Just pass through.
   override def eval(row: InternalRow): Any = {
-    // TODO: Proper codegen here.
-    val input = left.eval(row).asInstanceOf[UTF8String]
-    input.installCollationAwareComparator(collationId)
-    input
+    left.eval(row).asInstanceOf[UTF8String]
   }
 }
 

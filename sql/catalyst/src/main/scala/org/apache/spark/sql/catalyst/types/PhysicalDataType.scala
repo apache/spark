@@ -21,7 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.util.{ArrayData, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollatorFactory, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String, VariantVal}
@@ -264,7 +264,9 @@ case class PhysicalStringType(collationId: Int) extends PhysicalDataType {
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = UTF8String
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
+  private[sql] val ordering = {
+    CollatorFactory.getInfoForId(collationId).comparator.compare(_: UTF8String, _: UTF8String)
+  }
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 object PhysicalStringType {

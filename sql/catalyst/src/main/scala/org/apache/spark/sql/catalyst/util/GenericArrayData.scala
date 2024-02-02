@@ -70,7 +70,7 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   override def getFloat(ordinal: Int): Float = getAs(ordinal)
   override def getDouble(ordinal: Int): Double = getAs(ordinal)
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
-  override def getUTF8String(ordinal: Int, collationId: Int): UTF8String = getAs(ordinal)
+  override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
   override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
   override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
   override def getVariant(ordinal: Int): VariantVal = getAs(ordinal)

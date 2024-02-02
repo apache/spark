@@ -83,7 +83,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
       assert(batch.column(1).isInstanceOf[ConstantColumnVector])
 
       val p1 = batch.column(1).asInstanceOf[ConstantColumnVector]
-      assert(p1.getUTF8String(0, 0) === partitionValues.getUTF8String(0, 0))
+      assert(p1.getUTF8String(0) === partitionValues.getUTF8String(0))
     }
   }
 

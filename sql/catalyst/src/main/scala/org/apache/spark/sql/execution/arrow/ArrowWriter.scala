@@ -252,7 +252,7 @@ private[arrow] class StringWriter(val valueVector: VarCharVector) extends ArrowF
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    val utf8 = input.getUTF8String(ordinal, StringType.DEFAULT_COLLATION_ID)
+    val utf8 = input.getUTF8String(ordinal)
     val utf8ByteBuffer = utf8.getByteBuffer
     // todo: for off-heap UTF8String, how to pass in to arrow without copy?
     valueVector.setSafe(count, utf8ByteBuffer, utf8ByteBuffer.position(), utf8.numBytes())
@@ -267,7 +267,7 @@ private[arrow] class LargeStringWriter(
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    val utf8 = input.getUTF8String(ordinal, StringType.DEFAULT_COLLATION_ID)
+    val utf8 = input.getUTF8String(ordinal)
     val utf8ByteBuffer = utf8.getByteBuffer
     // todo: for off-heap UTF8String, how to pass in to arrow without copy?
     valueVector.setSafe(count, utf8ByteBuffer, utf8ByteBuffer.position(), utf8.numBytes())

@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StringType, _}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, ParentClassLoader, Utils}
@@ -622,6 +622,7 @@ class CodegenContext extends Logging {
       s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
     case DoubleType =>
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
+    case st: StringType => s"$c1.collationAwareEquals($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
@@ -650,6 +651,7 @@ class CodegenContext extends Logging {
       val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
       s"$clsName.compareFloats($c1, $c2)"
     // use c1 - c2 may overflow
+    case st: StringType => s"$c1.collationAwareCompareTo($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
     case NullType => "0"
@@ -1641,7 +1643,7 @@ object CodeGenerator extends Logging {
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
         case PhysicalStringType(collationId) =>
-          s"$input.getUTF8String($ordinal, $collationId)"
+          s"$input.getUTF8String($ordinal)"
         case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"

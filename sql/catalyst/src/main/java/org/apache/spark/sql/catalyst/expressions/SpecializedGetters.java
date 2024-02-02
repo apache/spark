@@ -46,7 +46,7 @@ public interface SpecializedGetters {
 
   Decimal getDecimal(int ordinal, int precision, int scale);
 
-  UTF8String getUTF8String(int ordinal, int collationId);
+  UTF8String getUTF8String(int ordinal);
 
   byte[] getBinary(int ordinal);
 

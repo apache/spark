@@ -416,6 +416,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           a.keyArray == b.keyArray && a.valueArray == b.valueArray
         case (a: Double, b: Double) if a.isNaN && b.isNaN => true
         case (a: Float, b: Float) if a.isNaN && b.isNaN => true
+        // these are values without collation.
+        // Perhaps we should fetch default collation here?
+        case (a: UTF8String, b: UTF8String) => a.binaryEquals(b)
         case (a, b) => a != null && a == b
       }
     case _ => false

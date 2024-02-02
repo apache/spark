@@ -108,9 +108,9 @@ class JoinedRow extends InternalRow {
     }
   }
 
-  override def getUTF8String(i: Int, collationId: Int): UTF8String =
-    if (i < row1.numFields) row1.getUTF8String(i, collationId)
-    else row2.getUTF8String(i - row1.numFields, collationId)
+  override def getUTF8String(i: Int): UTF8String =
+    if (i < row1.numFields) row1.getUTF8String(i)
+    else row2.getUTF8String(i - row1.numFields)
 
   override def getBinary(i: Int): Array[Byte] =
     if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)

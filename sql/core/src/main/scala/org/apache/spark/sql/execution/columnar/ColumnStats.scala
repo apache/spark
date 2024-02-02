@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.types.PhysicalStringType
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -262,17 +263,18 @@ private[columnar] final case class StringColumnStats(collationId: Int) extends C
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       // TODO: Stats work without collation concept.
-      val value = row.getUTF8String(ordinal, StringType.DEFAULT_COLLATION_ID)
+      val value = row.getUTF8String(ordinal)
       val size = value.numBytes() + 4;
-      gatherValueStats(value, size)
+      gatherValueStats(value, size, PhysicalStringType(collationId).ordering)
     } else {
       gatherNullStats()
     }
   }
 
-  def gatherValueStats(value: UTF8String, size: Int): Unit = {
-    if (upper == null || value.compareTo(upper) > 0) upper = value.clone()
-    if (lower == null || value.compareTo(lower) < 0) lower = value.clone()
+  def gatherValueStats(value: UTF8String, size: Int, ordering: Ordering[UTF8String]): Unit = {
+    if (upper == null || ordering.compare(value, lower) > 0) upper = value.clone()
+    if (lower == null || ordering.compare(value, lower) < 0) lower = value.clone()
+
     sizeInBytes += size
     count += 1
   }

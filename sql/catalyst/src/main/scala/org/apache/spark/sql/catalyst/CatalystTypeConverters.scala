@@ -299,7 +299,7 @@ object CatalystTypeConverters {
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
     override def toScalaImpl(row: InternalRow, column: Int): String =
-      row.getUTF8String(column, StringType.DEFAULT_COLLATION_ID).toString
+      row.getUTF8String(column).toString
   }
 
   private object DateConverter extends CatalystTypeConverter[Any, Date, Any] {

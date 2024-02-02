@@ -147,8 +147,8 @@ public final class ColumnarArray extends ArrayData {
   }
 
   @Override
-  public UTF8String getUTF8String(int ordinal, int collationId) {
-    return data.getUTF8String(offset + ordinal, collationId);
+  public UTF8String getUTF8String(int ordinal) {
+    return data.getUTF8String(offset + ordinal);
   }
 
   @Override

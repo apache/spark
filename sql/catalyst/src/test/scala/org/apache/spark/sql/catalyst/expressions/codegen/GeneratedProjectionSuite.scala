@@ -52,11 +52,11 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     (0 until N).foreach { i =>
       val s = UTF8String.fromString(i.toString)
       assert(i === unsafe.getInt(i + 2))
-      assert(s === unsafe.getUTF8String(i + 2 + N, 0))
+      assert(s === unsafe.getUTF8String(i + 2 + N))
       assert(i === unsafe.getStruct(0, N * 2).getInt(i))
-      assert(s === unsafe.getStruct(0, N * 2).getUTF8String(i + N, 0))
+      assert(s === unsafe.getStruct(0, N * 2).getUTF8String(i + N))
       assert(i === unsafe.getStruct(1, N * 2).getInt(i))
-      assert(s === unsafe.getStruct(1, N * 2).getUTF8String(i + N, 0))
+      assert(s === unsafe.getStruct(1, N * 2).getUTF8String(i + N))
     }
 
     // test generated SafeProjection
@@ -66,11 +66,11 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     (0 until N).foreach { i =>
       val s = UTF8String.fromString(i.toString)
       assert(i === result.getInt(i + 2))
-      assert(s === result.getUTF8String(i + 2 + N, 0))
+      assert(s === result.getUTF8String(i + 2 + N))
       assert(i === result.getStruct(0, N * 2).getInt(i))
-      assert(s === result.getStruct(0, N * 2).getUTF8String(i + N, 0))
+      assert(s === result.getStruct(0, N * 2).getUTF8String(i + N))
       assert(i === result.getStruct(1, N * 2).getInt(i))
-      assert(s === result.getStruct(1, N * 2).getUTF8String(i + N, 0))
+      assert(s === result.getStruct(1, N * 2).getUTF8String(i + N))
     }
 
     // test generated MutableProjection
@@ -103,11 +103,11 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     (0 until N).foreach { i =>
       val s = UTF8String.fromString(i.toString)
       assert(i === unsafe.getInt(i + 2))
-      assert(s === unsafe.getUTF8String(i + 2 + N, 0))
+      assert(s === unsafe.getUTF8String(i + 2 + N))
       assert(i === unsafe.getStruct(0, N * 2).getInt(i))
-      assert(s === unsafe.getStruct(0, N * 2).getUTF8String(i + N, 0))
+      assert(s === unsafe.getStruct(0, N * 2).getUTF8String(i + N))
       assert(i === unsafe.getStruct(1, N * 2).getInt(i))
-      assert(s === unsafe.getStruct(1, N * 2).getUTF8String(i + N, 0))
+      assert(s === unsafe.getStruct(1, N * 2).getUTF8String(i + N))
     }
 
     // test generated SafeProjection
@@ -117,11 +117,11 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     (0 until N).foreach { i =>
       val s = UTF8String.fromString(i.toString)
       assert(i === result.getInt(i + 2))
-      assert(s === result.getUTF8String(i + 2 + N, 0))
+      assert(s === result.getUTF8String(i + 2 + N))
       assert(i === result.getStruct(0, N * 2).getInt(i))
-      assert(s === result.getStruct(0, N * 2).getUTF8String(i + N, 0))
+      assert(s === result.getStruct(0, N * 2).getUTF8String(i + N))
       assert(i === result.getStruct(1, N * 2).getInt(i))
-      assert(s === result.getStruct(1, N * 2).getUTF8String(i + N, 0))
+      assert(s === result.getStruct(1, N * 2).getUTF8String(i + N))
     }
 
     // test generated MutableProjection
