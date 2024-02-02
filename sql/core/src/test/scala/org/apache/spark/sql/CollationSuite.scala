@@ -298,7 +298,6 @@ class CollationSuite extends QueryTest
   }
 
   test("create table support") {
-    // TODO: Filter pushdown and partitioning are todos.
     val tableName = "parquet_dummy_t"
     withTable(tableName) {
       sql(s"CREATE TABLE IF NOT EXISTS $tableName (c1 STRING COLLATE 'SR_CI_AI') USING PARQUET")
@@ -306,6 +305,23 @@ class CollationSuite extends QueryTest
       sql(s"INSERT INTO $tableName VALUES ('AAA')")
       checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"), Seq(Row("SR_CI_AI")))
       checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
+    }
+  }
+
+  test("create table with nested collations in struct") {
+    val tableName = "nested_collation_tbl"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |(c1 STRUCT<name: STRING COLLATE 'SR_CI_AI', age: INT>)
+           |USING PARQUET
+           |""".stripMargin)
+      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'aaa', 'id', 1))")
+      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'AAA', 'id', 2))")
+
+      checkAnswer(sql(s"SELECT DISTINCT collation(c1.name) FROM $tableName"), Seq(Row("SR_CI_AI")))
+      checkAnswer(sql(s"SELECT COUNT(DISTINCT c1.name) FROM $tableName"), Seq(Row(1)))
     }
   }
 

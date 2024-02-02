@@ -345,10 +345,6 @@ commentSpec
     : COMMENT stringLit
     ;
 
-collationSpec
-    : COLLATE stringLit
-    ;
-
 query
     : ctes? queryTerm queryOrganization
     ;
@@ -1098,6 +1094,10 @@ colPosition
     : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
+collation
+    : COLLATE collationName=stringLit
+    ;
+
 type
     : BOOLEAN
     | TINYINT | BYTE
@@ -1108,7 +1108,7 @@ type
     | DOUBLE
     | DATE
     | TIMESTAMP | TIMESTAMP_NTZ | TIMESTAMP_LTZ
-    | STRING
+    | STRING collation?
     | CHARACTER | CHAR
     | VARCHAR
     | BINARY
@@ -1175,7 +1175,6 @@ colDefinitionOption
     | defaultExpression
     | generationExpression
     | commentSpec
-    | collationSpec
     ;
 
 generationExpression

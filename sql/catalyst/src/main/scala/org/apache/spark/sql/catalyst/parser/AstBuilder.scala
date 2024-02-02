@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollatorFactory, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -3146,7 +3146,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     var defaultExpression: Option[DefaultExpressionContext] = None
     var generationExpression: Option[GenerationExpressionContext] = None
     var commentSpec: Option[CommentSpecContext] = None
-    var collationSpec: Option[CollationSpecContext] = None
 
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
@@ -3177,13 +3176,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         }
         commentSpec = Some(spec)
       }
-      Option(option.collationSpec()).foreach { spec =>
-        if (collationSpec.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnDescriptor(
-            option, colName.getText, "COLLATE")
-        }
-        collationSpec = Some(spec)
-      }
     }
 
     val builder = new MetadataBuilder
@@ -3191,7 +3183,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     commentSpec.map(visitCommentSpec).foreach {
       builder.putString("comment", _)
     }
-
     // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
     defaultExpression.map(visitDefaultExpression).foreach { field =>
       if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
@@ -3208,21 +3199,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
     }
 
-    val collation = collationSpec.map(visitCollationSpec)
     val name: String = colName.getText
-
-    val dataType = (collation, typedVisit[DataType](ctx.dataType)) match {
-      case (None, _) => typedVisit[DataType](ctx.dataType)
-      case (Some(collation), StringType) =>
-        val collationId = CollatorFactory.getInstance().collationNameToId(collation)
-        StringType(collationId)
-      case (Some(collation), dataType) =>
-        throw QueryParsingErrors.invalidCollationSpecified(ctx, dataType.catalogString, collation)
-    }
 
     StructField(
       name = name,
-      dataType = dataType,
+      dataType = typedVisit[DataType](ctx.dataType),
       nullable = nullable,
       metadata = builder.build())
   }
