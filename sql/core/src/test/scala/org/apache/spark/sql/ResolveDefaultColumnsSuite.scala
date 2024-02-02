@@ -217,7 +217,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("default values") {
+  test("SPARK-46949: DDL with valid default char/varchar values") {
     withTable("t") {
       val ddl =
         s"""
@@ -232,7 +232,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("default values 2") {
+  test("SPARK-46949: DDL with invalid default char/varchar values") {
     Seq("CHAR", "VARCHAR").foreach { typeName =>
       checkError(
         exception = intercept[SparkRuntimeException](
