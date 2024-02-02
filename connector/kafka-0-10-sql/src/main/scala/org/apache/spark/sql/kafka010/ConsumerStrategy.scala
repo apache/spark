@@ -28,7 +28,7 @@ import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
+import org.apache.spark.kafka010.KafkaConfigUpdater
 
 /**
  * Subscribe allows you to subscribe to a fixed collection of topics.
