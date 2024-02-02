@@ -314,7 +314,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val ret = if (supplanted == analyzed.dataType) {
       analyzed
     } else if (Cast.canUpCast(analyzed.dataType, supplanted)) {
-      Cast(analyzed, dataType)
+      Cast(analyzed, supplanted)
     } else {
       // If the provided default value is a literal of a wider type than the target column, but the
       // literal value fits within the narrower type, just coerce it for convenience. Exclude
@@ -343,7 +343,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       }
     }
     if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(dataType)) {
-      CharVarcharUtils.stringLengthCheck(ret, dataType).eval()
+      CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
     }
     ret
   }
