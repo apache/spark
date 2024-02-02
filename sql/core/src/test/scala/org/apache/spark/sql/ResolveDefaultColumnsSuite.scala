@@ -256,4 +256,11 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(sql("select * from t"), Row(1, "apache", "spark "))
     }
   }
+
+  test("SPARK-46958: Fix bug when canUpcast and result non-foldable expression") {
+    sql(s"CREATE TABLE t(key int, c STRING DEFAULT date '2018-11-17') " +
+      s"USING parquet")
+    sql("INSERT INTO t (key) VALUES(1)")
+    checkAnswer(sql("select * from t"), Row(1, "2018-11-17"))
+  }
 }

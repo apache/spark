@@ -311,36 +311,32 @@ object ResolveDefaultColumns extends QueryErrorsBase
       defaultSQL: String): Expression = {
     val supplanted = CharVarcharUtils.replaceCharVarcharWithString(dataType)
     // Perform implicit coercion from the provided expression type to the required column type.
-    val ret = if (supplanted == analyzed.dataType) {
-      analyzed
-    } else if (Cast.canUpCast(analyzed.dataType, supplanted)) {
-      Cast(analyzed, supplanted)
-    } else {
-      // If the provided default value is a literal of a wider type than the target column, but the
-      // literal value fits within the narrower type, just coerce it for convenience. Exclude
-      // boolean/array/struct/map types from consideration for this type coercion to avoid
-      // surprising behavior like interpreting "false" as integer zero.
-      val result = if (analyzed.isInstanceOf[Literal] &&
-        !Seq(supplanted, analyzed.dataType).exists(_ match {
+    val ret = analyzed match {
+      case equivalent if equivalent.dataType == supplanted => equivalent
+      case canUpCast if Cast.canUpCast(canUpCast.dataType, supplanted) =>
+        val lit = Cast(analyzed, supplanted, evalMode = EvalMode.TRY).eval(EmptyRow)
+        Literal(lit, supplanted)
+      case l: Literal
+        if !Seq(supplanted, l.dataType).exists(_ match {
           case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
           case _ => false
-        })) {
-        try {
-          val casted = Cast(analyzed, supplanted, evalMode = EvalMode.TRY).eval()
-          if (casted != null) {
-            Some(Literal(casted, supplanted))
-          } else {
-            None
-          }
+        }) =>
+        // If the provided default value is a literal of a wider type than the target column,
+        // but the literal value fits within the narrower type, just coerce it for convenience.
+        // Exclude boolean/array/struct/map types from consideration for this type coercion to
+        // avoid surprising behavior like interpreting "false" as integer zero.
+        val casted = Cast(l, supplanted, evalMode = EvalMode.TRY)
+        val result = try {
+          Option(casted.eval(EmptyRow)).map(Literal(_, supplanted))
         } catch {
-          case _: SparkThrowable | _: RuntimeException =>
-            None
+          case _: SparkThrowable | _: RuntimeException => None
         }
-      } else None
-      result.getOrElse {
+        result.getOrElse(
+          throw QueryCompilationErrors.defaultValuesDataTypeError(
+            statementType, colName, defaultSQL, dataType, l.dataType))
+      case _ =>
         throw QueryCompilationErrors.defaultValuesDataTypeError(
           statementType, colName, defaultSQL, dataType, analyzed.dataType)
-      }
     }
     if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(dataType)) {
       CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
