@@ -21,7 +21,6 @@ import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
-import jakarta.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Future}
@@ -30,6 +29,7 @@ import scala.io.Source
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
+import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkApplication

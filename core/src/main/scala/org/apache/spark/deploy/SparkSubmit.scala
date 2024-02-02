@@ -24,13 +24,13 @@ import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.util.ServiceLoader
 import java.util.jar.JarInputStream
-import jakarta.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{Properties, Try}
 
+import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}

@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.master.ui
 
-import jakarta.servlet.http.HttpServletRequest
-
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState

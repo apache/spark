@@ -17,11 +17,10 @@
 
 package org.apache.spark.deploy.rest
 
-import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.server.{HttpConnectionFactory, Server, ServerConnector}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}

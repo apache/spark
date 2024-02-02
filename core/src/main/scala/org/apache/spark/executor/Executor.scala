@@ -27,7 +27,6 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
-import jakarta.ws.rs.core.UriBuilder
 
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -37,6 +36,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{Cache, CacheBuilder, RemovalListener, RemovalNotification}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import jakarta.ws.rs.core.UriBuilder
 import org.slf4j.MDC
 
 import org.apache.spark._
