@@ -239,7 +239,7 @@ class MicroBatchExecution(
   private def verifyIfAQEIsDisabled(sink: Table, sparkSession: SparkSession): Unit = {
     if (!sink.isInstanceOf[ForeachBatchSink[_]] &&
       sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      throw QueryCompilationErrors.unsupportedFeatureForStreaming("Adaptive Query Execution", "AQE")
+      throw QueryCompilationErrors.unsupportedAQEForStreaming()
     }
   }
 

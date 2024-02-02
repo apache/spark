@@ -3981,9 +3981,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def unsupportedFeatureForStreaming(feature: String, subClass: String): Throwable = {
+  def unsupportedAQEForStreaming(): Throwable = {
     throw new AnalysisException(
-      errorClass = s"UNSUPPORTED_FEATURE_FOR_STREAMING.$subClass",
-      messageParameters = Map("feature" -> feature))
+      errorClass = "UNSUPPORTED_FEATURE.AQE_STREAMING",
+      messageParameters = Map.empty)
   }
 }

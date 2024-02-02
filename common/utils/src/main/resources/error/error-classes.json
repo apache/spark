@@ -3775,6 +3775,11 @@
           "The ANALYZE TABLE command does not support views."
         ]
       },
+      "AQE_STREAMING" : {
+        "message" : [
+          "Adaptive Query Execution is not supported in Structured Streaming. If you want to use AQE in streaming, please use ForeachBatch sink."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -4098,19 +4103,6 @@
       }
     },
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_FEATURE_FOR_STREAMING" : {
-    "message" : [
-      "<feature> is not supported in Structured Streaming."
-    ],
-    "subClass" : {
-      "AQE" : {
-        "message" : [
-          "If you want to use AQE in streaming, please use ForeachBatch sink."
-        ]
-      }
-    },
-    "sqlState" : "XXKST"
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
