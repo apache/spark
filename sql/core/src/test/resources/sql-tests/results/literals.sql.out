@@ -660,7 +660,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"named_struct(a, 1, b, spark)\"",
-    "inputType" : "\"STRUCT<a: INT, b: STRING>\"",
+    "inputType" : "\"STRUCT<a: INT NOT NULL, b: STRING NOT NULL>\"",
     "paramIndex" : "1",
     "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "sqlExpr" : "\"(+ named_struct(a, 1, b, spark))\""

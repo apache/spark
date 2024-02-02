@@ -17,19 +17,40 @@
 
 import os
 import sys
+import inspect
 import tempfile
 import unittest
 import warnings
+from contextlib import contextmanager
 from io import StringIO
-from typing import Iterator
+from typing import cast, Iterator
 from unittest import mock
 
 from pyspark import SparkConf, SparkContext
 from pyspark.profiler import has_memory_profiler
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import pandas_udf, udf
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+from pyspark.sql.functions import col, pandas_udf, udf
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+    ReusedSQLTestCase,
+)
 from pyspark.testing.utils import PySparkTestCase
+
+
+def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
+    @udf("long", useArrow=use_arrow)
+    def add1(x):
+        return x + 1
+
+    @udf("long", useArrow=use_arrow)
+    def add2(x):
+        return x + 2
+
+    df = spark.range(10).select(add1("id"), add2("id"), add1("id"), add2(col("id") + 1))
+    action(df)
 
 
 @unittest.skipIf(
@@ -179,6 +200,191 @@ class MemoryProfilerTests(PySparkTestCase):
 
         df = self.spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0)], ("id", "v"))
         df.mapInPandas(map, schema=df.schema).collect()
+
+
+@unittest.skipIf(not has_memory_profiler, "Must have memory-profiler installed.")
+class MemoryProfiler2TestsMixin:
+    @contextmanager
+    def trap_stdout(self):
+        old_stdout = sys.stdout
+        sys.stdout = io = StringIO()
+        try:
+            yield io
+        finally:
+            sys.stdout = old_stdout
+
+    @property
+    def profile_results(self):
+        return self.spark._profiler_collector._memory_profile_results
+
+    def test_memory_profiler_udf(self):
+        _do_computation(self.spark)
+
+        # Without the conf enabled, no profile results are collected.
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            _do_computation(self.spark)
+
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.trap_stdout() as io_all:
+            self.spark.showMemoryProfiles()
+
+        for id in self.profile_results:
+            self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
+
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_memory_profiler_udf_with_arrow(self):
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            _do_computation(self.spark, use_arrow=True)
+
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    def test_memory_profiler_udf_multiple_actions(self):
+        def action(df):
+            df.collect()
+            df.show()
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            _do_computation(self.spark, action=action)
+
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    def test_memory_profiler_udf_registered(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        self.spark.udf.register("add1", add1)
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_memory_profiler_pandas_udf(self):
+        @pandas_udf("long")
+        def add1(x):
+            return x + 1
+
+        @pandas_udf("long")
+        def add2(x):
+            return x + 2
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            df = self.spark.range(10, numPartitions=2).select(
+                add1("id"), add2("id"), add1("id"), add2(col("id") + 1)
+            )
+            df.collect()
+
+        self.assertEqual(3, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_memory_profiler_pandas_udf_iterator_not_supported(self):
+        import pandas as pd
+
+        @pandas_udf("long")
+        def add1(x):
+            return x + 1
+
+        @pandas_udf("long")
+        def add2(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in iter:
+                yield s + 2
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            df = self.spark.range(10, numPartitions=2).select(
+                add1("id"), add2("id"), add1("id"), add2(col("id") + 1)
+            )
+            df.collect()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_memory_profiler_map_in_pandas_not_supported(self):
+        df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+
+        def filter_func(iterator):
+            for pdf in iterator:
+                yield pdf[pdf.id == 1]
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            df.mapInPandas(filter_func, df.schema).show()
+
+        self.assertEqual(0, len(self.profile_results), str(self.profile_results.keys()))
+
+
+class MemoryProfiler2Tests(MemoryProfiler2TestsMixin, ReusedSQLTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.spark._profiler_collector._accumulator._value = None
 
 
 if __name__ == "__main__":

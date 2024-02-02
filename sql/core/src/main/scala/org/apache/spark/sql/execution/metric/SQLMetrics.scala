@@ -39,21 +39,21 @@ import org.apache.spark.util.AccumulatorContext.internOption
  */
 class SQLMetric(
     val metricType: String,
-    initValue: Long = 0L,
-    defaultValidValue: Long = 0L) extends AccumulatorV2[Long, Long] {
-  // initValue defines the initial value of the metric. defaultValidValue defines the lowest value
-  // considered valid. If a SQLMetric is invalid, it is set to defaultValidValue upon receiving any
-  // updates, and it also reports defaultValidValue as its value to avoid exposing it to the user
-  // programatically.
+    initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+  // initValue defines the initial value of the metric. 0 is the lowest value considered valid.
+  // If a SQLMetric is invalid, it is set to 0 upon receiving any updates, and it also reports
+  // 0 as its value to avoid exposing it to the user programmatically.
   //
-  // For many SQLMetrics, we use initValue = -1 and defaultValidValue = 0 to indicate that the
-  // metric is by default invalid. At the end of a task, we will update the metric making it valid,
-  // and the invalid metrics will be filtered out when calculating min, max, etc. as a workaround
+  // For many SQLMetrics, we use initValue = -1 to indicate that the metric is by default invalid.
+  // At the end of a task, we will update the metric making it valid, and the invalid metrics will
+  // be filtered out when calculating min, max, etc. as a workaround
   // for SPARK-11013.
+  assert(initValue <= 0)
+  // _value will always be either initValue or non-negative.
   private var _value = initValue
 
   override def copy(): SQLMetric = {
-    val newAcc = new SQLMetric(metricType, initValue, defaultValidValue)
+    val newAcc = new SQLMetric(metricType, initValue)
     newAcc._value = _value
     newAcc
   }
@@ -62,8 +62,8 @@ class SQLMetric(
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
     case o: SQLMetric =>
-      if (o.isValid) {
-        if (!isValid) _value = defaultValidValue
+      if (!o.isZero) {
+        if (isZero) _value = 0
         _value += o.value
       }
     case _ => throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
@@ -73,28 +73,32 @@ class SQLMetric(
   // This is used to filter out metrics. Metrics with value equal to initValue should
   // be filtered out, since they are either invalid or safe to filter without changing
   // the aggregation defined in [[SQLMetrics.stringValue]].
-  // Note that we don't use defaultValidValue here since we may want to collect
-  // defaultValidValue metrics for calculating min, max, etc. See SPARK-11013.
+  // Note that we don't use 0 here since we may want to collect 0 metrics for
+  // calculating min, max, etc. See SPARK-11013.
   override def isZero: Boolean = _value == initValue
 
-  def isValid: Boolean = _value >= defaultValidValue
-
   override def add(v: Long): Unit = {
-    if (!isValid) _value = defaultValidValue
-    _value += v
+    if (v >= 0) {
+      if (isZero) _value = 0
+      _value += v
+    }
   }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
-  def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)
+  def set(v: Double): Unit = if (v >= 0) {
+    SQLMetrics.setDoubleForAverageMetrics(this, v)
+  }
 
-  def set(v: Long): Unit = _value = v
+  def set(v: Long): Unit = if (v >= 0) {
+    _value = v
+  }
 
   def +=(v: Long): Unit = add(v)
 
-  // _value may be invalid, in many cases being -1. We should not expose it to the user
-  // and instead return defaultValidValue.
-  override def value: Long = if (!isValid) defaultValidValue else _value
+  // _value may be uninitialized, in many cases being -1. We should not expose it to the user
+  // and instead return 0.
+  override def value: Long = if (isZero) 0 else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {

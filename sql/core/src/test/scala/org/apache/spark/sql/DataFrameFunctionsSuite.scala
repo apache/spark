@@ -1988,7 +1988,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"reverse(struct(1, a))\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"struct(1, a)\"",
-        "inputType" -> "\"STRUCT<col1: INT, col2: STRING>\"",
+        "inputType" -> "\"STRUCT<col1: INT NOT NULL, col2: STRING NOT NULL>\"",
         "requiredType" -> "(\"STRING\" or \"ARRAY\")"
       ),
       queryContext = Array(ExpectedContext("", "", 7, 29, "reverse(struct(1, 'a'))"))

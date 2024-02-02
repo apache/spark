@@ -29,7 +29,7 @@ from pyspark.sql.functions import udf
 
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
-    from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark.sql.connect.client import DefaultChannelBuilder
 
 
 class ArtifactTestsMixin:
@@ -54,7 +54,9 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_pyfile(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
 
     def test_artifacts_cannot_be_overwritten(self):
@@ -100,7 +102,9 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_zipped_package(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
 
     def check_add_archive(self, spark_session):
@@ -134,7 +138,9 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_archive(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
 
     def check_add_file(self, spark_session):
@@ -162,7 +168,9 @@ class ArtifactTestsMixin:
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_file(
-            SparkSession.builder.remote(f"sc://localhost:{ChannelBuilder.default_port()}").create()
+            SparkSession.builder.remote(
+                f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+            ).create()
         )
 
 

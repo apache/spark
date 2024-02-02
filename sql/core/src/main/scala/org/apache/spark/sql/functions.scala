@@ -5747,6 +5747,15 @@ object functions {
   def monthname(timeExp: Column): Column =
     Column.fn("monthname", timeExp)
 
+  /**
+   * Extracts the three-letter abbreviated day name from a given date/timestamp/string.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def dayname(timeExp: Column): Column =
+    Column.fn("dayname", timeExp)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////

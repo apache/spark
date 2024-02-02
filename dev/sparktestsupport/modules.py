@@ -179,6 +179,15 @@ launcher = Module(
     ],
 )
 
+sketch = Module(
+    name="sketch",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/sketch/",
+    ],
+    sbt_test_goals=["sketch/test"],
+)
+
 core = Module(
     name="core",
     dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
@@ -200,7 +209,7 @@ api = Module(
 
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, core, api],
+    dependencies=[tags, sketch, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -313,15 +322,6 @@ connect = Module(
         "connect/test",
         "connect-client-jvm/test",
     ],
-)
-
-sketch = Module(
-    name="sketch",
-    dependencies=[tags],
-    source_file_regexes=[
-        "common/sketch/",
-    ],
-    sbt_test_goals=["sketch/test"],
 )
 
 graphx = Module(
@@ -816,9 +816,13 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.series.test_stat",
         "pyspark.pandas.tests.io.test_io",
         "pyspark.pandas.tests.io.test_csv",
+        "pyspark.pandas.tests.io.test_feather",
         "pyspark.pandas.tests.io.test_dataframe_conversion",
         "pyspark.pandas.tests.io.test_dataframe_spark_io",
         "pyspark.pandas.tests.io.test_series_conversion",
+        # fallback
+        "pyspark.pandas.tests.frame.test_asfreq",
+        "pyspark.pandas.tests.frame.test_asof",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -998,6 +1002,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
         "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_udf_profiler",
+        "pyspark.sql.tests.connect.test_parity_memory_profiler",
         "pyspark.sql.tests.connect.test_parity_udtf",
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_map",
@@ -1199,6 +1205,9 @@ pyspark_pandas_connect_part1 = Module(
         "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_object",
         "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_prefix",
         "pyspark.pandas.tests.connect.reshape.test_parity_merge_asof",
+        # fallback
+        "pyspark.pandas.tests.connect.frame.test_parity_asfreq",
+        "pyspark.pandas.tests.connect.frame.test_parity_asof",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1289,6 +1298,7 @@ pyspark_pandas_connect_part3 = Module(
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.io.test_parity_io",
         "pyspark.pandas.tests.connect.io.test_parity_csv",
+        "pyspark.pandas.tests.connect.io.test_parity_feather",
         "pyspark.pandas.tests.connect.io.test_parity_dataframe_conversion",
         "pyspark.pandas.tests.connect.io.test_parity_dataframe_spark_io",
         "pyspark.pandas.tests.connect.io.test_parity_series_conversion",

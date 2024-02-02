@@ -132,7 +132,7 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
       - name: Cache Scala, SBT and Maven
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             build/apache-maven-*
@@ -143,7 +143,7 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Maven local repository
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}

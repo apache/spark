@@ -2648,6 +2648,41 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             psdf._to_internal_pandas(), self.to_latex, pd.DataFrame.to_latex, args
         )
 
+    def to_feather(
+        self,
+        path: Union[str, IO[str]],
+        **kwargs: Any,
+    ) -> None:
+        """
+        Write a DataFrame to the binary Feather format.
+
+        .. note:: This method should only be used if the resulting DataFrame is expected
+                  to be small, as all the data is loaded into the driver's memory.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str, path object, file-like object
+            String, path object (implementing ``os.PathLike[str]``), or file-like
+            object implementing a binary ``write()`` function.
+        **kwargs :
+            Additional keywords passed to :func:`pyarrow.feather.write_feather`.
+            This includes the `compression`, `compression_level`, `chunksize`
+            and `version` keywords.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame([[1, 2, 3], [4, 5, 6]])
+        >>> df.to_feather("file.feather")  # doctest: +SKIP
+        """
+        # Make sure locals() call is at the top of the function so we don't capture local variables.
+        args = locals()
+
+        return validate_arguments_and_invoke_function(
+            self._to_internal_pandas(), self.to_feather, pd.DataFrame.to_feather, args
+        )
+
     def transpose(self) -> "DataFrame":
         """
         Transpose index and columns.
@@ -13446,10 +13481,59 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return psdf
 
+    def _fall_back_frame(self, method: str) -> Callable:
+        def _internal_fall_back_function(*inputs: Any, **kwargs: Any) -> "DataFrame":
+            log_advice(
+                f"`{method}` is executed in fallback mode. It loads partial data into the "
+                f"driver's memory to infer the schema, and loads all data into one executor's "
+                f"memory to compute. It should only be used if the pandas DataFrame is expected "
+                f"to be small."
+            )
+
+            input_df = self.copy()
+            index_names = input_df.index.names
+
+            sdf = input_df._internal.spark_frame
+            tmp_agg_column_name = verify_temp_column_name(
+                sdf, f"__tmp_aggregate_col_for_frame_{method}__"
+            )
+            input_df[tmp_agg_column_name] = 0
+
+            tmp_idx_column_name = verify_temp_column_name(
+                sdf, f"__tmp_index_col_for_frame_{method}__"
+            )
+            input_df[tmp_idx_column_name] = input_df.index
+
+            # TODO(SPARK-46859): specify the return type if possible
+            def compute_function(pdf: pd.DataFrame):  # type: ignore[no-untyped-def]
+                pdf = pdf.drop(columns=[tmp_agg_column_name])
+                pdf = pdf.set_index(tmp_idx_column_name, drop=True)
+                pdf = pdf.sort_index()
+                pdf = getattr(pdf, method)(*inputs, **kwargs)
+                pdf[tmp_idx_column_name] = pdf.index
+                return pdf.reset_index(drop=True)
+
+            output_df = input_df.groupby(tmp_agg_column_name).apply(compute_function)
+            output_df = output_df.set_index(tmp_idx_column_name)
+            output_df.index.names = index_names
+
+            return output_df
+
+        return _internal_fall_back_function
+
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
+            if key in [
+                "asfreq",
+                "asof",
+                "convert_dtypes",
+                "infer_objects",
+                "set_axis",
+            ] and get_option("compute.pandas_fallback"):
+                return self._fall_back_frame(key)
+
             property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):
                 return property_or_func.fget(self)

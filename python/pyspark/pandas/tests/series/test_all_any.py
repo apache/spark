@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -81,7 +81,11 @@ class SeriesAllAnyMixin:
             psser.any(axis=1)
 
 
-class SeriesAllAnyTests(SeriesAllAnyMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesAllAnyTests(
+    SeriesAllAnyMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -145,7 +145,7 @@ class StaxXmlParser(
   def doParseColumn(xml: String,
       parseMode: ParseMode,
       xsdSchema: Option[Schema]): Option[InternalRow] = {
-    val xmlRecord = UTF8String.fromString(xml)
+    lazy val xmlRecord = UTF8String.fromString(xml)
     try {
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
