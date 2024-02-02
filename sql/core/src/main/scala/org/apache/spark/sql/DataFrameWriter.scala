@@ -21,7 +21,6 @@ import java.util.{Locale, Properties}
 
 import scala.jdk.CollectionConverters._
 
-
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
