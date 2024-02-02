@@ -28,6 +28,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.core.avro.{AvroDeserializer, AvroOptions, SchemaConverters}
 import org.apache.spark.sql.types._
 
 private[sql] case class AvroDataToCatalyst(

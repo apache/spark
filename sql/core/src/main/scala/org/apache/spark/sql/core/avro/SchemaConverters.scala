@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.avro
+package org.apache.spark.sql.core.avro
 
 import java.util.Locale
 
@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
-import org.apache.avro.LogicalTypes.{Date, Decimal, LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{Decimal, _}
 import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
@@ -307,7 +307,7 @@ object SchemaConverters {
   }
 }
 
-private[avro] class IncompatibleSchemaException(
+private[sql] class IncompatibleSchemaException(
   msg: String, ex: Throwable = null) extends Exception(msg, ex)
 
-private[avro] class UnsupportedAvroTypeException(msg: String) extends Exception(msg)
+private[sql] class UnsupportedAvroTypeException(msg: String) extends Exception(msg)

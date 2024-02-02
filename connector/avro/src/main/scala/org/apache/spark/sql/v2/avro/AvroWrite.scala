@@ -18,8 +18,8 @@ package org.apache.spark.sql.v2.avro
 
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.sql.avro.AvroUtils
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
+import org.apache.spark.sql.core.avro.AvroUtils
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.execution.datasources.v2.FileWrite
 import org.apache.spark.sql.internal.SQLConf
