@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
@@ -213,6 +214,46 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
             "defaultValue" -> "true",
             "actualType" -> "\"BOOLEAN\""))
       }
+    }
+  }
+
+  test("SPARK-46949: DDL with valid default char/varchar values") {
+    withTable("t") {
+      val ddl =
+        s"""
+           |CREATE TABLE t(
+           |  key int,
+           |  v VARCHAR(6) DEFAULT 'apache',
+           |  c CHAR(5) DEFAULT 'spark')
+           |USING parquet""".stripMargin
+      sql(ddl)
+      sql("INSERT INTO t (key) VALUES(1)")
+      checkAnswer(sql("select * from t"), Row(1, "apache", "spark"))
+    }
+  }
+
+  test("SPARK-46949: DDL with invalid default char/varchar values") {
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      checkError(
+        exception = intercept[SparkRuntimeException](
+          sql(s"CREATE TABLE t(c $typeName(3) DEFAULT 'spark') USING parquet")),
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+    }
+  }
+
+  test("SPARK-46949: DDL with default char/varchar values need padding") {
+    withTable("t") {
+      val ddl =
+        s"""
+           |CREATE TABLE t(
+           |  key int,
+           |  v VARCHAR(6) DEFAULT 'apache',
+           |  c CHAR(6) DEFAULT 'spark')
+           |USING parquet""".stripMargin
+      sql(ddl)
+      sql("INSERT INTO t (key) VALUES(1)")
+      checkAnswer(sql("select * from t"), Row(1, "apache", "spark "))
     }
   }
 }
