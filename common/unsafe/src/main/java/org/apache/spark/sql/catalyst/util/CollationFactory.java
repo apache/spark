@@ -40,8 +40,11 @@ public final class CollationFactory {
     public final Comparator<UTF8String> comparator;
 
     /**
-     * Version of the collation. This is the version of the ICU library used to create the collator.
+     * Version of the collation. This is the version of the ICU library Collator.
      * For non-ICU collations (e.g. UTF8 Binary) the version is set to "1.0".
+     * When using ICU Collator this version is exposed through collator.getVersion().
+     * Whenever the collation is updated, the version should be updated as well or kept
+     * for backwards compatibility.
      */
     public final String version;
 
@@ -64,12 +67,12 @@ public final class CollationFactory {
     public final boolean isBinaryCollation;
 
     public Collation(
-      String collationName,
-      Collator collator,
-      Comparator<UTF8String> comparator,
-      String version,
-      ToLongFunction<UTF8String> hashFunction,
-      boolean isBinaryCollation) {
+        String collationName,
+        Collator collator,
+        Comparator<UTF8String> comparator,
+        String version,
+        ToLongFunction<UTF8String> hashFunction,
+        boolean isBinaryCollation) {
       this.collationName = collationName;
       this.collator = collator;
       this.comparator = comparator;
@@ -88,7 +91,7 @@ public final class CollationFactory {
      * Constructor with comparators that are inherited from the given collator.
      */
     public Collation(
-      String collationName, Collator collator, String version, boolean isBinaryCollation) {
+        String collationName, Collator collator, String version, boolean isBinaryCollation) {
       this(
         collationName,
         collator,
@@ -99,16 +102,14 @@ public final class CollationFactory {
     }
   }
 
-  private final Collation[] collatorTable;
-  private final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
+  private static final Collation[] collationTable = new Collation[4];
+  private static final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
 
-  private CollationFactory() {
-    collatorTable = new Collation[4];
-
+  static {
     // Binary comparison. This is the default collation.
     // No custom comparators will be used for this collation.
     // Instead, we rely on byte for byte comparison.
-    collatorTable[0] = new Collation(
+    collationTable[0] = new Collation(
       "UCS_BASIC",
       null,
       UTF8String::compareTo,
@@ -118,7 +119,7 @@ public final class CollationFactory {
 
     // Case-insensitive UTF8 binary collation.
     // TODO: Do in place comparisons instead of creating new strings.
-    collatorTable[1] = new Collation(
+    collationTable[1] = new Collation(
       "UCS_BASIC_LCASE",
       null,
             Comparator.comparing(UTF8String::toLowerCase), "1.0",
@@ -126,48 +127,48 @@ public final class CollationFactory {
       false);
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
-    collatorTable[2] = new Collation(
+    collationTable[2] = new Collation(
       "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true);
-    collatorTable[2].collator.setStrength(Collator.TERTIARY);
+    collationTable[2].collator.setStrength(Collator.TERTIARY);
 
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
-    collatorTable[3] = new Collation(
+    collationTable[3] = new Collation(
             "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
-    collatorTable[3].collator.setStrength(Collator.SECONDARY);
+    collationTable[3].collator.setStrength(Collator.SECONDARY);
 
-    for (int i = 0; i < collatorTable.length; i++) {
-      this.collationNameToIdMap.put(collatorTable[i].collationName, i);
+    for (int i = 0; i < collationTable.length; i++) {
+      collationNameToIdMap.put(collationTable[i].collationName, i);
     }
   }
-
-  private static final CollationFactory instance = new CollationFactory();
 
   /**
    * Returns the collation id for the given collation name.
    */
-  public int collationNameToId(String collationName) throws SparkException {
+  public static int collationNameToId(String collationName) throws SparkException {
     String normalizedName = collationName.toUpperCase();
     if (collationNameToIdMap.containsKey(normalizedName)) {
       return collationNameToIdMap.get(normalizedName);
     } else {
+      Collation suggestion = Collections.min(List.of(collationTable), Comparator.comparingInt(
+        c -> UTF8String.fromString(c.collationName).levenshteinDistance(
+          UTF8String.fromString(normalizedName))));
+
+      Map<String, String> params = new HashMap<>();
+      params.put("collationName", collationName);
+      params.put("proposal", suggestion.collationName);
+
       throw new SparkException(
-       "COLLATION_INVALID_NAME",
-        SparkException.constructMessageParams(
-          Collections.singletonMap("collationName", collationName)), null);
+       "COLLATION_INVALID_NAME", SparkException.constructMessageParams(params), null);
     }
   }
 
-  public Collation fetchCollation(int collationId) {
-    return collatorTable[collationId];
+  public static Collation fetchCollation(int collationId) {
+    return collationTable[collationId];
   }
 
-  public Collation fetchCollation(String collationName) throws SparkException {
+  public static Collation fetchCollation(String collationName) throws SparkException {
     int collationId = collationNameToId(collationName);
-    return collatorTable[collationId];
-  }
-
-  public static CollationFactory getInstance() {
-    return instance;
+    return collationTable[collationId];
   }
 }

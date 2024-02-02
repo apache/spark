@@ -128,7 +128,7 @@ object SparkException {
    * @return Scala collection that can be passed to SparkException constructor.
    */
   def constructMessageParams(
-    messageParameters: java.util.Map[String, String]): Map[String, String] = {
+      messageParameters: java.util.Map[String, String]): Map[String, String] = {
     messageParameters.asScala.toMap
   }
 }

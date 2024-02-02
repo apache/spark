@@ -22,32 +22,36 @@ import org.apache.spark.SparkException
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
 
-import org.apache.spark.sql.catalyst.util.CollationFactory.getInstance
+import org.apache.spark.sql.catalyst.util.CollationFactory._
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
   test("collationId stability") {
-    val ucsBasic = getInstance.fetchCollation(0)
+    val ucsBasic = fetchCollation(0)
     assert(ucsBasic.collationName == "UCS_BASIC")
     assert(ucsBasic.isBinaryCollation)
 
-    val ucsBasicLcase = getInstance.fetchCollation(1)
+    val ucsBasicLcase = fetchCollation(1)
     assert(ucsBasicLcase.collationName == "UCS_BASIC_LCASE")
     assert(!ucsBasicLcase.isBinaryCollation)
 
-    val unicode = getInstance.fetchCollation(2)
+    val unicode = fetchCollation(2)
     assert(unicode.collationName == "UNICODE")
     assert(unicode.isBinaryCollation);
 
-    val unicodeCi = getInstance.fetchCollation(3)
+    val unicodeCi = fetchCollation(3)
     assert(unicodeCi.collationName == "UNICODE_CI")
     assert(!unicodeCi.isBinaryCollation)
   }
 
   test("fetch invalid collation name") {
-    intercept[SparkException] {
-      getInstance.fetchCollation("INVALID_COLLATION_NAME")
+    val error = intercept[SparkException] {
+      fetchCollation("UCS_BASIS")
     }
+
+    assert(error.getMessage.contains(
+      "The value UCS_BASIS does not represent a correct collation name."))
+    assert(error.getMessage.contains("Suggested valid collation name: [UCS_BASIC]"))
   }
 
   case class CollationTestCase[R](collationName: String, s1: String, s2: String, expectedResult: R)
@@ -71,7 +75,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "aaa", "bbb", false))
 
     checks.foreach(testCase => {
-      val collation = getInstance.fetchCollation(testCase.collationName)
+      val collation = fetchCollation(testCase.collationName)
       assert(collation.equalsFunction(toUTF8(testCase.s1), toUTF8(testCase.s2)) ==
         testCase.expectedResult)
 
@@ -102,7 +106,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "aaa", "bbb", -1))
 
     checks.foreach(testCase => {
-      val collation = getInstance.fetchCollation(testCase.collationName)
+      val collation = fetchCollation(testCase.collationName)
       val result = collation.comparator.compare(toUTF8(testCase.s1), toUTF8(testCase.s2))
       assert(Integer.signum(result) == testCase.expectedResult)
     })
