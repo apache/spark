@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, LIMIT, WINDOW}
 
 /**
- * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
- * and the function results are further filtered by limit-like predicates or cumulative
- * aggregation with limit excludes `SizeBasedWindowFunction`. Example query:
+ * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions and the
+ * function results are further filtered by limit-like predicates or an actual limit. Example
+ * query:
  * {{{
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
