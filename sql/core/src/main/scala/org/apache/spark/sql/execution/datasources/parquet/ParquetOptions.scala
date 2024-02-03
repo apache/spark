@@ -57,7 +57,7 @@ class ParquetOptions(
       val availableCodecs =
         shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
       throw QueryExecutionErrors.codecNotAvailableError(
-          codecName, availableCodecs.mkString(", "))
+        codecName, availableCodecs.mkString(", "))
     }
     shortParquetCompressionCodecNames(codecName).name()
   }
