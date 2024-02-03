@@ -100,10 +100,10 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
         Seq(KafkaOffsetRange(tp1, 1, 5)),
         executorLocations = Array("location")) ==
         Seq(
-          KafkaOffsetRange(tp1, 1, 2, None),
-          KafkaOffsetRange(tp1, 2, 3, None),
-          KafkaOffsetRange(tp1, 3, 4, None),
-          KafkaOffsetRange(tp1, 4, 5, None))) // location pref not set when minPartition is set
+          KafkaOffsetRange(tp1, 1, 2, Some("location")),
+          KafkaOffsetRange(tp1, 2, 3, Some("location")),
+          KafkaOffsetRange(tp1, 3, 4, Some("location")),
+          KafkaOffsetRange(tp1, 4, 5, Some("location"))))
   }
 
   testWithMinPartitions("N skewed TopicPartitions to M offset ranges", 4) { calc =>
