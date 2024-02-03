@@ -98,12 +98,12 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
     assert(
       calc.getRanges(
         Seq(KafkaOffsetRange(tp1, 1, 5)),
-        executorLocations = Array("location")) ==
+        executorLocations = Array("1", "2", "3", "4")) ==
         Seq(
-          KafkaOffsetRange(tp1, 1, 2, Some("location")),
-          KafkaOffsetRange(tp1, 2, 3, Some("location")),
-          KafkaOffsetRange(tp1, 3, 4, Some("location")),
-          KafkaOffsetRange(tp1, 4, 5, Some("location"))))
+          KafkaOffsetRange(tp1, 1, 2, Some("4")),
+          KafkaOffsetRange(tp1, 2, 3, Some("1")),
+          KafkaOffsetRange(tp1, 3, 4, Some("2")),
+          KafkaOffsetRange(tp1, 4, 5, Some("3"))))
   }
 
   testWithMinPartitions("N skewed TopicPartitions to M offset ranges", 4) { calc =>
