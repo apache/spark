@@ -2711,4 +2711,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "INVALID_WRITER_COMMIT_MESSAGE",
       messageParameters = Map("details" -> details))
   }
+
+  def codecNotAvailableError(codecName: String, availableCodecs: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      messageParameters = Map(
+        "codecName" -> codecName,
+        "availableCodecs" -> availableCodecs))
+  }
 }
