@@ -135,7 +135,7 @@ public final class CollationFactory {
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
-            "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
+      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
     collationTable[3].collator.setStrength(Collator.SECONDARY);
 
     for (int i = 0; i < collationTable.length; i++) {
@@ -160,7 +160,7 @@ public final class CollationFactory {
       params.put("proposal", suggestion.collationName);
 
       throw new SparkException(
-       "COLLATION_INVALID_NAME", SparkException.constructMessageParams(params), null);
+        "COLLATION_INVALID_NAME", SparkException.constructMessageParams(params), null);
     }
   }
 
