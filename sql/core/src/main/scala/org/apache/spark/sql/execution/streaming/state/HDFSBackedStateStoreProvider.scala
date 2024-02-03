@@ -31,7 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -115,8 +115,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
     override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-      throw new UnsupportedOperationException("Creating multiple column families with " +
-        "HDFSBackedStateStoreProvider is not supported")
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3193")
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
