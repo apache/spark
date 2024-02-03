@@ -27,6 +27,7 @@ import org.apache.avro.io.EncoderFactory
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.core.avro.{AvroOptions, SchemaConverters}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf

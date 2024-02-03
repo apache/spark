@@ -37,6 +37,8 @@ import org.apache.spark.sql.types._
  * Class that adds tests for single value ValueState types used in arbitrary stateful
  * operators such as transformWithState
  */
+case class TestClass(var id: Long, var name: String)
+
 class ValueStateSuite extends SharedSparkSession
   with BeforeAndAfter {
 
@@ -93,7 +95,7 @@ class ValueStateSuite extends SharedSparkSession
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -130,13 +132,13 @@ class ValueStateSuite extends SharedSparkSession
     }
   }
 
-  test("Value state operations for single instance") {
+  test("Value state operations for single & primitive instance") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -162,8 +164,10 @@ class ValueStateSuite extends SharedSparkSession
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState1: ValueState[Long] = handle.getValueState[Long]("testState1")
-      val testState2: ValueState[Long] = handle.getValueState[Long]("testState2")
+      val testState1: ValueState[Long] = handle.getValueState[Long]("testState1",
+        Encoders.scalaLong)
+      val testState2: ValueState[Long] = handle.getValueState[Long]("testState2",
+        Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
@@ -216,5 +220,57 @@ class ValueStateSuite extends SharedSparkSession
       ),
       matchPVals = true
     )
+  }
+
+  test("Value state operations for case class instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
+        Encoders.product[TestClass])
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(TestClass(1, "testcase1"))
+      assert(testState.get().equals(new TestClass(1, "testcase1")))
+      testState.remove()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(TestClass(2, "testcase2"))
+      assert(testState.get() === TestClass(2, "testcase2"))
+      testState.update(TestClass(3, "testcase3"))
+      assert(testState.get() === TestClass(3, "testcase3"))
+
+      testState.remove()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("Value state operations for POJO instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Person] = handle.getValueState[Person]("testState",
+        Encoders.bean(classOf[Person]))
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(new Person("testcase1", 1))
+      assert(testState.get().equals(new Person("testcase1", 1)))
+      testState.remove()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(new Person("testcase2", 2))
+      assert(testState.get().equals(new Person("testcase2", 2)))
+      testState.update(new Person("testcase3", 3))
+      assert(testState.get().equals(new Person("testcase3", 3)))
+
+      testState.remove()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
   }
 }

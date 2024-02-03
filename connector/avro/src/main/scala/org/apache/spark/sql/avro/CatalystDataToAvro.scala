@@ -25,6 +25,7 @@ import org.apache.avro.io.{BinaryEncoder, EncoderFactory}
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.core.avro.{AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
 private[sql] case class CatalystDataToAvro(
