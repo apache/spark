@@ -21,11 +21,11 @@ import java.io.File
 import java.net.{URI, URL, URLClassLoader}
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
-import jakarta.ws.rs.core.UriBuilder
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
+import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 

@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution
 
 import java.time.ZoneOffset
 import java.util.{Locale, TimeZone}
-import jakarta.ws.rs.core.UriBuilder
 
 import scala.jdk.CollectionConverters._
 
+import jakarta.ws.rs.core.UriBuilder
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
