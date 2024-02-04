@@ -27,12 +27,11 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -113,7 +112,7 @@ class LauncherServer implements Closeable {
   private final ServerSocket server;
   private final Thread serverThread;
   private final ThreadFactory factory;
-  private final ScheduledThreadPoolExecutor timeoutTimer;
+  private final Timer timeoutTimer;
 
   private volatile boolean running;
 
@@ -129,8 +128,7 @@ class LauncherServer implements Closeable {
       this.threadIds = new AtomicLong();
       this.factory = new NamedThreadFactory(THREAD_NAME_FMT);
       this.secretToPendingApps = new ConcurrentHashMap<>();
-      this.timeoutTimer = new ScheduledThreadPoolExecutor(
-        1, new NamedThreadFactory("LauncherServer-TimeoutTimer"));
+      this.timeoutTimer = new Timer("LauncherServer-TimeoutTimer", true);
       this.server = server;
       this.running = true;
 
@@ -168,7 +166,7 @@ class LauncherServer implements Closeable {
       serverInstance = null;
     }
 
-    timeoutTimer.shutdown();
+    timeoutTimer.cancel();
     server.close();
     synchronized (clients) {
       List<ServerConnection> copy = new ArrayList<>(clients);
@@ -249,7 +247,7 @@ class LauncherServer implements Closeable {
         // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
         // and force an immediate timeout.
         if (timeoutMs > 0) {
-          timeoutTimer.schedule(timerTask, timeoutMs, TimeUnit.MILLISECONDS);
+          timeoutTimer.schedule(timerTask, timeoutMs);
         } else {
           timerTask.run();
         }
