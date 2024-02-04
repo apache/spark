@@ -1735,7 +1735,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-30001: session catalog name can be specified in SQL statements 2") {
+  test("SPARK-46972: asymmetrical replacement for char/varchar in V2SessionCatalog.createTable") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     withTable("t") {
