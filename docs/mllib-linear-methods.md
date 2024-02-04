@@ -383,7 +383,7 @@ online to the first stream, and make predictions on the second stream.
 First, we import the necessary classes for parsing our input data and creating the model.
 
 Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
-has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
+has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing-streamingcontext)
 for more info. For this example, we use labeled points in training and testing streams,
 but in practice you will likely want to use unlabeled vectors for test data.
 
@@ -408,7 +408,7 @@ Here a complete example:
 First, we import the necessary classes for parsing our input data and creating the model.
 
 Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
-has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
+has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing-streamingcontext)
 for more info. For this example, we use labeled points in training and testing streams,
 but in practice you will likely want to use unlabeled vectors for test data.
 
@@ -456,4 +456,3 @@ Algorithms are all implemented in Scala:
 * [LinearRegressionWithSGD](api/scala/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html)
 * [RidgeRegressionWithSGD](api/scala/org/apache/spark/mllib/regression/RidgeRegressionWithSGD.html)
 * [LassoWithSGD](api/scala/org/apache/spark/mllib/regression/LassoWithSGD.html)
-

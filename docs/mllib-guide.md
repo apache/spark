@@ -53,10 +53,9 @@ which is now the primary API for MLlib.
 * [Frequent pattern mining](mllib-frequent-pattern-mining.html)
   * [FP-growth](mllib-frequent-pattern-mining.html#fp-growth)
   * [association rules](mllib-frequent-pattern-mining.html#association-rules)
-  * [PrefixSpan](mllib-frequent-pattern-mining.html#prefix-span)
+  * [PrefixSpan](mllib-frequent-pattern-mining.html#prefixspan)
 * [Evaluation metrics](mllib-evaluation-metrics.html)
 * [PMML model export](mllib-pmml-model-export.html)
 * [Optimization (developer)](mllib-optimization.html)
   * [stochastic gradient descent](mllib-optimization.html#stochastic-gradient-descent-sgd)
   * [limited-memory BFGS (L-BFGS)](mllib-optimization.html#limited-memory-bfgs-l-bfgs)
-
