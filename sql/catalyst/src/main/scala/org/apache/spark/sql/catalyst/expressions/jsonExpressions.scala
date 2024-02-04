@@ -29,7 +29,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.PathInstruction.{Key, Named}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.json._
@@ -148,13 +147,10 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   // Used to rewrite GetJsonObject to JsonTuple. It only supports `.name` paths
   @transient private[catalyst] lazy val rewriteToJsonTuplePath: Option[Expression] = {
-    if (path.foldable) {
-      evaluator.parsedPath match {
-        case Some(List(Key, Named(name))) => Some(Literal.create(name, StringType))
-        case _ => None
-      }
-    } else {
-      None
+    evaluator.parsedPath match {
+      case Some(List(PathInstruction.Key, PathInstruction.Named(name))) =>
+        Some(Literal.create(name, StringType))
+      case _ => None
     }
   }
 
@@ -233,8 +229,9 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
   def this() = this(null)
 
   @transient
-  lazy val parsedPath: Option[List[PathInstruction]] =
-    parsePath(cachedPath)
+  private lazy val _parsedPath: Option[List[PathInstruction]] = parsePath(cachedPath)
+
+  private[expressions] def parsedPath: Option[List[PathInstruction]] = _parsedPath
 
   @transient
   private var jsonStr: UTF8String = null
@@ -256,7 +253,7 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
     }
 
     val parsed = if (cachedPath != null) {
-      parsedPath
+      _parsedPath
     } else {
       parsePath(pathStr)
     }

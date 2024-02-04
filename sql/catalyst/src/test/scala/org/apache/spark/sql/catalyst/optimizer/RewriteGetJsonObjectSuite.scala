@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Concat, GetJsonObject, JsonTup
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 
 class RewriteGetJsonObjectSuite extends PlanTest {
 
@@ -34,129 +35,160 @@ class RewriteGetJsonObjectSuite extends PlanTest {
 
   private val testRelation = LocalRelation($"a".string, $"b".string, $"c".string)
 
-  test("Rewrite to a single JsonTuple") {
-    val query = testRelation
-      .select(
-        GetJsonObject($"a", stringToLiteral("$.c1")).as("c1"),
-        GetJsonObject($"a", stringToLiteral("$.c2")).as("c2"),
-        GetJsonObject($"a", stringToLiteral("$.c3")).as("c3"))
+  test("Do not rewrite to a single JsonTuple when GetJsonObject under threshold") {
+    withSQLConf(SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD.key -> "3") {
+      val query = testRelation
+        .select(
+          GetJsonObject($"a", stringToLiteral("$.c1")).as("c1"),
+          GetJsonObject($"a", stringToLiteral("$.c2")).as("c2"))
 
-    val correctAnswer = testRelation
-      .generate(
-        JsonTuple(Seq($"a", stringToLiteral("c1"), stringToLiteral("c2"), stringToLiteral("c3"))),
-        Nil,
-        alias = Some("a"),
-        outputNames = Seq("c1", "c2", "c3"))
-      .select($"c1".as("c1"), $"c2".as("c2"), $"c3".as("c3"))
+      val getJsonObjects = query.expressions.flatMap {
+        _.collect {
+          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+        }
+      }
+      assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
+      comparePlans(Optimize.execute(query.analyze), query.analyze)
+    }
+  }
 
-    val getJsonObjects = query.expressions.flatMap { _.collect {
-        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
-    }}
-    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
-    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  test("Rewrite to a single JsonTuple when GetJsonObject exceeds threshold") {
+    withSQLConf(SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD.key -> "3") {
+      val query = testRelation
+        .select(
+          GetJsonObject($"a", stringToLiteral("$.c1")).as("c1"),
+          GetJsonObject($"a", stringToLiteral("$.c2")).as("c2"),
+          GetJsonObject($"a", stringToLiteral("$.c3")).as("c3"))
+
+      val correctAnswer = testRelation
+        .generate(
+          JsonTuple(Seq($"a", stringToLiteral("c1"), stringToLiteral("c2"), stringToLiteral("c3"))),
+          Nil,
+          alias = Some("a"),
+          outputNames = Seq("c1", "c2", "c3"))
+        .select($"c1".as("c1"), $"c2".as("c2"), $"c3".as("c3"))
+
+      val getJsonObjects = query.expressions.flatMap {
+        _.collect {
+          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+        }
+      }
+      assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
+      comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+    }
   }
 
   test("Rewrite to multiple JsonTuples") {
-    val query = testRelation
-      .select(
-        GetJsonObject($"a", stringToLiteral("$.c1")).as("c1"),
-        GetJsonObject($"a", stringToLiteral("$.c2")).as("c2"),
-        GetJsonObject($"b", stringToLiteral("$.c1")).as("c3"),
-        GetJsonObject($"b", stringToLiteral("$.c2")).as("c4"),
-        GetJsonObject($"c", stringToLiteral("$.c1")).as("c5"))
+    withSQLConf(SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD.key -> "2") {
+      val query = testRelation
+        .select(
+          GetJsonObject($"a", stringToLiteral("$.c1")).as("c1"),
+          GetJsonObject($"a", stringToLiteral("$.c2")).as("c2"),
+          GetJsonObject($"b", stringToLiteral("$.c1")).as("c3"),
+          GetJsonObject($"b", stringToLiteral("$.c2")).as("c4"),
+          GetJsonObject($"c", stringToLiteral("$.c1")).as("c5"))
 
-    val correctAnswer = testRelation
-      .generate(
-        JsonTuple(Seq($"a", stringToLiteral("c1"), stringToLiteral("c2"))),
-        Nil,
-        alias = Some("a"),
-        outputNames = Seq("c1", "c2"))
-      .generate(
-        JsonTuple(Seq($"b", stringToLiteral("c1"), stringToLiteral("c2"))),
-        Nil,
-        alias = Some("b"),
-        outputNames = Seq("c1", "c2"))
-      .select(
-        $"a.c1".as("c1"), $"a.c2".as("c2"),
-        $"b.c1".as("c3"), $"b.c2".as("c4"),
-        GetJsonObject($"c", stringToLiteral("$.c1")).as("c5"))
+      val correctAnswer = testRelation
+        .generate(
+          JsonTuple(Seq($"a", stringToLiteral("c1"), stringToLiteral("c2"))),
+          Nil,
+          alias = Some("a"),
+          outputNames = Seq("c1", "c2"))
+        .generate(
+          JsonTuple(Seq($"b", stringToLiteral("c1"), stringToLiteral("c2"))),
+          Nil,
+          alias = Some("b"),
+          outputNames = Seq("c1", "c2"))
+        .select(
+          $"a.c1".as("c1"), $"a.c2".as("c2"),
+          $"b.c1".as("c3"), $"b.c2".as("c4"),
+          GetJsonObject($"c", stringToLiteral("$.c1")).as("c5"))
 
-    val getJsonObjects = query.expressions.flatMap {
-      _.collect {
-        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      val getJsonObjects = query.expressions.flatMap {
+        _.collect {
+          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+        }
       }
+      assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
+      comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
     }
-    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
-    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("Rewrite GetJsonObject with other UDFs") {
-    val query = testRelation
-      .select(
-        Concat(Seq(GetJsonObject($"a", stringToLiteral("$.c1")),
-          GetJsonObject($"a", stringToLiteral("$.c2")),
-          GetJsonObject($"a", stringToLiteral("$.c3")))).as("c"))
+    withSQLConf(SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD.key -> "2") {
+      val query = testRelation
+        .select(
+          Concat(Seq(GetJsonObject($"a", stringToLiteral("$.c1")),
+            GetJsonObject($"a", stringToLiteral("$.c2")),
+            GetJsonObject($"a", stringToLiteral("$.c3")))).as("c"))
 
-    val correctAnswer = testRelation
-      .generate(
-        JsonTuple(Seq($"a", stringToLiteral("c1"), stringToLiteral("c2"), stringToLiteral("c3"))),
-        Nil,
-        alias = Some("a"),
-        outputNames = Seq("c1", "c2", "c3"))
-      .select(Concat(Seq($"c1", $"c2", $"c3")).as("c"))
+      val correctAnswer = testRelation
+        .generate(
+          JsonTuple(Seq($"a", stringToLiteral("c1"), stringToLiteral("c2"), stringToLiteral("c3"))),
+          Nil,
+          alias = Some("a"),
+          outputNames = Seq("c1", "c2", "c3"))
+        .select(Concat(Seq($"c1", $"c2", $"c3")).as("c"))
 
-    val getJsonObjects = query.expressions.flatMap {
-      _.collect {
-        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      val getJsonObjects = query.expressions.flatMap {
+        _.collect {
+          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+        }
       }
+      assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
+      comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
     }
-    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.nonEmpty))
-    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("Do not rewrite if parsed path is empty") {
-    val query = testRelation
-      .select(
-        GetJsonObject($"a", stringToLiteral("c1")).as("c1"),
-        GetJsonObject($"a", stringToLiteral("c2")).as("c2"),
-        GetJsonObject($"a", stringToLiteral("c3")).as("c3"))
+    withSQLConf(SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD.key -> "2") {
+      val query = testRelation
+        .select(
+          GetJsonObject($"a", stringToLiteral("c1")).as("c1"),
+          GetJsonObject($"a", stringToLiteral("c2")).as("c2"),
+          GetJsonObject($"a", stringToLiteral("c3")).as("c3"))
 
-    val getJsonObjects = query.expressions.flatMap {
-      _.collect {
-        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      val getJsonObjects = query.expressions.flatMap {
+        _.collect {
+          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+        }
       }
+      assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
+      comparePlans(Optimize.execute(query.analyze), query.analyze)
     }
-    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
-    comparePlans(Optimize.execute(query.analyze), query.analyze)
   }
 
   test("Do not rewrite if parsed path is not Key and Named") {
-    val query = testRelation
-      .select(
-        GetJsonObject($"a", stringToLiteral("$[0]")).as("c1"),
-        GetJsonObject($"a", stringToLiteral("$[1]")).as("c2"))
+    withSQLConf(SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD.key -> "2") {
+      val query = testRelation
+        .select(
+          GetJsonObject($"a", stringToLiteral("$[0]")).as("c1"),
+          GetJsonObject($"a", stringToLiteral("$[1]")).as("c2"))
 
-    val getJsonObjects = query.expressions.flatMap {
-      _.collect {
-        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      val getJsonObjects = query.expressions.flatMap {
+        _.collect {
+          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+        }
       }
+      assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
+      comparePlans(Optimize.execute(query.analyze), query.analyze)
     }
-    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
-    comparePlans(Optimize.execute(query.analyze), query.analyze)
   }
 
   test("Do not rewrite if parsed path contains multiple Named") {
-    val query = testRelation
-      .select(
-        GetJsonObject($"a", stringToLiteral("$.a.b")).as("c1"),
-        GetJsonObject($"a", stringToLiteral("$.c.d")).as("c2"))
+    withSQLConf(SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD.key -> "2") {
+      val query = testRelation
+        .select(
+          GetJsonObject($"a", stringToLiteral("$.a.b")).as("c1"),
+          GetJsonObject($"a", stringToLiteral("$.c.d")).as("c2"))
 
-    val getJsonObjects = query.expressions.flatMap {
-      _.collect {
-        case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+      val getJsonObjects = query.expressions.flatMap {
+        _.collect {
+          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
+        }
       }
+      assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
+      comparePlans(Optimize.execute(query.analyze), query.analyze)
     }
-    assert(getJsonObjects.forall(_.rewriteToJsonTuplePath.isEmpty))
-    comparePlans(Optimize.execute(query.analyze), query.analyze)
   }
 }

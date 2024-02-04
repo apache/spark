@@ -23,49 +23,50 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.GET_JSON_OBJECT
+import org.apache.spark.sql.internal.SQLConf.REWRITE_TO_JSON_TUPLE_THRESHOLD
 import org.apache.spark.sql.types.StringType
 
 /**
  * This rule rewrites multiple GetJsonObjects to a JsonTuple if their json expression is the same.
  */
 object RewriteGetJsonObject extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(GET_JSON_OBJECT), ruleId) {
-    case p: Project =>
-      val getJsonObjects = p.projectList.flatMap {
-        _.collect {
-          case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo
-        }
-      }
-
-      val groupedGetJsonObjects = getJsonObjects.groupBy(_.json).filter(_._2.size > 1)
-      if (groupedGetJsonObjects.nonEmpty) {
-        var newChild = p.child
-        val keyValues = mutable.LinkedHashMap.empty[Expression, AttributeReference]
-        groupedGetJsonObjects.foreach {
-          case (json, getJsonObjects) =>
-            val generatorOutput = getJsonObjects.map { j =>
-              val attr = AttributeReference(j.rewriteToJsonTuplePath.get.toString, StringType)()
-              keyValues.put(j.canonicalized, attr)
-              attr
-            }
-            newChild = Generate(
-              JsonTuple(json +: getJsonObjects.flatMap(_.rewriteToJsonTuplePath)),
-              Nil,
-              outer = false,
-              Some(json.sql),
-              generatorOutput,
-              newChild)
+  def apply(plan: LogicalPlan): LogicalPlan = conf.getConf(REWRITE_TO_JSON_TUPLE_THRESHOLD) match {
+    case None => plan
+    case Some(threshold) =>
+      plan.transformUpWithPruning(_.containsPattern(GET_JSON_OBJECT), ruleId) { case p: Project =>
+        val getJsonObjects = p.projectList.flatMap {
+          _.collect { case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo }
         }
 
-        val newProjectList = p.projectList.map {
-          _.transformUp {
-            case gjo: GetJsonObject => keyValues.getOrElse(gjo.canonicalized, gjo)
-          }.asInstanceOf[NamedExpression]
+        val groupedGetJsonObjects = getJsonObjects.groupBy(_.json).filter(_._2.size >= threshold)
+        if (groupedGetJsonObjects.nonEmpty) {
+          var newChild = p.child
+          val keyValues = mutable.LinkedHashMap.empty[Expression, AttributeReference]
+          groupedGetJsonObjects.foreach {
+            case (json, getJsonObjects) =>
+              val generatorOutput = getJsonObjects.map { gjo: GetJsonObject =>
+                val attr = AttributeReference(gjo.rewriteToJsonTuplePath.get.toString, StringType)()
+                keyValues.put(gjo.canonicalized, attr)
+                attr
+              }
+              newChild = Generate(
+                JsonTuple(json +: getJsonObjects.flatMap(_.rewriteToJsonTuplePath)),
+                Nil,
+                outer = false,
+                Some(json.sql),
+                generatorOutput,
+                newChild)
+          }
+
+          val newProjectList = p.projectList.map {
+            _.transformUp {
+              case gjo: GetJsonObject => keyValues.getOrElse(gjo.canonicalized, gjo)
+            }.asInstanceOf[NamedExpression]
+          }
+          p.copy(newProjectList, newChild)
+        } else {
+          p
         }
-        p.copy(newProjectList, newChild)
-      } else {
-        p
       }
   }
 }
