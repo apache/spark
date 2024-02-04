@@ -4088,12 +4088,12 @@
     "subClass" : {
       "EXISTENT_PATH" : {
         "message" : [
-          "for an existent path."
+          "Because the path <path> is an existent path."
         ]
       },
       "NON_EXISTENT_PATH" : {
         "message" : [
-          "for a non-existent path."
+          "Because the path <path> is a non-existent path."
         ]
       },
       "WITHOUT_SUGGESTION" : {

@@ -32,11 +32,11 @@ This error class has the following derived error classes:
 
 ## EXISTENT_PATH
 
-for an existent path.
+Because the path `<path>` is an existent path.
 
 ## NON_EXISTENT_PATH
 
-for a non-existent path.
+Because the path `<path>` is a non-existent path.
 
 ## WITHOUT_SUGGESTION
 

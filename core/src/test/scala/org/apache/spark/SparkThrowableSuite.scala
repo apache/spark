@@ -560,20 +560,23 @@ class SparkThrowableSuite extends SparkFunSuite {
         |    "fragment" : "1 / 0"
         |  } ]
         |}""".stripMargin)
-      // scalastyle:on line.size.limit
+    // scalastyle:on line.size.limit
     // STANDARD w/ errorSubClass but w/o queryContext
     val e2 = new SparkIllegalArgumentException(
       errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
-      messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE"))
+      messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE", "path" -> "an existent path"))
+    // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e2, STANDARD) ===
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
-        |  "messageTemplate" : "The save mode <saveMode> is not supported. for an existent path.",
+        |  "messageTemplate" : "The save mode <saveMode> is not supported. Because the path <path> is an existent path.",
         |  "sqlState" : "0A000",
         |  "messageParameters" : {
+        |    "path" : "an existent path",
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }
         |}""".stripMargin)
+    // scalastyle:on line.size.limit
     // Legacy mode when an exception does not have any error class
     class LegacyException extends Throwable with SparkThrowable {
       override def getErrorClass: String = null
