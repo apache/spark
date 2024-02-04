@@ -1472,12 +1472,50 @@ def sum_distinct(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
-    >>> df.select(sum_distinct(col("numbers"))).show()
+    Example 1: Using sum_distinct function on a column with all distinct values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (3,), (4,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                   10|
+    +---------------------+
+
+    Example 2: Using sum_distinct function on a column with no distinct values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (1,), (1,), (1,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                    1|
+    +---------------------+
+
+    Example 3: Using sum_distinct function on a column with null and duplicate values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
     +---------------------+
     |sum(DISTINCT numbers)|
     +---------------------+
     |                    3|
+    +---------------------+
+
+    Example 4: Using sum_distinct function on a column with all None values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType
+    >>> schema = StructType([StructField("numbers", IntegerType(), True)])
+    >>> df = spark.createDataFrame([(None,), (None,), (None,), (None,)], schema=schema)
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                 NULL|
     +---------------------+
     """
     return _invoke_function_over_columns("sum_distinct", col)
