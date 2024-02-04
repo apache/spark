@@ -1735,6 +1735,15 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-30001: session catalog name can be specified in SQL statements 2") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    withTable("t") {
+      sql(s"CREATE TABLE t(c char(1), v char(2)) USING $v2Source")
+      assert(!spark.table("t").isEmpty)
+    }
+  }
+
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()

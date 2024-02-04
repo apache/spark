@@ -27,7 +27,6 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
@@ -206,11 +205,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
           }
           val table = tableProvider.getTable(schema, partitions, dsOptions)
           // Check if the schema of the created table matches the given schema.
-          val tableSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-            table.columns().asSchema)
-          if (!DataType.equalsIgnoreNullability(tableSchema, schema)) {
-            throw QueryCompilationErrors.dataSourceTableSchemaMismatchError(
-              tableSchema, schema)
+          val tableSchema = table.columns().asSchema
+          if (!DataType.equalsIgnoreNullability(table.columns().asSchema, schema)) {
+            throw QueryCompilationErrors.dataSourceTableSchemaMismatchError(tableSchema, schema)
           }
           (schema, partitioning)
         }
