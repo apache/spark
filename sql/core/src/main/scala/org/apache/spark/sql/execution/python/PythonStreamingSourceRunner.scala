@@ -113,7 +113,7 @@ class PythonStreamingSourceRunner(
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "init_source", msg = msg)
+        action = "plan", tpe = "initialize source", msg = msg)
     }
   }
 

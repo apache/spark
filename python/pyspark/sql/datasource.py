@@ -304,6 +304,7 @@ class DataSourceReader(ABC):
         """
         ...
 
+
 class DataSourceStreamReader(ABC):
     def initial_offset(self) -> dict:
         """
@@ -330,6 +331,13 @@ class DataSourceStreamReader(ABC):
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
         """
         Plan the read partitions given the start and end offset.
+
+        Parameters
+        ----------
+        start : dict
+            The start offset of the microbatch to plan partitioning.
+        end : dict
+            The end offset of the microbatch to plan partitioning.
 
         Returns
         -------
@@ -365,7 +373,8 @@ class DataSourceStreamReader(ABC):
     def commit(self, end: dict):
         """
         Invoked when the streaming query have finished processing data up to a specific offset.
-        User can safely delete all the data before "end".
+        User can safely delete all the data before "end" in the data source.
+
         Parameters
         ----------
         end : dict

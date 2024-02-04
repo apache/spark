@@ -66,7 +66,7 @@ class PythonBatch(ds: PythonDataSourceV2, shortName: String,
 
 case class PythonStreamingSourceOffset(json: String) extends Offset
 
-case class PythonStreamingSourcePartition(partitions: Array[Byte]) extends InputPartition
+case class PythonStreamingSourcePartition(partition: Array[Byte]) extends InputPartition
 
 class PythonMicroBatchStream(
     ds: PythonDataSourceV2,
@@ -80,7 +80,11 @@ class PythonMicroBatchStream(
   val runner: PythonStreamingSourceRunner =
     new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema, outputSchema)
   runner.init()
-  override def initialOffset(): Offset = null
+
+  override def initialOffset(): Offset = {
+    // TODO: fill in the implementation.
+    null
+  }
 
   override def latestOffset(): Offset = PythonStreamingSourceOffset(runner.latestOffset())
 
@@ -90,9 +94,13 @@ class PythonMicroBatchStream(
       end.asInstanceOf[PythonStreamingSourceOffset].json).map(PythonStreamingSourcePartition(_))
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = null
+  override def createReaderFactory(): PartitionReaderFactory = {
+    // TODO: fill in the implementation.
+    null
+  }
 
   override def commit(end: Offset): Unit = {
+    // TODO: fill in the implementation.
   }
 
   override def stop(): Unit = {
