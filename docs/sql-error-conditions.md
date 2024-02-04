@@ -372,11 +372,13 @@ If this problem persists, you may consider using `rdd.checkpoint()` instead, whi
 
 `MapObjects` does not support the class `<cls>` as resulting collection.
 
-### CODEC_NOT_AVAILABLE
+### [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 SQLSTATE: 56038
 
-The codec `<codecName>` is not available. Consider to set the config `<configKey>` to `<configVal>`.
+The codec `<codecName>` is not available.
+
+For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 ### CODEC_SHORT_NAME_NOT_FOUND
 
@@ -2024,6 +2026,12 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
+
+### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to remove default column family with reserved name=`<colFamilyName>`.
 
 ### STATE_STORE_MULTIPLE_VALUES_PER_KEY
 

@@ -441,8 +441,20 @@
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
-      "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
+      "The codec <codecName> is not available."
     ],
+    "subClass" : {
+      "WITH_AVAILABLE_CODECS_SUGGESTION" : {
+        "message" : [
+          "Available codecs are <availableCodecs>."
+        ]
+      },
+      "WITH_CONF_SUGGESTION" : {
+        "message" : [
+          "Consider to set the config <configKey> to <configVal>."
+        ]
+      }
+    },
     "sqlState" : "56038"
   },
   "CODEC_SHORT_NAME_NOT_FOUND" : {
@@ -3241,6 +3253,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
+    "message" : [
+      "Failed to remove default column family with reserved name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
     "message" : [
       "Store does not support multiple values per key"
@@ -3948,6 +3966,11 @@
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [
           "Creating multiple column families with <stateStoreProvider> is not supported."
+        ]
+      },
+      "STATE_STORE_REMOVING_COLUMN_FAMILIES" : {
+        "message" : [
+          "Removing column families with <stateStoreProvider> is not supported."
         ]
       },
       "TABLE_OPERATION" : {
@@ -5736,11 +5759,6 @@
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2043" : {
-    "message" : [
-      "- <sqlValue> caused overflow."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2045" : {
     "message" : [
       "Unsupported table change: <message>"
@@ -7469,6 +7487,16 @@
   "_LEGACY_ERROR_TEMP_3192" : {
     "message" : [
       "Datatype not supported <dt>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3193" : {
+    "message" : [
+      "Creating multiple column families with HDFSBackedStateStoreProvider is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3197" : {
+    "message" : [
+      "Failed to create column family with reserved name=<colFamilyName>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

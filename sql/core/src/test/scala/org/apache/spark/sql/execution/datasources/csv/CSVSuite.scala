@@ -56,6 +56,7 @@ abstract class CSVSuite
   override protected def dataSourceFormat = "csv"
 
   protected val carsFile = "test-data/cars.csv"
+  protected val productsFile = "test-data/products.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
   private val carsFile8859 = "test-data/cars_iso-8859-1.csv"
   private val carsTsvFile = "test-data/cars.tsv"
@@ -3246,6 +3247,43 @@ abstract class CSVSuite
           .csv(path.getCanonicalPath)
         assert(df.count() === 5)
       }
+    }
+  }
+
+  test("SPARK-46890: CSV fails on a column with default and without enforcing schema") {
+    withTable("CarsTable") {
+      spark.sql(
+        s"""
+           |CREATE TABLE CarsTable(
+           |  year INT,
+           |  make STRING,
+           |  model STRING,
+           |  comment STRING DEFAULT '',
+           |  blank STRING DEFAULT '')
+           |USING csv
+           |OPTIONS (
+           |  header "true",
+           |  inferSchema "false",
+           |  enforceSchema "false",
+           |  path "${testFile(carsFile)}"
+           |)
+       """.stripMargin)
+      val expected = Seq(
+        Row("No comment"),
+        Row("Go get one now they are going fast"))
+      checkAnswer(
+        sql("SELECT comment FROM CarsTable WHERE year < 2014"),
+        expected)
+      checkAnswer(
+        spark.read.format("csv")
+          .options(Map(
+            "header" -> "true",
+            "inferSchema" -> "true",
+            "enforceSchema" -> "false"))
+          .load(testFile(carsFile))
+          .select("comment")
+          .where("year < 2014"),
+        expected)
     }
   }
 }
