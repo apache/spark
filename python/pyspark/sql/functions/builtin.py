@@ -4122,9 +4122,49 @@ def array_agg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Using array_agg function on an int column
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.agg(array_agg('c').alias('r')).collect()
-    [Row(r=[1, 1, 2])]
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                        [1, 1, 2]|
+    +---------------------------------+
+
+    Example 2: Using array_agg function on a string column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([["apple"],["apple"],["banana"]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show(truncate=False)
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |[apple, apple, banana]           |
+    +---------------------------------+
+
+    Example 3: Using array_agg function on a column with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                           [1, 2]|
+    +---------------------------------+
+
+    Example 4: Using array_agg function on a column with different data types
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],["apple"],[2]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                    [1, 2, apple]|
+    +---------------------------------+
     """
     return _invoke_function_over_columns("array_agg", col)
 
