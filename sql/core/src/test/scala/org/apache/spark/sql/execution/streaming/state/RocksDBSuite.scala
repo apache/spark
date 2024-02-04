@@ -29,7 +29,7 @@ import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
@@ -687,6 +687,41 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.rollback()
       assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
     }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDB: Unsupported Operations" +
+    " with Changelog Checkpointing") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1)
+
+    val ex1 = intercept[SparkUnsupportedOperationException] {
+      changelogWriter.put("a", "1", "testColFamily")
+    }
+
+    checkError(
+      ex1,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Put",
+        "entity" -> "changelog writer v1"
+      ),
+      matchPVals = true
+    )
+    val ex2 = intercept[SparkUnsupportedOperationException] {
+      changelogWriter.delete("a", "testColFamily")
+    }
+
+    checkError(
+      ex2,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Delete",
+        "entity" -> "changelog writer v1"
+      ),
+      matchPVals = true
+    )
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {

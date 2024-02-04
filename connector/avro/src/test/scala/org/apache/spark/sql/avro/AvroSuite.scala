@@ -103,14 +103,16 @@ abstract class AvroSuite
   // Check whether an Avro schema of union type is converted to SQL in an expected way, when the
   // stable ID option is on.
   //
-  // @param types           Avro types that contain in an Avro union type
-  // @param expectedSchema  expeted SQL schema, provided in DDL string form
-  // @param fieldsAndRow    A list of rows to be appended to the Avro file and the expected
-  // converted SQL rows
+  // @param types             Avro types that contain in an Avro union type
+  // @param expectedSchema    Expected SQL schema, provided in DDL string form
+  // @param fieldsAndRow      A list of rows to be appended to the Avro file and the expected
+  //                          converted SQL rows
+  // @param stableIdPrefixOpt Stable id prefix to use for Union type
   private def checkUnionStableId(
       types: List[Schema],
       expectedSchema: String,
-      fieldsAndRow: Seq[(Any, Row)]): Unit = {
+      fieldsAndRow: Seq[(Any, Row)],
+      stableIdPrefixOpt: Option[String] = None): Unit = {
     withTempDir { dir =>
       val unionType = Schema.createUnion(
         types.asJava
@@ -137,11 +139,16 @@ abstract class AvroSuite
       dataFileWriter.flush()
       dataFileWriter.close()
 
-      val df = spark
-        .read.
-        format("avro")
+      var dfReader = spark
+        .read
+        .format("avro")
         .option(AvroOptions.STABLE_ID_FOR_UNION_TYPE, "true")
-        .load(s"$dir.avro")
+
+      stableIdPrefixOpt.foreach { prefix =>
+        dfReader = dfReader.option(AvroOptions.STABLE_ID_PREFIX_FOR_UNION_TYPE, prefix)
+      }
+
+      val df = dfReader.load(s"$dir.avro")
       assert(df.schema === StructType.fromDDL("field1 " + expectedSchema))
       assert(df.collect().toSet == fieldsAndRow.map(fr => Row(fr._2)).toSet)
     }
@@ -320,7 +327,7 @@ abstract class AvroSuite
     }
   }
 
-  // The test test Avro option "enableStableIdentifiersForUnionType". It adds all types into
+  // The test verifies Avro option "enableStableIdentifiersForUnionType". It adds all types into
   // union and validate they are converted to expected SQL field names. The test also creates
   // different cases that might cause field name conflicts and see they are handled properly.
   test("SPARK-43333: Stable field names when converting Union type") {
@@ -432,6 +439,28 @@ abstract class AvroSuite
         )
       }
       assert(e.getMessage.contains("Schemas may not be named after primitives"))
+    }
+  }
+
+  test("SPARK-46930: Use custom prefix for stable ids when converting Union type") {
+    // Test default "member_" prefix.
+    checkUnionStableId(
+      List(Type.INT, Type.NULL, Type.STRING).map(Schema.create(_)),
+      "struct<member_int: int, member_string: string>",
+      Seq(
+        (42, Row(42, null)),
+        ("Alice", Row(null, "Alice"))))
+
+    // Test user-configured prefixes.
+    for (prefix <- Seq("tmp_", "tmp", "member", "MEMBER_", "__", "")) {
+      checkUnionStableId(
+        List(Type.INT, Type.NULL, Type.STRING).map(Schema.create(_)),
+        s"struct<${prefix}int: int, ${prefix}string: string>",
+        Seq(
+          (42, Row(42, null)),
+          ("Alice", Row(null, "Alice"))),
+        Some(prefix)
+      )
     }
   }
 
@@ -2146,7 +2175,7 @@ abstract class AvroSuite
 
   private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
-      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false)
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false, "")
     }.getMessage
 
     assert(message.contains("Found recursive reference in Avro schema"))
@@ -2703,7 +2732,7 @@ abstract class AvroSuite
   }
 
   test("SPARK-40667: validate Avro Options") {
-    assert(AvroOptions.getAllOptions.size == 10)
+    assert(AvroOptions.getAllOptions.size == 11)
     // Please add validation on any new Avro options here
     assert(AvroOptions.isValidOption("ignoreExtension"))
     assert(AvroOptions.isValidOption("mode"))
@@ -2715,6 +2744,7 @@ abstract class AvroSuite
     assert(AvroOptions.isValidOption("positionalFieldMatching"))
     assert(AvroOptions.isValidOption("datetimeRebaseMode"))
     assert(AvroOptions.isValidOption("enableStableIdentifiersForUnionType"))
+    assert(AvroOptions.isValidOption("stableIdentifierPrefixForUnionType"))
   }
 
   test("SPARK-46633: read file with empty blocks") {
