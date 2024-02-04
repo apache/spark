@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis._
@@ -44,7 +45,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object ResolveDefaultColumns extends QueryErrorsBase
   with ResolveDefaultColumnsUtils
-  with SQLConfHelper {
+  with SQLConfHelper
+  with Logging {
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
@@ -329,7 +331,10 @@ object ResolveDefaultColumns extends QueryErrorsBase
         val result = try {
           Option(casted.eval(EmptyRow)).map(Literal(_, supplanted))
         } catch {
-          case _: SparkThrowable | _: RuntimeException => None
+          case e @ ( _: SparkThrowable | _: RuntimeException) =>
+            logWarning(s"Failed to cast default value '$l' for column $colName from " +
+              s"${l.dataType} to $supplanted due to ${e.getMessage}")
+            None
         }
         result.getOrElse(
           throw QueryCompilationErrors.defaultValuesDataTypeError(
