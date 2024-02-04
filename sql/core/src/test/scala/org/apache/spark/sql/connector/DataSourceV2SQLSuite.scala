@@ -1739,7 +1739,7 @@ class DataSourceV2SQLSuiteV1Filter
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     withTable("t") {
-      sql(s"CREATE TABLE t(c char(1), v char(2)) USING $v2Source")
+      sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
       assert(!spark.table("t").isEmpty)
     }
   }
