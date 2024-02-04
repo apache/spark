@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -118,7 +119,11 @@ private[sql] class AvroOptions(
    * taken into account. If the former one is not set too, the `snappy` codec is used by default.
    */
   val compression: String = {
-    parameters.get(COMPRESSION).getOrElse(SQLConf.get.avroCompressionCodec)
+    val v = parameters.get(COMPRESSION).getOrElse(SQLConf.get.avroCompressionCodec)
+    if (v == null) {
+      throw QueryExecutionErrors.codecNotAvailableError(null, SQLConf.get.avroCompressionCodec)
+    }
+    v
   }
 
   val parseMode: ParseMode =

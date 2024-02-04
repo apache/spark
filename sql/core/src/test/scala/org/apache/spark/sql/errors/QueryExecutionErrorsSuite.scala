@@ -1160,6 +1160,67 @@ class QueryExecutionErrorsSuite
       )
     )
   }
+
+  test("CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION: when compression is null") {
+    withTempPath { path =>
+      val df = (1 to 5).map(i => ((i % 2).toString)).toDF("a")
+
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          df.write.option("compression", null).text(path.getAbsolutePath)
+        },
+        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "NULL",
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip"))
+
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          df.write.option("compression", null).csv(path.getAbsolutePath)
+        },
+        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "NULL",
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip"))
+
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          df.write.option("compression", null).json(path.getAbsolutePath)
+        },
+        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "NULL",
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip"))
+
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          df.write.option("compression", null).xml(path.getAbsolutePath)
+        },
+        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "NULL",
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip"))
+
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          df.write.option("compression", null).orc(path.getAbsolutePath)
+        },
+        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "NULL",
+          "availableCodecs" -> "uncompressed, lz4, lzo, snappy, zlib, none, zstd"))
+
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          df.write.option("compression", null).parquet(path.getAbsolutePath)
+        },
+        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "NULL",
+          "availableCodecs" ->
+            ("brotli, uncompressed, lzo, snappy, lz4_raw, none, zstd, lz4, gzip")))
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

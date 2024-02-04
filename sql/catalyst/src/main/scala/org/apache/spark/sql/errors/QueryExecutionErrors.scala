@@ -2716,7 +2716,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkIllegalArgumentException(
       errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
       messageParameters = Map(
-        "codecName" -> codecName,
+        "codecName" -> toSQLValue(codecName, StringType),
         "availableCodecs" -> availableCodecs))
   }
 }
