@@ -40,7 +40,9 @@ private[sql] case class AvroDataToCatalyst(
 
   override lazy val dataType: DataType = {
     val dt = SchemaConverters.toSqlType(
-      expectedSchema, avroOptions.useStableIdForUnionType).dataType
+      expectedSchema,
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -62,8 +64,12 @@ private[sql] case class AvroDataToCatalyst(
   @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
 
   @transient private lazy val deserializer =
-    new AvroDeserializer(expectedSchema, dataType,
-      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType)
+    new AvroDeserializer(
+      expectedSchema,
+      dataType,
+      avroOptions.datetimeRebaseModeInRead,
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType)
 
   @transient private var decoder: BinaryDecoder = _
 

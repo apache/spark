@@ -1884,17 +1884,6 @@ private[spark] object Utils
     }
   }
 
-  /** Check whether a path is an absolute URI. */
-  def isAbsoluteURI(path: String): Boolean = {
-    try {
-      val uri = new URI(path: String)
-      uri.isAbsolute
-    } catch {
-      case _: URISyntaxException =>
-        false
-    }
-  }
-
   /** Return all non-local paths from a comma-separated list of paths. */
   def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     val windows = isWindows || testWindows
@@ -1929,20 +1918,6 @@ private[spark] object Utils
       }
     }
     path
-  }
-
-  /**
-   * Updates Spark config with properties from a set of Properties.
-   * Provided properties have the highest priority.
-   */
-  def updateSparkConfigFromProperties(
-      conf: SparkConf,
-      properties: Map[String, String]) : Unit = {
-    properties.filter { case (k, v) =>
-      k.startsWith("spark.")
-    }.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
   }
 
   /**

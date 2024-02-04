@@ -728,7 +728,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
         dataAttributes, statefulProcessor, timeoutMode, outputMode,
-        outputAttr, child) =>
+        keyEncoder, outputAttr, child) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
           valueDeserializer,
@@ -737,6 +737,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           statefulProcessor,
           timeoutMode,
           outputMode,
+          keyEncoder,
           outputAttr,
           stateInfo = None,
           batchTimestampMs = None,

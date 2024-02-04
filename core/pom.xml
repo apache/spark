@@ -148,11 +148,6 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-continuation</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlet</artifactId>
       <scope>compile</scope>
     </dependency>
@@ -538,7 +533,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,protobuf-java,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
+                guava,protobuf-java,jetty-io,jetty-servlet,jetty-servlets,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>
@@ -558,7 +553,6 @@
               <include>org.eclipse.jetty:jetty-http</include>
               <include>org.eclipse.jetty:jetty-proxy</include>
               <include>org.eclipse.jetty:jetty-client</include>
-              <include>org.eclipse.jetty:jetty-continuation</include>
               <include>org.eclipse.jetty:jetty-servlet</include>
               <include>org.eclipse.jetty:jetty-servlets</include>
               <include>org.eclipse.jetty:jetty-plus</include>

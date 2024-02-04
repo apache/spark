@@ -418,7 +418,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         // Enable ANSI so that { NULL IN { <empty> } } behavior is correct in Spark.
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
 
-        val generatedQueries = generatedQuerySpecs.map(_.query).toSeq
+        val generatedQueries = querySpec.map(_.query).toSeq
         // Randomize query order because we are taking a subset of queries.
         val shuffledQueries = scala.util.Random.shuffle(generatedQueries)
 
