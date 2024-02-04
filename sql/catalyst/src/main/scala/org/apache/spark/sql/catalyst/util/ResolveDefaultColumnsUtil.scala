@@ -312,10 +312,10 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val supplanted = CharVarcharUtils.replaceCharVarcharWithString(dataType)
     // Perform implicit coercion from the provided expression type to the required column type.
     val ret = analyzed match {
-      case equivalent if equivalent.dataType == supplanted => equivalent
+      case equivalent if equivalent.dataType == supplanted =>
+        equivalent
       case canUpCast if Cast.canUpCast(canUpCast.dataType, supplanted) =>
-        val lit = Cast(analyzed, supplanted, evalMode = EvalMode.TRY).eval(EmptyRow)
-        Literal(lit, supplanted)
+        Cast(analyzed, supplanted, Some(conf.sessionLocalTimeZone))
       case l: Literal
         if !Seq(supplanted, l.dataType).exists(_ match {
           case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
@@ -325,7 +325,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
         // but the literal value fits within the narrower type, just coerce it for convenience.
         // Exclude boolean/array/struct/map types from consideration for this type coercion to
         // avoid surprising behavior like interpreting "false" as integer zero.
-        val casted = Cast(l, supplanted, evalMode = EvalMode.TRY)
+        val casted = Cast(l, supplanted, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
         val result = try {
           Option(casted.eval(EmptyRow)).map(Literal(_, supplanted))
         } catch {

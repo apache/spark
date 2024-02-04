@@ -257,10 +257,15 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-46958: Fix bug when canUpcast and result non-foldable expression") {
-    sql(s"CREATE TABLE t(key int, c STRING DEFAULT date '2018-11-17') " +
-      s"USING parquet")
-    sql("INSERT INTO t (key) VALUES(1)")
-    checkAnswer(sql("select * from t"), Row(1, "2018-11-17"))
+  test("SPARK-46958: timestamp default values should have timezone for being resolved") {
+    val defaults = Seq("timestamp '2018-11-17'", "CAST(timestamp '2018-11-17' AS STRING)")
+    defaults.foreach { default =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(key int, c STRING DEFAULT $default) " +
+          s"USING parquet")
+        sql("INSERT INTO t (key) VALUES(1)")
+        checkAnswer(sql("select * from t"), Row(1, "2018-11-17 00:00:00"))
+      }
+    }
   }
 }
