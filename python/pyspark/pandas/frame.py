@@ -2683,6 +2683,88 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             self._to_internal_pandas(), self.to_feather, pd.DataFrame.to_feather, args
         )
 
+    def to_stata(
+        self,
+        path: Union[str, IO[str]],
+        *,
+        convert_dates: Optional[Dict] = None,
+        write_index: bool = True,
+        byteorder: Optional[str] = None,
+        time_stamp: Optional[datetime.datetime] = None,
+        data_label: Optional[str] = None,
+        variable_labels: Optional[Dict] = None,
+        version: Optional[int] = 114,
+        convert_strl: Optional[Sequence[Name]] = None,
+        compression: str = "infer",
+        storage_options: Optional[str] = None,
+        value_labels: Optional[Dict] = None,
+    ) -> None:
+        """
+        Export DataFrame object to Stata dta format.
+
+        .. note:: This method should only be used if the resulting DataFrame is expected
+                  to be small, as all the data is loaded into the driver's memory.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str, path object, or buffer
+            String, path object (implementing ``os.PathLike[str]``), or file-like
+            object implementing a binary ``write()`` function.
+        convert_dates : dict
+            Dictionary mapping columns containing datetime types to stata
+            internal format to use when writing the dates. Options are 'tc',
+            'td', 'tm', 'tw', 'th', 'tq', 'ty'. Column can be either an integer
+            or a name. Datetime columns that do not have a conversion type
+            specified will be converted to 'tc'. Raises NotImplementedError if
+            a datetime column has timezone information.
+        write_index : bool
+            Write the index to Stata dataset.
+        byteorder : str
+            Can be ">", "<", "little", or "big". default is `sys.byteorder`.
+        time_stamp : datetime
+            A datetime to use as file creation date.  Default is the current
+            time.
+        data_label : str, optional
+            A label for the data set.  Must be 80 characters or smaller.
+        variable_labels : dict
+            Dictionary containing columns as keys and variable labels as
+            values. Each label must be 80 characters or smaller.
+        version : {{114, 117, 118, 119, None}}, default 114
+            Version to use in the output dta file. Set to None to let pandas
+            decide between 118 or 119 formats depending on the number of
+            columns in the frame. Version 114 can be read by Stata 10 and
+            later. Version 117 can be read by Stata 13 or later. Version 118
+            is supported in Stata 14 and later. Version 119 is supported in
+            Stata 15 and later. Version 114 limits string variables to 244
+            characters or fewer while versions 117 and later allow strings
+            with lengths up to 2,000,000 characters. Versions 118 and 119
+            support Unicode characters, and version 119 supports more than
+            32,767 variables.
+        convert_strl : list, optional
+            List of column names to convert to string columns to Stata StrL
+            format. Only available if version is 117.  Storing strings in the
+            StrL format can produce smaller dta files if strings have more than
+            8 characters and values are repeated.
+        value_labels : dict of dicts
+            Dictionary containing columns as keys and dictionaries of column value
+            to labels as values. Labels for a single variable must be 32,000
+            characters or smaller.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({'animal': ['falcon', 'parrot', 'falcon', 'parrot'],
+        ...                    'speed': [350, 18, 361, 15]})
+        >>> df.to_stata('animals.dta')  # doctest: +SKIP
+        """
+        # Make sure locals() call is at the top of the function so we don't capture local variables.
+        args = locals()
+
+        return validate_arguments_and_invoke_function(
+            self._to_internal_pandas(), self.to_stata, pd.DataFrame.to_stata, args
+        )
+
     def transpose(self) -> "DataFrame":
         """
         Transpose index and columns.
