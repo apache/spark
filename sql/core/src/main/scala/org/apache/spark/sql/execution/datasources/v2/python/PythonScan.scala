@@ -34,7 +34,8 @@ class PythonScan(
 
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
-  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = null
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    new PythonMicroBatchStream(ds, shortName, outputSchema, options)
 
   override def description: String = "(Python)"
 
