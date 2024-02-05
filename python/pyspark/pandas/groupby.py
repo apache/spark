@@ -4025,7 +4025,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         if method not in ["pearson", "spearman", "kendall"]:
             raise ValueError(f"Invalid method {method}")
 
-        groupkey_names = [key.name for key in self._groupkeys]
+        groupkey_names: List[str] = [str(key.name) for key in self._groupkeys]
         internal, agg_columns, sdf = self._prepare_reduce(
             groupkey_names=groupkey_names,
             accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
@@ -4102,19 +4102,15 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         )
 
         array_col_name = verify_temp_column_name(sdf, "__groupby_corr_array_temp_column__")
-        sdf = (
-            sdf.groupby(groupkey_names + [index_1_col_name])
-            .agg(
-                F.array_sort(
-                    F.collect_list(
-                        F.struct(
-                            F.col(index_2_col_name),
-                            F.col(CORRELATION_CORR_OUTPUT_COLUMN),
-                        )
+        sdf = sdf.groupby(groupkey_names + [index_1_col_name]).agg(
+            F.array_sort(
+                F.collect_list(
+                    F.struct(
+                        F.col(index_2_col_name),
+                        F.col(CORRELATION_CORR_OUTPUT_COLUMN),
                     )
-                ).alias(array_col_name)
-            )
-            .orderBy(groupkey_names + [index_1_col_name])
+                )
+            ).alias(array_col_name)
         )
 
         for i in range(0, num_scols):
@@ -4122,6 +4118,8 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 numeric_col_names[i],
                 F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
             )
+
+        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])  # type: ignore[arg-type]
 
         sdf = sdf.select(
             *[F.col(col) for col in groupkey_names + numeric_col_names],
@@ -4137,7 +4135,10 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 index_spark_columns=[
                     scol_for(sdf, key) for key in groupkey_names + [auxiliary_col_name]
                 ],
-                index_names=[(key,) for key in groupkey_names] + [(None,)],
+                index_names=(
+                    [psser._column_label for psser in self._groupkeys]
+                    + self._psdf._internal.index_names
+                ),
                 column_labels=numeric_labels,
                 column_label_names=internal.column_label_names,
             )
