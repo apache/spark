@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.util.Utils
 
 /**
@@ -95,18 +96,33 @@ private[spark] object ClientArguments {
  * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
-    conf: KubernetesDriverConf,
+    kubeConf: KubernetesDriverConf,
     builder: KubernetesDriverBuilder,
     kubernetesClient: KubernetesClient,
     watcher: LoggingPodStatusWatcher) extends Logging {
 
+  private var driverPod: String = null
+
+  private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = kubeConf.sparkConf
+
+    override def onStopRequest(): Unit = {
+      if (driverPod != null) {
+        kubernetesClient.pods().inNamespace(kubeConf.namespace).withName(driverPod).delete()
+      }
+      setState(SparkAppHandle.State.KILLED)
+    }
+  }
+
+  watcher.setLauncherBackend(launcherBackend)
+
   def run(): Unit = {
-    val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
+    val resolvedDriverSpec = builder.buildFromFeatures(kubeConf, kubernetesClient)
     val configMapName = KubernetesClientUtils.configMapNameDriver
     val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
-      conf.sparkConf, resolvedDriverSpec.systemProperties)
+      kubeConf.sparkConf, resolvedDriverSpec.systemProperties)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap +
-        (KUBERNETES_NAMESPACE.key -> conf.namespace))
+        (KUBERNETES_NAMESPACE.key -> kubeConf.namespace))
 
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
@@ -134,6 +150,9 @@ private[spark] class Client(
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
+    launcherBackend.connect()
+    launcherBackend.setAppId(kubeConf.appId)
+
     // setup resources before pod creation
     val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
     try {
@@ -150,13 +169,15 @@ private[spark] class Client(
     var createdDriverPod: Pod = null
     try {
       createdDriverPod =
-        kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
+        kubernetesClient.pods().inNamespace(kubeConf.namespace).resource(resolvedDriverPod).create()
     } catch {
       case NonFatal(e) =>
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
         logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
         throw e
     }
+
+    driverPod = driverPodName
 
     // Refresh all pre-resources' owner references
     try {
@@ -180,13 +201,13 @@ private[spark] class Client(
         throw e
     }
 
-    val sId = Client.submissionId(conf.namespace, driverPodName)
-    if (conf.get(WAIT_FOR_APP_COMPLETION)) {
+    val sId = Client.submissionId(kubeConf.namespace, driverPodName)
+    if (kubeConf.get(WAIT_FOR_APP_COMPLETION)) {
       breakable {
         while (true) {
           val podWithName = kubernetesClient
             .pods()
-            .inNamespace(conf.namespace)
+            .inNamespace(kubeConf.namespace)
             .withName(driverPodName)
           // Reset resource to old before we start the watch, this is important for race conditions
           watcher.reset()
@@ -203,8 +224,8 @@ private[spark] class Client(
         }
       }
     } else {
-      logInfo(s"Deployed Spark application ${conf.appName} with application ID ${conf.appId} " +
-        s"and submission ID $sId into Kubernetes")
+      logInfo(s"Deployed Spark application ${kubeConf.appName} " +
+        s"with application ID ${kubeConf.appId} and submission ID $sId into Kubernetes")
     }
   }
 }

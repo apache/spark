@@ -24,10 +24,12 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
   def reset(): Unit
+  def setLauncherBackend(lb: LauncherBackend): Unit
 }
 
 /**
@@ -47,11 +49,17 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private var pod = Option.empty[Pod]
 
-  private def phase: String = pod.map(_.getStatus.getPhase).getOrElse("unknown")
+  private def phase: String = pod.map(_.getStatus.getPhase).getOrElse("Unknown")
+
+  private var lb = Option.empty[LauncherBackend]
+
+  private var prevPhase = "Unknown"
 
   override def reset(): Unit = {
     resourceTooOldReceived = false
   }
+
+  override def setLauncherBackend(lb: LauncherBackend): Unit = this.lb = Option(lb)
 
   override def eventReceived(action: Action, pod: Pod): Unit = {
     this.pod = Option(pod)
@@ -60,6 +68,18 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
         closeWatch()
 
       case _ =>
+        if (phase != prevPhase) {
+          lb.foreach(_.setState {
+            phase match {
+              case "Pending" => SparkAppHandle.State.SUBMITTED
+              case "Running" => SparkAppHandle.State.RUNNING
+              case "Succeeded" => SparkAppHandle.State.FINISHED
+              case "Failed" => SparkAppHandle.State.FAILED
+              case "Unknown" => SparkAppHandle.State.UNKNOWN
+            }
+          })
+          prevPhase = phase
+        }
         logLongStatus()
         if (hasCompleted()) {
           closeWatch()
@@ -92,6 +112,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private def closeWatch(): Unit = synchronized {
     podCompleted = true
+    lb.foreach(_.close())
     this.notifyAll()
   }
 
