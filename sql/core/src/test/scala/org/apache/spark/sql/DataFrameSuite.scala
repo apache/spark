@@ -209,12 +209,11 @@ class DataFrameSuite extends QueryTest
     if (!ansiEnabled) {
       checkAnswer(df, expectedAnswer)
     } else {
-      val e = intercept[SparkException] {
+      val e = intercept[ArithmeticException] {
         df.collect()
       }
-      assert(e.getCause.isInstanceOf[ArithmeticException])
-      assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-        e.getCause.getMessage.contains("Overflow in sum of decimals"))
+      assert(e.getMessage.contains("cannot be represented as Decimal") ||
+        e.getMessage.contains("Overflow in sum of decimals"))
     }
   }
 

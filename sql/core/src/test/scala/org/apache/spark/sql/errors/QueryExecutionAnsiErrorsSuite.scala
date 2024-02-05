@@ -251,10 +251,12 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       val tableName = "overflowTable"
       withTable(tableName) {
         sql(s"CREATE TABLE $tableName(i $targetType) USING parquet")
+        val ex = intercept[SparkException] {
+          sql(s"insert into $tableName values 12345678901234567890D")
+        }
+        assert(ex.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into $tableName values 12345678901234567890D")
-          }.getCause.getCause.asInstanceOf[SparkThrowable],
+          exception = ex.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
@@ -271,7 +273,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
     checkError(
       exception = intercept[SparkArithmeticException] {
         CheckOverflowInTableInsert(caseWhen, "col").eval(null)
-      }.asInstanceOf[SparkThrowable],
+      },
       errorClass = "CAST_OVERFLOW",
       parameters = Map("value" -> "1.2345678901234567E19D",
         "sourceType" -> "\"DOUBLE\"",
@@ -287,10 +289,12 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       sql("CREATE TABLE t2 (x tinyint) USING parquet")
       val insertCmd = "insert into t2 select 0 - (case when x = 1.2345678901234567E19D " +
         "then 1.2345678901234567E19D else x end) from t1 where x = 1.2345678901234567E19D;"
+      val ex = intercept[SparkException] {
+        sql(insertCmd).collect()
+      }
+      assert(ex.getErrorClass == "TASK_WRITE_FAILED")
       checkError(
-        exception = intercept[SparkException] {
-          sql(insertCmd).collect()
-        }.getCause.getCause.asInstanceOf[SparkThrowable],
+        exception = ex.getCause.asInstanceOf[SparkArithmeticException],
         errorClass = "CAST_OVERFLOW",
         parameters = Map("value" -> "-1.2345678901234567E19D",
           "sourceType" -> "\"DOUBLE\"",
@@ -330,7 +334,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
     )
   }
 
-  test("user-facing runtime errors") {
+  test("SPARK-46922: user-facing runtime errors") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       var numTaskStarted = 0
       val listener = new SparkListener {
@@ -374,7 +378,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
           )
         )
         sparkContext.listenerBus.waitUntilEmpty()
-        // TODO: Spark should not re-try this error.
+        // TODO (SPARK-46951): Spark should not re-try tasks for this error.
         assert(numTaskStarted == 2)
         numTaskStarted = 0
 
@@ -389,7 +393,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
           )
         )
         sparkContext.listenerBus.waitUntilEmpty()
-        // TODO: Spark should not re-try tasks this error.
+        // TODO (SPARK-46951): Spark should not re-try tasks for this error.
         assert(numTaskStarted == 3)
       } finally {
         sparkContext.removeSparkListener(listener)

@@ -1242,6 +1242,12 @@
     ],
     "sqlState" : "22018"
   },
+  "FAILED_READ_FILE" : {
+    "message" : [
+      "Encountered error while reading file <path>."
+    ],
+    "sqlState" : "KD001"
+  },
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
     "message" : [
       "Failed to register classes with Kryo."
@@ -5852,11 +5858,6 @@
   "_LEGACY_ERROR_TEMP_2063" : {
     "message" : [
       "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2064" : {
-    "message" : [
-      "Encountered error while reading file <path>. Details:"
     ]
   },
   "_LEGACY_ERROR_TEMP_2065" : {

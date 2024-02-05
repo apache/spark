@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.internal.SQLConf
 
 object TransformWithStateSuiteUtils {
@@ -160,9 +160,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, "a"),
-        ExpectFailure[SparkException] {
-          (t: Throwable) => { assert(t.getCause
-            .getMessage.contains("Cannot create state variable")) }
+        ExpectFailure[SparkException] { t =>
+          assert(t.getCause.getMessage.contains("Cannot create state variable"))
         }
       )
     }
@@ -360,8 +359,8 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, "a"),
-      ExpectFailure[SparkException] {
-        (t: Throwable) => { assert(t.getCause.getMessage.contains("not supported")) }
+      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
+        assert(t.getMessage.contains("not supported"))
       }
     )
   }
