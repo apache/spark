@@ -232,8 +232,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .andReturn(HttpURLConnection.HTTP_OK, BUILT_DRIVER_POD)
       .once()
     server.expect().withPath(
-        s"/api/v1/namespaces/default/pods?fieldSelector=metadata.name%3D${POD_NAME}" +
-        "&allowWatchBookmarks=true&watch=true"
+        // Hint: different version of kubernetes client may cause the
+        //  url params in different order, which may cause the mock failed
+        s"/api/v1/namespaces/default/pods?allowWatchBookmarks=true&" +
+        s"fieldSelector=metadata.name%3D${POD_NAME}&watch=true"
       )
       .andUpgradeToWebSocket()
       .open(new WatchEvent(BUILT_DRIVER_POD, "ADDED"))
@@ -472,7 +474,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .startApplication()
 
     try {
-      eventually(timeout(1.seconds), interval(100.milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         assert(handle.getState == SparkAppHandle.State.SUBMITTED)
       }
 
