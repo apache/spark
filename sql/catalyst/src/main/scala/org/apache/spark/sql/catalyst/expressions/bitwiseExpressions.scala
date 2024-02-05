@@ -36,7 +36,8 @@ import org.apache.spark.sql.types._
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpression {
 
   protected override val failOnError: Boolean = false
 
@@ -59,6 +60,13 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    buildCanonicalizedPlan(
+      { case BitwiseAnd(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => BitwiseAnd(l, r)}
+    )
+  }
 }
 
 /**
@@ -75,7 +83,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpression {
 
   protected override val failOnError: Boolean = false
 
@@ -98,6 +107,13 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    buildCanonicalizedPlan(
+      { case BitwiseOr(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => BitwiseOr(l, r)}
+    )
+  }
 }
 
 /**
@@ -114,7 +130,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpression {
 
   protected override val failOnError: Boolean = false
 
@@ -137,6 +154,13 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    buildCanonicalizedPlan(
+      { case BitwiseXor(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => BitwiseXor(l, r)}
+    )
+  }
 }
 
 /**

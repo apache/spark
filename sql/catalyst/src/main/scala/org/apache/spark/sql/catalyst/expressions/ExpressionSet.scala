@@ -22,7 +22,9 @@ import scala.collection.{mutable, GenTraversableOnce}
 import org.apache.spark.sql.catalyst.util.BigArrayBuffer
 
 object ExpressionSet {
-  /** Constructs a new [[ExpressionSet]] by applying [[Canonicalize]] to `expressions`. */
+  /**
+   * Constructs a new [[ExpressionSet]] by applying [[Expression#canonicalized]] to `expressions`.
+   */
   def apply(expressions: TraversableOnce[Expression]): ExpressionSet = {
     val set = new ExpressionSet()
     expressions.foreach(set.add)
@@ -37,7 +39,7 @@ object ExpressionSet {
 /**
  * A [[Set]] where membership is determined based on determinacy and a canonical representation of
  * an [[Expression]] (i.e. one that attempts to ignore cosmetic differences).
- * See [[Canonicalize]] for more details.
+ * See [[Expression#canonicalized]] for more details.
  *
  * Internally this set uses the canonical representation, but keeps also track of the original
  * expressions to ease debugging.  Since different expressions can share the same canonical
@@ -156,8 +158,8 @@ class ExpressionSet protected(
   override def clone(): ExpressionSet = new ExpressionSet(baseSet.clone(), originals.clone())
 
   /**
-   * Returns a string containing both the post [[Canonicalize]] expressions and the original
-   * expressions in this set.
+   * Returns a string containing both the post [[Expression#canonicalized]] expressions
+   * and the original expressions in this set.
    */
   def toDebugString: String =
     s"""

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, Tre
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -222,49 +223,40 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
-  // Expression canonicalization is done in 2 phases:
-  //   1. Recursively canonicalize each node in the expression tree. This does not change the tree
-  //      structure and is more like "node-local" canonicalization.
-  //   2. Find adjacent commutative operators in the expression tree, reorder them to get a
-  //      static order and remove cosmetic variations. This may change the tree structure
-  //      dramatically and is more like a "global" canonicalization.
-  //
-  // The first phase is done by `preCanonicalized`. It's a `lazy val` which recursively calls
-  // `preCanonicalized` on the children. This means that almost every node in the expression tree
-  // will instantiate the `preCanonicalized` variable, which is good for performance as you can
-  // reuse the canonicalization result of the children when you construct a new expression node.
-  //
-  // The second phase is done by `canonicalized`, which simply calls `Canonicalize` and is kind of
-  // the actual "user-facing API" of expression canonicalization. Only the root node of the
-  // expression tree will instantiate the `canonicalized` variable. This is different from
-  // `preCanonicalized`, because `canonicalized` does "global" canonicalization and most of the time
-  // you cannot reuse the canonicalization result of the children.
-
-  /**
-   * An internal lazy val to implement expression canonicalization. It should only be called in
-   * `canonicalized`, or in subclass's `preCanonicalized` when the subclass overrides this lazy val
-   * to provide custom canonicalization logic.
-   */
-  lazy val preCanonicalized: Expression = {
-    val canonicalizedChildren = children.map(_.preCanonicalized)
-    withNewChildren(canonicalizedChildren)
-  }
-
   /**
    * Returns an expression where a best effort attempt has been made to transform `this` in a way
    * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
-   * commutative operations, etc.)  See [[Canonicalize]] for more details.
+   * commutative operations, etc.).
    *
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
+   *
+   * The process of canonicalization is a one pass, bottum-up expression tree computation based on
+   * canonicalizing children before canonicalizing the current node. There is one exception though,
+   * as adjacent, same class [[CommutativeExpression]]s canonicalazion happens in a way that calling
+   * `canonicalized` on the root:
+   *   1. Gathers and canonicalizes the non-commutative (or commutative but not same class) child
+   *      expressions of the adjacent expressions.
+   *   2. Reorder the canonicalized child expressions by their hashcode.
+   * This means that the lazy `cannonicalized` is called and computed only on the root of the
+   * adjacent expressions.
    */
-  lazy val canonicalized: Expression = Canonicalize.reorderCommutativeOperators(preCanonicalized)
+  lazy val canonicalized: Expression = withCanonicalizedChildren
+
+  /**
+   * The default process of canonicalization. It is a one pass, bottum-up expression tree
+   * computation based oncanonicalizing children before canonicalizing the current node.
+   */
+  final protected def withCanonicalizedChildren: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    withNewChildren(canonicalizedChildren)
+  }
 
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
    * cosmetically (i.e. capitalization of names in attributes may be different).
    *
-   * See [[Canonicalize]] for more details.
+   * See [[Expression#canonicalized]] for more details.
    */
   final def semanticEquals(other: Expression): Boolean =
     deterministic && other.deterministic && canonicalized == other.canonicalized
@@ -273,7 +265,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard
    * `hashCode`, an attempt has been made to eliminate cosmetic differences.
    *
-   * See [[Canonicalize]] for more details.
+   * See [[Expression#canonicalized]] for more details.
    */
   def semanticHash(): Int = canonicalized.hashCode()
 
@@ -362,7 +354,7 @@ trait RuntimeReplaceable extends Expression {
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
-  override lazy val preCanonicalized: Expression = replacement.preCanonicalized
+  override lazy val canonicalized: Expression = replacement.canonicalized
 
   final override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
@@ -1155,4 +1147,95 @@ trait ComplexTypeMergingExpression extends Expression {
  */
 trait UserDefinedExpression {
   def name: String
+}
+
+trait CommutativeExpression extends Expression {
+  /** Collects adjacent commutative operations. */
+  private def gatherCommutative(
+      e: Expression,
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = e match {
+    case c: CommutativeExpression if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
+    case other => other.canonicalized :: Nil
+  }
+
+  /**
+   * Reorders adjacent commutative operators such as [[And]] in the expression tree, according to
+   * the `hashCode` of non-commutative nodes, to remove cosmetic variations.
+   */
+  protected def orderCommutative(
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] =
+    gatherCommutative(this, f).sortBy(_.hashCode())
+
+  /**
+   * Helper method to generated a canonicalized plan. If the number of operands are
+   * greater than the MULTI_COMMUTATIVE_OP_OPT_THRESHOLD, this method creates a
+   * [[MultiCommutativeOp]] as the canonicalized plan.
+   */
+  protected def buildCanonicalizedPlan(
+      collectOperands: PartialFunction[Expression, Seq[Expression]],
+      buildBinaryOp: (Expression, Expression) => Expression,
+      failOnError: Option[Boolean] = None): Expression = {
+    val operands = orderCommutative(collectOperands)
+    val reorderResult =
+      if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
+        operands.reduce(buildBinaryOp)
+      } else {
+        MultiCommutativeOp(operands, this.getClass, failOnError)(this)
+      }
+    reorderResult
+  }
+}
+
+/**
+ * A helper class used by the Commutative expressions during canonicalization. During
+ * canonicalization, when we have a long tree of commutative operations, we use the MultiCommutative
+ * expression to represent that tree instead of creating new commutative objects.
+ * This class is added as a memory optimization for processing large commutative operation trees
+ * without creating a large number of new intermediate objects.
+ * The MultiCommutativeOp memory optimization is applied to the following commutative
+ * expressions:
+ *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
+ * @param operands A sequence of operands that produces a commutative expression tree.
+ * @param opCls The class of the root operator of the expression tree.
+ * @param failOnError The optional expression evaluation mode.
+ * @param originalRoot Root operator of the commutative expression tree before canonicalization.
+ *                     This object reference is used to deduce the return dataType of Add and
+ *                     Multiply operations when the input datatype is decimal.
+ */
+case class MultiCommutativeOp(
+     operands: Seq[Expression],
+     opCls: Class[_],
+     failOnError: Option[Boolean])(originalRoot: Expression) extends Unevaluable {
+  // Helper method to deduce the data type of a single operation.
+  private def singleOpDataType(lType: DataType, rType: DataType): DataType = {
+    originalRoot match {
+      case add: Add =>
+        (lType, rType) match {
+          case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+            add.resultDecimalType(p1, s1, p2, s2)
+          case _ => lType
+        }
+      case multiply: Multiply =>
+        (lType, rType) match {
+          case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+            multiply.resultDecimalType(p1, s1, p2, s2)
+          case _ => lType
+        }
+    }
+  }
+
+  override def dataType: DataType = {
+    originalRoot match {
+      case _: Add | _: Multiply =>
+        operands.map(_.dataType).reduce((l, r) => singleOpDataType(l, r))
+      case other => other.dataType
+    }
+  }
+
+  override def nullable: Boolean = operands.exists(_.nullable)
+
+  override def children: Seq[Expression] = operands
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    this.copy(operands = newChildren)(originalRoot)
 }
