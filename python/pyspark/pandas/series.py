@@ -7233,6 +7233,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if item.startswith("__"):
             raise AttributeError(item)
         if hasattr(MissingPandasLikeSeries, item):
+            if item in ["to_hdf"] and get_option("compute.pandas_fallback"):
+                new_key = f"_{item}_fallback"
+                return getattr(self, new_key)
             property_or_func = getattr(MissingPandasLikeSeries, item)
             if isinstance(property_or_func, property):
                 return property_or_func.fget(self)
