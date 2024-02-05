@@ -226,6 +226,7 @@
     <datasketches.version>5.0.1</datasketches.version>
     <netty.version>4.1.106.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
+    <icu4j.version>72.1</icu4j.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -2743,6 +2744,11 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr4-runtime</artifactId>
         <version>${antlr4.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.ibm.icu</groupId>
+        <artifactId>icu4j</artifactId>
+        <version>${icu4j.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
