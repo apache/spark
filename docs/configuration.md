@@ -3159,7 +3159,7 @@ the driver or executor, or, in the absence of that value, the number of cores av
 #### Server Configuration
 
 Server configurations are set in Spark Connect server, for example, when you start the Spark Connect server with `./sbin/start-connect-server.sh`.
-They are typically set via the config file and command-lineoptions with `--conf/-c`.
+They are typically set via the config file and command-line options with `--conf/-c`.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
