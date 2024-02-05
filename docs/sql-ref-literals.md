@@ -275,15 +275,30 @@ E [ + | - ] digit [ ... ]
 
     Case insensitive, indicates `DECIMAL`, with the total number of digits as precision and the number of digits to right of decimal point as scale.
 
+* **default (no postfix, no exponent)**
+
+    Indicates `DECIMAL`, same as the `BD` postfix.
+
+* **default (no postfix, with exponent)**
+
+    Indicates `DOUBLE`, same as the `D` postfix.
+
 #### Fractional Literals Examples
 
 ```sql
-SELECT 12.578 AS col;
-+------+
-|   col|
-+------+
-|12.578|
-+------+
+SELECT 12.578 AS col, TYPEOF(12.578) AS type;
++------+------------+
+|   col|        type|
++------+------------+
+|12.578|decimal(5,3)|
++------+------------+
+
+SELECT 12.578E0 AS col, TYPEOF(12.578E0) AS type;
++------+------+
+|   col|  type|
++------+------+
+|12.578|double|
++------+------+
 
 SELECT -0.1234567 AS col;
 +----------+
