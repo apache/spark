@@ -24,7 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Expression information, will be used to describe a expression.
+ * Expression information, will be used to describe an expression.
  */
 public class ExpressionInfo {
     private String className;

@@ -7505,6 +7505,21 @@
       "Failed to create column family with reserved name=<colFamilyName>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3198" : {
+    "message" : [
+      "Cannot grow BufferHolder by size <neededSize> because the size is negative"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3199" : {
+    "message" : [
+      "Cannot grow BufferHolder by size <neededSize> because the size after growing exceeds size limitation <arrayMax>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3200" : {
+    "message" : [
+      "Read-ahead limit < 0"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

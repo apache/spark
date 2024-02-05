@@ -30,6 +30,7 @@ import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
@@ -200,7 +201,7 @@ public class UDFXPathUtil {
     @Override
     public void mark(int readAheadLimit) throws IOException {
       if (readAheadLimit < 0) {
-        throw new IllegalArgumentException("Read-ahead limit < 0");
+        throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3200");
       }
       ensureOpen();
       mark = next;
