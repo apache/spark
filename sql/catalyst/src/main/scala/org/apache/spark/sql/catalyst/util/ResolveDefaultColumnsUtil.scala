@@ -468,10 +468,13 @@ object ResolveDefaultColumns extends QueryErrorsBase
       }
       // Our analysis check passes here. We do not further inspect whether the
       // expression is `foldable` here, as the plan is not optimized yet.
-    } else if (default.references.nonEmpty) {
+    }
+
+    if (default.references.nonEmpty || default.exists(_.isInstanceOf[VariableReference])) {
       // Ideally we should let the rest of `CheckAnalysis` report errors about why the default
       // expression is unresolved. But we should report a better error here if the default
       // expression references columns, which means it's not a constant for sure.
+      // Note that, session variable should be considered as non-constant as well.
       throw QueryCompilationErrors.defaultValueNotConstantError(
         statement, colName, default.originalSQL)
     }
