@@ -1175,6 +1175,7 @@ pyspark_pandas_connect_part1 = Module(
         "pyspark.pandas.tests.connect.frame.test_parity_truncate",
         "pyspark.pandas.tests.connect.groupby.test_parity_aggregate",
         "pyspark.pandas.tests.connect.groupby.test_parity_apply_func",
+        "pyspark.pandas.tests.connect.groupby.test_parity_corr",
         "pyspark.pandas.tests.connect.groupby.test_parity_cumulative",
         "pyspark.pandas.tests.connect.groupby.test_parity_missing_data",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply",
