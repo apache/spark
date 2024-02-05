@@ -103,12 +103,13 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
-  private def userSpecifiedLocationPreferences: Map[TopicPartition, Array[String]] = {
+  private def userSpecifiedLocationPreferences(executors: Array[String])
+      : Map[TopicPartition, Array[String]] = {
     val partitionDescrs = consumerStrategy.assignedPartitionDescriptions(admin)
       .toArray
       .sortBy(descr => (descr.topic, descr.partition))
 
-    partitionLocationAssigner.getLocationPreferences(partitionDescrs, getSortedExecutorList)
+    partitionLocationAssigner.getLocationPreferences(partitionDescrs, executors)
       .map {
         case (descr, executors) => (descr.toTopicPartition -> executors)
       }
@@ -422,13 +423,10 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }
-      val divvied = rangeCalculator
-        .getRanges(ranges, getSortedExecutorList, userSpecifiedLocationPreferences)
-        .groupBy(_.topicPartition)
+      val divvied = rangeCalculator.getRanges(ranges).groupBy(_.topicPartition)
       divvied.flatMap { case (tp, splitOffsetRanges) =>
         if (splitOffsetRanges.length == 1) {
-          val loc = splitOffsetRanges.head.preferredLoc
-          Seq(KafkaOffsetRange(tp, fromOffsetsMap(tp), untilOffsetsMap(tp), loc))
+          Seq(KafkaOffsetRange(tp, fromOffsetsMap(tp), untilOffsetsMap(tp), None))
         } else {
           // the list can't be empty
           val first = splitOffsetRanges.head.copy(fromOffset = fromOffsetsMap(tp))
@@ -437,11 +435,15 @@ private[kafka010] class KafkaOffsetReaderAdmin(
         }
       }.toArray.toImmutableArraySeq
     } else {
-      offsetRangesBase
+      val execs = getSortedExecutorList
+      rangeCalculator.getLocatedRanges(
+        offsetRangesBase,
+        execs,
+        userSpecifiedLocationPreferences(execs))
     }
   }
 
-  private def getSortedExecutorList: Array[String] = {
+  protected def getSortedExecutorList: Array[String] = {
     def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
       if (a.host == b.host) {
         a.executorId > b.executorId
@@ -505,10 +507,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(
-      ranges,
-      getSortedExecutorList,
-      userSpecifiedLocationPreferences)
+    val execs = getSortedExecutorList
+    rangeCalculator.getRanges(ranges, execs, userSpecifiedLocationPreferences(execs))
   }
 
   private def partitionsAssignedToAdmin(

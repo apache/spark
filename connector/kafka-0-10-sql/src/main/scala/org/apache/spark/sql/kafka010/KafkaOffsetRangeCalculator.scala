@@ -51,12 +51,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
     if (minPartitions.isEmpty || offsetRanges.size >= minPartitions.get) {
       // If minPartitions not set or there are enough partitions to
       // satisfy minPartitions, there's no splitting to do
-      offsetRanges.map { range =>
-        // Assign preferred executor locations to each range such that the same topic-partition is
-        // preferentially read from the same executor and the KafkaConsumer can be reused.
-        val execs = locationPreferences.getOrElse(range.topicPartition, executorLocations)
-        range.copy(preferredLoc = getLocation(range.topicPartition, execs))
-      }
+      getLocatedRanges(offsetRanges, executorLocations, locationPreferences)
     } else {
       // Splits offset ranges with relatively large amount of data to smaller ones.
       val totalSize = offsetRanges.map(_.size).sum
@@ -84,24 +79,39 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
         } else {
           getPartCount(size, splitRangeTotalSize, splitRangeMinPartitions)
         }
-        val execs = locationPreferences.getOrElse(range.topicPartition, executorLocations)
-        val maybeLocationIndex = getLocation(range.topicPartition, execs).map(exec => execs.indexWhere(_ == exec))
         var remaining = size
         var startOffset = range.fromOffset
-          (0 until parts).map { part =>
-            // Fine to do integer division. Last partition will consume all the round off errors
-            val thisPartition = remaining / (parts - part)
-            remaining -= thisPartition
-            val endOffset = math.min(startOffset + thisPartition, range.untilOffset)
-            val loc = maybeLocationIndex.map(idx => execs((idx + part) % parts))
-            val offsetRange = KafkaOffsetRange(tp, startOffset, endOffset, loc)
-            startOffset = endOffset
-            offsetRange
-          }
+        (0 until parts).map { part =>
+          // Fine to do integer division. Last partition will consume all the round off errors
+          val thisPartition = remaining / (parts - part)
+          remaining -= thisPartition
+          val endOffset = math.min(startOffset + thisPartition, range.untilOffset)
+          // no location is set on the offset range because we want
+          // to evenly distribute ranges across all executors.
+          val offsetRange = KafkaOffsetRange(tp, startOffset, endOffset, None)
+          startOffset = endOffset
+          offsetRange
+        }
       }.filter(_.size > 0)
     }
 
   }
+
+  
+  /**
+    * Set the appropriate location on a Seq of [[KafkaOffsetRange]].
+    * This method assigns preferred executor locations to each range
+    * such that the same topic-partition is preferentially read from the
+    * same executor and the KafkaConsumer can be reused.
+    */
+  def getLocatedRanges(
+    ranges: Seq[KafkaOffsetRange],
+    executorLocations: Array[String] = Array.empty,
+    locationPreferences: Map[TopicPartition, Array[String]] = Map.empty): Seq[KafkaOffsetRange] =
+    ranges.map { range =>
+      val execs = locationPreferences.getOrElse(range.topicPartition, executorLocations)
+      range.copy(preferredLoc = getLocation(range.topicPartition, execs))
+    }
 
   private def getPartCount(size: Long, totalSize: Long, minParts: Int): Int = {
     math.max(math.round(size.toDouble / totalSize * minParts), 1).toInt
@@ -109,9 +119,6 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 
   private def getLocation(tp: TopicPartition, executorLocations: Array[String]): Option[String] = {
     def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
-    // scalastyle:off println
-    println(s"getLocation, tp ${tp.topic()}, ${tp.partition()}, executors: ${executorLocations.mkString(",")}")
-    // scalastyle:on println
 
     val numExecutors = executorLocations.length
     if (numExecutors > 0) {
