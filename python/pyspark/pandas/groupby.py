@@ -82,6 +82,7 @@ from pyspark.pandas.correlation import (
     CORRELATION_VALUE_1_COLUMN,
     CORRELATION_VALUE_2_COLUMN,
     CORRELATION_CORR_OUTPUT_COLUMN,
+    CORRELATION_COUNT_OUTPUT_COLUMN,
 )
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -3935,11 +3936,16 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         # Cast columns to ``"float64"`` to match `pandas.DataFrame.groupby`.
         return DataFrame(internal).astype("float64")
 
-    def corr(self, method: str = "pearson") -> "DataFrame":
+    def corr(
+        self,
+        method: str = "pearson",
+        min_periods: int = 1,
+        numeric_only: bool = False,
+    ) -> "DataFrame":
         """
         Compute pairwise correlation of columns, excluding NA/null values.
 
-        .. versionadded:: 3.3.0
+        .. versionadded:: 4.0.0
 
         Parameters
         ----------
@@ -3948,13 +3954,12 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             * spearman : Spearman rank correlation
             * kendall : Kendall Tau correlation coefficient
 
-            .. versionchanged:: 3.4.0
-               support 'kendall' for method parameter
-        min_periods : int, optional
-            Minimum number of observations required per pair of columns
-            to have a valid result.
+        min_periods : int, default 1
+            Minimum number of observations in window required to have a value
+            (otherwise result is NA).
 
-            .. versionadded:: 3.4.0
+        numeric_only : bool, default False
+            Include only `float`, `int` or `boolean` data.
 
         Returns
         -------
@@ -3975,22 +3980,48 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
 
         Examples
         --------
-        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
-        ...                   columns=['dogs', 'cats'])
-        >>> df.corr('pearson')
-                  dogs      cats
-        dogs  1.000000 -0.851064
-        cats -0.851064  1.000000
+        >>> df = ps.DataFrame(
+        ...     {"A": [0, 0, 0, 1, 1, 2], "B": [-1, 2, 3, 5, 6, 0], "C": [4, 6, 5, 1, 3, 0]},
+        ...     columns=["A", "B", "C"])
+        >>> df.groupby("A").corr()
+                    B         C
+        A
+        0 B  1.000000  0.720577
+          C  0.720577  1.000000
+        1 B  1.000000  1.000000
+          C  1.000000  1.000000
+        2 B       NaN       NaN
+          C       NaN       NaN
 
-        >>> df.corr('spearman')
-                  dogs      cats
-        dogs  1.000000 -0.948683
-        cats -0.948683  1.000000
+        >>> psdf.groupby("A").corr(min_periods=2)
+                    B         C
+        A
+        0 B  1.000000  0.720577
+          C  0.720577  1.000000
+        1 B  1.000000  1.000000
+          C  1.000000  1.000000
+        2 B       NaN       NaN
+          C       NaN       NaN
 
-        >>> df.corr('kendall')
-                  dogs      cats
-        dogs  1.000000 -0.912871
-        cats -0.912871  1.000000
+        >>> df.groupby("A").corr("spearman")
+               B    C
+        A
+        0 B  1.0  0.5
+          C  0.5  1.0
+        1 B  1.0  1.0
+          C  1.0  1.0
+        2 B  NaN  NaN
+          C  NaN  NaN
+
+        >>> df.groupby("A").corr('kendall')
+                    B         C
+        A
+        0 B  1.000000  0.333333
+          C  0.333333  1.000000
+        1 B  1.000000  1.000000
+          C  1.000000  1.000000
+        2 B  1.000000       NaN
+          C       NaN  1.000000
         """
         if method not in ["pearson", "spearman", "kendall"]:
             raise ValueError(f"Invalid method {method}")
@@ -3998,7 +4029,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         groupkey_names = [key.name for key in self._groupkeys]
         internal, agg_columns, sdf = self._prepare_reduce(
             groupkey_names=groupkey_names,
-            accepted_spark_types=(NumericType, BooleanType),
+            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
             bool_to_numeric=False,
         )
 
@@ -4042,6 +4073,13 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 ),
             )
 
+        sdf = sdf.withColumn(
+            CORRELATION_CORR_OUTPUT_COLUMN,
+            F.when(F.col(CORRELATION_COUNT_OUTPUT_COLUMN) < min_periods, F.lit(None)).otherwise(
+                F.col(CORRELATION_CORR_OUTPUT_COLUMN)
+            ),
+        )
+
         auxiliary_col_name = verify_temp_column_name(sdf, "__groupby_corr_auxiliary_temp_column__")
         sdf = sdf.withColumn(
             auxiliary_col_name,
@@ -4070,7 +4108,10 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             .agg(
                 F.array_sort(
                     F.collect_list(
-                        F.struct(F.col(index_2_col_name), F.col(CORRELATION_CORR_OUTPUT_COLUMN))
+                        F.struct(
+                            F.col(index_2_col_name),
+                            F.col(CORRELATION_CORR_OUTPUT_COLUMN),
+                        )
                     )
                 ).alias(array_col_name)
             )
