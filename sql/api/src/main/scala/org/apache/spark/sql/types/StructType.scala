@@ -317,7 +317,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     nameToIndex.get(name)
   }
 
-  def getFieldIndexCaseInsensitive(name: String): Option[Int] = {
+  private[sql] def getFieldIndexCaseInsensitive(name: String): Option[Int] = {
     nameToIndexCaseInsensitive.get(name)
   }
 
