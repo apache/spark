@@ -275,6 +275,10 @@ E [ + | - ] digit [ ... ]
 
     Case insensitive, indicates `DECIMAL`, with the total number of digits as precision and the number of digits to right of decimal point as scale.
 
+* **default (no postfix)**
+
+    Indicates `DECIMAL`, same as the `BD` postfix.
+
 #### Fractional Literals Examples
 
 ```sql
