@@ -38,7 +38,16 @@ object RewriteGetJsonObject extends Rule[LogicalPlan] {
           _.collect { case gjo: GetJsonObject if gjo.rewriteToJsonTuplePath.nonEmpty => gjo }
         }
 
-        val groupedGetJsonObjects = getJsonObjects.groupBy(_.json).filter(_._2.size >= threshold)
+        val groupedGetJsonObjects = getJsonObjects
+          // an enhanced groupBy which result preserves the insertion order of keys
+          .foldLeft(new mutable.LinkedHashMap[Expression, mutable.ListBuffer[GetJsonObject]]) {
+            case (result: mutable.Map[Expression, mutable.ListBuffer[GetJsonObject]],
+                  gjo: GetJsonObject) =>
+              result.getOrElseUpdate(gjo.json, new mutable.ListBuffer[GetJsonObject]) += gjo
+              result
+          }
+          .filter { case (_, gjoList) => gjoList.size >= threshold }
+          .view.mapValues(_.toSeq)
         if (groupedGetJsonObjects.nonEmpty) {
           var newChild = p.child
           val keyValues = mutable.LinkedHashMap.empty[Expression, AttributeReference]
