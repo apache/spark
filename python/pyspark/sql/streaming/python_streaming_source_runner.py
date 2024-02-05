@@ -92,22 +92,6 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Receive the output schema from its child plan.
-        input_schema_json = utf8_deserializer.loads(infile)
-        input_schema = _parse_datatype_json_string(input_schema_json)
-        if not isinstance(input_schema, StructType):
-            raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
-                message_parameters={
-                    "expected": "an input schema of type 'StructType'",
-                    "actual": f"'{type(input_schema).__name__}'",
-                },
-            )
-        assert len(input_schema) == 1 and isinstance(input_schema[0].dataType, BinaryType), (
-            "The input schema of Python data source read should contain only one column of type "
-            f"'BinaryType', but got '{input_schema}'"
-        )
-
         # Receive the data source output schema.
         schema_json = utf8_deserializer.loads(infile)
         schema = _parse_datatype_json_string(schema_json)

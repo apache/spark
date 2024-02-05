@@ -39,7 +39,6 @@ object PythonStreamingSourceRunner {
 
 class PythonStreamingSourceRunner(
     func: PythonFunction,
-    inputSchema: StructType,
     outputSchema: StructType) extends Logging  {
   val workerModule = "pyspark.sql.streaming.python_streaming_source_runner"
 
@@ -95,9 +94,6 @@ class PythonStreamingSourceRunner(
 
     // Send the user function to python process
     PythonWorkerUtils.writePythonFunction(func, dataOut)
-
-    // Send input schema
-    PythonWorkerUtils.writeUTF(inputSchema.json, dataOut)
 
     // Send output schema
     PythonWorkerUtils.writeUTF(outputSchema.json, dataOut)

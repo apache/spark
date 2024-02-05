@@ -78,7 +78,7 @@ class PythonMicroBatchStream(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)).dataSource)
 
   val runner: PythonStreamingSourceRunner =
-    new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema, outputSchema)
+    new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema)
   runner.init()
 
   override def initialOffset(): Offset = {
