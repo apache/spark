@@ -23,7 +23,7 @@ import org.apache.logging.log4j.core.impl.Log4jLogEvent.Builder
 import org.apache.logging.log4j.message.SimpleMessage
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging.SparkShellLoggingFilter
+import org.apache.spark.internal.Log4j2Utils.SparkShellLoggingFilter
 import org.apache.spark.util.Utils
 
 class LoggingSuite extends SparkFunSuite {
