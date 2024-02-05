@@ -85,6 +85,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
+        RewriteGetJsonObject,
         GenerateOptimization,
         // Operator combine
         CollapseRepartition,
@@ -220,8 +221,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // aggregate distinct column
     Batch("Distinct Aggregate Rewrite", Once,
       RewriteDistinctAggregates) :+
-    Batch("Rewrite GetJsonObject", Once,
-      RewriteGetJsonObject) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
