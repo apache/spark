@@ -66,7 +66,6 @@ from pyspark.pandas.internal import (
     HIDDEN_COLUMNS,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
-    SPARK_DEFAULT_INDEX_NAME,
     SPARK_DEFAULT_SERIES_NAME,
     SPARK_INDEX_NAME_PATTERN,
 )
@@ -4138,7 +4137,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 index_spark_columns=[
                     scol_for(sdf, key) for key in groupkey_names + [auxiliary_col_name]
                 ],
-                index_names=[(key,) for key in groupkey_names] + [("",)],
+                index_names=[(key,) for key in groupkey_names] + [(None,)],
                 column_labels=numeric_labels,
                 column_label_names=internal.column_label_names,
             )

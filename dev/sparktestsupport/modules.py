@@ -889,6 +889,7 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.indexes.test_reset_index",
         "pyspark.pandas.tests.groupby.test_aggregate",
         "pyspark.pandas.tests.groupby.test_apply_func",
+        "pyspark.pandas.tests.groupby.test_corr",
         "pyspark.pandas.tests.groupby.test_cumulative",
         "pyspark.pandas.tests.groupby.test_describe",
         "pyspark.pandas.tests.groupby.test_groupby",
