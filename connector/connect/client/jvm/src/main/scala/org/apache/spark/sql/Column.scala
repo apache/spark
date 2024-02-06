@@ -1298,7 +1298,8 @@ private[sql] object Column {
     val builder = proto.Expression.newBuilder()
     name match {
       case "*" =>
-        builder.getUnresolvedStarBuilder
+        val starBuilder = builder.getUnresolvedStarBuilder
+        planId.foreach(starBuilder.setPlanId)
       case _ if name.endsWith(".*") =>
         builder.getUnresolvedStarBuilder.setUnparsedTarget(name)
       case _ =>

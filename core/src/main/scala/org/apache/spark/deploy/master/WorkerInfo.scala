@@ -20,21 +20,29 @@ package org.apache.spark.deploy.master
 import scala.collection.mutable
 
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
+import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
-  extends ResourceAllocator {
+  extends Serializable with ResourceAllocator {
 
   override protected def resourceName = this.name
   override protected def resourceAddresses = this.addresses
-  override protected def slotsPerAddress: Int = 1
 
+  /**
+   * Acquire the resources.
+   * @param amount How many addresses are requesting.
+   * @return ResourceInformation
+   */
   def acquire(amount: Int): ResourceInformation = {
-    val allocated = availableAddrs.take(amount)
-    acquire(allocated)
-    new ResourceInformation(resourceName, allocated.toArray)
+    // Any available address from availableAddrs must be a whole resource
+    // since worker needs to do full resources to the executors.
+    val addresses = availableAddrs.take(amount)
+    assert(addresses.length == amount)
+
+    acquire(addresses.map(addr => addr -> ONE_ENTIRE_RESOURCE).toMap)
+    new ResourceInformation(resourceName, addresses.toArray)
   }
 }
 
@@ -163,7 +171,7 @@ private[spark] class WorkerInfo(
    */
   def recoverResources(expected: Map[String, ResourceInformation]): Unit = {
     expected.foreach { case (rName, rInfo) =>
-      resources(rName).acquire(rInfo.addresses.toImmutableArraySeq)
+      resources(rName).acquire(rInfo.addresses.map(addr => addr -> ONE_ENTIRE_RESOURCE).toMap)
     }
   }
 
@@ -173,7 +181,7 @@ private[spark] class WorkerInfo(
    */
   private def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
     allocated.foreach { case (rName, rInfo) =>
-      resources(rName).release(rInfo.addresses.toImmutableArraySeq)
+      resources(rName).release(rInfo.addresses.map(addrs => addrs -> ONE_ENTIRE_RESOURCE).toMap)
     }
   }
 }

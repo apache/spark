@@ -4,6 +4,7 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=true
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),

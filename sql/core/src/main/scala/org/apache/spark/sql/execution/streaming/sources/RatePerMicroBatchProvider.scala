@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
@@ -109,7 +110,7 @@ class RatePerMicroBatchTable(
         advanceMillisPerBatch, options)
 
     override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-      throw new UnsupportedOperationException("continuous mode is not supported!")
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3167")
     }
 
     override def columnarSupportMode(): Scan.ColumnarSupportMode =

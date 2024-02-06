@@ -32,7 +32,7 @@
   <url>https://spark.apache.org/</url>
   <licenses>
     <license>
-      <name>Apache 2.0 License</name>
+      <name>Apache-2.0</name>
       <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
       <distribution>repo</distribution>
     </license>
@@ -119,8 +119,8 @@
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.6</asm.version>
-    <slf4j.version>2.0.9</slf4j.version>
-    <log4j.version>2.22.0</log4j.version>
+    <slf4j.version>2.0.11</slf4j.version>
+    <log4j.version>2.22.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -128,7 +128,7 @@
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.9.1</zookeeper.version>
-    <curator.version>5.2.0</curator.version>
+    <curator.version>5.6.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
@@ -143,7 +143,7 @@
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.53.v20231009</jetty.version>
+    <jetty.version>10.0.19</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <!--
@@ -156,7 +156,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.21</codahale.metrics.version>
+    <codahale.metrics.version>4.2.25</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.3</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -199,7 +199,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.14.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.11.1</commons-pool2.version>
+    <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
@@ -208,7 +208,7 @@
       Because it transitions Jakarta REST API from javax to jakarta package.
     -->
     <jersey.version>2.41</jersey.version>
-    <joda.version>2.12.5</joda.version>
+    <joda.version>2.12.6</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -223,18 +223,20 @@
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
-    <netty.version>4.1.100.Final</netty.version>
+    <datasketches.version>5.0.1</datasketches.version>
+    <netty.version>4.1.106.Final</netty.version>
     <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
+    <icu4j.version>72.1</icu4j.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>14.0.2</arrow.version>
+    <arrow.version>15.0.0</arrow.version>
     <ammonite.version>2.5.11</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.9.1</kubernetes-client.version>
+    <kubernetes-client.version>6.10.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -290,8 +292,8 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>32.0.1-jre</connect.guava.version>
-    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
+    <connect.guava.version>33.0.0-jre</connect.guava.version>
+    <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.59.0</io.grpc.version>
     <mima.version>1.1.3</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
@@ -490,12 +492,6 @@
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-continuation</artifactId>
-        <version>${jetty.version}</version>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-servlet</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
@@ -682,7 +678,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>8.3.2</version>
+        <version>8.8.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -800,7 +796,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-10</version>
+        <version>1.5.5-11</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1237,21 +1233,30 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>com.spotify</groupId>
-        <artifactId>docker-client</artifactId>
-        <version>8.14.1</version>
+        <groupId>com.github.docker-java</groupId>
+        <artifactId>docker-java</artifactId>
+        <version>3.3.4</version>
         <scope>test</scope>
-        <classifier>shaded</classifier>
         <exclusions>
-          <exclusion>
-            <artifactId>guava</artifactId>
-            <groupId>com.google.guava</groupId>
-          </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-jersey</artifactId>
+          </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.github.docker-java</groupId>
+        <artifactId>docker-java-transport-zerodep</artifactId>
+        <version>3.3.4</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.mysql</groupId>
@@ -2741,6 +2746,11 @@
         <version>${antlr4.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.ibm.icu</groupId>
+        <artifactId>icu4j</artifactId>
+        <version>${icu4j.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-crypto</artifactId>
         <version>${commons-crypto.version}</version>
@@ -2836,6 +2846,12 @@
         <groupId>dev.ludovic.netlib</groupId>
         <artifactId>arpack</artifactId>
         <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <!-- SPARK-16484 add `datasketches-java` for support Datasketches HllSketch -->
+      <dependency>
+        <groupId>org.apache.datasketches</groupId>
+        <artifactId>datasketches-java</artifactId>
+        <version>${datasketches.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -3651,6 +3667,13 @@
       <id>hadoop-cloud</id>
       <modules>
         <module>hadoop-cloud</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>jvm-profiler</id>
+      <modules>
+        <module>connector/profiler</module>
       </modules>
     </profile>
 

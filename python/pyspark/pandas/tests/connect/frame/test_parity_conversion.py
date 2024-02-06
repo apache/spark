@@ -16,18 +16,17 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.frame.test_conversion import FrameConversionMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class FrameParityConversionTests(
-    FrameConversionMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    FrameConversionMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":

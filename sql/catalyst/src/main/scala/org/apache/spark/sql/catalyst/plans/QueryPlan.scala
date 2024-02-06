@@ -361,6 +361,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         } else {
           transferAttrMapping ++ newOtherAttrMapping
         }
+        if (!(plan eq planAfterRule)) {
+          planAfterRule.copyTagsFrom(plan)
+        }
         planAfterRule -> resultAttrMapping.toSeq
       }
     }

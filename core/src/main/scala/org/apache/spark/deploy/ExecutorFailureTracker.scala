@@ -84,18 +84,20 @@ object ExecutorFailureTracker {
   // Default to twice the number of executors (twice the maximum number of executors if dynamic
   // allocation is enabled), with a minimum of 3.
   def maxNumExecutorFailures(sparkConf: SparkConf): Int = {
-    val effectiveNumExecutors =
-      if (Utils.isStreamingDynamicAllocationEnabled(sparkConf)) {
-        sparkConf.get(STREAMING_DYN_ALLOCATION_MAX_EXECUTORS)
-      } else if (Utils.isDynamicAllocationEnabled(sparkConf)) {
-        sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)
-      } else {
-        sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
-      }
     // By default, effectiveNumExecutors is Int.MaxValue if dynamic allocation is enabled. We need
     // avoid the integer overflow here.
-    val defaultMaxNumExecutorFailures = math.max(3,
-      if (effectiveNumExecutors > Int.MaxValue / 2) Int.MaxValue else 2 * effectiveNumExecutors)
+    def defaultMaxNumExecutorFailures: Int = {
+      val effectiveNumExecutors =
+        if (Utils.isStreamingDynamicAllocationEnabled(sparkConf)) {
+          sparkConf.get(STREAMING_DYN_ALLOCATION_MAX_EXECUTORS)
+        } else if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+          sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+        } else {
+          sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
+        }
+      math.max(3,
+        if (effectiveNumExecutors > Int.MaxValue / 2) Int.MaxValue else 2 * effectiveNumExecutors)
+    }
 
     sparkConf.get(MAX_EXECUTOR_FAILURES).getOrElse(defaultMaxNumExecutorFailures)
   }

@@ -68,17 +68,16 @@ object ResolveInlineTables extends Rule[LogicalPlan]
   /**
    * Validates that all inline table data are valid expressions that can be evaluated
    * (in this they must be foldable).
-   *
+   * Note that nondeterministic expressions are not supported since they are not foldable.
+   * Exception are CURRENT_LIKE expressions, which are replaced by a literal in later stages.
    * This is package visible for unit testing.
    */
   private[analysis] def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
-        // Note that nondeterministic expressions are not supported since they are not foldable.
-        // Only exception are CURRENT_LIKE expressions, which are replaced by a literal
-        // In later stages.
-        if ((!e.resolved && !e.containsPattern(CURRENT_LIKE))
-          || !trimAliases(prepareForEval(e)).foldable) {
+        if (e.containsPattern(CURRENT_LIKE)) {
+          // Do nothing.
+        } else if (!e.resolved || !trimAliases(prepareForEval(e)).foldable) {
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))

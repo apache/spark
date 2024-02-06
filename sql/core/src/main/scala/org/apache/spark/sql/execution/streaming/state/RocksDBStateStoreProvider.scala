@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -46,9 +48,15 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
-    override def get(key: UnsafeRow): UnsafeRow = {
+    override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+      verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
+        s"Failed to create column family with reserved_name=$colFamilyName")
+      rocksDB.createColFamilyIfAbsent(colFamilyName)
+    }
+
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
-      val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key)))
+      val value = encoder.decodeValue(rocksDB.get(encoder.encodeKey(key), colFamilyName))
       if (!isValidated && value != null) {
         StateStoreProvider.validateStateRowFormat(
           key, keySchema, value, valueSchema, storeConf)
@@ -57,21 +65,21 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
-    override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
+    override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
-      rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value))
+      rocksDB.put(encoder.encodeKey(key), encoder.encodeValue(value), colFamilyName)
     }
 
-    override def remove(key: UnsafeRow): Unit = {
+    override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
-      rocksDB.remove(encoder.encodeKey(key))
+      rocksDB.remove(encoder.encodeKey(key), colFamilyName)
     }
 
-    override def iterator(): Iterator[UnsafeRowPair] = {
-      rocksDB.iterator().map { kv =>
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+      rocksDB.iterator(colFamilyName).map { kv =>
         val rowPair = encoder.decode(kv)
         if (!isValidated && rowPair.value != null) {
           StateStoreProvider.validateStateRowFormat(
@@ -82,11 +90,12 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       require(encoder.supportPrefixKeyScan, "Prefix scan requires setting prefix key!")
 
       val prefix = encoder.encodePrefixKey(prefixKey)
-      rocksDB.prefixScan(prefix).map(kv => encoder.decode(kv))
+      rocksDB.prefixScan(prefix, colFamilyName).map(kv => encoder.decode(kv))
     }
 
     override def commit(): Long = synchronized {
@@ -180,6 +189,11 @@ private[sql] class RocksDBStateStoreProvider
 
     /** Return the [[RocksDB]] instance in this store. This is exposed mainly for testing. */
     def dbInstance(): RocksDB = rocksDB
+
+    /** Remove column family if exists */
+     override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+       rocksDB.removeColFamilyIfExists(colFamilyName)
+    }
   }
 
   override def init(
@@ -187,6 +201,7 @@ private[sql] class RocksDBStateStoreProvider
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     this.stateStoreId_ = stateStoreId
@@ -194,6 +209,7 @@ private[sql] class RocksDBStateStoreProvider
     this.valueSchema = valueSchema
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
+    this.useColumnFamilies = useColumnFamilies
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
       (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
@@ -233,7 +249,15 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
-    rocksDB.doMaintenance()
+    try {
+      rocksDB.doMaintenance()
+    } catch {
+      // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
+      // maintenance thread and streaming aggregation operator
+      case NonFatal(ex) =>
+        logWarning(s"Ignoring error while performing maintenance operations with exception=",
+          ex)
+    }
   }
 
   override def close(): Unit = {
@@ -251,6 +275,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
+  @volatile private var useColumnFamilies: Boolean = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -258,7 +283,8 @@ private[sql] class RocksDBStateStoreProvider
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr)
+    new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+      useColumnFamilies)
   }
 
   @volatile private var encoder: RocksDBStateEncoder = _

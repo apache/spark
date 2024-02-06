@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -59,7 +59,7 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
   override def output: Seq[Attribute] = plan.output
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException()
+    throw SparkUnsupportedOperationException()
   }
 }
 
@@ -720,6 +720,37 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Strategy to convert [[TransformWithState]] logical operator to physical operator
+   * in streaming plans.
+   */
+  object TransformWithStateStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case TransformWithState(
+        keyDeserializer, valueDeserializer, groupingAttributes,
+        dataAttributes, statefulProcessor, timeoutMode, outputMode,
+        keyEncoder, outputAttr, child) =>
+        val execPlan = TransformWithStateExec(
+          keyDeserializer,
+          valueDeserializer,
+          groupingAttributes,
+          dataAttributes,
+          statefulProcessor,
+          timeoutMode,
+          outputMode,
+          keyEncoder,
+          outputAttr,
+          stateInfo = None,
+          batchTimestampMs = None,
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None,
+          planLater(child))
+        execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
    * Strategy to convert [[FlatMapGroupsInPandasWithState]] logical operator to physical operator
    * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
    */
@@ -863,8 +894,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ) :: Nil
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
-        throw new UnsupportedOperationException(
-          "applyInPandasWithState is unsupported in batch query. Use applyInPandas instead.")
+        throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3176")
       case logical.CoGroup(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr, left, right) =>
         execution.CoGroupExec(
@@ -895,10 +925,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // We should match the combination of limit and offset first, to get the optimal physical
       // plan, instead of planning limit and offset separately.
       case LimitAndOffset(limit, offset, child) =>
-        GlobalLimitExec(limit, planLater(child), offset) :: Nil
+        GlobalLimitExec(limit,
+          LocalLimitExec(limit, planLater(child)), offset) :: Nil
       case OffsetAndLimit(offset, limit, child) =>
         // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-        GlobalLimitExec(limit = offset + limit, child = planLater(child), offset = offset) :: Nil
+        GlobalLimitExec(offset + limit,
+          LocalLimitExec(offset + limit, planLater(child)), offset) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>

@@ -27,6 +27,7 @@ import "timestamp.proto";
 import "duration.proto";
 import "basicmessage.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/wrappers.proto";
 
 option java_outer_classname = "SimpleMessageProtos";
 
@@ -268,6 +269,15 @@ message EventRecursiveB {
   OneOfEventWithRecursion recursiveOneOffInB = 3;
 }
 
+message EmptyProto {
+  // This is an empty proto
+}
+
+message EmptyProtoWrapper {
+  string name = 1;
+  EmptyProto empty_proto = 2;
+}
+
 message EmptyRecursiveProto {
   // This is a recursive proto with no fields. Used to test edge. Catalyst schema for this
   // should be "nothing" (i.e. completely dropped) irrespective of recursive limit.
@@ -323,4 +333,20 @@ message Proto3AllTypes {
     string option_b = 12;
   }
   map<string, string> map = 13;
+}
+
+message WellKnownWrapperTypes {
+  google.protobuf.BoolValue bool_val = 1;
+  google.protobuf.Int32Value int32_val = 2;
+  google.protobuf.UInt32Value uint32_val = 3;
+  google.protobuf.Int64Value int64_val = 4;
+  google.protobuf.UInt64Value uint64_val = 5;
+  google.protobuf.StringValue string_val = 6;
+  google.protobuf.BytesValue bytes_val = 7;
+  google.protobuf.FloatValue float_val = 8;
+  google.protobuf.DoubleValue double_val = 9;
+
+  // Sample repeated and map types
+  repeated google.protobuf.Int32Value int32_list = 10;
+  map<int32, google.protobuf.StringValue> wkt_map = 11;
 }

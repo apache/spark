@@ -1884,17 +1884,6 @@ private[spark] object Utils
     }
   }
 
-  /** Check whether a path is an absolute URI. */
-  def isAbsoluteURI(path: String): Boolean = {
-    try {
-      val uri = new URI(path: String)
-      uri.isAbsolute
-    } catch {
-      case _: URISyntaxException =>
-        false
-    }
-  }
-
   /** Return all non-local paths from a comma-separated list of paths. */
   def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     val windows = isWindows || testWindows
@@ -1929,20 +1918,6 @@ private[spark] object Utils
       }
     }
     path
-  }
-
-  /**
-   * Updates Spark config with properties from a set of Properties.
-   * Provided properties have the highest priority.
-   */
-  def updateSparkConfigFromProperties(
-      conf: SparkConf,
-      properties: Map[String, String]) : Unit = {
-    properties.filter { case (k, v) =>
-      k.startsWith("spark.")
-    }.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
   }
 
   /**
@@ -2851,7 +2826,7 @@ private[spark] object Utils
     else {
       // The last char is a dollar sign
       // Find last non-dollar char
-      val lastNonDollarChar = s.reverse.find(_ != '$')
+      val lastNonDollarChar = s.findLast(_ != '$')
       lastNonDollarChar match {
         case None => s
         case Some(c) =>
@@ -3025,6 +3000,23 @@ private[spark] object Utils
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
       case _ => math.max(sortedSize(len / 2), 1)
     }
+  }
+
+  /**
+   * Check if a command is available.
+   */
+  def checkCommandAvailable(command: String): Boolean = {
+    // To avoid conflicts with java.lang.Process
+    import scala.sys.process.{Process, ProcessLogger}
+
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
+    } else {
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
   }
 
   /**
