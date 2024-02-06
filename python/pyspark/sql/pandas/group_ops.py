@@ -389,7 +389,7 @@ class PandasGroupedOpsMixin:
                 state_serializer.handleState = StatefulProcessorHandleState.INITIALIZED
             
             state_serializer.grouping_key_tracker.setKey(key[0])
-            result = stateful_processor.handle_input_rows(handle, key, inputRows)
+            result = stateful_processor.handle_input_rows(key, inputRows)
             
             return result
         

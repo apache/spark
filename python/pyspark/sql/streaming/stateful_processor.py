@@ -16,11 +16,11 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING, Iterator
+from typing import Any, TYPE_CHECKING, Iterator, Union
 
 from pyspark.sql.pandas.serializers import TransformWithStateInPandasStateSerializer
 from pyspark.sql.streaming.gen import StateMessage_pb2
-from pyspark.sql.types import DataType
+from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -69,7 +69,7 @@ class StatefulProcessorHandle:
         state_serializer: TransformWithStateInPandasStateSerializer) -> None:
         self._state_serializer = state_serializer
 
-    def get_value_state(self, state_name: str, schema: DataType) -> ValueState:
+    def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
         get_value_state = StateMessage_pb2.StatefulProcessorHandleCall()
         get_value_state.getValueState = StateMessage_pb2.GetValueState(state_name)
 
@@ -82,10 +82,29 @@ class StatefulProcessorHandle:
 
 class StatefulProcessor(ABC):
     @abstractmethod
-    def init(self, handle: StatefulProcessorHandle) -> None:
+    def init(self) -> None:
         pass
 
     @abstractmethod
-    def handle_input_rows(self, key: Any, handle: StatefulProcessorHandle,
-        rows: "PandasDataFrameLike") -> "PandasDataFrameLike":
+    def handle_input_rows(self, key: Any, rows: "PandasDataFrameLike") -> "PandasDataFrameLike":
+        pass
+
+    def getStatefulProcessorHandle(self) -> StatefulProcessorHandle:
+        pass
+
+
+class WrappedStatefulProcessor(StatefulProcessor):
+
+    def __init__(self, handle: StatefulProcessorHandle,
+                 udf_stateful_processor: StatefulProcessor) -> None:
+        self.handle = handle
+        self.udf_stateful_processor = udf_stateful_processor
+
+    def init(self) -> None:
+        self.udf_stateful_processor.init()
+
+    def handle_input_rows(self, key: Any, rows: "PandasDataFrameLike") -> "PandasDataFrameLike":
+        pass
+
+    def getStatefulProcessorHandle(self) -> StatefulProcessorHandle:
         pass
