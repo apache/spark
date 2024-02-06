@@ -183,10 +183,10 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       KafkaOffsetRange(tp2, 0, 3, None)).sortBy(_.topicPartition.toString))
   }
 
-  testSPARK46798("getOffsetRangesFromUnresolvedOffsets") { (createKafkaReader: ReaderMaker) => 
+  testSPARK46798("getOffsetRangesFromUnresolvedOffsets") { (createKafkaReader: ReaderMaker) =>
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
-    Seq(0, 1, 2).foreach { partitionNumber => 
+    Seq(0, 1, 2).foreach { partitionNumber =>
       testUtils.sendMessages(topic, (0 until 10).map(_.toString).toArray, Some(partitionNumber))
     }
     val tp1 = new TopicPartition(topic, 0)
@@ -203,7 +203,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       KafkaOffsetRange(tp3, 1, 4, Some("exec2"))).sortBy(_.topicPartition.toString))
   }
 
-  testSPARK46798("getOffsetRangesFromResolvedOffsets") { (createKafkaReader: ReaderMaker) => 
+  testSPARK46798("getOffsetRangesFromResolvedOffsets") { (createKafkaReader: ReaderMaker) =>
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
     testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(0))
@@ -285,8 +285,9 @@ object TestKPLAssigner extends KafkaPartitionLocationAssigner {
   def getLocationPreferences(
     partDescrs: Array[PartitionDescription],
     knownExecutors: Array[String]): Map[PartitionDescription, Array[String]] = {
-    ret = partDescrs.map { partitionDescription =>
-      val execs = knownExecutors.filter(exec => exec.contains(partitionDescription.partition.toString))
+    partDescrs.map { partitionDescription =>
+      val execs = knownExecutors
+        .filter(exec => exec.contains(partitionDescription.partition.toString))
       (partitionDescription -> execs)
     }.toMap
   }

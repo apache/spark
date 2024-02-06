@@ -97,13 +97,12 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 
   }
 
-  
   /**
-    * Set the appropriate location on a Seq of [[KafkaOffsetRange]].
-    * This method assigns preferred executor locations to each range
-    * such that the same topic-partition is preferentially read from the
-    * same executor and the KafkaConsumer can be reused.
-    */
+   * Set the appropriate location on a Seq of [[KafkaOffsetRange]].
+   * This method assigns preferred executor locations to each range
+   * such that the same topic-partition is preferentially read from the
+   * same executor and the KafkaConsumer can be reused.
+   */
   def getLocatedRanges(
     ranges: Seq[KafkaOffsetRange],
     executorLocations: Array[String] = Array.empty,
