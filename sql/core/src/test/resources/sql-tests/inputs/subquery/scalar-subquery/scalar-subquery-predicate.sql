@@ -358,6 +358,20 @@ WHERE  t1c = (SELECT t2c
               WHERE  t1b < t1d
               ORDER BY t2c LIMIT 1);
 
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT MAX(t2c)
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY min(t2c) LIMIT 1);
+
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT DISTINCT t2c
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY t2c LIMIT 1);
+
 -- Set operations in correlation path
 
 CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0);
