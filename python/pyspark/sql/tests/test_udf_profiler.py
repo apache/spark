@@ -358,7 +358,7 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -387,7 +387,7 @@ class UDFProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.show_perf_profiles(id)
+                self.spark.showPerfProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
