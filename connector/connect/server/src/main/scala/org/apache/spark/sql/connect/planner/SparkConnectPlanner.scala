@@ -2829,8 +2829,11 @@ class SparkConnectPlanner(
    * @param writeOperation
    */
   private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
+    // Transform the input plan into the logical plan.
+    val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = transformRelationAsDataset(writeOperation.getInput)
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+    val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.write
     if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
@@ -2898,8 +2901,11 @@ class SparkConnectPlanner(
    * @param writeOperation
    */
   def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+    // Transform the input plan into the logical plan.
+    val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = transformRelationAsDataset(writeOperation.getInput)
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+    val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
 
@@ -2956,8 +2962,9 @@ class SparkConnectPlanner(
   def handleWriteStreamOperationStart(
       writeOp: WriteStreamOperationStart,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+    val plan = transformRelation(writeOp.getInput)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val dataset = transformRelationAsDataset(writeOp.getInput)
+    val dataset = Dataset.ofRows(session, plan, tracker)
     // Call manually as writeStream does not trigger ReadyForExecution
     tracker.setReadyForExecution()
 
