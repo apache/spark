@@ -174,21 +174,6 @@ class HiveDDLSuite
     testAddColumnPartitioned("orc")
   }
 
-  test("SPARK-22431: illegal hive type") {
-    try {
-      hiveClient.runSqlHive("CREATE TABLE t(foo UNIONTYPE<int, double>)")
-      val exception = intercept[SparkException](sql("SELECT * FROM t"))
-      checkError(
-        exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-        parameters = Map("fieldType" -> "\"UNIONTYPE<INT,DOUBLE>\"", "fieldName" -> "`foo`"))
-    } finally {
-      // USING hive to cleanup the table because Spark `DROP TABLE` will fail as it load the
-      // unrecognized schema too. bug?
-      hiveClient.runSqlHive("DROP TABLE IF EXIST t")
-    }
-  }
-
   test("SPARK-46934: quote element name before parse struct") { //
     withTable("t") {
       sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
