@@ -3992,7 +3992,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         2 B       NaN       NaN
           C       NaN       NaN
 
-        >>> psdf.groupby("A").corr(min_periods=2)
+        >>> df.groupby("A").corr(min_periods=2)
                     B         C
         A
         0 B  1.000000  0.720577
