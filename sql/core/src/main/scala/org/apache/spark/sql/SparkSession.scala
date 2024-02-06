@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -935,7 +936,7 @@ object SparkSession extends Logging {
   @Stable
   class Builder extends Logging {
 
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+    private[this] val options = new ConcurrentHashMap[String, String]
 
     private[this] val extensions = new SparkSessionExtensions
 
@@ -960,8 +961,8 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
+    def config(key: String, value: String): Builder = {
+      options.put(key, value)
       this
     }
 
@@ -971,8 +972,8 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
+    def config(key: String, value: Long): Builder = {
+      options.put(key, value.toString)
       this
     }
 
@@ -982,8 +983,8 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
+    def config(key: String, value: Double): Builder = {
+      options.put(key, value.toString)
       this
     }
 
@@ -993,8 +994,8 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
+    def config(key: String, value: Boolean): Builder = {
+      options.put(key, value.toString)
       this
     }
 
@@ -1004,10 +1005,10 @@ object SparkSession extends Logging {
      *
      * @since 3.4.0
      */
-    def config(map: Map[String, Any]): Builder = synchronized {
+    def config(map: Map[String, Any]): Builder = {
       map.foreach {
         kv: (String, Any) => {
-          options += kv._1 -> kv._2.toString
+          options.put(kv._1, kv._2.toString)
         }
       }
       this
@@ -1028,8 +1029,8 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    def config(conf: SparkConf): Builder = synchronized {
-      conf.getAll.foreach { case (k, v) => options += k -> v }
+    def config(conf: SparkConf): Builder = {
+      conf.getAll.foreach { case (k, v) => options.put(k, v) }
       this
     }
 
@@ -1085,7 +1086,7 @@ object SparkSession extends Logging {
      */
     def getOrCreate(): SparkSession = synchronized {
       val sparkConf = new SparkConf()
-      options.foreach { case (k, v) => sparkConf.set(k, v) }
+      options.asScala.foreach { case (k, v) => sparkConf.set(k, v) }
 
       if (!sparkConf.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
         assertOnDriver()
@@ -1094,7 +1095,7 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
+        applyModifiableSettings(session, new java.util.HashMap[String, String](options))
         return session
       }
 
@@ -1103,7 +1104,7 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
+          applyModifiableSettings(session, new java.util.HashMap[String, String](options))
           return session
         }
 
@@ -1121,7 +1122,7 @@ object SparkSession extends Logging {
         loadExtensions(extensions)
         applyExtensions(sparkContext, extensions)
 
-        session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
+        session = new SparkSession(sparkContext, None, None, extensions, options.asScala.toMap)
         setDefaultSession(session)
         setActiveSession(session)
         registerContextListener(sparkContext)
