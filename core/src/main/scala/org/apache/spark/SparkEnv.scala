@@ -67,7 +67,6 @@ class SparkEnv (
     val blockManager: BlockManager,
     val securityManager: SecurityManager,
     val metricsSystem: MetricsSystem,
-    val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
@@ -76,6 +75,12 @@ class SparkEnv (
   private var _shuffleManager: ShuffleManager = _
 
   def shuffleManager: ShuffleManager = _shuffleManager
+
+  // We initialize the MemoryManager later in SparkContext after DriverPlugin is loaded
+  // to allow the plugin to overwrite memory configurations
+  private var _memoryManager: MemoryManager = _
+
+  def memoryManager: MemoryManager = _memoryManager
 
   @volatile private[spark] var isStopped = false
 
@@ -198,6 +203,12 @@ class SparkEnv (
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
     _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
+  }
+
+  private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {
+    Preconditions.checkState(null == memoryManager,
+      "Memory manager already initialized to %s", _memoryManager)
+    _memoryManager = UnifiedMemoryManager(conf, numUsableCores)
   }
 }
 
@@ -358,8 +369,6 @@ object SparkEnv extends Logging {
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
-    val memoryManager: MemoryManager = UnifiedMemoryManager(conf, numUsableCores)
-
     val blockManagerPort = if (isDriver) {
       conf.get(DRIVER_BLOCK_MANAGER_PORT)
     } else {
@@ -418,7 +427,7 @@ object SparkEnv extends Logging {
       blockManagerMaster,
       serializerManager,
       conf,
-      memoryManager,
+      _memoryManager = null,
       mapOutputTracker,
       _shuffleManager = null,
       blockTransferService,
@@ -463,7 +472,6 @@ object SparkEnv extends Logging {
       blockManager,
       securityManager,
       metricsSystem,
-      memoryManager,
       outputCommitCoordinator,
       conf)
 

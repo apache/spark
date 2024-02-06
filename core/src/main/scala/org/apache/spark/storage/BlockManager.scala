@@ -185,7 +185,7 @@ private[spark] class BlockManager(
     val master: BlockManagerMaster,
     val serializerManager: SerializerManager,
     val conf: SparkConf,
-    memoryManager: MemoryManager,
+    private val _memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
     private val _shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
@@ -197,6 +197,11 @@ private[spark] class BlockManager(
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the instance from the SparkEnv.
   private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
+
+  // Similarly, we also initialize MemoryManager later after DriverPlugin is loaded, to
+  // allow the plugin to overwrite certain memory configurations. The `_memoryManager` will be
+  // null here and we ask for the instance from SparkEnv
+  private lazy val memoryManager = Option(_memoryManager).getOrElse(SparkEnv.get.memoryManager)
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
