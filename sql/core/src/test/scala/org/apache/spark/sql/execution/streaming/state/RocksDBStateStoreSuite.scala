@@ -170,11 +170,15 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val valueRow1 = dataToValueRow(1)
         store.put(keyRow1, valueRow1, colFamilyName = testColFamily)
         assert(valueRowToData(store.get(keyRow1, colFamilyName = testColFamily)) === 1)
+        store.remove(keyRow1, colFamilyName = testColFamily)
+        assert(store.get(keyRow1, colFamilyName = testColFamily) === null)
       }
       val keyRow2 = dataToKeyRow("b", 0)
       val valueRow2 = dataToValueRow(2)
       store.put(keyRow2, valueRow2)
       assert(valueRowToData(store.get(keyRow2)) === 2)
+      store.remove(keyRow2)
+      assert(store.get(keyRow2) === null)
     }
   }
 
