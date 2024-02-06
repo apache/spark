@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.spark.SparkIllegalArgumentException;
 
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import org.apache.spark.SparkIllegalArgumentException;
 
 /**
  * Expression information, will be used to describe an expression.
