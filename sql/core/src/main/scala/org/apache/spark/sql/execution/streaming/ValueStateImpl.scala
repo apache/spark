@@ -40,6 +40,13 @@ class ValueStateImpl[S](
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any]) extends ValueState[S] with Logging {
 
+  val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+
+  val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
+  store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 0,
+    schemaForValueRow)
+
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
   private def encodeKey(): UnsafeRow = {
@@ -52,14 +59,12 @@ class ValueStateImpl[S](
     val keyByteArr = toRow
       .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
 
-    val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
     val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
     val keyRow = keyEncoder(InternalRow(keyByteArr))
     keyRow
   }
 
   private def encodeValue(value: S): UnsafeRow = {
-    val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
     val valueEncoder = UnsafeProjection.create(schemaForValueRow)
     val valueRow = valueEncoder(InternalRow(valueByteArr))

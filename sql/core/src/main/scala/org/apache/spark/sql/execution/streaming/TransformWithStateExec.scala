@@ -165,7 +165,7 @@ case class TransformWithStateExec(
       store: StateStore,
       timeoutMode: TimeoutMode): Iterator[InternalRow] = {
     timeoutMode match {
-      case ProcessingTime =>
+/*      case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         store.createColFamilyIfAbsent(TimerStateUtils.PROC_TIMERS_STATE_NAME, true)
 
@@ -173,7 +173,7 @@ case class TransformWithStateExec(
           .iterator(TimerStateUtils.PROC_TIMERS_STATE_NAME)
         procTimeIter.flatMap { case rowPair =>
           handleTimerRows(store, rowPair.key, batchTimestampMs.get)
-        }
+        } */
 
       case _ => Iterator.empty
     }

@@ -116,6 +116,9 @@ trait StateStore extends ReadStateStore {
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,
+      keySchema: StructType,
+      numColsPrefixKey: Int,
+      valueSchema: StructType,
       isInternal: Boolean = false): Unit
 
   /**

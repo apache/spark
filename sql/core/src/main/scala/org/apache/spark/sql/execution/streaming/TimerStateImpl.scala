@@ -51,14 +51,14 @@ class TimerStateImpl[S](
     store: StateStore,
     stateName: String) extends Logging {
 
-  protected val schemaForValueRow: StructType =
-    StructType(Array(StructField("__dummy__", NullType)))
+//  protected val schemaForValueRow: StructType =
+//    StructType(Array(StructField("__dummy__", NullType)))
 
-  val keyToTsCFName = stateName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-  store.createColFamilyIfAbsent(keyToTsCFName, true)
+//  val keyToTsCFName = stateName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+//  store.createColFamilyIfAbsent(keyToTsCFName, true)
 
-  val tsToKeyCFName = stateName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
-  store.createColFamilyIfAbsent(tsToKeyCFName, false)
+//  val tsToKeyCFName = stateName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+//  store.createColFamilyIfAbsent(tsToKeyCFName, false)
 
   private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
