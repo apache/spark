@@ -440,7 +440,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
     }
   }
 
-  test("SPARK-46934: runhive") {
+  test("SPARK-46934: Handle special characters in struct types with hive DDL") {
     withTable("t") {
       val schema =
         "a struct<" +

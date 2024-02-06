@@ -174,7 +174,7 @@ class HiveDDLSuite
     testAddColumnPartitioned("orc")
   }
 
-  test("SPARK-46934: quote element name before parse struct") { //
+  test("SPARK-46934: quote element name before parsing struct") {
     withTable("t") {
       sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
       assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
@@ -241,7 +241,7 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-22431: negative alter table tests with nested types") {
+  test("SPARK-46934: alter table tests with nested types") {
     withTable("t1") {
       sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
       sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
