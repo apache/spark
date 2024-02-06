@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -886,8 +886,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("parsing day of week") {
     assert(getDayOfWeekFromString(UTF8String.fromString("THU")) == 0)
     assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
-    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
-    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        getDayOfWeekFromString(UTF8String.fromString("xx"))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      parameters = Map("string" -> "xx"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        getDayOfWeekFromString(UTF8String.fromString("\"quote"))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      parameters = Map("string" -> "\"quote"))
   }
 
   test("SPARK-34761: timestamp add day-time interval") {

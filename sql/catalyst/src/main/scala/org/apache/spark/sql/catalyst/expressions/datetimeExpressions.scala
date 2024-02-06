@@ -24,7 +24,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.SparkDateTimeException
+import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -1551,9 +1551,9 @@ case class NextDay(
       val sd = start.asInstanceOf[Int]
       DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
     } catch {
-      case e: IllegalArgumentException =>
+      case e: SparkIllegalArgumentException =>
         if (failOnError) {
-          throw QueryExecutionErrors.ansiIllegalArgumentError(e)
+          throw e
         } else {
           null
         }
@@ -1568,7 +1568,7 @@ case class NextDay(
       sd: String,
       dowS: String): String = {
     val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiIllegalArgumentError(e);"
+      "throw e;"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -1576,7 +1576,7 @@ case class NextDay(
      |try {
      |  int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
      |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
-     |} catch (IllegalArgumentException e) {
+     |} catch (org.apache.spark.SparkIllegalArgumentException e) {
      |  $failOnErrorBranch
      |}
      |""".stripMargin
