@@ -108,6 +108,7 @@ class OrderingColumn:
     ascending: bool = True
     overrideNullsFirst: Optional[bool] = None
 
+
 @dataclass(frozen=True)
 class SelectedColumn:
     """
@@ -125,7 +126,8 @@ class SelectedColumn:
     """
 
     name: str
-    alias: str = ''
+    alias: str = ""
+
 
 # Note: this class is a "dataclass" for purposes of convenience, but it is not marked "frozen"
 # because the intention is that users may create subclasses of it for purposes of returning custom

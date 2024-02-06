@@ -204,8 +204,8 @@ def main(infile: IO, outfile: IO) -> None:
                 )
             )
         elif isinstance(result.select, (list, tuple)) and (
-                len(result.select) > 0
-                and not all([isinstance(val, SelectedColumn) for val in result.select])
+            len(result.select) > 0
+            and not all([isinstance(val, SelectedColumn) for val in result.select])
         ):
             raise PySparkValueError(
                 format_error(
