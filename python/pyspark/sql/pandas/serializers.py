@@ -32,6 +32,7 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
+from pyspark.sql.streaming.gen import StateMessage_pb2
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -1156,8 +1157,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         finally:
             print("closing the state socket")
             self._client_socket.close()
-            self.state_serializer.handleState = StatefulProcessorHandleState.CREATED
-            self.state_serializer.send("setHandleState", "CLOSED")
+            stateful_handle_call = StateMessage_pb2.StatefulProcessorHandleCall()
+            stateful_handle_call.setHandleState = StateMessage_pb2.SetHandleState(
+                StateMessage_pb2.CLOSED
+            )
+            self.state_serializer.send(stateful_handle_call.SerializeToString())
             code = self.state_serializer.receive()
             assert code == 0
 
@@ -1184,9 +1188,6 @@ class TransformWithStateInPandasStateSerializer:
     def __init__(self, sockfile) -> None:
         self.sockfile = sockfile
         self.handleState = StatefulProcessorHandleState.CREATED
-        self.send("setHandleState", "CREATED")
-        code = self.receive()
-        assert code == 0
         self.grouping_key_tracker = ImplicitGroupingKeyTracker()
 
     def load_stream(self, stream):
@@ -1195,9 +1196,8 @@ class TransformWithStateInPandasStateSerializer:
     def dump_stream(self, iterator, stream):
         pass
 
-    def send(self, *args):
-        message = ':'.join(args).encode()
-        write_with_length(message, self.sockfile)
+    def send(self, proto_message):
+        write_with_length(proto_message, self.sockfile)
         self.sockfile.flush()
 
     def receive(self):

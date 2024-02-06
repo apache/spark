@@ -16,9 +16,11 @@
 #
 
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Iterator
 
 from pyspark.sql.pandas.serializers import TransformWithStateInPandasStateSerializer
+from pyspark.sql.streaming.gen import StateMessage_pb2
+from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
@@ -34,11 +36,10 @@ class ValueState:
         pass
 
     def get(self) -> Any:
-        self._state_serializer.send("ValueState",
-            self._state_name,
-            "get",
-            self._state_serializer.grouping_key_tracker.getKey()
-        )
+        value_state_call = StateMessage_pb2.ValueStateCall()
+        value_state_call.get = StateMessage_pb2.ValueStateGet()
+
+        self._state_serializer.send(value_state_call.SerializeToString())
         
         code = self._state_serializer.receive()
         assert code == 0
@@ -51,18 +52,16 @@ class ValueState:
         return None
 
     def update(self, new_value: Any) -> None:
-        self._state_serializer.send("ValueState",
-            self._state_name,
-            "set",
-            self._state_serializer.grouping_key_tracker.getKey(),
-            str(new_value)
-        )
+        value_state_call = StateMessage_pb2.ValueStateCall()
+        value_state_call.update = StateMessage_pb2.ValueStateUpdate(new_value)
+
+        self._state_serializer.send(value_state_call.SerializeToString())
+
         code = self._state_serializer.receive()
         assert code == 0
 
     def remove(self) -> None:
         pass
-
 
 class StatefulProcessorHandle:
     def __init__(
@@ -70,8 +69,12 @@ class StatefulProcessorHandle:
         state_serializer: TransformWithStateInPandasStateSerializer) -> None:
         self._state_serializer = state_serializer
 
-    def get_value_state(self, state_name: str) -> ValueState:
-        self._state_serializer.send("getState", "ValueState", state_name)
+    def get_value_state(self, state_name: str, schema: DataType) -> ValueState:
+        get_value_state = StateMessage_pb2.StatefulProcessorHandleCall()
+        get_value_state.getValueState = StateMessage_pb2.GetValueState(state_name)
+
+        self._state_serializer.send(get_value_state.SerializeToString())
+
         code = self._state_serializer.receive()
         assert code == 0
         return ValueState(self._state_serializer, state_name)

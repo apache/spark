@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package org.apache.spark.sql.execution.streaming.state;
+
+message StateRequest {
+  int32 version = 1;
+  oneof method {
+    StatefulProcessorHandleCall statefulProcessorHandleCall = 2;
+    ValueStateCall valueStateCall = 3;
+  }
+}
+
+message StatefulProcessorHandleCall {
+  oneof method {
+    SetHandleState setHandleState = 2;
+    GetValueState getValueState = 3;
+  }
+}
+
+message GetValueState {
+  string stateName = 1;
+}
+
+message ValueStateCall {
+  oneof method {
+    ValueStateExists exists = 1;
+    ValueStateGet get = 2;
+    ValueStateUpdate update = 3;
+  }
+}
+
+message ValueStateExists {
+}
+
+message ValueStateGet {
+}
+
+message ValueStateUpdate {
+  bytes updatedValue = 1;
+}
+
+enum HandleState {
+  CREATED = 0;
+  INITIALIZED = 1;
+  DATA_PROCESSED = 2;
+  CLOSED = 3;
+}
+
+message SetHandleState {
+  HandleState state = 1;
+}

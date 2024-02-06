@@ -26,6 +26,7 @@ from pyspark.sql.functions.builtin import udf
 from pyspark.sql.pandas.serializers import StatefulProcessorHandleState, TransformWithStateInPandasStateSerializer
 from pyspark.sql.streaming.state import GroupStateTimeout
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
+from pyspark.sql.streaming import StateMessage_pb2
 from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
@@ -378,7 +379,11 @@ class PandasGroupedOpsMixin:
             
             if (state_serializer.handleState == StatefulProcessorHandleState.CREATED):
                 stateful_processor.init(handle)
-                state_serializer.send("setHandleState", "INITIALIZED")
+                stateful_handle_call = StateMessage_pb2.StatefulProcessorHandleCall()
+                stateful_handle_call.setHandleState = StateMessage_pb2.SetHandleState(
+                    StateMessage_pb2.INITIALIZED
+                )
+                state_serializer.send(stateful_handle_call.SerializeToString())
                 code = state_serializer.receive()
                 assert code == 0
                 state_serializer.handleState = StatefulProcessorHandleState.INITIALIZED
