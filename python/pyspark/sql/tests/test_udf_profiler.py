@@ -27,7 +27,7 @@ from typing import Iterator, cast
 
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, pandas_udf, udf, PandasUDFType
+from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
 from pyspark.testing.sqlutils import (
