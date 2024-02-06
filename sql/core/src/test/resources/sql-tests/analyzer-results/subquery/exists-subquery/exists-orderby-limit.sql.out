@@ -630,13 +630,13 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :        +- Aggregate [max(dept_id#x) AS max(dept_id)#x]
    :           +- Filter (outer(salary#x) > cast(200 as double))
    :              +- SubqueryAlias dept
-   :                 +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+   :                 +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
    :                    +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
    :                       +- Project [dept_id#x, dept_name#x, state#x]
    :                          +- SubqueryAlias DEPT
    :                             +- LocalRelation [dept_id#x, dept_name#x, state#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
                +- SubqueryAlias EMP
@@ -659,13 +659,13 @@ Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
    :        +- Aggregate [state#x], [state#x, max(dept_name#x) AS max(dept_name)#x]
    :           +- Filter (outer(salary#x) > cast(200 as double))
    :              +- SubqueryAlias dept
-   :                 +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+   :                 +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])
    :                    +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
    :                       +- Project [dept_id#x, dept_name#x, state#x]
    :                          +- SubqueryAlias DEPT
    :                             +- LocalRelation [dept_id#x, dept_name#x, state#x]
    +- SubqueryAlias emp
-      +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
          +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
             +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
                +- SubqueryAlias EMP
