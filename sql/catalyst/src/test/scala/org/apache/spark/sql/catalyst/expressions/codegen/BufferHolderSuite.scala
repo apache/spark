@@ -38,7 +38,7 @@ class BufferHolderSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         holder.grow(Integer.MAX_VALUE)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3198",
+      errorClass = "_LEGACY_ERROR_TEMP_3199",
       parameters = Map("neededSize" -> "2147483647", "arrayMax" -> "2147483632")
     )
   }
