@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{Timer, TimerTask}
+import java.util.TimerTask
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
@@ -135,7 +135,8 @@ private[spark] class TaskSchedulerImpl(
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
-  private val starvationTimer = new Timer("task-starvation-timer", true)
+  private val starvationTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+    "task-starvation-timer")
 
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
@@ -166,7 +167,7 @@ private[spark] class TaskSchedulerImpl(
 
   protected val executorIdToHost = new HashMap[String, String]
 
-  private val abortTimer = new Timer("task-abort-timer", true)
+  private val abortTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-abort-timer")
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
@@ -282,7 +283,7 @@ private[spark] class TaskSchedulerImpl(
               this.cancel()
             }
           }
-        }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS)
+        }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
       hasReceivedTask = true
     }
@@ -776,7 +777,7 @@ private[spark] class TaskSchedulerImpl(
     logInfo(s"Waiting for $timeout ms for completely " +
       s"excluded task to be schedulable again before aborting stage ${taskSet.stageId}.")
     abortTimer.schedule(
-      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
+      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout, TimeUnit.MILLISECONDS)
   }
 
   private def createUnschedulableTaskSetAbortTimer(
@@ -1002,8 +1003,8 @@ private[spark] class TaskSchedulerImpl(
         barrierCoordinator.stop()
       }
     }
-    starvationTimer.cancel()
-    abortTimer.cancel()
+    ThreadUtils.shutdown(starvationTimer)
+    ThreadUtils.shutdown(abortTimer)
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()

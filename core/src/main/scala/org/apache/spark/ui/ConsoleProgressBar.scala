@@ -17,14 +17,13 @@
 
 package org.apache.spark.ui
 
-import java.util.concurrent.{Executors, TimeUnit}
-
-import com.google.common.util.concurrent.ThreadFactoryBuilder
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.StageData
+import org.apache.spark.util.ThreadUtils
 
 /**
  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
@@ -48,9 +47,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   private var lastProgressBar = ""
 
   // Schedule a refresh thread to run periodically
-  private val threadFactory =
-    new ThreadFactoryBuilder().setDaemon(true).setNameFormat("refresh progress").build()
-  private val timer = Executors.newSingleThreadScheduledExecutor(threadFactory)
+  private val timer = ThreadUtils.newDaemonSingleThreadScheduledExecutor("refresh progress")
   timer.scheduleAtFixedRate(
     () => refresh(), firstDelayMSec, updatePeriodMSec, TimeUnit.MILLISECONDS)
 
@@ -124,5 +121,5 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
    * SparkContext if it's not terminated.
    */
-  def stop(): Unit = timer.shutdown()
+  def stop(): Unit = ThreadUtils.shutdown(timer)
 }
