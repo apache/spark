@@ -56,8 +56,7 @@ partitions_func_id = 886
 latest_offsets_func_id = 887
 
 def latest_offset_func(reader, outfile):
-    offset = reader.latest_offset()
-    # write_with_length(json.dump(offset).encode("utf-8"), outfile)
+    offset = reader.latestOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 def partitions_func(reader, infile, outfile):
@@ -113,7 +112,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate data source reader.
         try:
-            reader = data_source.stream_reader(schema=schema)
+            reader = data_source.streamReader(schema=schema)
         except NotImplementedError:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",

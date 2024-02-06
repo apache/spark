@@ -44,22 +44,6 @@ class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
   protected val staticSourceName = "custom_source"
   protected var tempDir: File = _
 
-
-  protected def simpleDataStreamReaderScript: String =
-    """
-      |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
-      |
-      |class SimpleDataStreamReader(DataSourceStreamReader):
-      |    def latest_offset(self):
-      |        return {"0": "2"}
-      |    def partitions(self, start: dict, end: dict):
-      |        return [InputPartition(i) for i in range(int(start["0"]))]
-      |    def read(self, partition):
-      |        yield (0, partition.value)
-      |        yield (1, partition.value)
-      |        yield (2, partition.value)
-      |""".stripMargin
-
   override def beforeAll(): Unit = {
     // Create a Python Data Source package before starting up the Spark Session
     // that triggers automatic registration of the Python Data Source.

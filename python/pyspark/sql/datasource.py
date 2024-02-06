@@ -306,7 +306,14 @@ class DataSourceReader(ABC):
 
 
 class DataSourceStreamReader(ABC):
-    def initial_offset(self) -> dict:
+    """
+    A base class for data source readers. Data source stream readers are responsible for
+    outputting data from a streaming data source.
+
+    .. versionadded: 4.0.0
+    """
+
+    def initialOffset(self) -> dict:
         """
         The initial offset of the streaming data source.
 
@@ -317,7 +324,7 @@ class DataSourceStreamReader(ABC):
         """
         ...
 
-    def latest_offset(self) -> dict:
+    def latestOffset(self) -> dict:
         """
         Seek the latest offset of the streaming data source.
 

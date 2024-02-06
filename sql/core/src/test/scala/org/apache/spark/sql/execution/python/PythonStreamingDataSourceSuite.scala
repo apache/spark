@@ -24,12 +24,27 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
+  protected def simpleDataStreamReaderScript: String =
+    """
+      |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
+      |
+      |class SimpleDataStreamReader(DataSourceStreamReader):
+      |    def latestOffset(self):
+      |        return {"0": "2"}
+      |    def partitions(self, start: dict, end: dict):
+      |        return [InputPartition(i) for i in range(int(start["0"]))]
+      |    def read(self, partition):
+      |        yield (0, partition.value)
+      |        yield (1, partition.value)
+      |        yield (2, partition.value)
+      |""".stripMargin
+
   protected def errorDataStreamReaderScript: String =
     """
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
       |
       |class ErrorDataStreamReader(DataSourceStreamReader):
-      |    def latest_offset(self):
+      |    def latestOffset(self):
       |        raise Exception("error reading latest offset")
       |    def partitions(self, start: dict, end: dict):
       |        raise Exception("error planning partitions")
@@ -49,7 +64,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |$simpleDataStreamReaderScript
          |
          |class $dataSourceName(DataSource):
-         |    def stream_reader(self, schema):
+         |    def streamReader(self, schema):
          |        return SimpleDataStreamReader()
          |""".stripMargin
     val inputSchema = StructType.fromDDL("input BINARY")
@@ -75,7 +90,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       s"""
          |from pyspark.sql.datasource import DataSource
          |class $dataSourceName(DataSource):
-         |    def stream_reader(self, schema):
+         |    def streamReader(self, schema):
          |        raise Exception("error creating stream reader")
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(
@@ -100,7 +115,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |$errorDataStreamReaderScript
          |
          |class $errorDataSourceName(DataSource):
-         |    def stream_reader(self, schema):
+         |    def streamReader(self, schema):
          |        return ErrorDataStreamReader()
          |""".stripMargin
     val inputSchema = StructType.fromDDL("input BINARY")
