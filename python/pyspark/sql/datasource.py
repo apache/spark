@@ -307,8 +307,8 @@ class DataSourceReader(ABC):
 
 class DataSourceStreamReader(ABC):
     """
-    A base class for data source readers. Data source stream readers are responsible for
-    outputting data from a streaming data source.
+    A base class for streaming data source readers. Data source stream readers are responsible
+    for outputting data from a streaming data source.
 
     .. versionadded: 4.0.0
     """
