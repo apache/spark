@@ -269,4 +269,35 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
       assert(pos1 == pos2)
     }
   }
+
+  test("SPARK-45599: 0.0 and -0.0 are equal but not the same") {
+    // Therefore, 0.0 and -0.0 should get separate entries in the hash set.
+    val spark45599Repro = Seq(
+      // Need exactly these elements in roughly this order to get 0.0 and -0.0
+      // to hash to the same bucket.
+      Double.NaN,
+      2.0,
+      168.0,
+      Double.NaN,
+      Double.NaN,
+      -0.0,
+      153.0,
+      0.0
+    )
+    val set = new OpenHashSet[Double]()
+    spark45599Repro.foreach(set.add)
+    assert(set.size == 6)
+    val zeroPos = set.getPos(0.0)
+    val negZeroPos = set.getPos(-0.0)
+    assert(zeroPos != negZeroPos)
+  }
+
+  test("SPARK-45599: NaN and NaN are the same but not equal") {
+    // Any mathematical comparison to NaN will return false, but when we place it in
+    // a hash set we want the lookup to work like a "normal" value.
+    val set = new OpenHashSet[Double]()
+    set.add(Double.NaN)
+    set.add(Double.NaN)
+    assert(set.size == 1)
+  }
 }
