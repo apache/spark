@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.util;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
 import org.slf4j.Logger;
@@ -145,7 +146,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
     } else if (value.equalsIgnoreCase("false")) {
       return false;
     } else {
-      throw new IllegalArgumentException(value + " is not a boolean string.");
+      throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3206", Map.of("value", value));
     }
   }
 

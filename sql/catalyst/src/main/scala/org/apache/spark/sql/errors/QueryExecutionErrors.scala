@@ -2711,4 +2711,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "codecName" -> codecName,
         "availableCodecs" -> availableCodecs))
   }
+
+  def partitionNumMismatchError(numFields: Int, schemaLen: Int): IllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3208",
+      messageParameters = Map(
+        "numFields" -> numFields.toString,
+        "schemaLen" -> schemaLen.toString))
+  }
 }
