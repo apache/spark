@@ -28,6 +28,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
+from pyspark.sql.loose_version import LooseVersion
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
@@ -1788,6 +1789,18 @@ class UtilsTestsMixin:
             self.assertIsNone(e.getSqlState())
             self.assertEqual(e.getMessageParameters(), {})
             self.assertEqual(e.getMessage(), "")
+
+    def test_loose_version(self):
+        v1 = LooseVersion("1.2.3")
+        self.assertEqual(str(v1), "1.2.3")
+        self.assertEqual(repr(v1), "LooseVersion ('1.2.3')")
+        v2 = "1.2.3"
+        self.assertTrue(v1 == v2)
+        v3 = 1.1
+        with self.assertRaises(TypeError):
+            v1 > v3
+        v4 = LooseVersion("1.2.4")
+        self.assertTrue(v1 <= v4)
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):

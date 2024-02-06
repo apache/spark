@@ -49,7 +49,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
-from pyspark.loose_version import LooseVersion
+from pyspark.sql.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame

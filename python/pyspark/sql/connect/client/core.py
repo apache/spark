@@ -56,7 +56,7 @@ from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
 from pyspark.accumulators import SpecialAccumulatorIds
-from pyspark.loose_version import LooseVersion
+from pyspark.sql.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager

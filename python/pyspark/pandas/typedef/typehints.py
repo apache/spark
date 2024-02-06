@@ -148,7 +148,7 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    from pyspark.loose_version import LooseVersion
+    from pyspark.sql.loose_version import LooseVersion
 
     # For NumPy typing, NumPy version should be 1.21+
     if LooseVersion(np.__version__) >= LooseVersion("1.21"):

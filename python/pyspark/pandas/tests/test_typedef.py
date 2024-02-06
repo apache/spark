@@ -26,7 +26,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 import numpy as np
 
-from pyspark.loose_version import LooseVersion
+from pyspark.sql.loose_version import LooseVersion
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,

@@ -20,7 +20,7 @@ from datetime import datetime
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.loose_version import LooseVersion
+from pyspark.sql.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import SQLTestUtils
 

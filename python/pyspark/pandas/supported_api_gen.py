@@ -30,7 +30,7 @@ import pandas as pd
 import pandas.core.groupby as pdg
 import pandas.core.window as pdw
 
-from pyspark.loose_version import LooseVersion
+from pyspark.sql.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
 
 # Constants
