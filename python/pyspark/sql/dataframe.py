@@ -4005,10 +4005,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     @overload
-    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
-
-    @overload
     def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
         ...
 
@@ -6793,6 +6789,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     # make it "compatible" by adding aliases. Therefore, we stop adding such
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
+    @overload
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+        ...
+
+    @overload
+    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+        ...
+
     def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         """
         :func:`groupby` is an alias for :func:`groupBy`.
