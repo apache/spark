@@ -69,11 +69,12 @@ final class BufferHolder {
   void grow(int neededSize) {
     if (neededSize < 0) {
       throw new SparkIllegalArgumentException(
-        "_LEGACY_ERROR_TEMP_3198", Map.of("neededSize", String.valueOf(neededSize)));
+        "_LEGACY_ERROR_TEMP_3198",
+        Map.of("neededSize", String.valueOf(neededSize)));
     }
     if (neededSize > ARRAY_MAX - totalSize()) {
       throw new SparkIllegalArgumentException(
-        "_LEGACY_ERROR_TEMP_3198",
+        "_LEGACY_ERROR_TEMP_3199",
         Map.of("neededSize", String.valueOf(neededSize), "arrayMax", String.valueOf(ARRAY_MAX)));
     }
     final int length = totalSize() + neededSize;
