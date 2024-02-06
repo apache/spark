@@ -30,6 +30,18 @@ case class PartitionDescription(
   replicas: Array[Node],
   isr: Array[Node]) {
   def toTopicPartition: TopicPartition = new TopicPartition(topic, partition)
+
+  private def nodeString(n: Node): String = n.host()
+
+  override def toString: String =
+    s"""
+      |PartitionDescription(
+      |  $topic,
+      |  $partition,
+      |  ${nodeString(leader)},
+      |  ${replicas.map(nodeString(_)).mkString(",")},
+      |  ${isr.map(nodeString(_)).mkString(",")})
+      |""".stripMargin
 }
 
 object PartitionDescription {
