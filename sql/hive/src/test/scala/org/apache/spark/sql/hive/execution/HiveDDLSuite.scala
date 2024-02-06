@@ -3416,4 +3416,16 @@ class HiveDDLSuite
       )
     }
   }
+
+  test("SPARK-46982: Use CANNOT_RECOGNIZE_HIVE_TYPE for unsupported hive type") {
+    try {
+      hiveClient.runSqlHive("CREATE TABLE t(foo UNIONTYPE<int, double>)")
+      checkError(
+        exception = intercept[SparkException](sql("SELECT * FROM t")),
+        errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
+        parameters = Map("fieldType" -> "\"UNIONTYPE<INT,DOUBLE>\"", "fieldName" -> "`foo`"))
+    } finally {
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS t")
+    }
+  }
 }

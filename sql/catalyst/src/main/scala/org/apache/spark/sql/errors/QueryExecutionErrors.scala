@@ -1569,17 +1569,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def convertHiveTableToCatalogTableError(
-      e: SparkException, dbName: String, tableName: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2187",
-      messageParameters = Map(
-        "message" -> e.getMessage,
-        "dbName" -> dbName,
-        "tableName" -> tableName),
-      cause = e)
-  }
-
   def cannotRecognizeHiveTypeError(
       e: ParseException, fieldType: String, fieldName: String): Throwable = {
     new SparkException(

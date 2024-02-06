@@ -6296,11 +6296,6 @@
       "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2187" : {
-    "message" : [
-      "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2192" : {
     "message" : [
       "Partition filter cannot have both `\"` and `'` characters."
