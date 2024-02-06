@@ -7520,6 +7520,31 @@
       "Read-ahead limit < 0"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3201" : {
+    "message" : [
+      "'note' is malformed in the expression [<exprName>]. It should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<note>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3202" : {
+    "message" : [
+      "'group' is malformed in the expression [<exprName>]. It should be a value in <validGroups>; however, got <group>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3203" : {
+    "message" : [
+      "'source' is malformed in the expression [<exprName>]. It should be a value in <validSources>; however, got [<source>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3204" : {
+    "message" : [
+      "'since' is malformed in the expression [<exprName>]. It should not start with a negative number; however, got [<since>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3205" : {
+    "message" : [
+      "'deprecated' is malformed in the expression [<exprName>]. It should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<deprecated>]."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
