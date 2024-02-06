@@ -92,7 +92,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        conf.pythonUDFProfiler)
+        None) // TODO(SPARK-46689): Support profiling on FlatMapGroupsInBatchExec
 
       executePython(data, output, runner)
     }}
