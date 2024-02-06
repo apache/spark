@@ -47,8 +47,7 @@ import json
 import warnings
 from collections.abc import Iterable
 
-from pyspark import _NoValue
-from pyspark._globals import _NoValueType
+from pyspark.sql._globals import _NoValue, _NoValueType
 from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,

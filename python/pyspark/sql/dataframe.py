@@ -40,8 +40,8 @@ from typing import (
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark import copy_func, _NoValue
-from pyspark._globals import _NoValueType
+from pyspark import copy_func
+from pyspark.sql._globals import _NoValue, _NoValueType
 from pyspark.context import SparkContext
 from pyspark.errors import (
     PySparkTypeError,

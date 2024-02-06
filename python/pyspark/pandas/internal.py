@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype  # noqa: F401
 
-from pyspark._globals import _NoValue, _NoValueType
+from pyspark.sql._globals import _NoValue, _NoValueType
 from pyspark.sql import (
     functions as F,
     Column as PySparkColumn,

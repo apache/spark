@@ -23,8 +23,8 @@ way the identities of the classes defined here are fixed and will remain so
 even if pyspark itself is reloaded. In particular, a function like the following
 will still work correctly after pyspark is reloaded:
 
-    def foo(arg=pyspark._NoValue):
-        if arg is pyspark._NoValue:
+    def foo(arg=pyspark.sql._globals._NoValue):
+        if arg is pyspark._globals._NoValue:
             ...
 
 See gh-7844 for a discussion of the reload problem that motivated this module.
@@ -37,8 +37,7 @@ __ALL__ = ["_NoValue"]
 
 # Disallow reloading this module so as to preserve the identities of the
 # classes defined here.
-if "_is_loaded" in globals():
-    raise RuntimeError("Reloading pyspark._globals is not allowed")
+assert "_is_loaded" not in globals(), "Reloading pyspark.sql._globals is not allowed"
 _is_loaded = True
 
 

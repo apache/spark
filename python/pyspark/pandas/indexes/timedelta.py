@@ -23,7 +23,7 @@ from pandas.api.types import is_hashable  # type: ignore[attr-defined]
 import numpy as np
 
 from pyspark import pandas as ps
-from pyspark._globals import _NoValue
+from pyspark.sql._globals import _NoValue
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
 from pyspark.pandas.series import Series

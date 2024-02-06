@@ -22,8 +22,7 @@ check_dependencies(__name__)
 from typing import Any, Optional, Union, cast
 import warnings
 
-from pyspark import _NoValue
-from pyspark._globals import _NoValueType
+from pyspark.sql._globals import _NoValue, _NoValueType
 from pyspark.sql.conf import RuntimeConfig as PySparkRuntimeConfig
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.client import SparkConnectClient

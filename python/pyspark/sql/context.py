@@ -34,8 +34,7 @@ from typing import (
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import _NoValue
-from pyspark._globals import _NoValueType
+from pyspark.sql._globals import _NoValue, _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader

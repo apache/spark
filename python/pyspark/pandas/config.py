@@ -22,7 +22,7 @@ from contextlib import contextmanager
 import json
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
-from pyspark._globals import _NoValue, _NoValueType
+from pyspark.sql._globals import _NoValue, _NoValueType
 from pyspark.pandas.utils import default_session
 
 

@@ -20,8 +20,7 @@ from typing import Any, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import _NoValue
-from pyspark._globals import _NoValueType
+from pyspark.sql._globals import _NoValue, _NoValueType
 from pyspark.errors import PySparkTypeError
 
 

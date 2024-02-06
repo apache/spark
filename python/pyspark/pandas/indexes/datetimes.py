@@ -22,7 +22,7 @@ from typing import Any, Optional, Union, cast, no_type_check
 import pandas as pd
 from pandas.api.types import is_hashable  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
-from pyspark._globals import _NoValue
+from pyspark.sql._globals import _NoValue
 
 from pyspark import pandas as ps
 from pyspark.pandas import DataFrame

@@ -62,7 +62,6 @@ from pyspark.serializers import MarshalSerializer, CPickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
-from pyspark._globals import _NoValue  # noqa: F401
 
 _F = TypeVar("_F", bound=Callable)
 
