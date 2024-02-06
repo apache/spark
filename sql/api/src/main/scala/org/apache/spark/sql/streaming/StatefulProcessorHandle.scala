@@ -53,4 +53,10 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * @param expiryTimestampMs - timer expiry timestamp in milliseconds
    */
   def deleteTimer(expiryTimestampMs: Long): Unit
+
+  /**
+   * Function to delete and purge state variable if defined previously
+   * @param stateName - name of the state variable
+   */
+  def deleteIfExists(stateName: String): Unit
 }

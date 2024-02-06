@@ -1735,6 +1735,15 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-46972: asymmetrical replacement for char/varchar in V2SessionCatalog.createTable") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    withTable("t") {
+      sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
+      assert(!spark.table("t").isEmpty)
+    }
+  }
+
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()

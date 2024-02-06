@@ -163,5 +163,14 @@ class StatefulProcessorHandleImpl(
     }
   }
 
-
+  /**
+   * Function to delete and purge state variable if defined previously
+   *
+   * @param stateName - name of the state variable
+   */
+  override def deleteIfExists(stateName: String): Unit = {
+    verify(currState == CREATED, s"Cannot delete state variable with name=$stateName after " +
+      "initialization is complete")
+    store.removeColFamilyIfExists(stateName)
+  }
 }

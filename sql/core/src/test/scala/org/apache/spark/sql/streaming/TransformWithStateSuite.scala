@@ -144,6 +144,75 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
   }
 }
 
+class RunningCountMostRecentStatefulProcessor
+  extends StatefulProcessor[String, (String, String), (String, String, String)]
+  with Logging {
+  @transient private var _countState: ValueState[Long] = _
+  @transient private var _mostRecent: ValueState[String] = _
+  @transient var _processorHandle: StatefulProcessorHandle = _
+
+  override def init(
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode) : Unit = {
+    _processorHandle = handle
+    assert(handle.getQueryInfo().getBatchId >= 0)
+    _countState = _processorHandle.getValueState[Long]("countState")
+    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    val mostRecent = _mostRecent.getOption().getOrElse("")
+
+    var output = List[(String, String, String)]()
+    inputRows.foreach { row =>
+      _mostRecent.update(row._2)
+      _countState.update(count)
+      output = (key, count.toString, mostRecent) :: output
+    }
+    output.iterator
+  }
+
+  override def close(): Unit = {}
+}
+
+class MostRecentStatefulProcessorWithDeletion
+  extends StatefulProcessor[String, (String, String), (String, String)]
+  with Logging {
+  @transient private var _mostRecent: ValueState[String] = _
+  @transient var _processorHandle: StatefulProcessorHandle = _
+
+  override def init(
+       handle: StatefulProcessorHandle,
+       outputMode: OutputMode) : Unit = {
+    _processorHandle = handle
+    assert(handle.getQueryInfo().getBatchId >= 0)
+    _processorHandle.deleteIfExists("countState")
+    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val mostRecent = _mostRecent.getOption().getOrElse("")
+
+    var output = List[(String, String)]()
+    inputRows.foreach { row =>
+      _mostRecent.update(row._2)
+      output = (key, mostRecent) :: output
+    }
+    output.iterator
+  }
+
+  override def close(): Unit = {}
+}
+
 // Class to verify incorrect usage of stateful processor
 class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcessor {
   @transient private var _tempState: ValueState[Long] = _
@@ -290,6 +359,43 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", "-1"), ("d", "1")),
         StopStream
       )
+    }
+  }
+
+  test("transformWithState - test deleteIfExists operator") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { chkptDir =>
+        val dirPath = chkptDir.getCanonicalPath
+        val inputData = MemoryStream[(String, String)]
+        val stream1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeoutMode.NoTimeouts(),
+            OutputMode.Update())
+
+        val stream2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeoutMode.NoTimeouts(),
+            OutputMode.Update())
+
+        testStream(stream1, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          StopStream
+        )
+        testStream(stream2, OutputMode.Update())(
+          StartStream(checkpointLocation = dirPath),
+          AddData(inputData, ("a", "str2"), ("b", "str3")),
+          CheckNewAnswer(("a", "str1"),
+            ("b", "")), // should not factor in previous count state
+          StopStream
+        )
+      }
     }
   }
 }

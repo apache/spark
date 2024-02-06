@@ -32,6 +32,7 @@ import org.apache.spark.util.logging.RollingFileAppender
  */
 private[deploy] object Utils extends Logging {
   val DEFAULT_BYTES = 100 * 1024
+  val SUPPORTED_LOG_TYPES = Set("stderr", "stdout", "out")
 
   def addRenderLogHandler(page: WebUI, conf: SparkConf): Unit = {
     page.attachHandler(createServletHandler("/log",
@@ -58,6 +59,9 @@ private[deploy] object Utils extends Logging {
       logType: String,
       offsetOption: Option[Long],
       byteLength: Int): (String, Long, Long, Long) = {
+    if (!SUPPORTED_LOG_TYPES.contains(logType)) {
+      return ("Error: Log type must be one of " + SUPPORTED_LOG_TYPES.mkString(", "), 0, 0, 0)
+    }
     try {
       // Find a log file name
       val fileName = if (logType.equals("out")) {

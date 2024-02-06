@@ -121,6 +121,16 @@ object SparkException {
       throw new SparkIllegalArgumentException(errorClass, messageParameters)
     }
   }
+
+  /**
+   * Utility method to construct message params from Java Map.
+   * @param messageParameters The Java Map.
+   * @return Scala collection that can be passed to SparkException constructor.
+   */
+  def constructMessageParams(
+      messageParameters: java.util.Map[String, String]): Map[String, String] = {
+    messageParameters.asScala.toMap
+  }
 }
 
 /**

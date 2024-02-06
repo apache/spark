@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import org.apache.spark.{QueryContext, QueryContextType}
+import org.apache.spark.{QueryContext, QueryContextType, SparkUnsupportedOperationException}
 
 /** The class represents error context of a SQL query. */
 case class SQLQueryContext(
@@ -131,16 +131,16 @@ case class SQLQueryContext(
       originStartIndex.get <= originStopIndex.get
   }
 
-  override def callSite: String = throw new UnsupportedOperationException
+  override def callSite: String = throw SparkUnsupportedOperationException()
 }
 
 case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends QueryContext {
   override val contextType = QueryContextType.DataFrame
 
-  override def objectType: String = throw new UnsupportedOperationException
-  override def objectName: String = throw new UnsupportedOperationException
-  override def startIndex: Int = throw new UnsupportedOperationException
-  override def stopIndex: Int = throw new UnsupportedOperationException
+  override def objectType: String = throw SparkUnsupportedOperationException()
+  override def objectName: String = throw SparkUnsupportedOperationException()
+  override def startIndex: Int = throw SparkUnsupportedOperationException()
+  override def stopIndex: Int = throw SparkUnsupportedOperationException()
 
   override val fragment: String = {
     stackTrace.headOption.map { firstElem =>

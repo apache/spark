@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -42,7 +42,9 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * This object contains fields to help process DEFAULT columns.
  */
-object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsUtils {
+object ResolveDefaultColumns extends QueryErrorsBase
+  with ResolveDefaultColumnsUtils
+  with SQLConfHelper {
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
@@ -307,25 +309,26 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       statementType: String,
       colName: String,
       defaultSQL: String): Expression = {
+    val supplanted = CharVarcharUtils.replaceCharVarcharWithString(dataType)
     // Perform implicit coercion from the provided expression type to the required column type.
-    if (dataType == analyzed.dataType) {
+    val ret = if (supplanted == analyzed.dataType) {
       analyzed
-    } else if (Cast.canUpCast(analyzed.dataType, dataType)) {
-      Cast(analyzed, dataType)
+    } else if (Cast.canUpCast(analyzed.dataType, supplanted)) {
+      Cast(analyzed, supplanted)
     } else {
       // If the provided default value is a literal of a wider type than the target column, but the
       // literal value fits within the narrower type, just coerce it for convenience. Exclude
       // boolean/array/struct/map types from consideration for this type coercion to avoid
       // surprising behavior like interpreting "false" as integer zero.
       val result = if (analyzed.isInstanceOf[Literal] &&
-        !Seq(dataType, analyzed.dataType).exists(_ match {
+        !Seq(supplanted, analyzed.dataType).exists(_ match {
           case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
           case _ => false
         })) {
         try {
-          val casted = Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()
+          val casted = Cast(analyzed, supplanted, evalMode = EvalMode.TRY).eval()
           if (casted != null) {
-            Some(Literal(casted, dataType))
+            Some(Literal(casted, supplanted))
           } else {
             None
           }
@@ -339,6 +342,10 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
           statementType, colName, defaultSQL, dataType, analyzed.dataType)
       }
     }
+    if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(dataType)) {
+      CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
+    }
+    ret
   }
 
   /**
@@ -454,7 +461,8 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statement, colName, default.originalSQL)
     } else if (default.resolved) {
-      if (!Cast.canUpCast(default.child.dataType, targetType)) {
+      val dataType = CharVarcharUtils.replaceCharVarcharWithString(targetType)
+      if (!Cast.canUpCast(default.child.dataType, dataType)) {
         throw QueryCompilationErrors.defaultValuesDataTypeError(
           statement, colName, default.originalSQL, targetType, default.child.dataType)
       }

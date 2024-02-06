@@ -441,13 +441,31 @@
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
-      "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
+      "The codec <codecName> is not available."
     ],
+    "subClass" : {
+      "WITH_AVAILABLE_CODECS_SUGGESTION" : {
+        "message" : [
+          "Available codecs are <availableCodecs>."
+        ]
+      },
+      "WITH_CONF_SUGGESTION" : {
+        "message" : [
+          "Consider to set the config <configKey> to <configVal>."
+        ]
+      }
+    },
     "sqlState" : "56038"
   },
   "CODEC_SHORT_NAME_NOT_FOUND" : {
     "message" : [
       "Cannot find a short name for the codec <codecName>."
+    ],
+    "sqlState" : "42704"
+  },
+  "COLLATION_INVALID_NAME" : {
+    "message" : [
+      "The value <collationName> does not represent a correct collation name. Suggested valid collation name: [<proposal>]."
     ],
     "sqlState" : "42704"
   },
@@ -1651,6 +1669,12 @@
     "sqlState" : "XX000"
   },
   "INTERNAL_ERROR_STORAGE" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_TWS" : {
     "message" : [
       "<message>"
     ],
@@ -3235,6 +3259,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
+    "message" : [
+      "Failed to remove default column family with reserved name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
+    "message" : [
+      "Store does not support multiple values per key"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operationType> operation not supported with <entity>"
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
       "Static partition column <staticName> is also specified in the column list."
@@ -3387,6 +3429,12 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "TWS_VALUE_SHOULD_NOT_BE_NULL" : {
+    "message" : [
+      "New value should be non-null for <typeOfState>"
+    ],
+    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -3919,6 +3967,16 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
+        "message" : [
+          "Creating multiple column families with <stateStoreProvider> is not supported."
+        ]
+      },
+      "STATE_STORE_REMOVING_COLUMN_FAMILIES" : {
+        "message" : [
+          "Removing column families with <stateStoreProvider> is not supported."
         ]
       },
       "TABLE_OPERATION" : {
@@ -5707,11 +5765,6 @@
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2043" : {
-    "message" : [
-      "- <sqlValue> caused overflow."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2045" : {
     "message" : [
       "Unsupported table change: <message>"
@@ -7440,6 +7493,16 @@
   "_LEGACY_ERROR_TEMP_3192" : {
     "message" : [
       "Datatype not supported <dt>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3193" : {
+    "message" : [
+      "Creating multiple column families with HDFSBackedStateStoreProvider is not supported"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3197" : {
+    "message" : [
+      "Failed to create column family with reserved name=<colFamilyName>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

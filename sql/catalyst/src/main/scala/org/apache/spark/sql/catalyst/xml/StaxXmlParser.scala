@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{
   ArrayBasedMapData,
   BadRecordException,
-  CaseInsensitiveMap,
   DateFormatter,
   DropMalformedMode,
   FailureSafeParser,
@@ -101,11 +100,11 @@ class StaxXmlParser(
     }
   }
 
-  private def getFieldNameToIndex(schema: StructType): Map[String, Int] = {
+  private def getFieldIndex(schema: StructType, fieldName: String): Option[Int] = {
     if (caseSensitive) {
-      schema.map(_.name).zipWithIndex.toMap
+      schema.getFieldIndex(fieldName)
     } else {
-      CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
+      schema.getFieldIndexCaseInsensitive(fieldName)
     }
   }
 
@@ -145,7 +144,7 @@ class StaxXmlParser(
   def doParseColumn(xml: String,
       parseMode: ParseMode,
       xsdSchema: Option[Schema]): Option[InternalRow] = {
-    val xmlRecord = UTF8String.fromString(xml)
+    lazy val xmlRecord = UTF8String.fromString(xml)
     try {
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
@@ -292,8 +291,8 @@ class StaxXmlParser(
     val convertedValuesMap = collection.mutable.Map.empty[String, Any]
     val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = getFieldNameToIndex(schema)
-      nameToIndex.get(f).foreach { i =>
+      val indexOpt = getFieldIndex(schema, f)
+      indexOpt.foreach { i =>
         convertedValuesMap(f) = convertTo(v, schema(i).dataType)
       }
     }
@@ -332,8 +331,8 @@ class StaxXmlParser(
     // Here we merge both to a row.
     val valuesMap = fieldsMap ++ attributesMap
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = getFieldNameToIndex(schema)
-      nameToIndex.get(f).foreach { row(_) = v }
+      val indexOpt = getFieldIndex(schema, f)
+      indexOpt.foreach { row(_) = v }
     }
 
     if (valuesMap.isEmpty) {
@@ -353,11 +352,10 @@ class StaxXmlParser(
       schema: StructType,
       rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
-    val nameToIndex = getFieldNameToIndex(schema)
     // If there are attributes, then we process them first.
     convertAttributes(rootAttributes, schema).toSeq.foreach {
       case (f, v) =>
-        nameToIndex.get(f).foreach { row(_) = v }
+        getFieldIndex(schema, f).foreach { row(_) = v }
     }
 
     val wildcardColName = options.wildcardColName
@@ -372,7 +370,7 @@ class StaxXmlParser(
           val attributes = e.getAttributes.asScala.toArray
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
 
-          nameToIndex.get(field) match {
+          getFieldIndex(schema, field) match {
             case Some(index) => schema(index).dataType match {
               case st: StructType =>
                 row(index) = convertObjectWithAttributes(parser, st, field, attributes)
