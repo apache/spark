@@ -28,6 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -1150,7 +1151,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
-    // The default value fails to analyze.
+    // The default value references columns.
     withTable("t") {
       checkError(
         exception = intercept[AnalysisException] {
@@ -1161,6 +1162,39 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",
           "defaultValue" -> "badvalue"))
+    }
+    try {
+      // The default value references session variables.
+      sql("DECLARE test_var INT")
+      withTable("t") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("create table t(i boolean, s int default test_var) using parquet")
+          },
+          // V1 command still use the fake Analyzer which can't resolve session variables and we
+          // can only report UNRESOLVED_EXPRESSION error.
+          errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`s`",
+            "defaultValue" -> "test_var")
+        )
+        val v2Source = classOf[FakeV2Provider].getName
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"create table t(i int, j int default test_var) using $v2Source")
+          },
+          // V2 command uses the actual analyzer and can resolve session variables. We can report
+          // a more accurate NOT_CONSTANT error.
+          errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`j`",
+            "defaultValue" -> "test_var")
+        )
+      }
+    } finally {
+      sql("DROP TEMPORARY VARIABLE test_var")
     }
     // The default value analyzes to a table not in the catalog.
     withTable("t") {
