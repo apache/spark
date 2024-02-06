@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
-import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -31,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeoutMode}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CompletionIterator, Utils}
+import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -161,6 +159,8 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+    val broadcastedHadoopConf =
+      new SerializableConfiguration(session.sessionState.newHadoopConf())
     if (isStreaming) {
       child.execute().mapPartitionsWithStateStore[InternalRow](
         getStateInfo,
@@ -199,7 +199,7 @@ case class TransformWithStateExec(
             numColsPrefixKey = 0,
             useColumnFamilies = true,
             storeConf = storeConf,
-            hadoopConf = new Configuration())
+            hadoopConf = broadcastedHadoopConf.value)
 
           val store = stateStoreProvider.getStore(0)
           val outputIterator = processData(store, iter)

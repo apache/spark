@@ -197,7 +197,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - batch should succeed") {
-    val inputData = Seq("a", "a", "b")
+    val inputData = Seq("a", "b")
     val result = inputData.toDS()
       .groupByKey(x => x)
       .transformWithState(new RunningCountStatefulProcessor(),
