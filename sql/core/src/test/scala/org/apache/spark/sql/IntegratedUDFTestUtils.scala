@@ -591,6 +591,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val pythonScript: String =
       s"""
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.functions import SelectedColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
         |class $name:
         |    def __init__(self):
@@ -644,13 +645,20 @@ object IntegratedUDFTestUtils extends SQLHelper {
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "partition_col",
       orderBy = "input",
-      select = "\"partition_col\", \"input\"")
+      select = "SelectedColumn(\"partition_col\"), SelectedColumn(\"input\")")
 
   object UDTFPartitionByOrderBySelectComplexExpr
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "partition_col + 1",
       orderBy = "RANDOM(42)",
-      select = "\"input + 1\"")
+      select = "SelectedColumn(\"partition_col\"), " +
+        "SelectedColumn(name=\"input + 1\", alias=\"input\")")
+
+  object UDTFPartitionByOrderBySelectExprOnlyPartitionColumn
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "SelectedColumn(\"partition_col\")")
 
   object UDTFInvalidPartitionByOrderByParseError
     extends TestPythonUDTFPartitionByOrderByBase(
@@ -668,7 +676,19 @@ object IntegratedUDFTestUtils extends SQLHelper {
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "partition_col",
       orderBy = "input",
-      select = "\"unparsable\"")
+      select = "SelectedColumn(\"unparsable\")")
+
+  object UDTFInvalidSelectExprStringValue
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "\"partition_cll\"")
+
+  object UDTFInvalidComplexSelectExprMissingAlias
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col + 1",
+      orderBy = "RANDOM(42)",
+      select = "SelectedColumn(name=\"input + 1\")")
 
   object UDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val pythonScript: String =
@@ -1178,6 +1198,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFPartitionByOrderBy,
     UDTFInvalidOrderByAscKeyword,
     UDTFInvalidSelectExprParseError,
+    UDTFInvalidSelectExprStringValue,
+    UDTFInvalidComplexSelectExprMissingAlias,
     UDTFInvalidPartitionByAndWithSinglePartition,
     UDTFInvalidPartitionByOrderByParseError,
     UDTFInvalidOrderByWithoutPartitionBy,
@@ -1186,6 +1208,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFPartitionByOrderByComplexExpr,
     UDTFPartitionByOrderBySelectExpr,
     UDTFPartitionByOrderBySelectComplexExpr,
+    UDTFPartitionByOrderBySelectExprOnlyPartitionColumn,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,

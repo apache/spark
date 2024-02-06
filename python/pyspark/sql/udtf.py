@@ -43,6 +43,7 @@ __all__ = [
     "AnalyzeResult",
     "PartitioningColumn",
     "OrderingColumn",
+    "SelectedColumn",
     "SkipRestOfInputTableException",
     "UDTFRegistration",
 ]
@@ -107,6 +108,24 @@ class OrderingColumn:
     ascending: bool = True
     overrideNullsFirst: Optional[bool] = None
 
+@dataclass(frozen=True)
+class SelectedColumn:
+    """
+    Represents an expression that the UDTF is specifying for Catalyst to evaluate against the
+    columns in the input TABLE argument. The UDTF then receives one input column for each expression
+    in the list, in the order they are listed.
+
+    Parameters
+    ----------
+    name : str
+        The contents of the selected column name or expression represented as a SQL string.
+    alias : str, default ''
+        If non-empty, this is the alias for the column or expression as visible from the UDTF's
+        'eval' method. This is required if the expression is not a simple column reference.
+    """
+
+    name: str
+    alias: str = ''
 
 # Note: this class is a "dataclass" for purposes of convenience, but it is not marked "frozen"
 # because the intention is that users may create subclasses of it for purposes of returning custom
@@ -133,17 +152,17 @@ class AnalyzeResult:
         If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
         in this case.
-    select: sequence of str
-        If non-empty, this is a list of column names that the UDTF is specifying for Catalyst to
+    select: sequence of :class:`SelectedColumn`
+        If non-empty, this is a sequence of expressions that the UDTF is specifying for Catalyst to
         evaluate against the columns in the input TABLE argument. The UDTF then receives one input
-        column for each name in the list, in the order they are listed.
+        attribute for each name in the list, in the order they are listed.
     """
 
     schema: StructType
     withSinglePartition: bool = False
     partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
     orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
-    select: Sequence[str] = field(default_factory=tuple)
+    select: Sequence[SelectedColumn] = field(default_factory=tuple)
 
 
 class SkipRestOfInputTableException(Exception):

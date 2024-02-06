@@ -689,10 +689,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("aliasName" -> aliasName))
   }
 
-  def invalidUDTFSelectItemFromAnalyzeMethodIsComplex(item: String): Throwable = {
+  def invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(expression: String): Throwable = {
     new AnalysisException(
-      errorClass = "UDTF_INVALID_REQUESTED_SELECTED_COLUMN_STRING_FROM_ANALYZE_METHOD",
-      messageParameters = Map("item" -> item))
+      errorClass = "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS",
+      messageParameters = Map("expression" -> expression))
   }
 
   def windowAggregateFunctionWithFilterNotSupportedError(): Throwable = {

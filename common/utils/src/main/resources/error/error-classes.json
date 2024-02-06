@@ -3397,9 +3397,9 @@
     ],
     "sqlState" : "42802"
   },
-  "UDTF_INVALID_REQUESTED_SELECTED_COLUMN_STRING_FROM_ANALYZE_METHOD" : {
+  "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS" : {
     "message" : [
-      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' list () that does not contain only simple column references; please update this list and then try the query again."
+      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression (<expression>) that does not include a corresponding alias; please update the UDTF to specify an alias there and then try the query again."
     ],
     "sqlState" : "42802"
   },

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Project, Repartition, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -61,10 +59,10 @@ import org.apache.spark.sql.types.DataType
  * @param orderByExpressions if non-empty, the TABLE argument included the ORDER BY clause to
  *                           indicate that the rows within each partition of the table function are
  *                           to arrive in the provided order.
- * @param selectedInputColumns If non-empty, this is a list of column names that the UDTF is
- *                             specifying for Catalyst to return from the input TABLE argument.
- *                             The UDTF then receives one input column for each name in the list,
- *                             in the order they are listed.
+ * @param selectedInputExpressions If non-empty, this is a sequence of expressions that the UDTF is
+ *                                 specifying for Catalyst to evaluate against the columns in the
+ *                                 input TABLE argument. The UDTF then receives one input attribute
+ *                                 for each name in the list, in the order they are listed.
  */
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
@@ -73,7 +71,7 @@ case class FunctionTableSubqueryArgumentExpression(
     partitionByExpressions: Seq[Expression] = Seq.empty,
     withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty,
-    selectedInputColumns: Seq[Expression] = Seq.empty)
+    selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
@@ -142,18 +140,18 @@ case class FunctionTableSubqueryArgumentExpression(
           child = subquery)
       }
     }
-    // If instructed, add a projection to select the specified input columns.
-    if (selectedInputColumns.nonEmpty) {
-      val projectList = mutable.ArrayBuffer.empty[NamedExpression]
-      selectedInputColumns.foreach {
-        case a: Attribute =>
-          projectList += a
-        case _ =>
-          throw QueryCompilationErrors.invalidUDTFSelectItemFromAnalyzeMethodIsComplex(
-            selectedInputColumns.mkString(", "))
-      }
-      projectList.appendAll(extraProjectedPartitioningExpressions)
-      subquery = Project(projectList.toSeq, subquery)
+    // If instructed, add a projection to compute the specified input expressions.
+    if (selectedInputExpressions.nonEmpty) {
+      val projectList: Seq[NamedExpression] = selectedInputExpressions.map {
+        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String)) =>
+          Alias(expression, alias)()
+        case PythonUDTFSelectedExpression(a: Attribute, None) =>
+          a
+        case PythonUDTFSelectedExpression(other: Expression, None) =>
+          throw QueryCompilationErrors
+            .invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(other.sql)
+      } ++ extraProjectedPartitioningExpressions
+      subquery = Project(projectList, subquery)
     }
     Project(Seq(Alias(CreateStruct(subquery.output), "c")()), subquery)
   }

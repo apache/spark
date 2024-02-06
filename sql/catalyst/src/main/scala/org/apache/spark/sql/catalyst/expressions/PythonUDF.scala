@@ -262,7 +262,7 @@ case class PythonUDTFAnalyzeResult(
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
-    selectedInputExpressions: Seq[Expression],
+    selectedInputExpressions: Seq[PythonUDTFSelectedExpression],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
@@ -298,7 +298,7 @@ case class PythonUDTFAnalyzeResult(
     var newWithSinglePartition = t.withSinglePartition
     var newPartitionByExpressions = t.partitionByExpressions
     var newOrderByExpressions = t.orderByExpressions
-    var newSelectedInputExpressions = t.selectedInputColumns
+    var newSelectedInputExpressions = t.selectedInputExpressions
     if (withSinglePartition) {
       newWithSinglePartition = true
     }
@@ -315,9 +315,22 @@ case class PythonUDTFAnalyzeResult(
       withSinglePartition = newWithSinglePartition,
       partitionByExpressions = newPartitionByExpressions,
       orderByExpressions = newOrderByExpressions,
-      selectedInputColumns = newSelectedInputExpressions)
+      selectedInputExpressions = newSelectedInputExpressions)
   }
 }
+
+/**
+ * Represents an expression that the UDTF is specifying for Catalyst to evaluate against the
+ * columns in the input TABLE argument. The UDTF then receives one input column for each expression
+ * in the list, in the order they are listed.
+ *
+ * @param expression the expression that the UDTF is specifying for Catalyst to evaluate against the
+ *                   columns in the input TABLE argument
+ * @param alias If present, this is the alias for the column or expression as visible from the
+ *              UDTF's 'eval' method. This is required if the expression is not a simple column
+ *              reference.
+ */
+case class PythonUDTFSelectedExpression(expression: Expression, alias: Option[String])
 
 /**
  * A place holder used when printing expressions without debugging information such as the
