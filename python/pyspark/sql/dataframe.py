@@ -6793,7 +6793,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     # make it "compatible" by adding aliases. Therefore, we stop adding such
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         """
         :func:`groupby` is an alias for :func:`groupBy`.
 

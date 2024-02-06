@@ -1235,7 +1235,7 @@ class Column:
 
         .. versionadded:: 2.0.0
         """
-        return self.alias(self, *alias, **kwargs)
+        return self.alias(*alias, **kwargs)
 
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         """
@@ -1288,7 +1288,7 @@ class Column:
 
         .. versionadded:: 1.4.0
         """
-        return self.cast(self, dataType)
+        return self.cast(dataType)
 
     def between(
         self,
