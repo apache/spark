@@ -32,7 +32,6 @@ import org.apache.spark.sql.types._
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
  * @param keyEnc - Spark SQL encoder for key
- * @tparam K - data type of key
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](
@@ -40,9 +39,9 @@ class ValueStateImpl[S](
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any]) extends ValueState[S] with Logging {
 
-  val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
 
-  val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+  private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
   store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 0,
     schemaForValueRow)
