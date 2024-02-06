@@ -161,9 +161,24 @@ class DataSource(ABC):
         )
 
     def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
+        """
+        Returns a ``DataSourceStreamReader`` instance for reading streaming data.
+
+        The implementation is required for readable streaming data sources.
+
+        Parameters
+        ----------
+        schema : StructType
+            The schema of the data to be written.
+
+        Returns
+        -------
+        reader : DataSourceStreamReader
+            A reader instance for this streaming data source.
+        """
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "stream_reader"},
+            message_parameters={"feature": "streamReader"},
         )
 
 
