@@ -421,6 +421,19 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
+    @staticmethod
+    def apply_in_arrow_func(left, right):
+        import pyarrow as pa
+
+        left_ids = left.to_pydict()["id"]
+        right_ids = right.to_pydict()["id"]
+        result = {
+            "metric": ["min", "max", "len", "sum"],
+            "left": [min(left_ids), max(left_ids), len(left_ids), sum(left_ids)],
+            "right": [min(right_ids), max(right_ids), len(right_ids), sum(right_ids)],
+        }
+        return pa.Table.from_pydict(result)
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
@@ -443,6 +456,66 @@ class UDFProfiler2TestsMixin:
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
                 asof_join, schema="time int, id int, v1 double, v2 string"
+            ).show()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_group_apply_in_arrow(self):
+        # FlatMapGroupsInBatchExec
+        import pyarrow.compute as pc
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        def normalize(table):
+            v = table.column("v")
+            norm = pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1))
+            return table.set_column(1, "v", norm)
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df.groupby("id").applyInArrow(normalize, schema="id long, v double").show()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_cogroup_apply_in_arrow(self):
+        import pyarrow as pa
+
+        df1 = self.spark.createDataFrame([(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)], ("id", "v1"))
+        df2 = self.spark.createDataFrame([(1, "x"), (2, "y")], ("id", "v2"))
+
+        def summarize(l, r):
+            return pa.Table.from_pydict({"left": [l.num_rows], "right": [r.num_rows]})
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
+                summarize, schema="left long, right long"
             ).show()
 
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
