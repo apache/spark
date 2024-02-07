@@ -375,3 +375,9 @@ CREATE OR REPLACE VIEW v AS SELECT var1 AS c1;
 DROP VIEW IF EXISTS V;
 
 DROP TEMPORARY VARIABLE var1;
+
+SET VARIABLE title = 'variable references -- test constant folding';
+
+DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'a INT';
+SELECT from_json('{"a": 1}', var1);
+DROP TEMPORARY VARIABLE var1;
