@@ -4005,6 +4005,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     @overload
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+        ...
+
+    @overload
     def groupBy(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
         ...
 
@@ -6797,7 +6801,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
         ...
 
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         """
         :func:`groupby` is an alias for :func:`groupBy`.
 

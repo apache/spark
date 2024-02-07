@@ -125,7 +125,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
                 )
             )
 
-        sdf = sdf.groupby(*groupKeys).agg(
+        sdf = sdf.groupby(groupKeys).agg(
             F.corr(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN).alias(
                 CORRELATION_CORR_OUTPUT_COLUMN
             ),
@@ -220,7 +220,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
         )
 
         sdf = (
-            sdf.groupby(*groupKeys)
+            sdf.groupby(groupKeys)
             .agg(
                 F.count(F.when(pair_cond & p_cond, 1)).alias(CORRELATION_KENDALL_P_COLUMN),
                 F.count(F.when(pair_cond & q_cond, 1)).alias(CORRELATION_KENDALL_Q_COLUMN),
