@@ -31,6 +31,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.security.HadoopDelegationTokenProvider
+import org.apache.spark.util.Utils
 
 private[deploy] class HadoopFSDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
@@ -116,10 +117,10 @@ private[deploy] class HadoopFSDelegationTokenProvider
       if (fsToExclude.contains(fs.getUri.getHost)) {
         // YARN RM skips renewing token with empty renewer
         logInfo(s"getting token for: $fs with empty renewer to skip renewal")
-        fs.addDelegationTokens("", creds)
+        Utils.tryLogNonFatalError { fs.addDelegationTokens("", creds) }
       } else {
         logInfo(s"getting token for: $fs with renewer $renewer")
-        fs.addDelegationTokens(renewer, creds)
+        Utils.tryLogNonFatalError { fs.addDelegationTokens(renewer, creds) }
       }
     }
 

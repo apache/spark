@@ -1031,8 +1031,7 @@ private[spark] class Client(
     javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
 
     // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`
-    // is added by default. It will not affect Java 8 and Java 11 due to existence of
-    // `-XX:+IgnoreUnrecognizedVMOptions`.
+    // is added by default.
     javaOpts += JavaModuleOptions.defaultModuleOptions()
 
     // Set the environment variable through a command prefix

@@ -190,6 +190,14 @@ set PROPERTIES and DBPROPERTIES at the same time.
 
 `<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE `<variableName>` = ... instead.
 
+## STATE_STORE_MULTIPLE_COLUMN_FAMILIES
+
+Creating multiple column families with `<stateStoreProvider>` is not supported.
+
+## STATE_STORE_REMOVING_COLUMN_FAMILIES
+
+Removing column families with `<stateStoreProvider>` is not supported.
+
 ## TABLE_OPERATION
 
 Table `<tableName>` does not support `<operation>`. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by "spark.sql.catalog".

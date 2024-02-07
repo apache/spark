@@ -60,23 +60,15 @@ case class UnaryMinus(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
-    case ByteType | ShortType if failOnError =>
+    case ByteType | ShortType | IntegerType | LongType if failOnError =>
+      val typeUtils = TypeUtils.getClass.getCanonicalName.stripSuffix("$")
+      val refDataType = ctx.addReferenceObj("refDataType", dataType, dataType.getClass.getName)
       nullSafeCodeGen(ctx, ev, eval => {
         val javaBoxedType = CodeGenerator.boxedType(dataType)
-        val javaType = CodeGenerator.javaType(dataType)
-        val originValue = ctx.freshName("origin")
         s"""
-           |$javaType $originValue = ($javaType)($eval);
-           |if ($originValue == $javaBoxedType.MIN_VALUE) {
-           |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($originValue);
-           |}
-           |${ev.value} = ($javaType)(-($originValue));
-           """.stripMargin
-      })
-    case IntegerType | LongType if failOnError =>
-      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
-      nullSafeCodeGen(ctx, ev, eval => {
-        s"${ev.value} = $mathUtils.negateExact($eval);"
+           |${ev.value} = ($javaBoxedType)$typeUtils.getNumeric(
+           |  $refDataType, $failOnError).negate($eval);
+         """.stripMargin
       })
     case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
@@ -181,23 +173,16 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
 
-    case ByteType | ShortType if failOnError =>
-      val javaBoxedType = CodeGenerator.boxedType(dataType)
-      val javaType = CodeGenerator.javaType(dataType)
-      nullSafeCodeGen(ctx, ev, eval =>
+    case ByteType | ShortType | IntegerType | LongType if failOnError =>
+      val typeUtils = TypeUtils.getClass.getCanonicalName.stripSuffix("$")
+      val refDataType = ctx.addReferenceObj("refDataType", dataType, dataType.getClass.getName)
+      nullSafeCodeGen(ctx, ev, eval => {
+        val javaBoxedType = CodeGenerator.boxedType(dataType)
         s"""
-          |if ($eval == $javaBoxedType.MIN_VALUE) {
-          |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($eval);
-          |} else if ($eval < 0) {
-          |  ${ev.value} = ($javaType)-$eval;
-          |} else {
-          |  ${ev.value} = $eval;
-          |}
-          |""".stripMargin)
-
-    case IntegerType | LongType if failOnError =>
-      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
-      defineCodeGen(ctx, ev, c => s"$c < 0 ? $mathUtils.negateExact($c) : $c")
+           |${ev.value} = ($javaBoxedType)$typeUtils.getNumeric(
+           |  $refDataType, $failOnError).abs($eval);
+         """.stripMargin
+      })
 
     case _: AnsiIntervalType =>
       val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")

@@ -16,16 +16,13 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.Serializable
-
 import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.types._
 
@@ -38,24 +35,22 @@ import org.apache.spark.sql.types._
  * @tparam K - data type of key
  * @tparam S - data type of object that will be stored
  */
-class ValueStateImpl[K, S](
+class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
-    keyEnc: Encoder[K]) extends ValueState[S] with Logging {
+    keyExprEnc: ExpressionEncoder[Any]) extends ValueState[S] with Logging {
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
   private def encodeKey(): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw new UnsupportedOperationException("Implicit key not found for operation on" +
-        s"stateName=$stateName")
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
-    val exprEnc: ExpressionEncoder[K] = encoderFor(keyEnc)
-    val toRow = exprEnc.createSerializer()
+    val toRow = keyExprEnc.createSerializer()
     val keyByteArr = toRow
-      .apply(keyOption.get.asInstanceOf[K]).asInstanceOf[UnsafeRow].getBytes()
+      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
 
     val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
     val keyEncoder = UnsafeProjection.create(schemaForKeyRow)

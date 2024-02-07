@@ -43,8 +43,6 @@ private[connect] object ProtoUtils {
         val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
         if (size > threshold) {
           builder.setField(field, createString(string.take(threshold), size))
-        } else {
-          builder.setField(field, string)
         }
 
       case (field: FieldDescriptor, byteString: ByteString)
@@ -57,8 +55,6 @@ private[connect] object ProtoUtils {
             byteString
               .substring(0, threshold)
               .concat(createTruncatedByteString(size)))
-        } else {
-          builder.setField(field, byteString)
         }
 
       case (field: FieldDescriptor, byteArray: Array[Byte])
@@ -71,8 +67,6 @@ private[connect] object ProtoUtils {
             ByteString
               .copyFrom(byteArray, 0, threshold)
               .concat(createTruncatedByteString(size)))
-        } else {
-          builder.setField(field, byteArray)
         }
 
       // TODO(SPARK-43117): should also support 1, repeated msg; 2, map<xxx, msg>
@@ -80,7 +74,7 @@ private[connect] object ProtoUtils {
           if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && msg != null =>
         builder.setField(field, abbreviate(msg, thresholds))
 
-      case (field: FieldDescriptor, value: Any) => builder.setField(field, value)
+      case _ =>
     }
 
     builder.build()

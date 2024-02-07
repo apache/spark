@@ -189,6 +189,11 @@ private[sql] class RocksDBStateStoreProvider
 
     /** Return the [[RocksDB]] instance in this store. This is exposed mainly for testing. */
     def dbInstance(): RocksDB = rocksDB
+
+    /** Remove column family if exists */
+     override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+       rocksDB.removeColFamilyIfExists(colFamilyName)
+    }
   }
 
   override def init(
