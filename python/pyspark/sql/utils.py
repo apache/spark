@@ -19,15 +19,6 @@ import functools
 import os
 from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
 
-from py4j.java_collections import JavaArray
-from py4j.java_gateway import (
-    JavaClass,
-    JavaGateway,
-    JavaObject,
-)
-
-from pyspark import SparkContext
-
 # For backward compatibility.
 from pyspark.errors import (  # noqa: F401
     AnalysisException,
@@ -45,6 +36,13 @@ from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
 if TYPE_CHECKING:
+    from py4j.java_collections import JavaArray
+    from py4j.java_gateway import (
+        JavaClass,
+        JavaGateway,
+        JavaObject,
+    )
+    from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.column import Column
@@ -63,7 +61,7 @@ except ImportError:
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
-def toJArray(gateway: JavaGateway, jtype: JavaClass, arr: Sequence[Any]) -> JavaArray:
+def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
     """
     Convert python list to java type array
 
@@ -76,7 +74,7 @@ def toJArray(gateway: JavaGateway, jtype: JavaClass, arr: Sequence[Any]) -> Java
     arr :
         python type list
     """
-    jarray: JavaArray = gateway.new_array(jtype, len(arr))
+    jarray: "JavaArray" = gateway.new_array(jtype, len(arr))
     for i in range(0, len(arr)):
         jarray[i] = arr[i]
     return jarray
@@ -108,7 +106,7 @@ class ForeachBatchFunction:
         self.func = func
         self.session = session
 
-    def call(self, jdf: JavaObject, batch_id: int) -> None:
+    def call(self, jdf: "JavaObject", batch_id: int) -> None:
         from pyspark.sql.dataframe import DataFrame
         from pyspark.sql.session import SparkSession
 
@@ -151,6 +149,8 @@ def is_timestamp_ntz_preferred() -> bool:
         else:
             return session.conf.get("spark.sql.timestampType", None) == "TIMESTAMP_NTZ"
     else:
+        from pyspark import SparkContext
+
         jvm = SparkContext._jvm
         return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
 
@@ -271,9 +271,11 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def get_active_spark_context() -> SparkContext:
+def get_active_spark_context() -> "SparkContext":
     """Raise RuntimeError if SparkContext is not initialized,
     otherwise, returns the active SparkContext."""
+    from pyspark import SparkContext
+
     sc = SparkContext._active_spark_context
     if sc is None or sc._jvm is None:
         raise PySparkRuntimeError(

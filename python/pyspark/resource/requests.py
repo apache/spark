@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import overload, Optional, Dict
-
-from py4j.java_gateway import JavaObject, JVMView
+from typing import overload, Optional, Dict, TYPE_CHECKING
 
 from pyspark.util import _parse_memory
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject, JVMView
 
 
 class ExecutorResourceRequest:
@@ -147,7 +148,7 @@ class ExecutorResourceRequests:
     _OFFHEAP_MEM = "offHeap"
 
     @overload
-    def __init__(self, _jvm: JVMView):
+    def __init__(self, _jvm: "JVMView"):
         ...
 
     @overload
@@ -160,7 +161,7 @@ class ExecutorResourceRequests:
 
     def __init__(
         self,
-        _jvm: Optional[JVMView] = None,
+        _jvm: Optional["JVMView"] = None,
         _requests: Optional[Dict[str, ExecutorResourceRequest]] = None,
     ):
         from pyspark import SparkContext
@@ -445,7 +446,7 @@ class TaskResourceRequests:
     _CPUS = "cpus"
 
     @overload
-    def __init__(self, _jvm: JVMView):
+    def __init__(self, _jvm: "JVMView"):
         ...
 
     @overload
@@ -458,7 +459,7 @@ class TaskResourceRequests:
 
     def __init__(
         self,
-        _jvm: Optional[JVMView] = None,
+        _jvm: Optional["JVMView"] = None,
         _requests: Optional[Dict[str, TaskResourceRequest]] = None,
     ):
         from pyspark import SparkContext
@@ -468,7 +469,7 @@ class TaskResourceRequests:
 
         if _jvm is not None and not is_remote():
             self._java_task_resource_requests: Optional[
-                JavaObject
+                "JavaObject"
             ] = _jvm.org.apache.spark.resource.TaskResourceRequests()
             if _requests is not None:
                 for k, v in _requests.items():

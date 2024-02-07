@@ -90,7 +90,7 @@ from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
 
