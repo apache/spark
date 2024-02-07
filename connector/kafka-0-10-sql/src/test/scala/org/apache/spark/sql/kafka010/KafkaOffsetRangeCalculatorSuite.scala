@@ -28,7 +28,8 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
   def testWithMinPartitions(name: String, minPartition: Int)
       (f: KafkaOffsetRangeCalculator => Unit): Unit = {
-    val options = new CaseInsensitiveStringMap(Map("minPartitions" -> minPartition.toString).asJava)
+    val options =
+      new CaseInsensitiveStringMap(Map("minPartitions" -> minPartition.toString).asJava)
     test(s"with minPartition = $minPartition: $name") {
       f(KafkaOffsetRangeCalculator(options))
     }
@@ -107,19 +108,6 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp2, 1, 7, None),
           KafkaOffsetRange(tp2, 7, 14, None),
           KafkaOffsetRange(tp2, 14, 21, None)))
-
-    assert(
-      calc.getRanges(
-        Seq(
-          KafkaOffsetRange(tp1, 1, 5),
-          KafkaOffsetRange(tp2, 1, 21)),
-      ) ===
-        Seq(
-          KafkaOffsetRange(tp1, 1, 5, None),
-          KafkaOffsetRange(tp2, 1, 7, None),
-          KafkaOffsetRange(tp2, 7, 14, None),
-          KafkaOffsetRange(tp2, 14, 21, None)))
-
   }
 
   testWithMinPartitions("SPARK-30656: ignore empty ranges and split the rest", 4) { calc =>
@@ -258,7 +246,8 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
   testWithMinPartitions("SPARK-46798: locations set when ranges unsplit", 3) { calc =>
     val execs = Array("exec1", "exec2", "exec3")
-    val locPrefs = Map((tp1 -> Array(execs(0))), (tp2 -> Array(execs(1))), (tp3 -> Array(execs(2))))
+    val locPrefs =
+      Map(tp1 -> Array(execs(0)), tp2 -> Array(execs(1)), tp3 -> Array(execs(2)))
     assert(
       calc.getRanges(
         Seq(
@@ -276,7 +265,8 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
   testWithMinPartitions("SPARK-46798: locations not set when ranges split", 4) { calc =>
     val execs = Array("exec1", "exec2", "exec3")
-    val locPrefs = Map((tp1 -> Array(execs(0))), (tp2 -> Array(execs(1))), (tp3 -> Array(execs(2))))
+    val locPrefs =
+      Map(tp1 -> Array(execs(0)), tp2 -> Array(execs(1)), tp3 -> Array(execs(2)))
     assert(
       calc.getRanges(
         Seq(
