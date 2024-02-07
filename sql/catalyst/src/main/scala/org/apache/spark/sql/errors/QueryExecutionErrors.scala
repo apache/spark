@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode, MapData}
+import org.apache.spark.sql.catalyst.util.{sideBySide, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -836,7 +836,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       e: Throwable,
       path: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2064",
+      errorClass = "FAILED_READ_FILE",
       messageParameters = Map("path" -> path),
       cause = e)
   }
@@ -1501,7 +1501,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def malformedRecordsDetectedInRecordParsingError(
-      badRecord: String, e: BadRecordException): Throwable = {
+      badRecord: String, e: Throwable): Throwable = {
     new SparkException(
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(

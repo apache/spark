@@ -40,7 +40,7 @@ from typing import (
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark import copy_func, _NoValue
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
 from pyspark.errors import (
@@ -1711,8 +1711,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1754,8 +1753,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
 
         Persists the data in the disk by specifying the storage level.
 
@@ -6780,22 +6778,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return list(self._jdf.inputFiles())
 
-    where = copy_func(filter, sinceversion=1.3, doc=":func:`where` is an alias for :func:`filter`.")
+    def where(self, condition: "ColumnOrName") -> "DataFrame":
+        """
+        :func:`where` is an alias for :func:`filter`.
+
+        .. versionadded:: 1.3.0
+        """
+        return self.filter(condition)
 
     # Two aliases below were added for pandas compatibility many years ago.
     # There are too many differences compared to pandas and we cannot just
     # make it "compatible" by adding aliases. Therefore, we stop adding such
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
-    groupby = copy_func(
-        groupBy, sinceversion=1.4, doc=":func:`groupby` is an alias for :func:`groupBy`."
-    )
+    @overload
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+        ...
 
-    drop_duplicates = copy_func(
-        dropDuplicates,
-        sinceversion=1.4,
-        doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.",
-    )
+    @overload
+    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+        ...
+
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
+        """
+        :func:`groupby` is an alias for :func:`groupBy`.
+
+        .. versionadded:: 1.4.0
+        """
+        return self.groupBy(*cols)
+
+    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        """
+        :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
+
+        .. versionadded:: 1.4.0
+        """
+        return self.dropDuplicates(subset)
 
     def writeTo(self, table: str) -> DataFrameWriterV2:
         """

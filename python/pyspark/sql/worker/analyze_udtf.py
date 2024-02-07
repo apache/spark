@@ -31,7 +31,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.functions import OrderingColumn, PartitioningColumn
+from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import handle_worker_exception
@@ -212,6 +212,11 @@ def main(infile: IO, outfile: IO) -> None:
             and not all([isinstance(val, OrderingColumn) for val in result.orderBy])
         ):
             raise invalid_analyze_result_field("orderBy", "OrderingColumn")
+        elif isinstance(result.select, (list, tuple)) and (
+            len(result.select) > 0
+            and not all([isinstance(val, SelectedColumn) for val in result.select])
+        ):
+            raise invalid_analyze_result_field("select", "SelectedColumn")
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
@@ -234,6 +239,11 @@ def main(infile: IO, outfile: IO) -> None:
                 write_int(1, outfile)
             else:
                 write_int(2, outfile)
+        # Return the requested selected input table columns, if specified.
+        write_int(len(result.select), outfile)
+        for col in result.select:
+            write_with_length(col.name.encode("utf-8"), outfile)
+            write_with_length(col.alias.encode("utf-8"), outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

@@ -2825,12 +2825,17 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-43026: Apply AQE with non-exchange table cache") {
-    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
-      val df = spark.range(0).cache()
-      df.collect()
-      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      assert(df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
-        .executedPlan.isInstanceOf[LocalTableScanExec])
+    Seq(true, false).foreach { canChangeOP =>
+      withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> canChangeOP.toString) {
+        // No exchange, no need for AQE
+        val df = spark.range(0).cache()
+        df.collect()
+        assert(!df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+        // Has exchange, apply AQE
+        val df2 = spark.range(0).repartition(1).cache()
+        df2.collect()
+        assert(df2.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      }
     }
   }
 

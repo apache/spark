@@ -22,7 +22,6 @@ import scala.collection.immutable.IndexedSeq
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
@@ -59,17 +58,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
-
-  /**
-   * Configurations needs to be turned off, to avoid regression for cached query, so that the
-   * outputPartitioning of the underlying cached query plan can be leveraged later.
-   * Configurations include:
-   * 1. AQE
-   * 2. Automatic bucketed table scan
-   */
-  private val forceDisableConfigs: Seq[ConfigEntry[Boolean]] = Seq(
-    SQLConf.ADAPTIVE_EXECUTION_ENABLED,
-    SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
 
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
@@ -395,19 +383,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /**
    * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
-   * `AUTO_BUCKETED_SCAN_ENABLED`.
-   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is disabled, return the session with disabled
-   * `AUTO_BUCKETED_SCAN_ENABLED` and `ADAPTIVE_EXECUTION_ENABLED`.
+   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS`.
+   * `AUTO_BUCKETED_SCAN_ENABLED` is always disabled.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
-    if (session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
-      // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
-      // so we always do bucketed scan in a cached plan.
-      SparkSession.getOrCloneSessionWithConfigsOff(session,
-        SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS ::
-          SQLConf.AUTO_BUCKETED_SCAN_ENABLED :: Nil)
-    } else {
-      SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
+    // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
+    // so we always do bucketed scan in a cached plan.
+    var disableConfigs = Seq(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+    if (!session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+      // Allowing changing cached plan output partitioning might lead to regression as it introduces
+      // extra shuffle
+      disableConfigs =
+        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
     }
+    SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }
 }

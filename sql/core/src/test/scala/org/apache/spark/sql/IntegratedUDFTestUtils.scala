@@ -586,10 +586,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   abstract class TestPythonUDTFPartitionByOrderByBase(
       partitionBy: String,
-      orderBy: String) extends TestUDTF {
+      orderBy: String,
+      select: String) extends TestUDTF {
     val pythonScript: String =
       s"""
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.functions import SelectedColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
         |class $name:
         |    def __init__(self):
@@ -611,6 +613,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |            ],
         |            orderBy=[
         |                $orderBy
+        |            ],
+        |            select=[
+        |                $select
         |            ])
         |
         |    def eval(self, row: Row):
@@ -626,28 +631,70 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   object UDTFPartitionByOrderBy
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"input\")")
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "")
 
   object UDTFPartitionByOrderByComplexExpr
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
-      orderBy = "OrderingColumn(\"RANDOM(42)\")")
+      partitionBy = "partition_col + 1",
+      orderBy = "RANDOM(42)",
+      select = "")
+
+  object UDTFPartitionByOrderBySelectExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "SelectedColumn(\"partition_col\"), SelectedColumn(\"input\")")
+
+  object UDTFPartitionByOrderBySelectComplexExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col + 1",
+      orderBy = "RANDOM(42)",
+      select = "SelectedColumn(\"partition_col\"), " +
+        "SelectedColumn(name=\"input + 1\", alias=\"input\")")
+
+  object UDTFPartitionByOrderBySelectExprOnlyPartitionColumn
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "SelectedColumn(\"partition_col\")")
 
   object UDTFInvalidPartitionByOrderByParseError
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"unparsable\")",
-      orderBy = "OrderingColumn(\"input\")")
+      partitionBy = "unparsable",
+      orderBy = "input",
+      select = "")
 
   object UDTFInvalidOrderByAscKeyword
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "OrderingColumn(\"partition_col ASC\")")
+      partitionBy = "partition_col",
+      orderBy = "partition_col ASC",
+      select = "")
+
+  object UDTFInvalidSelectExprParseError
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "SelectedColumn(\"unparsable\")")
+
+  object UDTFInvalidSelectExprStringValue
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col",
+      orderBy = "input",
+      select = "\"partition_cll\"")
+
+  object UDTFInvalidComplexSelectExprMissingAlias
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "partition_col + 1",
+      orderBy = "RANDOM(42)",
+      select = "SelectedColumn(name=\"input + 1\")")
 
   object UDTFInvalidOrderByStringList
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "PartitioningColumn(\"partition_col\")",
-      orderBy = "\"partition_col\"")
+      orderBy = "\"partition_col\"",
+      select = "SelectedColumn(\"partition_col\"), SelectedColumn(\"input\")")
 
   object UDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val pythonScript: String =
@@ -1157,12 +1204,18 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFPartitionByOrderBy,
     UDTFInvalidOrderByAscKeyword,
     UDTFInvalidOrderByStringList,
+    UDTFInvalidSelectExprParseError,
+    UDTFInvalidSelectExprStringValue,
+    UDTFInvalidComplexSelectExprMissingAlias,
     UDTFInvalidPartitionByAndWithSinglePartition,
     UDTFInvalidPartitionByOrderByParseError,
     UDTFInvalidOrderByWithoutPartitionBy,
     UDTFForwardStateFromAnalyze,
     UDTFForwardStateFromAnalyzeWithKwargs,
     UDTFPartitionByOrderByComplexExpr,
+    UDTFPartitionByOrderBySelectExpr,
+    UDTFPartitionByOrderBySelectComplexExpr,
+    UDTFPartitionByOrderBySelectExprOnlyPartitionColumn,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,

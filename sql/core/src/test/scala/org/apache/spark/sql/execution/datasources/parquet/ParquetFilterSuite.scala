@@ -36,7 +36,7 @@ import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, Parquet
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -1954,10 +1954,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
            """.stripMargin)
 
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          val e = intercept[SparkException] {
+          val ex = intercept[SparkException] {
             sql(s"select a from $tableName where b > 0").collect()
           }
-          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getCause.isInstanceOf[SparkRuntimeException])
+          assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
         }
 
