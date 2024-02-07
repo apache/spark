@@ -197,7 +197,7 @@ class PandasMapOpsMixin:
             .. versionadded: 3.5.0
 
         profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
-            to be used for mapInPandas.
+            to be used for mapInArrow.
 
             .. versionadded: 4.0.0
 
