@@ -441,70 +441,39 @@ class MemoryProfiler2TestsMixin:
                 io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
-)
-def test_memory_profiler_group_apply_in_pandas(self):
-    # FlatMapGroupsInBatchExec
-    df = self.spark.createDataFrame(
-        [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
-
-    def normalize(pdf):
-        v = pdf.v
-        return pdf.assign(v=(v - v.mean()) / v.std())
-
-    with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
-        df.groupby("id").applyInPandas(normalize, schema="id long, v double").show()
-
-    self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
-
-    for id in self.profile_results:
-        with self.trap_stdout() as io:
-            self.spark.showMemoryProfiles(id)
-
-        self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-        self.assertRegex(
-            io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+    def test_memory_profiler_group_apply_in_pandas(self):
+        # FlatMapGroupsInBatchExec
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
         )
 
+        def normalize(pdf):
+            v = pdf.v
+            return pdf.assign(v=(v - v.mean()) / v.std())
 
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
-)
-def test_memory_profiler_cogroup_apply_in_pandas(self):
-    # FlatMapCoGroupsInBatchExec
-    import pandas as pd
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            df.groupby("id").applyInPandas(normalize, schema="id long, v double").show()
 
-    df1 = self.spark.createDataFrame(
-        [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
-        ("time", "id", "v1"),
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showMemoryProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
-    df2 = self.spark.createDataFrame([(20000101, 1, "x"), (20000101, 2, "y")], ("time", "id", "v2"))
-
-    def asof_join(left, right):
-        return pd.merge_asof(left, right, on="time", by="id")
-
-    with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
-        df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-            asof_join, schema="time int, id int, v1 double, v2 string"
-        ).show()
-
-    self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
-
-    for id in self.profile_results:
-        with self.trap_stdout() as io:
-            self.spark.showMemoryProfiles(id)
-
-        self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-        self.assertRegex(
-            io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-        )
-
-    def test_perf_profiler_cogroup_apply_in_pandas(self):
+    def test_memory_profiler_cogroup_apply_in_pandas(self):
         # FlatMapCoGroupsInBatchExec
         import pandas as pd
 
@@ -528,72 +497,103 @@ def test_memory_profiler_cogroup_apply_in_pandas(self):
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showPerfProfiles(id)
+                self.spark.showMemoryProfiles(id)
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
-                io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
+                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
-    )
-    def test_memory_profiler_group_apply_in_arrow(self):
-        # FlatMapGroupsInBatchExec
-        import pyarrow.compute as pc
+        def test_perf_profiler_cogroup_apply_in_pandas(self):
+            # FlatMapCoGroupsInBatchExec
+            import pandas as pd
 
-        df = self.spark.createDataFrame(
-            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+            df1 = self.spark.createDataFrame(
+                [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
+                ("time", "id", "v1"),
+            )
+            df2 = self.spark.createDataFrame(
+                [(20000101, 1, "x"), (20000101, 2, "y")], ("time", "id", "v2")
+            )
+
+            def asof_join(left, right):
+                return pd.merge_asof(left, right, on="time", by="id")
+
+            with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+                df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
+                    asof_join, schema="time int, id int, v1 double, v2 string"
+                ).show()
+
+            self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+            for id in self.profile_results:
+                with self.trap_stdout() as io:
+                    self.spark.showPerfProfiles(id)
+
+                self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+                self.assertRegex(
+                    io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
+                )
+
+        @unittest.skipIf(
+            not have_pandas or not have_pyarrow,
+            cast(str, pandas_requirement_message or pyarrow_requirement_message),
         )
+        def test_memory_profiler_group_apply_in_arrow(self):
+            # FlatMapGroupsInBatchExec
+            import pyarrow.compute as pc
 
-        def normalize(table):
-            v = table.column("v")
-            norm = pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1))
-            return table.set_column(1, "v", norm)
-
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
-            df.groupby("id").applyInArrow(normalize, schema="id long, v double").show()
-
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
-
-        for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+            df = self.spark.createDataFrame(
+                [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
             )
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
-    )
-    def test_memory_profiler_cogroup_apply_in_arrow(self):
-        import pyarrow as pa
+            def normalize(table):
+                v = table.column("v")
+                norm = pc.divide(pc.subtract(v, pc.mean(v)), pc.stddev(v, ddof=1))
+                return table.set_column(1, "v", norm)
 
-        df1 = self.spark.createDataFrame([(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)], ("id", "v1"))
-        df2 = self.spark.createDataFrame([(1, "x"), (2, "y")], ("id", "v2"))
+            with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+                df.groupby("id").applyInArrow(normalize, schema="id long, v double").show()
 
-        def summarize(l, r):
-            return pa.Table.from_pydict({"left": [l.num_rows], "right": [r.num_rows]})
+            self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
-            df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
-                summarize, schema="left long, right long"
-            ).show()
+            for id in self.profile_results:
+                with self.trap_stdout() as io:
+                    self.spark.showMemoryProfiles(id)
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+                self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+                self.assertRegex(
+                    io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+                )
 
-        for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+        @unittest.skipIf(
+            not have_pandas or not have_pyarrow,
+            cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        )
+        def test_memory_profiler_cogroup_apply_in_arrow(self):
+            import pyarrow as pa
 
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            df1 = self.spark.createDataFrame([(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)], ("id", "v1"))
+            df2 = self.spark.createDataFrame([(1, "x"), (2, "y")], ("id", "v2"))
+
+            def summarize(l, r):
+                return pa.Table.from_pydict({"left": [l.num_rows], "right": [r.num_rows]})
+
+            with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+                df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
+                    summarize, schema="left long, right long"
+                ).show()
+
+            self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+            for id in self.profile_results:
+                with self.trap_stdout() as io:
+                    self.spark.showMemoryProfiles(id)
+
+                self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+                self.assertRegex(
+                    io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+                )
 
 
 class MemoryProfiler2Tests(MemoryProfiler2TestsMixin, ReusedSQLTestCase):

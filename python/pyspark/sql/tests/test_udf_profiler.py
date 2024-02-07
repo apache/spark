@@ -422,19 +422,6 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-    @staticmethod
-    def apply_in_arrow_func(left, right):
-        import pyarrow as pa
-
-        left_ids = left.to_pydict()["id"]
-        right_ids = right.to_pydict()["id"]
-        result = {
-            "metric": ["min", "max", "len", "sum"],
-            "left": [min(left_ids), max(left_ids), len(left_ids), sum(left_ids)],
-            "right": [min(right_ids), max(right_ids), len(right_ids), sum(right_ids)],
-        }
-        return pa.Table.from_pydict(result)
-
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
