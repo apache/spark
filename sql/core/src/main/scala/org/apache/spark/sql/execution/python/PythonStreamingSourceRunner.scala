@@ -39,6 +39,13 @@ object PythonStreamingSourceRunner {
   val commitFuncId = 887
 }
 
+/**
+ * This class is a proxy to invoke methods in Python DataSourceStreamReader from JVM.
+ * A runner spawns a python worker process. In the main function, set up communication
+ * between JVM and python process through socket and create a DataSourceStreamReader instance.
+ * In an infinite loop, the python worker process poll information(function name and parameters)
+ * from the socket, invoke the corresponding method of StreamReader and send return value to JVM.
+ */
 class PythonStreamingSourceRunner(
     func: PythonFunction,
     outputSchema: StructType) extends Logging  {
@@ -114,6 +121,9 @@ class PythonStreamingSourceRunner(
     }
   }
 
+  /**
+   * Invokes latestOffset() function of the stream reader and receive the return value.
+   */
   def latestOffset(): String = {
     dataOut.writeInt(latestOffsetFuncId)
     dataOut.flush()
@@ -126,6 +136,9 @@ class PythonStreamingSourceRunner(
     PythonWorkerUtils.readUTF(len, dataIn)
   }
 
+  /**
+   * Invokes initialOffset() function of the stream reader and receive the return value.
+   */
   def initialOffset(): String = {
     dataOut.writeInt(initialOffsetFuncId)
     dataOut.flush()
@@ -138,6 +151,9 @@ class PythonStreamingSourceRunner(
     PythonWorkerUtils.readUTF(len, dataIn)
   }
 
+  /**
+   * Invokes partitions(start, end) function of the stream reader and receive the return value.
+   */
   def partitions(start: String, end: String): Array[Array[Byte]] = {
     dataOut.writeInt(partitionsFuncId)
     PythonWorkerUtils.writeUTF(start, dataOut)
@@ -158,6 +174,9 @@ class PythonStreamingSourceRunner(
     pickledPartitions.toArray
   }
 
+  /**
+   * Invokes commit(end) function of the stream reader and receive the return value.
+   */
   def commit(end: String): Unit = {
     dataOut.writeInt(commitFuncId)
     PythonWorkerUtils.writeUTF(end, dataOut)
@@ -170,9 +189,11 @@ class PythonStreamingSourceRunner(
     }
   }
 
+  /**
+   * Stop the python worker process and invoke stop() on stream reader.
+   */
   def stop(): Unit = {
     logInfo(s"Stopping streaming runner for module: $workerModule.")
-
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>

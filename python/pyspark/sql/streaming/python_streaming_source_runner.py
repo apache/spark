@@ -150,11 +150,11 @@ def main(infile: IO, outfile: IO) -> None:
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
                 message_parameters={"type": "reader", "error": str(e)},
             )
+        finally:
+            reader.stop()
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        reader.stop()
     send_accumulator_updates(outfile)
 
     # check end of stream
