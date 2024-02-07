@@ -163,8 +163,6 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
-    val broadcastedHadoopConf =
-      new SerializableConfiguration(session.sessionState.newHadoopConf())
     if (isStreaming) {
       child.execute().mapPartitionsWithStateStore[InternalRow](
         getStateInfo,
@@ -181,10 +179,11 @@ case class TransformWithStateExec(
     } else {
       // If the query is running in batch mode, we need to create a new StateStore and instantiate
       // a temp directory on the executors in mapPartitionsWithIndex.
+      val broadcastedHadoopConf =
+        new SerializableConfiguration(session.sessionState.newHadoopConf())
       child.execute().mapPartitionsWithIndex[InternalRow](
         (i, iter) => {
           val providerId = {
-            // lazy creation to initialize tempDirPath once
             val tempDirPath = Utils.createTempDir().getAbsolutePath
             new StateStoreProviderId(
               StateStoreId(tempDirPath, 0, i), getStateInfo.queryRunId)
