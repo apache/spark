@@ -53,7 +53,7 @@ class ValueStateImpl[S](
           StateEncoder.decodeAvroToValue[S](retRow, valEnc)
         case SerializationType.SPARK_SQL =>
           StateEncoder.decodeValSparkSQL[S](retRow, valEnc)
-        case _ =>
+        case SerializationType.JAVA =>
           StateEncoder.decodeValue[S](retRow)
       }
       Some(resState)
@@ -71,7 +71,7 @@ class ValueStateImpl[S](
           StateEncoder.decodeAvroToValue[S](retRow, valEnc)
         case SerializationType.SPARK_SQL =>
           StateEncoder.decodeValSparkSQL[S](retRow, valEnc)
-        case _ =>
+        case SerializationType.JAVA =>
           StateEncoder.decodeValue[S](retRow)
       }
       resState
@@ -91,7 +91,7 @@ class ValueStateImpl[S](
         StateEncoder.encodeValToAvro[S](newState, valEnc)
       case SerializationType.SPARK_SQL =>
         StateEncoder.encodeValSparkSQL[S](newState, valEnc)
-      case _ =>
+      case SerializationType.JAVA =>
         StateEncoder.encodeValue[S](newState)
     }
     store.put(StateEncoder.encodeGroupingKey(stateName, keyExprEnc), encodedVal, stateName)

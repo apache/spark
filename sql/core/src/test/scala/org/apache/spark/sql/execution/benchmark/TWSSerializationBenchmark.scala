@@ -22,15 +22,23 @@ import scala.util.Random
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.state.{Person, TestClass}
 import org.apache.spark.sql.streaming.{SerializationType, StateEncoder}
 
 object TWSSerializationDataType extends Enumeration {
   type TWSSerializationDataType = Value
-  val PRIMITVE, CASE_CLASS, POJO = Value
+  val PRIMITIVE, CASE_CLASS, POJO = Value
+}
+
+object TWSSerializationOpType extends Enumeration {
+  type TWSSerializationOpType = Value
+  val ENCODE, DECODE, ROUND_TRIP = Value
 }
 
 /**
- * Synthetic benchmark for State Store basic operations.
+ * Synthetic benchmark for TransformWithState Serialization methods
+ * on different data type - primitive, case class, POJO.
+ *
  * To run this benchmark:
  * {{{
  *   1. without sbt:
@@ -68,6 +76,46 @@ object TWSSerializationBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  // Construct Seq[obj, encodedObjToDecode], case class TestClass type
+  private def constructCaseClassRandomizedTestData(numRows: Int,
+      serializer: SerializationType.Value): Seq[(TestClass, UnsafeRow)] = {
+    (1 to numRows).map { idx =>
+      val valueStr = Random.alphanumeric.take(randomNumGenerator.nextInt(100)).mkString
+      val valueInt = randomNumGenerator.nextInt(100)
+      val newCaseClass = new TestClass(valueInt, valueStr)
+      val encodedVal = serializer match {
+        case SerializationType.AVRO =>
+          StateEncoder.encodeValToAvro[TestClass](newCaseClass, Encoders.product[TestClass])
+        case SerializationType.SPARK_SQL =>
+          StateEncoder.encodeValSparkSQL[TestClass](newCaseClass, Encoders.product[TestClass])
+        case _ =>
+          StateEncoder.encodeValue[TestClass](newCaseClass)
+      }
+
+      (newCaseClass, encodedVal)
+    }
+  }
+
+  // Construct Seq[obj, encodedObjToDecode], POJO type
+  private def constructPOJORandomizedTestData(numRows: Int,
+      serializer: SerializationType.Value): Seq[(Person, UnsafeRow)] = {
+    (1 to numRows).map { idx =>
+      val valueStr = Random.alphanumeric.take(randomNumGenerator.nextInt(100)).mkString
+      val valueInt = randomNumGenerator.nextInt(100)
+      val newCaseClass = new Person(valueStr, valueInt)
+      val encodedVal = serializer match {
+        case SerializationType.AVRO =>
+          StateEncoder.encodeValToAvro[Person](newCaseClass, Encoders.bean(classOf[Person]))
+        case SerializationType.SPARK_SQL =>
+          StateEncoder.encodeValSparkSQL[Person](newCaseClass, Encoders.bean(classOf[Person]))
+        case _ =>
+          StateEncoder.encodeValue[Person](newCaseClass)
+      }
+
+      (newCaseClass, encodedVal)
+    }
+  }
+
   private def registerBenchmark(
       benchmark: Benchmark,
       serializer: SerializationType.Value)(f: => Unit): Unit = {
@@ -79,10 +127,24 @@ object TWSSerializationBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def runBenchmarkWithDataType(
+      dataType: TWSSerializationDataType.Value,
+      benchmarkOp: String)
+    (f: (SerializationType.Value, Benchmark) => Unit): Unit = {
+    Seq(SerializationType.JAVA, SerializationType.SPARK_SQL, SerializationType.AVRO).foreach { se =>
+      if (!(se == SerializationType.JAVA && dataType == TWSSerializationDataType.POJO)) {
+        val benchmarkName = s"$benchmarkOp benchmark with numRows=$NUM_OF_ROWS and $dataType"
+        val benchmark = new Benchmark(benchmarkName, NUM_OF_ROWS, ITERATIONS, output = output)
+        f(se, benchmark)
+        benchmark.run()
+      }
+    }
+  }
+
   private def encodeValToRow[T](
-     serializer: SerializationType.Value,
-     rows: Seq[T],
-     valEnc: Encoder[T]): Unit = {
+      serializer: SerializationType.Value,
+      rows: Seq[T],
+      valEnc: Encoder[T]): Unit = {
     rows.foreach { row =>
       serializer match {
         case SerializationType.AVRO =>
@@ -96,9 +158,9 @@ object TWSSerializationBenchmark extends SqlBasedBenchmark {
   }
 
   private def decodeRowToVal[T](
-     serializer: SerializationType.Value,
-     rows: Seq[UnsafeRow],
-     valEnc: Encoder[T]): Unit = {
+      serializer: SerializationType.Value,
+      rows: Seq[UnsafeRow],
+      valEnc: Encoder[T]): Unit = {
     rows.foreach { row =>
       serializer match {
         case SerializationType.AVRO =>
@@ -112,9 +174,9 @@ object TWSSerializationBenchmark extends SqlBasedBenchmark {
   }
 
   private def serializeRoundTrip[T](
-     serializer: SerializationType.Value,
-     rows: Seq[T],
-     valEnc: Encoder[T]): Unit = {
+      serializer: SerializationType.Value,
+      rows: Seq[T],
+      valEnc: Encoder[T]): Unit = {
     rows.foreach { row =>
       val unsafeRow = serializer match {
         case SerializationType.AVRO =>
@@ -136,87 +198,90 @@ object TWSSerializationBenchmark extends SqlBasedBenchmark {
   }
 
   private def executeEncoding[T](
-     benchmark: Benchmark,
-     serializer: SerializationType.Value,
-     rows: Seq[T],
-     valEnc: Encoder[T]): Unit = {
+      benchmark: Benchmark,
+      serializer: SerializationType.Value,
+      rows: Seq[T],
+      valEnc: Encoder[T]): Unit = {
     registerBenchmark(benchmark, serializer) {
       encodeValToRow[T](serializer, rows, valEnc)
     }
   }
 
   private def executeDecoding[T](
-     benchmark: Benchmark,
-     serializer: SerializationType.Value,
-     rows: Seq[UnsafeRow],
-     valEnc: Encoder[T]): Unit = {
+      benchmark: Benchmark,
+      serializer: SerializationType.Value,
+      rows: Seq[UnsafeRow],
+      valEnc: Encoder[T]): Unit = {
     registerBenchmark(benchmark, serializer) {
       decodeRowToVal[T](serializer, rows, valEnc)
     }
   }
 
   private def executeRoundTrip[T](
-     benchmark: Benchmark,
-     serializer: SerializationType.Value,
-     rows: Seq[T],
-     valEnc: Encoder[T]): Unit = {
+      benchmark: Benchmark,
+      serializer: SerializationType.Value,
+      rows: Seq[T],
+      valEnc: Encoder[T]): Unit = {
     registerBenchmark(benchmark, serializer) {
       serializeRoundTrip[T](serializer, rows, valEnc)
     }
   }
 
-  private def runEncodeBenchmark(): Unit = {
-    val numRows = NUM_OF_ROWS
-
+  private def runBenchmarkWithOp(op: TWSSerializationOpType.Value): Unit = {
     // primitive type
-    Seq(SerializationType.JAVA, SerializationType.SPARK_SQL, SerializationType.AVRO).foreach { se =>
-      val testData = constructPrimitiveRandomizedTestData(numRows, se)
-      val valsToEncode = testData.map(_._1)
-
-      val benchmarkName = s"encode benchmark with numRows=$NUM_OF_ROWS and primitive type"
-      val benchmark = new Benchmark(benchmarkName, NUM_OF_ROWS, ITERATIONS, output = output)
-      executeEncoding[String](benchmark, se, valsToEncode, Encoders.STRING)
-
-      benchmark.run()
+    runBenchmarkWithDataType(TWSSerializationDataType.PRIMITIVE,
+      op.toString) { (serializer, benchmark) =>
+      val testData = constructPrimitiveRandomizedTestData(NUM_OF_ROWS, serializer)
+      op match {
+        case TWSSerializationOpType.ENCODE =>
+          executeEncoding[String](benchmark, serializer, testData.map(_._1), Encoders.STRING)
+        case TWSSerializationOpType.DECODE =>
+          executeDecoding[String](benchmark, serializer, testData.map(_._2), Encoders.STRING)
+        case TWSSerializationOpType.ROUND_TRIP =>
+          executeRoundTrip[String](benchmark, serializer, testData.map(_._1), Encoders.STRING)
+      }
     }
-  }
 
-  private def runDecodeBenchmark(): Unit = {
-    val numRows = NUM_OF_ROWS
-
-    // primitive type
-    Seq(SerializationType.JAVA, SerializationType.SPARK_SQL, SerializationType.AVRO).foreach { se =>
-      val testData = constructPrimitiveRandomizedTestData(numRows, se)
-      val valsToEncode = testData.map(_._2)
-
-      val benchmarkName = s"decode benchmark with numRows=$NUM_OF_ROWS and primitive type"
-      val benchmark = new Benchmark(benchmarkName, NUM_OF_ROWS, ITERATIONS, output = output)
-      executeDecoding[String](benchmark, se, valsToEncode, Encoders.STRING)
-
-      benchmark.run()
+    // case class
+    runBenchmarkWithDataType(TWSSerializationDataType.CASE_CLASS,
+      op.toString) { (serializer, benchmark) =>
+      val testData = constructCaseClassRandomizedTestData(NUM_OF_ROWS, serializer)
+      op match {
+        case TWSSerializationOpType.ENCODE =>
+          executeEncoding[TestClass](benchmark, serializer,
+            testData.map(_._1), Encoders.product[TestClass])
+        case TWSSerializationOpType.DECODE =>
+          executeDecoding[TestClass](benchmark, serializer,
+            testData.map(_._2), Encoders.product[TestClass])
+        case TWSSerializationOpType.ROUND_TRIP =>
+          executeRoundTrip[TestClass](benchmark, serializer,
+            testData.map(_._1), Encoders.product[TestClass])
+      }
     }
-  }
 
-  private def runRoundTripBenchmark(): Unit = {
-    val numRows = NUM_OF_ROWS
-
-    // primitive type
-    Seq(SerializationType.JAVA, SerializationType.SPARK_SQL, SerializationType.AVRO).foreach { se =>
-      val testData = constructPrimitiveRandomizedTestData(numRows, se)
-      val rowsToDecode = testData.map(_._1)
-
-      val benchmarkName = s"serializer round trip benchmark with " +
-        s"numRows=$NUM_OF_ROWS and primitive type"
-      val benchmark = new Benchmark(benchmarkName, NUM_OF_ROWS, ITERATIONS, output = output)
-      executeRoundTrip[String](benchmark, se, rowsToDecode, Encoders.STRING)
-
-      benchmark.run()
+    // POJO
+    runBenchmarkWithDataType(TWSSerializationDataType.POJO,
+      op.toString) { (serializer, benchmark) =>
+      val testData = constructPOJORandomizedTestData(NUM_OF_ROWS, serializer)
+      op match {
+        case TWSSerializationOpType.ENCODE =>
+          executeEncoding[Person](benchmark, serializer,
+            testData.map(_._1), Encoders.bean(classOf[Person]))
+        case TWSSerializationOpType.DECODE =>
+          executeDecoding[Person](benchmark, serializer,
+            testData.map(_._2), Encoders.bean(classOf[Person]))
+        case TWSSerializationOpType.ROUND_TRIP =>
+          executeRoundTrip[Person](benchmark, serializer,
+            testData.map(_._1), Encoders.bean(classOf[Person]))
+      }
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runEncodeBenchmark()
-    runDecodeBenchmark()
-    runRoundTripBenchmark()
+    Seq(TWSSerializationOpType.ENCODE, TWSSerializationOpType.DECODE,
+      TWSSerializationOpType.ROUND_TRIP).foreach { op =>
+      runBenchmarkWithOp(op)
+    }
   }
 }
+
