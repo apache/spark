@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String
   examples = """
     Examples:
       > SELECT 'Spark SQL' COLLATE 'UCS_BASIC_LCASE';
-       'Spark Sql'
+       Spark SQL
   """,
   since = "4.0.0",
   group = "string_funcs")
@@ -60,14 +60,15 @@ case class Collate(child: Expression, collationName: String)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
-       'UCS_BASIC'
+       UCS_BASIC
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class Collation(child: Expression) extends UnaryExpression with String2StringExpression {
+case class Collation(child: Expression) extends UnaryExpression {
   override def dataType: DataType = StringType
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
-  override def convert(v: UTF8String): UTF8String = {
+
+  override def eval(row: InternalRow): Any = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     UTF8String.fromString(CollationFactory.fetchCollation(collationId).collationName)
   }

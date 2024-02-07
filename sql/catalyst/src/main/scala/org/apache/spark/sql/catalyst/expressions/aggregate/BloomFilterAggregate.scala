@@ -156,7 +156,7 @@ case class BloomFilterAggregate(
     case IntegerType => IntUpdater
     case ShortType => ShortUpdater
     case ByteType => ByteUpdater
-    case StringType => BinaryUpdater
+    case _: StringType => BinaryUpdater
   }
 
   override def first: Expression = child
