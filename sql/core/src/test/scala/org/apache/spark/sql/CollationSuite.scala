@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -72,7 +71,7 @@ class CollationSuite extends QueryTest with SharedSparkSession {
       ("unicode", "aaa", "AAA", false),
       ("unicode_CI", "aaa", "aaa", true),
       ("unicode_CI", "aaa", "AAA", true),
-      ("unicode_CI", "aaa", "bbb", false),
+      ("unicode_CI", "aaa", "bbb", false)
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
@@ -94,12 +93,11 @@ class CollationSuite extends QueryTest with SharedSparkSession {
       ("unicode", "aaa", "BBB", true),
       ("unicode_CI", "aaa", "aaa", false),
       ("unicode_CI", "aaa", "AAA", false),
-      ("unicode_CI", "aaa", "bbb", true),
+      ("unicode_CI", "aaa", "bbb", true)
     ).foreach {
-      case (collationName, left, right, expected) =>
-        checkAnswer(
-          sql(s"select '$left' collate '$collationName' < '$right' collate '$collationName'"),
-          Row(expected))
+      case (collationName, left, right, expected) => checkAnswer(
+        sql(s"select '$left' collate '$collationName' < '$right' collate '$collationName'"),
+        Row(expected))
     }
   }
 }

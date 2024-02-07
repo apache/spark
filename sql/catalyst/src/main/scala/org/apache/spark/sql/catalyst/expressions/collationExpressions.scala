@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
@@ -30,7 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Only type metadata will be updated.
  */
 @ExpressionDescription(
-  usage = "expr _FUNC_ collationName) - ",
+  usage = "expr _FUNC_ collationName",
   examples = """
     Examples:
       > SELECT 'Spark SQL' COLLATE 'UCS_BASIC_LCASE');
@@ -38,23 +37,16 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class Collate(child: Expression, collationName: String) extends UnaryExpression {
+case class Collate(child: Expression, collationName: String)
+  extends UnaryExpression with ExpectsInputTypes {
   private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
-  override def foldable: Boolean = false
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override protected def withNewChildInternal(
     newChild: Expression): Expression = copy(newChild)
 
   override def eval(row: InternalRow): Any = child.eval(row)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    child.dataType match {
-        case _: StringType => TypeCheckResult.TypeCheckSuccess
-        case _ => TypeCheckResult.TypeCheckFailure(
-            s"input to function $prettyName should be string type, not ${child.dataType}")
-    }
-  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, (in) => in)
@@ -64,11 +56,11 @@ case class Collate(child: Expression, collationName: String) extends UnaryExpres
  * A function that returns the collation name of a given expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - ",
+  usage = "_FUNC_(expr)",
   examples = """
     Examples:
-      > SELECT _FUNC_(collate('Spark SQL', "UCS_BASIC_LCASE"));
-       'UCS_BASIC_LCASE'
+      > SELECT _FUNC_('Spark SQL');
+       'UCS_BASIC'
   """,
   since = "4.0.0",
   group = "string_funcs")
@@ -80,10 +72,9 @@ case class Collation(child: Expression) extends UnaryExpression with String2Stri
     UTF8String.fromString(CollationFactory.fetchCollation(collationId).collationName)
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    defineCodeGen(ctx, ev, _ => {
-      val collationId = child.dataType.asInstanceOf[StringType].collationId
-      val collationName = CollationFactory.fetchCollation(collationId).collationName
-      s"UTF8String.fromString(\"$collationName\")"
-    })
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val collationId = child.dataType.asInstanceOf[StringType].collationId
+    val collationName = CollationFactory.fetchCollation(collationId).collationName
+    defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString("$collationName")""")
+  }
 }
