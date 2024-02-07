@@ -183,7 +183,7 @@ class FileStreamSource(
       case files: ReadMaxFiles if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
-        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_FILES_RATIO) {
+        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_INPUT_RATIO) {
           // Discard unselected files if the number of files are smaller than threshold.
           // This is to avoid the case when the next batch would have too few files to read
           // whereas there're new files available.
@@ -201,7 +201,7 @@ class FileStreamSource(
         // we can cache and reuse remaining fetched list of files in further batches
         val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
           takeFilesUntilMax(newFiles, files.maxBytes())
-        if (rSize < (files.maxBytes() * DISCARD_UNSEEN_FILES_RATIO).toLong) {
+        if (rSize.toDouble < (files.maxBytes() * DISCARD_UNSEEN_INPUT_RATIO)) {
           // Discard unselected files if the total size of files is smaller than threshold.
           // This is to avoid the case when the next batch would have too small of a size of
           // files to read whereas there're new files available.
@@ -421,7 +421,7 @@ object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
-  val DISCARD_UNSEEN_FILES_RATIO = 0.2
+  val DISCARD_UNSEEN_INPUT_RATIO = 0.2
   val MAX_CACHED_UNSEEN_FILES = 10000
 
   case class FileEntry(
