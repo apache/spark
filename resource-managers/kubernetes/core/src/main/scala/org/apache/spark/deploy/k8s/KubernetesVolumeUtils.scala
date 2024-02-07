@@ -114,7 +114,7 @@ private[spark] object KubernetesVolumeUtils {
     size.foreach { v =>
       if (v.forall(_.isDigit) && parseLong(v) < 1024) {
         throw new IllegalArgumentException(
-          s"Volume size `${size.get}` is smaller than 1KiB. Missing units?")
+          s"Volume size `$v` is smaller than 1KiB. Missing units?")
       }
     }
   }
