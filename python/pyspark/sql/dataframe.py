@@ -1711,8 +1711,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1754,8 +1753,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
 
         Persists the data in the disk by specifying the storage level.
 
