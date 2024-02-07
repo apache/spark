@@ -39,6 +39,8 @@ object TWSSerializationOpType extends Enumeration {
  * Synthetic benchmark for TransformWithState Serialization methods
  * on different data type - primitive, case class, POJO.
  *
+ * Note that Java serialization cannot serialize POJO type.
+ *
  * To run this benchmark:
  * {{{
  *   1. without sbt:
@@ -51,7 +53,7 @@ object TWSSerializationOpType extends Enumeration {
  * }}}
  */
 object TWSSerializationBenchmark extends SqlBasedBenchmark {
-  private val NUM_OF_ROWS = 100
+  private val NUM_OF_ROWS = 10000
   private val ITERATIONS = 10
 
   // Use random with static seed to generate value sizes
