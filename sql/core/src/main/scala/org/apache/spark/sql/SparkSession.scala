@@ -1006,11 +1006,10 @@ object SparkSession extends Logging {
      * @since 3.4.0
      */
     def config(map: Map[String, Any]): Builder = {
-      map.foreach {
-        kv: (String, Any) => {
-          options.put(kv._1, kv._2.toString)
-        }
-      }
+      val kvs = map.map { kv: (String, Any) =>
+        (kv._1, kv._2.toString)
+      }.asJava
+      options.putAll(kvs)
       this
     }
 
@@ -1020,7 +1019,7 @@ object SparkSession extends Logging {
      *
      * @since 3.4.0
      */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+    def config(map: java.util.Map[String, Any]): Builder = {
       config(map.asScala.toMap)
     }
 
@@ -1030,7 +1029,8 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(conf: SparkConf): Builder = {
-      conf.getAll.foreach { case (k, v) => options.put(k, v) }
+      val map = conf.getAll.toMap
+      options.putAll(map.asJava)
       this
     }
 

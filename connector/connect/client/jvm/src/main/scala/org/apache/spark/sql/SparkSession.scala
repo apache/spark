@@ -930,11 +930,10 @@ object SparkSession extends Logging {
      * @since 3.5.0
      */
     def config(map: Map[String, Any]): Builder = {
-      map.foreach { kv: (String, Any) =>
-        {
-          options.put(kv._1, kv._2.toString)
-        }
-      }
+      val kvs = map.map { kv: (String, Any) =>
+        (kv._1, kv._2.toString)
+      }.asJava
+      options.putAll(kvs)
       this
     }
 
