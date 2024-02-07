@@ -20,7 +20,6 @@ from typing import Union, TYPE_CHECKING, Optional
 from py4j.java_gateway import JavaObject
 
 from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
-
 from pyspark.rdd import PythonEvalType
 from pyspark.resource import ResourceProfile
 from pyspark.sql.types import StructType
