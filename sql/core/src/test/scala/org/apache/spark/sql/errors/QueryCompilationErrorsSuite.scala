@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.IllegalFormatException
+
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
@@ -128,6 +130,11 @@ class QueryCompilationErrorsSuite
           "functionName" -> "`format_string`"),
         context = ExpectedContext(
           fragment = "format_string('%0$s', 'Hello')", start = 7, stop = 36))
+    }
+    withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "true") {
+      intercept[IllegalFormatException] {
+        sql("select format_string('%0$s', 'Hello')").collect()
+      }
     }
   }
 
