@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
   usage = "expr _FUNC_ collationName",
   examples = """
     Examples:
-      > SELECT 'Spark SQL' COLLATE 'UCS_BASIC_LCASE');
+      > SELECT 'Spark SQL' COLLATE 'UCS_BASIC_LCASE';
        'Spark Sql'
   """,
   since = "4.0.0",

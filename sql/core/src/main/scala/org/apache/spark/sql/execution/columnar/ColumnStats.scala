@@ -257,6 +257,7 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
 
 private[columnar] final class StringColumnStats(collationId: Int) extends ColumnStats {
   def this(dataType: StringType) = this(dataType.collationId)
+  def this() = this(StringType.DEFAULT_COLLATION_ID)
 
   protected var upper: UTF8String = null
   protected var lower: UTF8String = null
