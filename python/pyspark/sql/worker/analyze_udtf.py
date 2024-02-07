@@ -202,19 +202,16 @@ def main(infile: IO, outfile: IO) -> None:
                     set to empty, and then try the query again."""
                 )
             )
-        elif isinstance(result.partitionBy, (list, tuple)) and (
-            len(result.partitionBy) > 0
-            and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
+        elif not isinstance(result.partitionBy, (list, tuple)) or not all(
+            isinstance(val, PartitioningColumn) for val in result.partitionBy
         ):
             raise invalid_analyze_result_field("partitionBy", "PartitioningColumn")
-        elif isinstance(result.orderBy, (list, tuple)) and (
-            len(result.orderBy) > 0
-            and not all([isinstance(val, OrderingColumn) for val in result.orderBy])
+        elif not isinstance(result.orderBy, (list, tuple)) or not all(
+            isinstance(val, OrderingColumn) for val in result.orderBy
         ):
             raise invalid_analyze_result_field("orderBy", "OrderingColumn")
-        elif isinstance(result.select, (list, tuple)) and (
-            len(result.select) > 0
-            and not all([isinstance(val, SelectedColumn) for val in result.select])
+        elif not isinstance(result.select, (list, tuple)) or not all(
+            isinstance(val, SelectedColumn) for val in result.select
         ):
             raise invalid_analyze_result_field("select", "SelectedColumn")
 
