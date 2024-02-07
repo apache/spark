@@ -163,6 +163,18 @@ def main(infile: IO, outfile: IO) -> None:
                     but the 'schema' field had the wrong type: {type(result.schema)}"""
                 )
             )
+
+        def invalid_analyze_result_field(field_name: str, expected_field: str) -> PySparkValueError:
+            return PySparkValueError(
+                format_error(
+                    f"""
+                    {error_prefix} because the static 'analyze' method returned an
+                    'AnalyzeResult' object with the '{field_name}' field set to a value besides a
+                    list or tuple of '{expected_field}' objects. Please update the table function
+                    and then try the query again."""
+                )
+            )
+
         has_table_arg = any(arg.isTable for arg in args) or any(
             arg.isTable for arg in kwargs.values()
         )
@@ -190,19 +202,7 @@ def main(infile: IO, outfile: IO) -> None:
                     set to empty, and then try the query again."""
                 )
             )
-
-        def invalid_analyze_result_field(field_name: str, expected_field: str) -> PySparkValueError:
-            return PySparkValueError(
-                format_error(
-                    f"""
-                    {error_prefix} because the static 'analyze' method returned an
-                    'AnalyzeResult' object with the '{field_name}' field set to a value besides a
-                    list or tuple of '{expected_field}' objects. Please update the table function
-                    and then try the query again."""
-                )
-            )
-
-        if isinstance(result.partitionBy, (list, tuple)) and (
+        elif isinstance(result.partitionBy, (list, tuple)) and (
             len(result.partitionBy) > 0
             and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
         ):
