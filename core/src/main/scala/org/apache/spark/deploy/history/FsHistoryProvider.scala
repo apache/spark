@@ -381,7 +381,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       Map()
     }
-    Map("Event log directory" -> logDir) ++ safeMode
+    val driverLog = if (conf.contains(DRIVER_LOG_DFS_DIR)) {
+      Map("Driver log directory" -> conf.get(DRIVER_LOG_DFS_DIR).get)
+    } else {
+      Map()
+    }
+    Map("Event log directory" -> logDir) ++ safeMode ++ driverLog
   }
 
   override def start(): Unit = {

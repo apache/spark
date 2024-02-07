@@ -23,9 +23,10 @@ import org.apache.spark.annotation.Stable
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
  *
  * @since 1.3.0
+ * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private() extends AtomicType {
+class StringType private(val collationId: Int) extends AtomicType {
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
@@ -38,5 +39,7 @@ class StringType private() extends AtomicType {
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType
-
+case object StringType extends StringType(0) {
+  val DEFAULT_COLLATION_ID = 0
+  def apply(collationId: Int): StringType = new StringType(collationId)
+}
