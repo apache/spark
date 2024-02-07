@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
 import org.apache.spark.sql.types.StructType
@@ -30,18 +30,18 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
       |
       |class SimpleDataStreamReader(DataSourceStreamReader):
+      |    current = 0
       |    def initialOffset(self):
-      |        return {"0": "2"}
+      |        return {"offset": "0"}
       |    def latestOffset(self):
-      |        return {"0": "2"}
+      |        self.current += 2
+      |        return {"offset": str(self.current)}
       |    def partitions(self, start: dict, end: dict):
-      |        return [InputPartition(i) for i in range(int(start["0"]))]
+      |        return [InputPartition(i) for i in range(int(start["offset"]), int(end["offset"]))]
       |    def commit(self, end: dict):
       |        1 + 2
       |    def read(self, partition):
-      |        yield (0, partition.value)
-      |        yield (1, partition.value)
-      |        yield (2, partition.value)
+      |        yield (partition.value,)
       |""".stripMargin
 
   protected def errorDataStreamReaderScript: String =
@@ -73,6 +73,8 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |$simpleDataStreamReaderScript
          |
          |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
          |    def streamReader(self, schema):
          |        return SimpleDataStreamReader()
          |""".stripMargin
@@ -86,14 +88,43 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
 
     val initialOffset = stream.initialOffset()
-    assert(initialOffset.json == "{\"0\": \"2\"}")
-    for (_ <- 1 to 50) {
+    assert(initialOffset.json == s"""{"offset": "0"}""")
+    var prevOffset = initialOffset
+    for (i <- 1 to 50) {
       val offset = stream.latestOffset()
-      assert(offset.json == "{\"0\": \"2\"}")
-      assert(stream.planInputPartitions(offset, offset).size == 2)
+      assert(offset.json == s"""{"offset": "${2*i}"}""")
+      assert(stream.planInputPartitions(prevOffset, offset).size == 2)
       stream.commit(offset)
+      prevOffset = offset
     }
     stream.stop()
+  }
+
+  test("Read from simple data stream source") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val df = spark.readStream.format(dataSourceName).load()
+
+    val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+    }).start()
+    Thread.sleep(3000)
+    q.stop()
+    q.awaitTermination()
   }
 
   test("Error creating stream reader") {
