@@ -143,7 +143,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     } else {
       None
     }
-    val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, bmConf,
+    val blockManager = BlockManager(name, rpcEnv, master, serializerManager, bmConf,
       memManager, mapOutputTracker, shuffleManager, transfer, bmSecurityMgr, externalShuffleClient)
     memManager.setMemoryStore(blockManager.memoryStore)
     allStores += blockManager
@@ -1344,7 +1344,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val transfer = new NettyBlockTransferService(
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
-    val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+    val store = BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
     allStores += store
@@ -1393,7 +1393,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       val transfer = new NettyBlockTransferService(
         conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
       val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
-      val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+      val blockManager = BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
         serializerManager, conf, memoryManager, mapOutputTracker,
         shuffleManager, transfer, securityMgr, None)
       try {
@@ -2248,7 +2248,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val transfer = new NettyBlockTransferService(
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
-    val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+    val store = BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
     allStores += store
@@ -2272,7 +2272,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val transfer = new NettyBlockTransferService(
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
-    val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+    val store = BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
     allStores += store
