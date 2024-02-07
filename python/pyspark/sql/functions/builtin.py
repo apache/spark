@@ -1472,12 +1472,50 @@ def sum_distinct(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
-    >>> df.select(sum_distinct(col("numbers"))).show()
+    Example 1: Using sum_distinct function on a column with all distinct values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (3,), (4,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                   10|
+    +---------------------+
+
+    Example 2: Using sum_distinct function on a column with no distinct values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (1,), (1,), (1,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                    1|
+    +---------------------+
+
+    Example 3: Using sum_distinct function on a column with null and duplicate values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
     +---------------------+
     |sum(DISTINCT numbers)|
     +---------------------+
     |                    3|
+    +---------------------+
+
+    Example 4: Using sum_distinct function on a column with all None values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType
+    >>> schema = StructType([StructField("numbers", IntegerType(), True)])
+    >>> df = spark.createDataFrame([(None,), (None,), (None,), (None,)], schema=schema)
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                 NULL|
     +---------------------+
     """
     return _invoke_function_over_columns("sum_distinct", col)
@@ -4122,9 +4160,49 @@ def array_agg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Using array_agg function on an int column
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.agg(array_agg('c').alias('r')).collect()
-    [Row(r=[1, 1, 2])]
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                        [1, 1, 2]|
+    +---------------------------------+
+
+    Example 2: Using array_agg function on a string column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([["apple"],["apple"],["banana"]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show(truncate=False)
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |[apple, apple, banana]           |
+    +---------------------------------+
+
+    Example 3: Using array_agg function on a column with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                           [1, 2]|
+    +---------------------------------+
+
+    Example 4: Using array_agg function on a column with different data types
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],["apple"],[2]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                    [1, 2, apple]|
+    +---------------------------------+
     """
     return _invoke_function_over_columns("array_agg", col)
 
@@ -6809,7 +6887,8 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
 
 @_try_remote_functions
 def count_if(col: "ColumnOrName") -> Column:
-    """Returns the number of `TRUE` values for the `col`.
+    """
+    Aggregate function: Returns the number of `TRUE` values for the `col`.
 
     .. versionadded:: 3.5.0
 
@@ -6825,17 +6904,50 @@ def count_if(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.select(count_if(col('c2') % 2 == 0)).show()
+    Example 1: Counting the number of even numbers in a numeric column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
+    >>> df.select(sf.count_if(sf.col('c2') % 2 == 0)).show()
     +------------------------+
     |count_if(((c2 % 2) = 0))|
     +------------------------+
     |                       3|
     +------------------------+
+
+    Example 2: Counting the number of rows where a string column starts with a certain letter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("apple",), ("banana",), ("cherry",), ("apple",), ("banana",)], ["fruit"])
+    >>> df.select(sf.count_if(sf.col('fruit').startswith('a'))).show()
+    +------------------------------+
+    |count_if(startswith(fruit, a))|
+    +------------------------------+
+    |                             2|
+    +------------------------------+
+
+    Example 3: Counting the number of rows where a numeric column is greater than a certain value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (3,), (4,), (5,)], ["num"])
+    >>> df.select(sf.count_if(sf.col('num') > 3)).show()
+    +-------------------+
+    |count_if((num > 3))|
+    +-------------------+
+    |                  2|
+    +-------------------+
+
+    Example 4: Counting the number of rows where a boolean column is True
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(True,), (False,), (True,), (False,), (True,)], ["bool"])
+    >>> df.select(sf.count_if(sf.col('bool'))).show()
+    +--------------+
+    |count_if(bool)|
+    +--------------+
+    |             3|
+    +--------------+
     """
     return _invoke_function_over_columns("count_if", col)
 

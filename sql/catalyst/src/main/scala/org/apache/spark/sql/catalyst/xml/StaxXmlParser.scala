@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
+import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util.Locale
@@ -37,21 +37,7 @@ import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{
-  ArrayBasedMapData,
-  BadRecordException,
-  CaseInsensitiveMap,
-  DateFormatter,
-  DropMalformedMode,
-  FailureSafeParser,
-  GenericArrayData,
-  MapData,
-  ParseMode,
-  PartialResultArrayException,
-  PartialResultException,
-  PermissiveMode,
-  TimestampFormatter
-}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -101,11 +87,11 @@ class StaxXmlParser(
     }
   }
 
-  private def getFieldNameToIndex(schema: StructType): Map[String, Int] = {
+  private def getFieldIndex(schema: StructType, fieldName: String): Option[Int] = {
     if (caseSensitive) {
-      schema.map(_.name).zipWithIndex.toMap
+      schema.getFieldIndex(fieldName)
     } else {
-      CaseInsensitiveMap(schema.map(_.name).zipWithIndex.toMap)
+      schema.getFieldIndexCaseInsensitive(fieldName)
     }
   }
 
@@ -292,8 +278,8 @@ class StaxXmlParser(
     val convertedValuesMap = collection.mutable.Map.empty[String, Any]
     val valuesMap = StaxXmlParserUtils.convertAttributesToValuesMap(attributes, options)
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = getFieldNameToIndex(schema)
-      nameToIndex.get(f).foreach { i =>
+      val indexOpt = getFieldIndex(schema, f)
+      indexOpt.foreach { i =>
         convertedValuesMap(f) = convertTo(v, schema(i).dataType)
       }
     }
@@ -332,8 +318,8 @@ class StaxXmlParser(
     // Here we merge both to a row.
     val valuesMap = fieldsMap ++ attributesMap
     valuesMap.foreach { case (f, v) =>
-      val nameToIndex = getFieldNameToIndex(schema)
-      nameToIndex.get(f).foreach { row(_) = v }
+      val indexOpt = getFieldIndex(schema, f)
+      indexOpt.foreach { row(_) = v }
     }
 
     if (valuesMap.isEmpty) {
@@ -353,11 +339,10 @@ class StaxXmlParser(
       schema: StructType,
       rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
     val row = new Array[Any](schema.length)
-    val nameToIndex = getFieldNameToIndex(schema)
     // If there are attributes, then we process them first.
     convertAttributes(rootAttributes, schema).toSeq.foreach {
       case (f, v) =>
-        nameToIndex.get(f).foreach { row(_) = v }
+        getFieldIndex(schema, f).foreach { row(_) = v }
     }
 
     val wildcardColName = options.wildcardColName
@@ -372,7 +357,7 @@ class StaxXmlParser(
           val attributes = e.getAttributes.asScala.toArray
           val field = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
 
-          nameToIndex.get(field) match {
+          getFieldIndex(schema, field) match {
             case Some(index) => schema(index).dataType match {
               case st: StructType =>
                 row(index) = convertObjectWithAttributes(parser, st, field, attributes)
@@ -625,7 +610,8 @@ class StaxXmlParser(
 class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) extends Logging {
-  private var reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+  private var reader = new BufferedReader(
+    new InputStreamReader(inputStream, Charset.forName(options.charset)))
   private var currentStartTag: String = _
   private var buffer = new StringBuilder()
   private val startTag = s"<${options.rowTag}>"

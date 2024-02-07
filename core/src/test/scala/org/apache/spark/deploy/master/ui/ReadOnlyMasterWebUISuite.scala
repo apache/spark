@@ -24,13 +24,16 @@ import org.mockito.Mockito.{mock, when}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.master.ui.MasterWebUISuite._
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 class ReadOnlyMasterWebUISuite extends SparkFunSuite {
 
-  val conf = new SparkConf().set(UI_KILL_ENABLED, false)
+  val conf = new SparkConf()
+    .set(UI_KILL_ENABLED, false)
+    .set(DECOMMISSION_ENABLED, false)
   val securityMgr = new SecurityManager(conf)
   val rpcEnv = mock(classOf[RpcEnv])
   val master = mock(classOf[Master])
