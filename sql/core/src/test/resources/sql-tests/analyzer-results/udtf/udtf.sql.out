@@ -125,13 +125,41 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2))
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 51,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2))"
+  } ]
+}
 
 
 -- !query
 SELECT * FROM UDTFWithSinglePartition(1, TABLE(t2))
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 51,
+    "fragment" : "UDTFWithSinglePartition(1, TABLE(t2))"
+  } ]
+}
 
 
 -- !query
@@ -139,12 +167,10 @@ SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
-  "sqlState" : "22023",
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
   "messageParameters" : {
-    "functionName" : "UDTFWithSinglePartition",
-    "invalidFunctionCallProperty" : "specified the WITH SINGLE PARTITION or PARTITION BY clause; please remove these clauses and retry the query again.",
-    "requestedMetadata" : "specified its own required partitioning of the input table"
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -161,12 +187,10 @@ SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
-  "sqlState" : "22023",
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
   "messageParameters" : {
-    "functionName" : "UDTFWithSinglePartition",
-    "invalidFunctionCallProperty" : "specified the WITH SINGLE PARTITION or PARTITION BY clause; please remove these clauses and retry the query again.",
-    "requestedMetadata" : "specified its own required partitioning of the input table"
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -186,12 +210,10 @@ SELECT * FROM
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
-  "sqlState" : "22023",
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
   "messageParameters" : {
-    "functionName" : "UDTFWithSinglePartition",
-    "invalidFunctionCallProperty" : "specified the WITH SINGLE PARTITION or PARTITION BY clause; please remove these clauses and retry the query again.",
-    "requestedMetadata" : "specified its own required partitioning of the input table"
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -302,6 +324,13 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "UDTFInvalidOrderByAscKeyword(TABLE(t2))"
   } ]
 }
+
+
+-- !query
+SELECT * FROM UDTFInvalidOrderByStringList(TABLE(t2))
+-- !query analysis
+java.lang.NegativeArraySizeException
+-2
 
 
 -- !query
@@ -541,7 +570,21 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2))
 -- !query
 SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs()
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 53,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs()"
+  } ]
+}
 
 
 -- !query
@@ -567,7 +610,21 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2)
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 65,
+    "fragment" : "UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2)"
+  } ]
+}
 
 
 -- !query
@@ -674,7 +731,21 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT * FROM InvalidForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2))
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "sqlState" : "38000",
+  "messageParameters" : {
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 206, in main\n    elif isinstance(result.select, (list, tuple)) and (\nAttributeError: 'AnalyzeResultWithBuffer' object has no attribute 'select'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 70,
+    "fragment" : "InvalidForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2))"
+  } ]
+}
 
 
 -- !query

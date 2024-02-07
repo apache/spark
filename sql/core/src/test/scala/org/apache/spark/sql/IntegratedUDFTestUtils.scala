@@ -607,10 +607,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
         |            partitionBy=[
-        |                PartitioningColumn("$partitionBy")
+        |                $partitionBy
         |            ],
         |            orderBy=[
-        |                OrderingColumn("$orderBy")
+        |                $orderBy
         |            ])
         |
         |    def eval(self, row: Row):
@@ -626,23 +626,28 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   object UDTFPartitionByOrderBy
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "partition_col",
-      orderBy = "input")
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"input\")")
 
   object UDTFPartitionByOrderByComplexExpr
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "partition_col + 1",
-      orderBy = "RANDOM(42)")
+      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
+      orderBy = "OrderingColumn(\"RANDOM(42)\")")
 
   object UDTFInvalidPartitionByOrderByParseError
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "unparsable",
-      orderBy = "input")
+      partitionBy = "PartitioningColumn(\"unparsable\")",
+      orderBy = "OrderingColumn(\"input\")")
 
   object UDTFInvalidOrderByAscKeyword
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "partition_col",
-      orderBy = "partition_col ASC")
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"partition_col ASC\")")
+
+  object UDTFInvalidOrderByStringList
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "\"partition_col\"")
 
   object UDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val pythonScript: String =
@@ -1151,6 +1156,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFWithSinglePartition,
     UDTFPartitionByOrderBy,
     UDTFInvalidOrderByAscKeyword,
+    UDTFInvalidOrderByStringList,
     UDTFInvalidPartitionByAndWithSinglePartition,
     UDTFInvalidPartitionByOrderByParseError,
     UDTFInvalidOrderByWithoutPartitionBy,

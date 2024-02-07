@@ -77,6 +77,7 @@ SELECT * FROM
     UDTFPartitionByOrderBy(TABLE(t2) PARTITION BY partition_col);
 SELECT * FROM UDTFPartitionByOrderByComplexExpr(TABLE(t2));
 SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2));
+SELECT * FROM UDTFInvalidOrderByStringList(TABLE(t2));
 -- As a reminder, UDTFInvalidPartitionByAndWithSinglePartition returns this analyze result:
 --     AnalyzeResult(
 --         schema=StructType()

@@ -31,7 +31,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.functions import PartitioningColumn
+from pyspark.sql.functions import OrderingColumn, PartitioningColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import handle_worker_exception
@@ -190,19 +190,28 @@ def main(infile: IO, outfile: IO) -> None:
                     set to empty, and then try the query again."""
                 )
             )
-        elif isinstance(result.partitionBy, (list, tuple)) and (
-            len(result.partitionBy) > 0
-            and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
-        ):
-            raise PySparkValueError(
+
+        def invalid_analyze_result_field(field_name: str, expected_field: str) -> PySparkValueError:
+            return PySparkValueError(
                 format_error(
                     f"""
                     {error_prefix} because the static 'analyze' method returned an
-                    'AnalyzeResult' object with the 'partitionBy' field set to a value besides a
-                    list or tuple of 'PartitioningColumn' objects. Please update the table function
+                    'AnalyzeResult' object with the '{field_name}' field set to a value besides a
+                    list or tuple of '{expected_field}' objects. Please update the table function
                     and then try the query again."""
                 )
             )
+
+        if isinstance(result.partitionBy, (list, tuple)) and (
+            len(result.partitionBy) > 0
+            and not all([isinstance(val, PartitioningColumn) for val in result.partitionBy])
+        ):
+            raise invalid_analyze_result_field("partitionBy", "PartitioningColumn")
+        elif isinstance(result.orderBy, (list, tuple)) and (
+            len(result.orderBy) > 0
+            and not all([isinstance(val, OrderingColumn) for val in result.orderBy])
+        ):
+            raise invalid_analyze_result_field("orderBy", "OrderingColumn")
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
