@@ -47,7 +47,7 @@ public class UTF8StringSuite {
 
     assertEquals(s1.hashCode(), s2.hashCode());
 
-    assertEquals(0, s1.compareTo(s2));
+    assertEquals(0, s1.binaryCompare(s2));
 
     assertTrue(s1.contains(s2));
     assertTrue(s2.contains(s1));
@@ -93,18 +93,18 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void compareTo() {
-    assertTrue(fromString("").compareTo(fromString("a")) < 0);
-    assertTrue(fromString("abc").compareTo(fromString("ABC")) > 0);
-    assertTrue(fromString("abc0").compareTo(fromString("abc")) > 0);
-    assertTrue(fromString("abcabcabc").compareTo(fromString("abcabcabc")) == 0);
-    assertTrue(fromString("aBcabcabc").compareTo(fromString("Abcabcabc")) > 0);
-    assertTrue(fromString("Abcabcabc").compareTo(fromString("abcabcabC")) < 0);
-    assertTrue(fromString("abcabcabc").compareTo(fromString("abcabcabC")) > 0);
+  public void binaryCompareTo() {
+    assertTrue(fromString("").binaryCompare(fromString("a")) < 0);
+    assertTrue(fromString("abc").binaryCompare(fromString("ABC")) > 0);
+    assertTrue(fromString("abc0").binaryCompare(fromString("abc")) > 0);
+    assertTrue(fromString("abcabcabc").binaryCompare(fromString("abcabcabc")) == 0);
+    assertTrue(fromString("aBcabcabc").binaryCompare(fromString("Abcabcabc")) > 0);
+    assertTrue(fromString("Abcabcabc").binaryCompare(fromString("abcabcabC")) < 0);
+    assertTrue(fromString("abcabcabc").binaryCompare(fromString("abcabcabC")) > 0);
 
-    assertTrue(fromString("abc").compareTo(fromString("世界")) < 0);
-    assertTrue(fromString("你好").compareTo(fromString("世界")) > 0);
-    assertTrue(fromString("你好123").compareTo(fromString("你好122")) > 0);
+    assertTrue(fromString("abc").binaryCompare(fromString("世界")) < 0);
+    assertTrue(fromString("你好").binaryCompare(fromString("世界")) > 0);
+    assertTrue(fromString("你好123").binaryCompare(fromString("你好122")) > 0);
   }
 
   protected static void testUpperandLower(String upper, String lower) {

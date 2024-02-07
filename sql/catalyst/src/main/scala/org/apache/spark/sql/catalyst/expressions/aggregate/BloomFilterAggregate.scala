@@ -78,7 +78,7 @@ case class BloomFilterAggregate(
             "exprName" -> "estimatedNumItems or numBits"
           )
         )
-      case (LongType | IntegerType | ShortType | ByteType | StringType, LongType, LongType) =>
+      case (LongType | IntegerType | ShortType | ByteType | _: StringType, LongType, LongType) =>
         if (!estimatedNumItemsExpression.foldable) {
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",

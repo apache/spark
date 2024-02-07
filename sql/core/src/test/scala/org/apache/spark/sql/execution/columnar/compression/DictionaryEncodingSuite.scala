@@ -20,17 +20,19 @@ package org.apache.spark.sql.execution.columnar.compression
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.types.StringType
 
 class DictionaryEncodingSuite extends SparkFunSuite {
   val nullValue = -1
   testDictionaryEncoding(new IntColumnStats, INT)
   testDictionaryEncoding(new LongColumnStats, LONG)
-  testDictionaryEncoding(new StringColumnStats, STRING, false)
+  testDictionaryEncoding(new StringColumnStats(StringType.DEFAULT_COLLATION_ID), STRING, false)
 
   def testDictionaryEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,

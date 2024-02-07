@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import scala.math.Ordering
-
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkFunSuite
@@ -31,7 +29,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -558,7 +556,9 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-32624: CodegenContext.addReferenceObj should work for nested Scala class") {
     // emulate TypeUtils.getInterpretedOrdering(StringType)
     val ctx = new CodegenContext
-    val comparator = implicitly[Ordering[UTF8String]]
+    val comparator = CollationFactory.fetchCollation(
+      StringType.DEFAULT_COLLATION_ID).comparator.compare(_, _)
+
     val refTerm = ctx.addReferenceObj("comparator", comparator)
 
     // Expecting result:
