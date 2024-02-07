@@ -393,10 +393,11 @@ class UDFProfiler2TestsMixin:
             self.assertRegex(
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
-        )
+    )
     def test_perf_profiler_group_apply_in_pandas(self):
         # FlatMapGroupsInBatchExec
         df = self.spark.createDataFrame(
@@ -437,7 +438,7 @@ class UDFProfiler2TestsMixin:
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
-        )
+    )
     def test_perf_profiler_cogroup_apply_in_pandas(self):
         # FlatMapCoGroupsInBatchExec
         import pandas as pd

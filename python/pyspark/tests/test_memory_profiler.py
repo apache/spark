@@ -440,10 +440,12 @@ class MemoryProfiler2TestsMixin:
             self.assertRegex(
                 io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
+
+
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
-    )
+)
 def test_memory_profiler_group_apply_in_pandas(self):
     # FlatMapGroupsInBatchExec
     df = self.spark.createDataFrame(
@@ -468,10 +470,11 @@ def test_memory_profiler_group_apply_in_pandas(self):
             io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
         )
 
+
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
-    )
+)
 def test_memory_profiler_cogroup_apply_in_pandas(self):
     # FlatMapCoGroupsInBatchExec
     import pandas as pd
@@ -480,9 +483,7 @@ def test_memory_profiler_cogroup_apply_in_pandas(self):
         [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
         ("time", "id", "v1"),
     )
-    df2 = self.spark.createDataFrame(
-        [(20000101, 1, "x"), (20000101, 2, "y")], ("time", "id", "v2")
-    )
+    df2 = self.spark.createDataFrame([(20000101, 1, "x"), (20000101, 2, "y")], ("time", "id", "v2"))
 
     def asof_join(left, right):
         return pd.merge_asof(left, right, on="time", by="id")
