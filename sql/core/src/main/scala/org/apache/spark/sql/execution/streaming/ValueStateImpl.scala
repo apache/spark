@@ -21,7 +21,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.ValueState
+import org.apache.spark.sql.streaming.{SerializationType, StateEncoder, ValueState}
 
 /**
  * Class that provides a concrete implementation for a single value state associated with state
@@ -36,7 +36,9 @@ class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEnc: Encoder[S]) extends ValueState[S] with Logging {
+    valEnc: Encoder[S],
+    serializer: SerializationType.Value) extends ValueState[S] with Logging {
+
   /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
     getImpl() != null
@@ -46,7 +48,14 @@ class ValueStateImpl[S](
   override def getOption(): Option[S] = {
     val retRow = getImpl()
     if (retRow != null) {
-      val resState = StateEncoder.decodeAvroToValue[S](retRow, valEnc)
+      val resState = serializer match {
+        case SerializationType.AVRO =>
+          StateEncoder.decodeAvroToValue[S](retRow, valEnc)
+        case SerializationType.SPARK_SQL =>
+          StateEncoder.decodeValSparkSQL[S](retRow, valEnc)
+        case _ =>
+          StateEncoder.decodeValue[S](retRow)
+      }
       Some(resState)
     } else {
       None
@@ -57,7 +66,15 @@ class ValueStateImpl[S](
   override def get(): S = {
     val retRow = getImpl()
     if (retRow != null) {
-      StateEncoder.decodeAvroToValue[S](retRow, valEnc)
+      val resState = serializer match {
+        case SerializationType.AVRO =>
+          StateEncoder.decodeAvroToValue[S](retRow, valEnc)
+        case SerializationType.SPARK_SQL =>
+          StateEncoder.decodeValSparkSQL[S](retRow, valEnc)
+        case _ =>
+          StateEncoder.decodeValue[S](retRow)
+      }
+      resState
     } else {
       null.asInstanceOf[S]
     }
@@ -69,8 +86,15 @@ class ValueStateImpl[S](
 
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
-    store.put(StateEncoder.encodeGroupingKey(stateName, keyExprEnc),
-      StateEncoder.encodeValToAvro(newState, valEnc), stateName)
+    val encodedVal = serializer match {
+      case SerializationType.AVRO =>
+        StateEncoder.encodeValToAvro[S](newState, valEnc)
+      case SerializationType.SPARK_SQL =>
+        StateEncoder.encodeValSparkSQL[S](newState, valEnc)
+      case _ =>
+        StateEncoder.encodeValue[S](newState)
+    }
+    store.put(StateEncoder.encodeGroupingKey(stateName, keyExprEnc), encodedVal, stateName)
   }
 
   /** Function to remove state for given key */
