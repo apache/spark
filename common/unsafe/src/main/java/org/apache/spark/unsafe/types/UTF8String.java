@@ -1394,7 +1394,7 @@ public final class UTF8String implements Externalizable, KryoSerializable,
    */
   public int binaryCompare(final UTF8String other) {
     return ByteArray.compareBinary(
-            base, offset, numBytes, other.base, other.offset, other.numBytes);
+      base, offset, numBytes, other.base, other.offset, other.numBytes);
   }
 
   /**
