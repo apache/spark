@@ -112,8 +112,8 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 
   /**
    * Check if a key exists at the provided position using object equality rather than
-   * cooperative equality. Otherwise, hash sets that include both 0.0 and -0.0 may drop
-   * one of those entries.
+   * cooperative equality. Otherwise, hash sets will mishandle values for which `==`
+   * and `equals` return different results, like 0.0/-0.0 and NaN/NaN.
    *
    * See: https://issues.apache.org/jira/browse/SPARK-45599
    */
