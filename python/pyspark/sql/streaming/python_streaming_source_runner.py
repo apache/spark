@@ -51,9 +51,14 @@ from pyspark.worker_util import (
     utf8_deserializer,
 )
 
-# Get the partitions if any.
+initial_offset_func_id = 884
+latest_offset_func_id = 885
 partitions_func_id = 886
-latest_offsets_func_id = 887
+commit_func_id = 887
+
+def initial_offset_func(reader, outfile):
+    offset = reader.initialOffset()
+    write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 def latest_offset_func(reader, outfile):
     offset = reader.latestOffset()
@@ -67,6 +72,11 @@ def partitions_func(reader, infile, outfile):
     write_int(len(partitions), outfile)
     for partition in partitions:
         pickleSer._write_with_length(partition, outfile)
+
+def commit_func(reader, infile, outfile):
+    end_offset = json.loads(utf8_deserializer.loads(infile))
+    reader.commit(end_offset)
+    write_int(0, outfile)
 
 def main(infile: IO, outfile: IO) -> None:
     try:
@@ -113,6 +123,23 @@ def main(infile: IO, outfile: IO) -> None:
         # Instantiate data source reader.
         try:
             reader = data_source.streamReader(schema=schema)
+            # Initialization succeed.
+            write_int(0, outfile)
+            outfile.flush()
+
+            # handle method call from socket
+            while True:
+                func_id = read_int(infile)
+                if func_id == initial_offset_func_id:
+                    initial_offset_func(reader, outfile)
+                elif func_id == latest_offset_func_id:
+                    latest_offset_func(reader, outfile)
+                elif func_id == partitions_func_id:
+                    partitions_func(reader, infile, outfile)
+                elif func_id == commit_func_id:
+                    commit_func(reader, infile, outfile)
+                outfile.flush()
+
         except NotImplementedError:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",
@@ -123,24 +150,11 @@ def main(infile: IO, outfile: IO) -> None:
                 error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
                 message_parameters={"type": "reader", "error": str(e)},
             )
-
-        # Initialization succeed.
-        write_int(0, outfile)
-        outfile.flush()
-
-        # handle method call from socket
-        while True:
-            func_id = read_int(infile)
-            if func_id == latest_offsets_func_id:
-                latest_offset_func(reader, outfile)
-            elif func_id == partitions_func_id:
-                partitions_func(reader, infile, outfile)
-            outfile.flush()
-
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-
+    finally:
+        reader.stop()
     send_accumulator_updates(outfile)
 
     # check end of stream

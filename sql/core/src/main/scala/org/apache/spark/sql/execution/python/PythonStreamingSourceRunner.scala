@@ -28,13 +28,15 @@ import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFa
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 object PythonStreamingSourceRunner {
+  val initialOffsetFuncId = 884
+  val latestOffsetFuncId = 885
   val partitionsFuncId = 886
-  val latestOffsetsFuncId = 887
+  val commitFuncId = 887
 }
 
 class PythonStreamingSourceRunner(
@@ -58,8 +60,7 @@ class PythonStreamingSourceRunner(
   import PythonStreamingSourceRunner._
 
   /**
-   * Initializes the Python worker for streaming functions. Sets up Spark Connect session
-   * to be used with the functions.
+   * Initializes the Python worker for running the streaming source.
    */
   def init(): Unit = {
     logInfo(s"Initializing Python runner pythonExec: $pythonExec")
@@ -114,13 +115,25 @@ class PythonStreamingSourceRunner(
   }
 
   def latestOffset(): String = {
-    dataOut.writeInt(latestOffsetsFuncId)
+    dataOut.writeInt(latestOffsetFuncId)
     dataOut.flush()
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "latest offset", msg = msg)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "latestOffset", msg)
+    }
+    PythonWorkerUtils.readUTF(len, dataIn)
+  }
+
+  def initialOffset(): String = {
+    dataOut.writeInt(initialOffsetFuncId)
+    dataOut.flush()
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "initialOffset", msg)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -135,14 +148,26 @@ class PythonStreamingSourceRunner(
     val numPartitions = dataIn.readInt()
     if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "plan partitions", msg = msg)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "planPartitions", msg)
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
       pickledPartitions.append(pickledPartition)
     }
     pickledPartitions.toArray
+  }
+
+  def commit(end: String): Unit = {
+    dataOut.writeInt(commitFuncId)
+    PythonWorkerUtils.writeUTF(end, dataOut)
+    dataOut.flush()
+    val status = dataIn.readInt()
+    if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "commitSource", msg)
+    }
   }
 
   def stop(): Unit = {

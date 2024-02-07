@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
@@ -29,10 +30,14 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
       |
       |class SimpleDataStreamReader(DataSourceStreamReader):
+      |    def initialOffset(self):
+      |        return {"0": "2"}
       |    def latestOffset(self):
       |        return {"0": "2"}
       |    def partitions(self, start: dict, end: dict):
       |        return [InputPartition(i) for i in range(int(start["0"]))]
+      |    def commit(self, end: dict):
+      |        1 + 2
       |    def read(self, partition):
       |        yield (0, partition.value)
       |        yield (1, partition.value)
@@ -44,10 +49,14 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
       |
       |class ErrorDataStreamReader(DataSourceStreamReader):
+      |    def initialOffset(self):
+      |        raise Exception("error reading initial offset")
       |    def latestOffset(self):
       |        raise Exception("error reading latest offset")
       |    def partitions(self, start: dict, end: dict):
       |        raise Exception("error planning partitions")
+      |    def commit(self, end: dict):
+      |        raise Exception("error committing offset")
       |    def read(self, partition):
       |        yield (0, partition.value)
       |        yield (1, partition.value)
@@ -76,10 +85,13 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val stream = new PythonMicroBatchStream(
       pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
 
+    val initialOffset = stream.initialOffset()
+    assert(initialOffset.json == "{\"0\": \"2\"}")
     for (_ <- 1 to 50) {
       val offset = stream.latestOffset()
       assert(offset.json == "{\"0\": \"2\"}")
       assert(stream.planInputPartitions(offset, offset).size == 2)
+      stream.commit(offset)
     }
     stream.stop()
   }
@@ -124,23 +136,33 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     spark.dataSource.registerPython(errorDataSourceName, dataSource)
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName("ErrorDataSource")
-    val stream1 = new PythonMicroBatchStream(
-      pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
-    val latestOffsetErr = intercept[AnalysisException] {
-      stream1.latestOffset()
-    }
-    assert(latestOffsetErr.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
-    assert(latestOffsetErr.getMessage.contains("error reading latest offset"))
-    stream1.stop()
-
-    val stream2 = new PythonMicroBatchStream(
-      pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
     val offset = PythonStreamingSourceOffset("{\"0\": \"2\"}")
-    val planInputPartitionErr = intercept[AnalysisException] {
-      stream2.planInputPartitions(offset, offset)
+
+    def testMicroBatchStreamError(msg: String)
+                                 (func: PythonMicroBatchStream => Unit): Unit = {
+      val stream = new PythonMicroBatchStream(
+        pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
+      val err = intercept[SparkException] {
+        func(stream)
+      }
+      assert(err.getMessage.contains(msg))
+      stream.stop()
     }
-    assert(planInputPartitionErr.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
-    assert(planInputPartitionErr.getMessage.contains("error planning partitions"))
-    stream2.stop()
+
+    testMicroBatchStreamError("error reading initial offset") {
+      stream => stream.initialOffset()
+    }
+
+    testMicroBatchStreamError("error reading latest offset") {
+      stream => stream.latestOffset()
+    }
+
+    testMicroBatchStreamError("error planning partitions") {
+      stream => stream.planInputPartitions(offset, offset)
+    }
+
+    testMicroBatchStreamError("error committing offset") {
+      stream => stream.commit(offset)
+    }
   }
 }
