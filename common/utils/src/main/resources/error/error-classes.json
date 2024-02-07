@@ -7565,6 +7565,31 @@
       "Illegal input for day of week: <string>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3210" : {
+    "message" : [
+      "Interval string does not match second-nano format of ss.nnnnnnnnn"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3211" : {
+    "message" : [
+      "Error parsing interval day-time string: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3212" : {
+    "message" : [
+      "Cannot support (interval '<input>' <from> to <to>) expression"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3213" : {
+    "message" : [
+      "Error parsing interval <interval> string: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3214" : {
+    "message" : [
+      "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
