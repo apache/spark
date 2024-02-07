@@ -1,0 +1,144 @@
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+serializerType: JAVA                                         8             11           2          0.0       83356.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                                   21             27           2          0.0      214375.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                        28             52          18          0.0      276410.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+serializerType: JAVA                                          5              5           1          0.0       46791.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                                    63            143          92          0.0      632173.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                         67             97          18          0.0      665578.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and POJO:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                              45             58          12          0.0      453256.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ENCODE benchmark with numRows=100 and POJO:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                   57             84          18          0.0      571663.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+serializerType: JAVA                                         0              0           1          2.1         478.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                                  137            239          78          0.0     1372960.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                        86            122          23          0.0      862230.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+serializerType: JAVA                                          0              1           1          0.2        4324.6       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                                    66             87          13          0.0      657134.2       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                         81            126          29          0.0      812973.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and POJO:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                              48             75          14          0.0      478530.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+DECODE benchmark with numRows=100 and POJO:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                   65             73           7          0.0      645323.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+serializerType: JAVA                                             6              8           3          0.0       57934.2       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                                       43             58          11          0.0      426546.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and PRIMITIVE:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                            55             68           6          0.0      549944.6       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+serializerType: JAVA                                              3              4           0          0.0       34554.2       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                                        71             91           8          0.0      707661.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and CASE_CLASS:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                            168            228          39          0.0     1677275.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and POJO:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+serializerType: SPARK_SQL                                 133            207          52          0.0     1328131.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.9+0 on Mac OS X 14.2.1
+Apple M2 Max
+ROUND_TRIP benchmark with numRows=100 and POJO:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+serializerType: AVRO                                       52             64          11          0.0      518545.4       1.0X
+
