@@ -40,7 +40,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.util import rddToFileName, TransformFunction
-from pyspark.rdd import portable_hash, RDD
+from pyspark.core.rdd import portable_hash, RDD
 from pyspark.resultiterable import ResultIterable
 
 if TYPE_CHECKING:

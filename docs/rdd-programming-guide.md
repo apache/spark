@@ -1321,7 +1321,7 @@ method. The code below shows this:
 
 {% highlight python %}
 >>> broadcastVar = sc.broadcast([1, 2, 3])
-<pyspark.broadcast.Broadcast object at 0x102789f10>
+<pyspark.core.broadcast.Broadcast object at 0x102789f10>
 
 >>> broadcastVar.value
 [1, 2, 3]

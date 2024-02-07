@@ -29,7 +29,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
     ReusedSQLTestCase,
 )
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 
 
 @unittest.skipIf(

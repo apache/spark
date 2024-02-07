@@ -51,7 +51,7 @@ class SCCallSiteSync:
     Helper for setting the spark context call site.
 
     Example usage:
-    from pyspark.context import SCCallSiteSync
+    from pyspark.core.context import SCCallSiteSync
     with SCCallSiteSync(<relevant SparkContext>) as css:
         <a Spark call>
     """

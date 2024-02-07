@@ -23,7 +23,6 @@ from typing import IO, List, Iterator, Iterable
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -38,7 +37,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,

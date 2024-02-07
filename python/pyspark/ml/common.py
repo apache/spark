@@ -22,7 +22,7 @@ from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
 from py4j.java_collections import JavaArray, JavaList
 
-import pyspark.context
+import pyspark.core.context
 from pyspark import RDD, SparkContext
 from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 from pyspark.sql import DataFrame, SparkSession
@@ -122,7 +122,7 @@ def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "byt
 
 
 def callJavaFunc(
-    sc: pyspark.context.SparkContext, func: Callable[..., "JavaObjectOrPickleDump"], *args: Any
+    sc: pyspark.core.context.SparkContext, func: Callable[..., "JavaObjectOrPickleDump"], *args: Any
 ) -> "JavaObjectOrPickleDump":
     """Call Java Function"""
     java_args = [_py2java(sc, a) for a in args]

@@ -32,7 +32,7 @@ def infer_eval_type(
     sig: Signature, type_hints: Dict[str, Any]
 ) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
     """
-    Infers the evaluation type in :class:`pyspark.rdd.PythonEvalType` from
+    Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
     :class:`inspect.Signature` instance and type hints.
     """
     from pyspark.sql.pandas.functions import PandasUDFType
