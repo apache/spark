@@ -185,7 +185,7 @@ case class TransformWithStateExec(
         (i, iter) => {
           val providerId = {
             // lazy creation to initialize tempDirPath once
-            lazy val tempDirPath = Utils.createTempDir().getAbsolutePath
+            val tempDirPath = Utils.createTempDir().getAbsolutePath
             new StateStoreProviderId(
               StateStoreId(tempDirPath, 0, i), getStateInfo.queryRunId)
           }
