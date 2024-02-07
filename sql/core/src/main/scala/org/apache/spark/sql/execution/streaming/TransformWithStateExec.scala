@@ -147,7 +147,11 @@ case class TransformWithStateExec(
       // by the upstream (consumer) operators in addition to the processing in this operator.
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
-        store.commit()
+        if (isStreaming) {
+          store.commit()
+        } else {
+          store.abort()
+        }
       }
       setStoreMetrics(store)
       setOperatorMetrics()
