@@ -247,9 +247,9 @@ class XmlSuite
         .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
         .collect()
     }
+    assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParsing.getCause.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -273,10 +273,10 @@ class XmlSuite
         .option("mode", FailFastMode.name)
         .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
         .show()
-    }.getCause.getCause
+    }
+    assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParsing.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -2387,10 +2387,12 @@ class XmlSuite
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
         }
+        assert(err.getErrorClass == "TASK_WRITE_FAILED")
+        val msg = err.getCause.getMessage
         assert(
-          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
-            err.getMessage.contains("Unable to extract value") ||
-            err.getMessage.contains("Unable to extract ZoneId"))
+          msg.contains("Unsupported field: OffsetSeconds") ||
+            msg.contains("Unable to extract value") ||
+            msg.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -2770,11 +2772,10 @@ class XmlSuite
       val df = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
       fs.delete(xmlPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        val e = intercept[SparkException] {
+        val e = intercept[SparkFileNotFoundException] {
           df.collect()
         }
-        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
-        assert(e.getCause.getMessage.contains(".xml does not exist"))
+        assert(e.getMessage.contains(".xml does not exist"))
       }
 
       sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)
@@ -2867,9 +2868,9 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-
-            assert(e.getCause.getCause.isInstanceOf[XMLStreamException])
-            assert(e.getMessage.contains(errorMsg))
+            assert(e.getErrorClass == "TASK_WRITE_FAILED")
+            assert(e.getCause.isInstanceOf[XMLStreamException])
+            assert(e.getCause.getMessage.contains(errorMsg))
         }
       }
     }

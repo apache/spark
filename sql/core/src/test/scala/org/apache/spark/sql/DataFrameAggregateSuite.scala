@@ -23,7 +23,7 @@ import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1451,17 +1451,15 @@ class DataFrameAggregateSuite extends QueryTest
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
       .toDF("year-month", "day")
-    val error = intercept[SparkException] {
+    val error = intercept[SparkArithmeticException] {
       checkAnswer(df2.select(sum($"year-month")), Nil)
     }
-    assert(error.toString contains
-      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
+    assert(error.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
 
-    val error2 = intercept[SparkException] {
+    val error2 = intercept[SparkArithmeticException] {
       checkAnswer(df2.select(sum($"day")), Nil)
     }
-    assert(error2.toString contains
-      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
+    assert(error2.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
   }
 
   test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {
@@ -1588,17 +1586,15 @@ class DataFrameAggregateSuite extends QueryTest
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
       .toDF("year-month", "day")
-    val error = intercept[SparkException] {
+    val error = intercept[SparkArithmeticException] {
       checkAnswer(df2.select(avg($"year-month")), Nil)
     }
-    assert(error.toString contains
-      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
+    assert(error.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
 
-    val error2 = intercept[SparkException] {
+    val error2 = intercept[SparkArithmeticException] {
       checkAnswer(df2.select(avg($"day")), Nil)
     }
-    assert(error2.toString contains
-      "SparkArithmeticException: [INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
+    assert(error2.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
 
     val df3 = intervalData.filter($"class" > 4)
     val avgDF3 = df3.select(avg($"year-month"), avg($"day"))
@@ -1881,13 +1877,13 @@ class DataFrameAggregateSuite extends QueryTest
 
     // validate that the functions error out when lgConfigK < 4 or > 24
     checkError(
-      exception = intercept[SparkException] {
-        val res = df1.groupBy("id")
+      exception = intercept[SparkRuntimeException] {
+        df1.groupBy("id")
           .agg(
             hll_sketch_agg("value", 1).as("hllsketch")
           )
-        checkAnswer(res, Nil)
-      }.getCause.asInstanceOf[SparkThrowable],
+          .collect()
+      },
       errorClass = "HLL_INVALID_LG_K",
       parameters = Map(
         "function" -> "`hll_sketch_agg`",
@@ -1897,13 +1893,13 @@ class DataFrameAggregateSuite extends QueryTest
       ))
 
     checkError(
-      exception = intercept[SparkException] {
-        val res = df1.groupBy("id")
+      exception = intercept[SparkRuntimeException] {
+        df1.groupBy("id")
           .agg(
             hll_sketch_agg("value", 25).as("hllsketch")
           )
-        checkAnswer(res, Nil)
-      }.getCause.asInstanceOf[SparkThrowable],
+          .collect()
+      },
       errorClass = "HLL_INVALID_LG_K",
       parameters = Map(
         "function" -> "`hll_sketch_agg`",
@@ -1914,7 +1910,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     // validate that unions error out by default for different lgConfigK sketches
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkRuntimeException] {
         val i1 = df1.groupBy("id")
           .agg(
             hll_sketch_agg("value").as("hllsketch_left")
@@ -1923,9 +1919,10 @@ class DataFrameAggregateSuite extends QueryTest
           .agg(
             hll_sketch_agg("value", 20).as("hllsketch_right")
           )
-        val res = i1.join(i2).withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
-        checkAnswer(res, Nil)
-      }.getCause.asInstanceOf[SparkThrowable],
+        i1.join(i2)
+          .withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
+          .collect()
+      },
       errorClass = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
@@ -1934,7 +1931,7 @@ class DataFrameAggregateSuite extends QueryTest
       ))
 
     checkError(
-      exception = intercept[SparkException] {
+      exception = intercept[SparkRuntimeException] {
         val i1 = df1.groupBy("id")
           .agg(
             hll_sketch_agg("value").as("hllsketch")
@@ -1943,12 +1940,12 @@ class DataFrameAggregateSuite extends QueryTest
           .agg(
             hll_sketch_agg("value", 20).as("hllsketch")
           )
-        val res = i1.union(i2).groupBy("id")
+        i1.union(i2).groupBy("id")
           .agg(
             hll_union_agg("hllsketch")
           )
-        checkAnswer(res, Nil)
-      }.getCause.asInstanceOf[SparkThrowable],
+          .collect()
+      },
       errorClass = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
@@ -2014,8 +2011,8 @@ class DataFrameAggregateSuite extends QueryTest
 
     // validate that unions error out by default for different lgConfigK sketches
     checkError(
-      exception = intercept[SparkException] {
-        val res = sql(
+      exception = intercept[SparkRuntimeException] {
+        sql(
           """with cte1 as (
             |select
             | id,
@@ -2039,9 +2036,8 @@ class DataFrameAggregateSuite extends QueryTest
             | hll_union(cte1.sketch, cte2.sketch) as sketch
             |from
             | cte1 join cte2 on cte1.id = cte2.id
-            |""".stripMargin)
-        checkAnswer(res, Nil)
-      }.getCause.asInstanceOf[SparkThrowable],
+            |""".stripMargin).collect()
+      },
       errorClass = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",
@@ -2050,8 +2046,8 @@ class DataFrameAggregateSuite extends QueryTest
       ))
 
     checkError(
-      exception = intercept[SparkException] {
-        val res = sql(
+      exception = intercept[SparkRuntimeException] {
+        sql(
           """with cte1 as (
             |select
             | id,
@@ -2076,9 +2072,8 @@ class DataFrameAggregateSuite extends QueryTest
             |from
             | (select * from cte1 union all select * from cte2)
             |group by 1
-            |""".stripMargin)
-        checkAnswer(res, Nil)
-      }.getCause.asInstanceOf[SparkThrowable],
+            |""".stripMargin).collect()
+      },
       errorClass = "HLL_UNION_DIFFERENT_LG_K",
       parameters = Map(
         "left" -> "12",

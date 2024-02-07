@@ -207,9 +207,8 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       assert(!exception.getMessageParameters().get("endOffset").isEmpty)
       assert(exception.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.isInstanceOf[SparkException])
-      assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
       assert(
-        exception.getCause.getCause.getCause.getMessage
+        exception.getCause.getCause.getMessage
           .contains("java.lang.RuntimeException: Number 2 encountered!"))
     } finally {
       spark.streams.resetTerminated()
@@ -248,9 +247,8 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
     assert(!exception.getMessageParameters().get("endOffset").isEmpty)
     assert(exception.getCause.isInstanceOf[SparkException])
     assert(exception.getCause.getCause.isInstanceOf[SparkException])
-    assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
     assert(
-      exception.getCause.getCause.getCause.getMessage
+      exception.getCause.getCause.getMessage
         .contains("java.lang.RuntimeException: Number 2 encountered!"))
   }
 

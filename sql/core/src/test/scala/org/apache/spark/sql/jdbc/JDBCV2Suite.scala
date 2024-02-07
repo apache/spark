@@ -2859,12 +2859,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkAggregateRemoved(df, false)
         checkPushedInfo(df, "PushedAggregates: [COUNT(PRICE), SUM(PRICE)]")
         if (ansiEnabled) {
-          val e = intercept[SparkException] {
+          val e = intercept[ArithmeticException] {
             df.collect()
           }
-          assert(e.getCause.isInstanceOf[ArithmeticException])
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-            e.getCause.getMessage.contains("Overflow in sum of decimals"))
+          assert(e.getMessage.contains("cannot be represented as Decimal") ||
+            e.getMessage.contains("Overflow in sum of decimals"))
         } else {
           checkAnswer(df, Seq(Row(null)))
         }

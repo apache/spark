@@ -29,7 +29,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1395,10 +1395,11 @@ class DatasetSuite extends QueryTest
   test("row nullability mismatch") {
     val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
     val rdd = spark.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
-    val message = intercept[Exception] {
+    val ex = intercept[SparkRuntimeException] {
       spark.createDataFrame(rdd, schema).collect()
-    }.getMessage
-    assert(message.contains("The 1th field 'b' of input row cannot be null"))
+    }
+    assert(ex.getErrorClass == "EXPRESSION_ENCODING_FAILED")
+    assert(ex.getCause.getMessage.contains("The 1th field 'b' of input row cannot be null"))
   }
 
   test("createTempView") {

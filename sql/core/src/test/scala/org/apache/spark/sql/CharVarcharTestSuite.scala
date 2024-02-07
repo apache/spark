@@ -315,11 +315,11 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c $typeName(5)) USING $format")
       sql("INSERT INTO t VALUES (null)")
       checkAnswer(spark.table("t"), Row(null))
-      val e = intercept[SparkException] {
+      val ex = intercept[Exception] {
         sql("INSERT INTO t VALUES ('123456')")
       }
       checkError(
-        exception = e.getCause match {
+        exception = ex match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -337,9 +337,10 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         sql(s"CREATE TABLE $tableName(i INT, c $typeName(5)) USING $format PARTITIONED BY (c)")
         sql(s"INSERT INTO $tableName VALUES (1, null)")
         checkAnswer(spark.table(tableName), Row(1, null))
-        val e = intercept[SparkException](sql(s"INSERT INTO $tableName VALUES (1, '123456')"))
         checkError(
-          exception = e.getCause.asInstanceOf[SparkException],
+          exception = intercept[SparkException] {
+            sql(s"INSERT INTO $tableName VALUES (1, '123456')")
+          },
           errorClass = "TASK_WRITE_FAILED",
           parameters = Map("path" -> s".*$tableName.*"),
           matchPVals = true
@@ -368,11 +369,11 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c ARRAY<$typeName(5)>) USING $format")
       sql("INSERT INTO t VALUES (array(null))")
       checkAnswer(spark.table("t"), Row(Seq(null)))
-      val e = intercept[SparkException] {
+      val e = intercept[Exception] {
         sql("INSERT INTO t VALUES (array('a', '123456'))")
       }
       checkError(
-        exception = e.getCause match {
+        exception = e match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -385,9 +386,9 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   test("length check for input string values: nested in map key") {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), STRING>) USING $format")
-      val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
+      val e = intercept[Exception](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
       checkError(
-        exception = e.getCause match {
+        exception = e match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -402,9 +403,9 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c MAP<STRING, $typeName(5)>) USING $format")
       sql("INSERT INTO t VALUES (map('a', null))")
       checkAnswer(spark.table("t"), Row(Map("a" -> null)))
-      val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
+      val e = intercept[Exception](sql("INSERT INTO t VALUES (map('a', '123456'))"))
       checkError(
-        exception = e.getCause match {
+        exception = e match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -417,18 +418,18 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   test("length check for input string values: nested in both map key and value") {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), $typeName(5)>) USING $format")
-      val e1 = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
+      val e1 = intercept[Exception](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
       checkError(
-        exception = e1.getCause match {
+        exception = e1 match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
         errorClass = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "5")
       )
-      val e2 = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
+      val e2 = intercept[Exception](sql("INSERT INTO t VALUES (map('a', '123456'))"))
       checkError(
-        exception = e2.getCause match {
+        exception = e2 match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -443,9 +444,9 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c STRUCT<c: ARRAY<$typeName(5)>>) USING $format")
       sql("INSERT INTO t SELECT struct(array(null))")
       checkAnswer(spark.table("t"), Row(Row(Seq(null))))
-      val e = intercept[SparkException](sql("INSERT INTO t SELECT struct(array('123456'))"))
+      val e = intercept[Exception](sql("INSERT INTO t SELECT struct(array('123456'))"))
       checkError(
-        exception = e.getCause match {
+        exception = e match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -460,9 +461,9 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c ARRAY<STRUCT<c: $typeName(5)>>) USING $format")
       sql("INSERT INTO t VALUES (array(struct(null)))")
       checkAnswer(spark.table("t"), Row(Seq(Row(null))))
-      val e = intercept[SparkException](sql("INSERT INTO t VALUES (array(struct('123456')))"))
+      val e = intercept[Exception](sql("INSERT INTO t VALUES (array(struct('123456')))"))
       checkError(
-        exception = e.getCause match {
+        exception = e match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -477,9 +478,9 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c ARRAY<ARRAY<$typeName(5)>>) USING $format")
       sql("INSERT INTO t VALUES (array(array(null)))")
       checkAnswer(spark.table("t"), Row(Seq(Seq(null))))
-      val e = intercept[SparkException](sql("INSERT INTO t VALUES (array(array('123456')))"))
+      val e = intercept[Exception](sql("INSERT INTO t VALUES (array(array('123456')))"))
       checkError(
-        exception = e.getCause match {
+        exception = e match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -505,18 +506,18 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c1 CHAR(5), c2 VARCHAR(5)) USING $format")
       sql("INSERT INTO t VALUES (1234, 1234)")
       checkAnswer(spark.table("t"), Row("1234 ", "1234"))
-      val e1 = intercept[SparkException](sql("INSERT INTO t VALUES (123456, 1)"))
+      val e1 = intercept[Exception](sql("INSERT INTO t VALUES (123456, 1)"))
       checkError(
-        exception = e1.getCause match {
+        exception = e1 match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
         errorClass = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "5")
       )
-      val e2 = intercept[SparkException](sql("INSERT INTO t VALUES (1, 123456)"))
+      val e2 = intercept[Exception](sql("INSERT INTO t VALUES (1, 123456)"))
       checkError(
-        exception = e2.getCause match {
+        exception = e2 match {
           case c: SparkRuntimeException => c
           case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
         },
@@ -1046,9 +1047,10 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           checkAnswer(spark.table(tableName), Nil)
         }
 
-        val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)"))
         checkError(
-          exception = e1.getCause.asInstanceOf[SparkException],
+          exception = intercept[SparkException] {
+            sql(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)")
+          },
           errorClass = "TASK_WRITE_FAILED",
           parameters = Map("path" -> s".*$tableName"),
           matchPVals = true
@@ -1086,9 +1088,9 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
           checkAnswer(spark.table("t"), Nil)
         }
 
-        val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE t VALUES ('1', 100000)"))
+        val e1 = intercept[Exception](sql(s"INSERT OVERWRITE t VALUES ('1', 100000)"))
         checkError(
-          exception = e1.getCause match {
+          exception = e1 match {
             case c: SparkRuntimeException => c
             case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
           },
@@ -1132,9 +1134,9 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
 
         val inputDF = sql("SELECT array(named_struct('n_i', 1, 'n_c', '123456')) AS a")
 
-        val e = intercept[SparkException](inputDF.writeTo("t").append())
+        val e = intercept[Exception](inputDF.writeTo("t").append())
         checkError(
-          exception = e.getCause match {
+          exception = e match {
             case c: SparkRuntimeException => c
             case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
           },
@@ -1152,9 +1154,9 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
 
         val inputDF = sql("SELECT map(named_struct('n_i', 1, 'n_c', '123456'), 1) AS m")
 
-        val e = intercept[SparkException](inputDF.writeTo("t").append())
+        val e = intercept[Exception](inputDF.writeTo("t").append())
         checkError(
-          exception = e.getCause match {
+          exception = e match {
             case c: SparkRuntimeException => c
             case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
           },
@@ -1172,9 +1174,9 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
 
         val inputDF = sql("SELECT map(1, named_struct('n_i', 1, 'n_c', '123456')) AS m")
 
-        val e = intercept[SparkException](inputDF.writeTo("t").append())
+        val e = intercept[Exception](inputDF.writeTo("t").append())
         checkError(
-          exception = e.getCause match {
+          exception = e match {
             case c: SparkRuntimeException => c
             case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
           },

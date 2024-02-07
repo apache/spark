@@ -726,6 +726,12 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 
 Failed parsing struct: `<raw>`.
 
+### FAILED_READ_FILE
+
+SQLSTATE: KD001
+
+Encountered error while reading file `<path>`.
+
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
 SQLSTATE: KD000
