@@ -171,11 +171,10 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
         .option("sep", ";")
         .option("header", "true")
         .option("path", testDataPath.resolve("csv").toString)
-        .schema(
-          StructType(
-            Array(StructField("name", StringType),
-              StructField("age", IntegerType),
-              StructField("job", StringType))))
+        .schema(StructType(Array(
+          StructField("name", StringType),
+          StructField("age", IntegerType),
+          StructField("job", StringType))))
         .load()
         .writeStream
         .option("checkpointLocation", ckpt.getCanonicalPath)
