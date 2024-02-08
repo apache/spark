@@ -455,7 +455,8 @@ private[spark] class TaskSchedulerImpl(
   private def resourcesMeetTaskRequirements(
       taskSet: TaskSetManager,
       availCpus: Int,
-      availWorkerResources: ExecutorResourcesAmounts): Option[Map[String, Map[String, Long]]] = {
+      availWorkerResources: ExecutorResourcesAmounts
+  ): Option[Map[String, Map[String, BigDecimal]]] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)

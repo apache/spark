@@ -21,22 +21,16 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.resource.{ResourceAmountUtils, ResourceProfileBuilder, TaskResourceRequests}
+import org.apache.spark.resource.{ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.GPU
 
-class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceUtils {
+class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
-  implicit def toFractionalResource(resources: Map[String, Long]): Map[String, Double] =
-    resources.map { case (k, v) => k -> ResourceAmountUtils.toFractionalResource(v) }
-
-  implicit def toInternalResource(resources: Map[String, Double]): Map[String, Long] =
-    resources.map { case (k, v) => k -> ResourceAmountUtils.toInternalResource(v) }
-
-  implicit def toInternalResourceMap(resources: Map[String, Map[String, Double]]):
-      Map[String, Map[String, Long]] =
-    resources.map { case (resName, addressesAmountMap) =>
-      resName -> addressesAmountMap.map { case (k, v) =>
-        k -> ResourceAmountUtils.toInternalResource(v) }
+  implicit def convertMapMapDoubleToBigDecimal(resources: Map[String, Map[String, Double]]):
+      Map[String, Map[String, BigDecimal]] = {
+    resources.map { case (name, addressAmounts) => name ->
+      addressAmounts.map { case (k, v) => k -> BigDecimal(v) }
+    }
   }
 
   test("assign to rp without task resources requirement") {
@@ -64,9 +58,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     // default resources amounts of executors info
     executorsInfo.foreach { case (rName, rInfo) =>
       if (rName == "gpu") {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(rInfo.resourcesAmounts === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(rInfo.resourcesAmounts === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
 
@@ -76,9 +70,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     val availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(addressesAmount === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
 
@@ -86,17 +80,17 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     // executors info shouldn't be changed.
     executorsInfo.foreach { case (rName, rInfo) =>
       if (rName == "gpu") {
-        rInfo.acquire(toInternalResource(Map("2" -> 0.4, "6" -> 0.6)))
+        rInfo.acquire(Map("2" -> 0.4, "6" -> 0.6))
       } else {
-        rInfo.acquire(toInternalResource(Map("aa" -> 0.2, "bb" -> 0.7)))
+        rInfo.acquire(Map("aa" -> 0.2, "bb" -> 0.7))
       }
     }
 
     executorsInfo.foreach { case (rName, rInfo) =>
       if (rName == "gpu") {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("2" -> 0.6, "4" -> 1.0, "6" -> 0.4)))
+        assert(rInfo.resourcesAmounts === Map("2" -> 0.6, "4" -> 1.0, "6" -> 0.4))
       } else {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("aa" -> 0.8, "bb" -> 0.3)))
+        assert(rInfo.resourcesAmounts === Map("aa" -> 0.8, "bb" -> 0.3))
       }
     }
 
@@ -106,9 +100,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     val availableRes1 = availableExecResAmounts1.availableResources
     availableRes1.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount, Map("2" -> 0.6, "4" -> 1.0, "6" -> 0.4)))
+        assert(addressesAmount === Map("2" -> 0.6, "4" -> 1.0, "6" -> 0.4))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 0.8, "bb" -> 0.3)))
+        assert(addressesAmount === Map("aa" -> 0.8, "bb" -> 0.3))
       }
     }
 
@@ -123,9 +117,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     // default resources amounts of executors info
     executorsInfo.foreach { case (rName, rInfo) =>
       if (rName == "gpu") {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(rInfo.resourcesAmounts === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(rInfo.resourcesAmounts === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
 
@@ -144,25 +138,24 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     val availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount,
-          Map("2" -> (1.0 - gpuTaskAmount), "4" -> 1.0, "6" -> 1.0)))
+        assert(addressesAmount === Map("2" -> (1.0 - gpuTaskAmount), "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
 
     // executors info shouldn't be changed.
     executorsInfo.foreach { case (rName, rInfo) =>
       if (rName == "gpu") {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(rInfo.resourcesAmounts === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(rInfo.resourcesAmounts, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(rInfo.resourcesAmounts === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
   }
 
   test("executor resources are not matching to the task requirement") {
-    val totalRes = Map("gpu" -> Map("2" -> 0.4))
+    val totalRes = Map("gpu" -> Map("2" -> BigDecimal(0.4)))
     val availableExecResAmounts = new ExecutorResourcesAmounts(totalRes)
 
     val gpuTaskAmount = 0.6
@@ -187,8 +180,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
     var assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-    assert(!assigned.isEmpty)
-    assigned.foreach { case resource => assert(!resource.isEmpty)}
+    assert(assigned.isDefined)
+    assigned.foreach(resource => assert(resource.nonEmpty))
 
     val treqs1 = new TaskResourceRequests()
       .resource("gpu", gpuTaskAmount)
@@ -204,12 +197,12 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     val availableExecResAmounts = new ExecutorResourcesAmounts(totalRes)
 
     val e = intercept[SparkException] {
-      availableExecResAmounts.release(toInternalResourceMap(Map("gpu" -> Map("2" -> 0.7))))
+      availableExecResAmounts.release(Map("gpu" -> Map("2" -> 0.7)))
     }
     assert(e.getMessage.contains("after releasing gpu address 2 should be <= 1.0"))
 
-    availableExecResAmounts.release(toInternalResourceMap(Map("gpu" -> Map("2" -> 0.6))))
-    assert(compareMaps(availableExecResAmounts.availableResources("gpu"), Map("2" -> 1.0)))
+    availableExecResAmounts.release(Map("gpu" -> Map("2" -> 0.6)))
+    assert(availableExecResAmounts.availableResources("gpu") === Map("2" -> 1.0))
   }
 
   test("the total amount after acquire should be >= 0") {
@@ -217,12 +210,12 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     val availableExecResAmounts = new ExecutorResourcesAmounts(totalRes)
 
     val e = intercept[SparkException] {
-      availableExecResAmounts.acquire(toInternalResourceMap(Map("gpu" -> Map("2" -> 0.6))))
+      availableExecResAmounts.acquire(Map("gpu" -> Map("2" -> 0.6)))
     }
     assert(e.getMessage.contains("after acquiring gpu address 2 should be >= 0"))
 
-    availableExecResAmounts.acquire(toInternalResourceMap(Map("gpu" -> Map("2" -> 0.4))))
-    assert(compareMaps(availableExecResAmounts.availableResources("gpu"), Map("2" -> 0.0)))
+    availableExecResAmounts.acquire(Map("gpu" -> Map("2" -> 0.4)))
+    assert(availableExecResAmounts.availableResources("gpu") === Map("2" -> 0.0))
   }
 
   test("Ensure that we can acquire the same fractions of a resource") {
@@ -235,8 +228,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
       val availableExecResAmounts = ExecutorResourcesAmounts(Map(GPU -> info))
       for (_ <- 0 until slots) {
         addresses.foreach(addr =>
-          availableExecResAmounts.acquire(
-            toInternalResourceMap(Map(GPU -> Map(addr -> taskAmount)))))
+          availableExecResAmounts.acquire(Map(GPU -> Map(addr -> taskAmount))))
       }
 
       assert(availableExecResAmounts.availableResources.size === 1)
@@ -247,8 +239,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
 
       addresses.foreach { addr =>
         assertThrows[SparkException] {
-          availableExecResAmounts.acquire(
-            toInternalResourceMap(Map(GPU -> Map(addr -> taskAmount))))
+          availableExecResAmounts.acquire(Map(GPU -> Map(addr -> taskAmount)))
         }
       }
     }
@@ -270,22 +261,22 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
 
     // taskMount = 0.1 < 1.0 which can be assigned.
     val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-    assert(!assigned.isEmpty)
-    assigned.foreach { case resource =>
+    assert(assigned.isDefined)
+    assigned.foreach { resource =>
       assert(resource.size === 1)
       assert(resource.keys.toSeq === Seq("gpu"))
       assert(resource("gpu").size === 1)
       assert(resource("gpu").keys.toSeq === Seq("2"))
-      assert(ResourceAmountUtils.toFractionalResource(resource("gpu")("2")) === gpuTaskAmount)
+      assert(resource("gpu")("2") === gpuTaskAmount)
     }
 
     // assign will not update the real value.
     var availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(addressesAmount === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
 
@@ -296,12 +287,12 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount, Map(
+        assert(addressesAmount === Map(
           "2" -> (1.0 - gpuTaskAmount),
           "4" -> 1.0,
-          "6" -> 1.0)))
+          "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
 
@@ -311,9 +302,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(addressesAmount === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
   }
@@ -337,29 +328,27 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
 
     // taskMount = 0.1 < 1.0 which can be assigned.
     val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-    assert(!assigned.isEmpty)
+    assert(assigned.isDefined)
     assigned.foreach { case resourceAmounts =>
       assert(resourceAmounts.size === 2)
       assert(resourceAmounts.keys.toSeq.sorted === Seq("gpu", "fpga").sorted)
 
       assert(resourceAmounts("gpu").size === 1)
       assert(resourceAmounts("gpu").keys.toSeq === Seq("2"))
-      assert(ResourceAmountUtils.toFractionalResource(resourceAmounts("gpu")("2")) ===
-        gpuTaskAmount)
+      assert(resourceAmounts("gpu")("2") === gpuTaskAmount)
 
       assert(resourceAmounts("fpga").size === 1)
       assert(resourceAmounts("fpga").keys.toSeq === Seq("aa"))
-      assert(ResourceAmountUtils.toFractionalResource(resourceAmounts("fpga")("aa")) ===
-        fpgaTaskAmount)
+      assert(resourceAmounts("fpga")("aa") === fpgaTaskAmount)
     }
 
     // assign will not update the real value.
     var availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(addressesAmount === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
 
@@ -370,10 +359,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount,
-          Map("2" -> (1.0 - gpuTaskAmount), "4" -> 1.0, "6" -> 1.0)))
+        assert(addressesAmount === Map("2" -> (1.0 - gpuTaskAmount), "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> (1.0 - fpgaTaskAmount), "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> (1.0 - fpgaTaskAmount), "bb" -> 1.0))
       }
     }
 
@@ -383,9 +371,9 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     availableRes = availableExecResAmounts.availableResources
     availableRes.foreach { case (rName, addressesAmount) =>
       if (rName == "gpu") {
-        assert(compareMaps(addressesAmount, Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0)))
+        assert(addressesAmount === Map("2" -> 1.0, "4" -> 1.0, "6" -> 1.0))
       } else {
-        assert(compareMaps(addressesAmount, Map("aa" -> 1.0, "bb" -> 1.0)))
+        assert(addressesAmount === Map("aa" -> 1.0, "bb" -> 1.0))
       }
     }
   }
@@ -402,30 +390,28 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
       val treqs = new TaskResourceRequests().resource("gpu", taskAmount)
       val rp = new ResourceProfileBuilder().require(treqs).build()
       val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-      assert(!assigned.isEmpty)
+      assert(assigned.isDefined)
       assigned.foreach { case resources =>
-        assert(
-          resources("gpu").values.toArray.sorted.map(ResourceAmountUtils.toFractionalResource(_))
-          === expectedAssignedAmount.sorted)
+        assert(resources("gpu").values.toArray.sorted === expectedAssignedAmount.sorted)
 
         availableExecResAmounts.acquire(resources)
 
         val leftRes = availableExecResAmounts.availableResources
         assert(leftRes.size == 1)
-        assert(leftRes.keys.toSeq(0) == "gpu")
-        assert(compareMaps(leftRes("gpu"), expectedLeftRes))
+        assert(leftRes.keys.toSeq.head == "gpu")
+        assert(leftRes("gpu") === expectedLeftRes)
       }
     }
 
-    def testRelease(releasedRes: Map[String, Double],
-                    expectedLeftRes: Map[String, Double]
+    def testRelease(releasedRes: Map[String, BigDecimal],
+                    expectedLeftRes: Map[String, BigDecimal]
                    ): Unit = {
       availableExecResAmounts.release(Map("gpu" -> releasedRes))
 
       val leftRes = availableExecResAmounts.availableResources
       assert(leftRes.size == 1)
-      assert(leftRes.keys.toSeq(0) == "gpu")
-      assert(compareMaps(leftRes("gpu"), expectedLeftRes))
+      assert(leftRes.keys.toSeq.head == "gpu")
+      assert(leftRes("gpu") === expectedLeftRes)
     }
 
     // request 0.2 gpu, ExecutorResourcesAmounts should assign "0",
@@ -505,13 +491,13 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
 
     // Acquire an address from a resource that doesn't exist
     val e = intercept[SparkException] {
-      availableExecResAmounts.acquire(toInternalResourceMap(Map("fpga" -> Map("1" -> 1.0))))
+      availableExecResAmounts.acquire(Map("fpga" -> Map("1" -> 1.0)))
     }
     assert(e.getMessage.contains("Try to acquire an address from fpga that doesn't exist"))
 
     // Acquire an address that is not available
     val e1 = intercept[SparkException] {
-      availableExecResAmounts.acquire(toInternalResourceMap(Map("gpu" -> Map("6" -> 1.0))))
+      availableExecResAmounts.acquire(Map("gpu" -> Map("6" -> 1.0)))
     }
     assert(e1.getMessage.contains("Try to acquire an address that doesn't exist"))
   }
@@ -523,13 +509,13 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
 
     // Acquire an address from a resource that doesn't exist
     val e = intercept[SparkException] {
-      availableExecResAmounts.release(toInternalResourceMap(Map("fpga" -> Map("1" -> 0.1))))
+      availableExecResAmounts.release(Map("fpga" -> Map("1" -> 0.1)))
     }
     assert(e.getMessage.contains("Try to release an address from fpga that doesn't exist"))
 
     // Acquire an address that is not available
     val e1 = intercept[SparkException] {
-      availableExecResAmounts.release(toInternalResourceMap(Map("gpu" -> Map("6" -> 0.1))))
+      availableExecResAmounts.release(Map("gpu" -> Map("6" -> 0.1)))
     }
     assert(e1.getMessage.contains("Try to release an address that is not assigned"))
   }

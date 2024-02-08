@@ -21,18 +21,12 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.resource.ResourceAmountUtils
 import org.apache.spark.resource.ResourceUtils.GPU
 
-class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils {
+class ExecutorResourceInfoSuite extends SparkFunSuite {
 
-  implicit def convertMapLongToDouble(resources: Map[String, Long]): Map[String, Double] = {
-    resources.map { case (k, v) => k -> ResourceAmountUtils.toFractionalResource(v) }
-  }
-
-  implicit def convertMapDoubleToLong(resources: Map[String, Double]): Map[String, Long] = {
-    resources.map { case (k, v) => k -> ResourceAmountUtils.toInternalResource(v) }
-  }
+  implicit def convertMapDoubleToBigDecimal(resources: Map[String, Double]):
+      Map[String, BigDecimal] = resources.map { case (k, v) => k -> BigDecimal(v) }
 
   test("Track Executor Resource information") {
     // Init Executor Resource.
@@ -61,9 +55,9 @@ class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils
     assert(!info.availableAddrs.contains("1"))
     // Acquire an address that is not available
     val e = intercept[SparkException] {
-      info.acquire(convertMapDoubleToLong(Map("1" -> 1.0)))
+      info.acquire(Map("1" -> 1.0))
     }
-    assert(e.getMessage.contains("Try to acquire gpu address 1 amount: 1.0, but only 0.0 left."))
+    assert(e.getMessage.contains("Try to acquire gpu address 1 amount: 1.0, but only 0E-14 left."))
   }
 
   test("Don't allow acquire address that doesn't exist") {
@@ -72,7 +66,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils
     assert(!info.availableAddrs.contains("4"))
     // Acquire an address that doesn't exist
     val e = intercept[SparkException] {
-      info.acquire(convertMapDoubleToLong(Map("4" -> 1.0)))
+      info.acquire(Map("4" -> 1.0))
     }
     assert(e.getMessage.contains("Try to acquire an address that doesn't exist."))
   }
@@ -86,10 +80,10 @@ class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils
     assert(!info.assignedAddrs.contains("2"))
     // Release an address that is not assigned
     val e = intercept[SparkException] {
-      info.release(convertMapDoubleToLong(Map("2" -> 1.0)))
+      info.release(Map("2" -> 1.0))
     }
     assert(e.getMessage.contains("Try to release gpu address 2 amount: 1.0. " +
-      "But the total amount: 2.0 after release should be <= 1"))
+      "But the total amount: 2.00000000000000 after release should be <= 1"))
   }
 
   test("Don't allow release address that doesn't exist") {
@@ -98,7 +92,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils
     assert(!info.assignedAddrs.contains("4"))
     // Release an address that doesn't exist
     val e = intercept[SparkException] {
-      info.release(convertMapDoubleToLong(Map("4" -> 1.0)))
+      info.release((Map("4" -> 1.0)))
     }
     assert(e.getMessage.contains("Try to release an address that doesn't exist."))
   }
@@ -110,17 +104,17 @@ class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils
       val taskAmount = 1.0 / slots
       val info = new ExecutorResourceInfo(GPU, addresses.toSeq)
       for (_ <- 0 until slots) {
-        addresses.foreach(addr => info.acquire(convertMapDoubleToLong(Map(addr -> taskAmount))))
+        addresses.foreach(addr => info.acquire((Map(addr -> taskAmount))))
       }
 
       // All addresses has been assigned
       assert(info.resourcesAmounts.values.toSeq.toSet.size == 1)
       // The left amount of any address should < taskAmount
-      assert(ResourceAmountUtils.toFractionalResource(info.resourcesAmounts("0")) < taskAmount)
+      assert(info.resourcesAmounts("0") < taskAmount)
 
       addresses.foreach { addr =>
         assertThrows[SparkException] {
-          info.acquire(convertMapDoubleToLong(Map(addr -> taskAmount)))
+          info.acquire(Map(addr -> taskAmount))
         }
       }
     }
@@ -129,20 +123,20 @@ class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils
   test("assign/release resource for different task requirements") {
     val execInfo = new ExecutorResourceInfo("gpu", Seq("0", "1", "2", "3"))
 
-    def testAllocation(taskAddressAmount: Map[String, Double],
-                       expectedLeftRes: Map[String, Double]
+    def testAllocation(taskAddressAmount: Map[String, BigDecimal],
+                       expectedLeftRes: Map[String, BigDecimal]
                       ): Unit = {
       execInfo.acquire(taskAddressAmount)
       val leftRes = execInfo.resourcesAmounts
-      assert(compareMaps(leftRes, expectedLeftRes))
+      assert(leftRes === expectedLeftRes)
     }
 
-    def testRelease(releasedRes: Map[String, Double],
-                    expectedLeftRes: Map[String, Double]
+    def testRelease(releasedRes: Map[String, BigDecimal],
+                    expectedLeftRes: Map[String, BigDecimal]
                    ): Unit = {
       execInfo.release(releasedRes)
       val leftRes = execInfo.resourcesAmounts
-      assert(compareMaps(leftRes, expectedLeftRes))
+      assert(leftRes === expectedLeftRes)
     }
 
     testAllocation(taskAddressAmount = Map("0" -> 0.2),

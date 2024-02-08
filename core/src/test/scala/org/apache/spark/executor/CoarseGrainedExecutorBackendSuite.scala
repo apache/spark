@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
+import scala.language.implicitConversions
 
 import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.json4s.JsonAST.{JArray, JObject}
@@ -46,6 +47,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, Sp
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{SerializableBuffer, SslTestUtils, ThreadUtils, Utils}
+
 
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
@@ -292,6 +294,13 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
   }
 
+  implicit def convertMapMapDoubleToBigDecimal(resources: Map[String, Map[String, Double]]):
+      Map[String, Map[String, BigDecimal]] = {
+    resources.map { case (name, addressAmounts) => name ->
+      addressAmounts.map { case (k, v) => k -> BigDecimal(v) }
+    }
+  }
+
   test("track allocated resources by taskId") {
     val conf = createSparkConf()
     val securityMgr = new SecurityManager(conf)
@@ -306,9 +315,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
           resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf))
 
       val taskId = 1000000L
-      val resourcesAmounts = Map(GPU -> Map(
-        "0" -> ResourceAmountUtils.toInternalResource(0.15),
-        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
+      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
@@ -426,9 +433,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
-      val resourcesAmounts = Map(GPU -> Map(
-        "0" -> ResourceAmountUtils.toInternalResource(0.15),
-        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
+      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
@@ -518,9 +523,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
-      val resourcesAmounts = Map(GPU -> Map(
-        "0" -> ResourceAmountUtils.toInternalResource(0.15),
-        "1" -> ResourceAmountUtils.toInternalResource(0.76)))
+      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
 
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {

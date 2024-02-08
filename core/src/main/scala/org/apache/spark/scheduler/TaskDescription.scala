@@ -57,9 +57,9 @@ private[spark] class TaskDescription(
     val properties: Properties,
     val cpus: Int,
     // resources is the total resources assigned to the task
-    // Eg, Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.7))):
+    // Eg, Map("gpu" -> Map("0" -> BigDecimal(0.7))):
     // assign 0.7 of the gpu address "0" to this task
-    val resources: immutable.Map[String, immutable.Map[String, Long]],
+    val resources: immutable.Map[String, immutable.Map[String, BigDecimal]],
     val serializedTask: ByteBuffer) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
@@ -76,7 +76,7 @@ private[spark] object TaskDescription {
     }
   }
 
-  private def serializeResources(map: immutable.Map[String, immutable.Map[String, Long]],
+  private def serializeResources(map: immutable.Map[String, immutable.Map[String, BigDecimal]],
       dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(map.size)
     map.foreach { case (rName, addressAmountMap) =>
@@ -84,7 +84,7 @@ private[spark] object TaskDescription {
       dataOut.writeInt(addressAmountMap.size)
       addressAmountMap.foreach { case (address, amount) =>
         dataOut.writeUTF(address)
-        dataOut.writeLong(amount)
+        dataOut.writeUTF(amount.toString())
       }
     }
   }
@@ -176,19 +176,19 @@ private[spark] object TaskDescription {
   }
 
   private def deserializeResources(dataIn: DataInputStream):
-      immutable.Map[String, immutable.Map[String, Long]] = {
-    val map = new HashMap[String, immutable.Map[String, Long]]()
+      immutable.Map[String, immutable.Map[String, BigDecimal]] = {
+    val map = new HashMap[String, immutable.Map[String, BigDecimal]]()
     val mapSize = dataIn.readInt()
     var i = 0
     while (i < mapSize) {
       val resType = dataIn.readUTF()
-      val addressAmountMap = new HashMap[String, Long]()
+      val addressAmountMap = new HashMap[String, BigDecimal]()
       val addressAmountSize = dataIn.readInt()
       var j = 0
       while (j < addressAmountSize) {
         val address = dataIn.readUTF()
-        val amount = dataIn.readLong()
-        addressAmountMap(address) = amount
+        val amount = dataIn.readUTF()
+        addressAmountMap(address) = BigDecimal(amount)
         j += 1
       }
       map.put(resType, addressAmountMap.toMap)
