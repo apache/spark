@@ -888,6 +888,171 @@ case class MapFromEntries(child: Expression)
     copy(child = newChild)
 }
 
+@ExpressionDescription(
+  usage = """
+    _FUNC_(map[, ascendingOrder]) - Sorts the input map in ascending or descending order
+      according to the natural ordering of the map keys.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(map(3, 'c', 1, 'a', 2, 'b'), true);
+       {1:"a",2:"b",3:"c"}
+  """,
+  group = "map_funcs",
+  since = "4.0.0")
+case class SortMap(base: Expression, ascendingOrder: Expression)
+  extends BinaryExpression with NullIntolerant with QueryErrorsBase {
+
+  def this(e: Expression) = this(e, Literal(true))
+
+  val keyType: DataType = base.dataType.asInstanceOf[MapType].keyType
+  val valueType: DataType = base.dataType.asInstanceOf[MapType].valueType
+
+  override def left: Expression = base
+  override def right: Expression = ascendingOrder
+  override def dataType: DataType = base.dataType
+
+  override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
+    case MapType(kt, _, _) if RowOrdering.isOrderable(kt) =>
+      ascendingOrder match {
+        case Literal(_: Boolean, BooleanType) =>
+          TypeCheckResult.TypeCheckSuccess
+        case _ =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "2",
+              "requiredType" -> toSQLType(BooleanType),
+              "inputSql" -> toSQLExpr(ascendingOrder),
+              "inputType" -> toSQLType(ascendingOrder.dataType))
+          )
+      }
+    case MapType(_, _, _) =>
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ORDERING_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(base.dataType)
+        )
+      )
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(ArrayType),
+          "inputSql" -> toSQLExpr(base),
+          "inputType" -> toSQLType(base.dataType))
+      )
+  }
+
+  override def nullSafeEval(array: Any, ascending: Any): Any = {
+    // put keys in a tree map and then read them back to build new k/v arrays
+
+    val mapData = array.asInstanceOf[MapData]
+    val numElements = mapData.numElements()
+    val keys = mapData.keyArray()
+    val values = mapData.valueArray()
+
+    val ordering = if (ascending.asInstanceOf[Boolean]) {
+      PhysicalDataType.ordering(keyType)
+    } else {
+      PhysicalDataType.ordering(keyType).reverse
+    }
+
+    val treeMap = mutable.TreeMap.empty[Any, Int](ordering)
+    for (i <- 0 until numElements) {
+      treeMap.put(keys.get(i, keyType), i)
+    }
+
+    val newKeys = new Array[Any](numElements)
+    val newValues = new Array[Any](numElements)
+
+    treeMap.zipWithIndex.foreach { case ((_, originalIndex), sortedIndex) =>
+      newKeys(sortedIndex) = keys.get(originalIndex, keyType)
+      newValues(sortedIndex) = values.get(originalIndex, valueType)
+    }
+
+    new ArrayBasedMapData(new GenericArrayData(newKeys), new GenericArrayData(newValues))
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (b, order) => sortCodegen(ctx, ev, b, order))
+  }
+
+  private def sortCodegen(ctx: CodegenContext, ev: ExprCode,
+      base: String, order: String): String = {
+
+    val arrayBasedMapData = classOf[ArrayBasedMapData].getName
+    val genericArrayData = classOf[GenericArrayData].getName
+
+    val numElements = ctx.freshName("numElements")
+    val keys = ctx.freshName("keys")
+    val values = ctx.freshName("values")
+    val treeMap = ctx.freshName("treeMap")
+    val i = ctx.freshName("i")
+    val o1 = ctx.freshName("o1")
+    val o2 = ctx.freshName("o2")
+    val c = ctx.freshName("c")
+    val newKeys = ctx.freshName("newKeys")
+    val newValues = ctx.freshName("newValues")
+    val mapEntry = ctx.freshName("mapEntry")
+    val originalIndex = ctx.freshName("originalIndex")
+
+    val boxedKeyType = CodeGenerator.boxedType(keyType)
+    val javaKeyType = CodeGenerator.javaType(keyType)
+
+    val comp = if (CodeGenerator.isPrimitiveType(keyType)) {
+      val v1 = ctx.freshName("v1")
+      val v2 = ctx.freshName("v2")
+      s"""
+         |$javaKeyType $v1 = (($boxedKeyType) $o1).${javaKeyType}Value();
+         |$javaKeyType $v2 = (($boxedKeyType) $o2).${javaKeyType}Value();
+         |int $c = ${ctx.genComp(keyType, v1, v2)};
+       """.stripMargin
+    } else {
+      s"int $c = ${ctx.genComp(keyType, s"(($javaKeyType) $o1)", s"(($javaKeyType) $o2)")};"
+    }
+
+    s"""
+       |final int $numElements = $base.numElements();
+       |ArrayData $keys = $base.keyArray();
+       |ArrayData $values = $base.valueArray();
+       |
+       |java.util.TreeMap<$boxedKeyType, Integer> $treeMap = new java.util.TreeMap<>(
+       |  new java.util.Comparator() {
+       |    @Override public int compare(Object $o1, Object $o2) {
+       |      $comp;
+       |      return $order ? $c : -$c;
+       |    }
+       |  }
+       |);
+       |
+       |for (int $i = 0; $i < $numElements; $i++) {
+       |  $treeMap.put(${CodeGenerator.getValue(keys, keyType, i)}, $i);
+       |}
+       |
+       |Object[] $newKeys = new Object[$numElements];
+       |Object[] $newValues = new Object[$numElements];
+       |
+       |int $i = 0;
+       |for (java.util.Map.Entry<$boxedKeyType, Integer> $mapEntry : $treeMap.entrySet()) {
+       |  int $originalIndex = (Integer) $mapEntry.getValue();
+       |  $newKeys[$i] = ${CodeGenerator.getValue(keys, keyType, originalIndex)};
+       |  $newValues[$i] = ${CodeGenerator.getValue(values, valueType, originalIndex)};
+       |  $i++;
+       |}
+       |
+       |${ev.value} = new $arrayBasedMapData(
+       |  new $genericArrayData($newKeys), new $genericArrayData($newValues));
+       |""".stripMargin
+  }
+
+  override def prettyName: String = "sort_map"
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
+    : SortMap = copy(base = newLeft, ascendingOrder = newRight)
+}
 
 /**
  * Common base class for [[SortArray]] and [[ArraySort]].
