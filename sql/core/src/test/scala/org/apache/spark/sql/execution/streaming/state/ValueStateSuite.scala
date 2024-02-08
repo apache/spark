@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 
+import scala.concurrent.duration.Duration
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
@@ -27,12 +28,12 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTTL
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-
 /**
  * Class that adds tests for single value ValueState types used in arbitrary stateful
  * operators such as transformWithState
@@ -137,6 +138,33 @@ class ValueStateSuite extends SharedSparkSession
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(123)
+      assert(testState.get() === 123)
+      testState.remove()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(456)
+      assert(testState.get() === 456)
+      assert(testState.get() === 456)
+      testState.update(123)
+      assert(testState.get() === 123)
+
+      testState.remove()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("Value state TTL operations for single instance") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        ProcessingTimeTTL, Duration.Zero)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)

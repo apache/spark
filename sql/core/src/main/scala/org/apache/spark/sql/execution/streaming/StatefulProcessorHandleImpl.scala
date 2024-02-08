@@ -18,11 +18,13 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
 
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, TTLMode, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -117,6 +119,15 @@ class StatefulProcessorHandleImpl(
       "initialization is complete")
     store.createColFamilyIfAbsent(stateName)
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder)
+    resultState
+  }
+
+  def getValueState[T](stateName: String, ttlMode: TTLMode,
+      ttl: Duration): ValueState[T] = {
+    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
+      "initialization is complete")
+    store.createColFamilyIfAbsent(stateName)
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, ttlMode, ttl)
     resultState
   }
 

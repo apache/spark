@@ -80,6 +80,7 @@ case class TransformWithStateExec(
   protected val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
 
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+    .add("ttl", BinaryType)
 
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(groupingAttributes,
