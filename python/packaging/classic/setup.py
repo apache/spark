@@ -58,7 +58,7 @@ run sdist.
       ./build/mvn -DskipTests clean package
     Building the source dist is done in the Python directory:
       cd python
-      python setup.py sdist
+      python packaging/classic/setup.py sdist
       pip install dist/*.tar.gz"""
 
 # Figure out where the jars are we need to package with PySpark.
@@ -182,6 +182,8 @@ try:
         # Don't worry if the directory already exists.
         pass
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
+    copyfile("packaging/classic/setup.py", "setup.py")
+    copyfile("packaging/classic/setup.cfg", "setup.cfg")
 
     if in_spark:
         # Construct the symlink farm - this is necessary since we can't refer to the path above the
@@ -234,6 +236,7 @@ try:
         url="https://github.com/apache/spark/tree/master/python",
         packages=[
             "pyspark",
+            "pyspark.core",
             "pyspark.cloudpickle",
             "pyspark.mllib",
             "pyspark.mllib.linalg",
@@ -368,3 +371,5 @@ finally:
             rmtree(os.path.join(TEMP_PATH, "data"))
             rmtree(os.path.join(TEMP_PATH, "licenses"))
         os.rmdir(TEMP_PATH)
+    os.remove("setup.py")
+    os.remove("setup.cfg")
