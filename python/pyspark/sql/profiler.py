@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
+import os
 import pstats
 from threading import RLock
 from typing import Dict, Optional, TYPE_CHECKING
@@ -157,6 +158,37 @@ class ProfilerCollector(ABC):
         Get the profile results.
         """
         ...
+
+    def dump_perf_profiles(self, path: str, id: Optional[int] = None) -> None:
+        """
+        Dump the perf profile results into directory `path`.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path: str
+            A directory in which to dump the perf profile.
+        id : int, optional
+            A UDF ID to be shown. If not specified, all the results will be shown.
+        """
+        with self._lock:
+            stats = self._perf_profile_results
+
+        def dump(path: str, id: int) -> None:
+            s = stats.get(id)
+
+            if s is not None:
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                p = os.path.join(path, "udf_%d.pstats" % id)
+                s.dump_stats(p)
+
+        if id is not None:
+            dump(path, id)
+        else:
+            for id in sorted(stats.keys()):
+                dump(path, id)
 
 
 class AccumulatorProfilerCollector(ProfilerCollector):
