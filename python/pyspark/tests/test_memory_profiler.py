@@ -545,8 +545,8 @@ class MemoryProfiler2TestsMixin:
         df1 = self.spark.createDataFrame([(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)], ("id", "v1"))
         df2 = self.spark.createDataFrame([(1, "x"), (2, "y")], ("id", "v2"))
 
-        def summarize(l, r):
-            return pa.Table.from_pydict({"left": [l.num_rows], "right": [r.num_rows]})
+        def summarize(left, right):
+            return pa.Table.from_pydict({"left": [left.num_rows], "right": [right.num_rows]})
 
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
             df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
