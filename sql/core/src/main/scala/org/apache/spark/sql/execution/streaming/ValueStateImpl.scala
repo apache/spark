@@ -87,11 +87,11 @@ class ValueStateImpl[S](
   override def getOption(): Option[S] = {
     val retRow = getImpl()
     if (retRow != null) {
+      val resState = SerializationUtils
+        .deserialize(retRow.getBinary(0))
+        .asInstanceOf[S]
       ttlMode match {
         case NoTTL =>
-          val resState = SerializationUtils
-          .deserialize(retRow.getBinary(0))
-          .asInstanceOf[S]
           Some(resState)
         case ProcessingTimeTTL =>
           val ttlForVal = SerializationUtils
@@ -102,9 +102,6 @@ class ValueStateImpl[S](
             store.remove(encodeKey(), stateName)
             None
           } else {
-            val resState = SerializationUtils
-              .deserialize(retRow.getBinary(0))
-              .asInstanceOf[S]
             Some(resState)
           }
       }
@@ -117,11 +114,11 @@ class ValueStateImpl[S](
   override def get(): S = {
     val retRow = getImpl()
     if (retRow != null) {
+      val resState = SerializationUtils
+        .deserialize(retRow.getBinary(0))
+        .asInstanceOf[S]
       ttlMode match {
         case NoTTL =>
-          val resState = SerializationUtils
-            .deserialize(retRow.getBinary(0))
-            .asInstanceOf[S]
           resState
         case ProcessingTimeTTL =>
           val ttlForVal = SerializationUtils
@@ -132,9 +129,6 @@ class ValueStateImpl[S](
             store.remove(encodeKey(), stateName)
             null.asInstanceOf[S]
           } else {
-            val resState = SerializationUtils
-              .deserialize(retRow.getBinary(0))
-              .asInstanceOf[S]
             resState
           }
       }

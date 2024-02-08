@@ -122,7 +122,7 @@ class StatefulProcessorHandleImpl(
     resultState
   }
 
-  def getValueState[T](stateName: String, ttlMode: TTLMode,
+  override def getValueState[T](stateName: String, ttlMode: TTLMode,
       ttl: Duration): ValueState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
