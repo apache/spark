@@ -31,7 +31,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.functions import PartitioningColumn
+from pyspark.sql.functions import PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import handle_worker_exception
@@ -203,6 +203,19 @@ def main(infile: IO, outfile: IO) -> None:
                     and then try the query again."""
                 )
             )
+        elif isinstance(result.select, (list, tuple)) and (
+            len(result.select) > 0
+            and not all([isinstance(val, SelectedColumn) for val in result.select])
+        ):
+            raise PySparkValueError(
+                format_error(
+                    f"""
+                    {error_prefix} because the static 'analyze' method returned an
+                    'AnalyzeResult' object with the 'select' field set to a value besides a
+                    list or tuple of 'SelectedColumn' objects. Please update the table function
+                    and then try the query again."""
+                )
+            )
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
@@ -225,6 +238,11 @@ def main(infile: IO, outfile: IO) -> None:
                 write_int(1, outfile)
             else:
                 write_int(2, outfile)
+        # Return the requested selected input table columns, if specified.
+        write_int(len(result.select), outfile)
+        for col in result.select:
+            write_with_length(col.name.encode("utf-8"), outfile)
+            write_with_length(col.alias.encode("utf-8"), outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

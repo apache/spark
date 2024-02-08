@@ -366,7 +366,8 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           checkAnswer(readContent(), expected)
         }
       }
-      assert(caught.getMessage.contains("exceeds the max length allowed"))
+      assert(caught.getErrorClass == "FAILED_READ_FILE")
+      assert(caught.getCause.getMessage.contains("exceeds the max length allowed"))
     }
   }
 

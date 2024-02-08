@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
+import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util.Locale
@@ -37,20 +37,7 @@ import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{
-  ArrayBasedMapData,
-  BadRecordException,
-  DateFormatter,
-  DropMalformedMode,
-  FailureSafeParser,
-  GenericArrayData,
-  MapData,
-  ParseMode,
-  PartialResultArrayException,
-  PartialResultException,
-  PermissiveMode,
-  TimestampFormatter
-}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -623,7 +610,8 @@ class StaxXmlParser(
 class XmlTokenizer(
   inputStream: InputStream,
   options: XmlOptions) extends Logging {
-  private var reader = new InputStreamReader(inputStream, Charset.forName(options.charset))
+  private var reader = new BufferedReader(
+    new InputStreamReader(inputStream, Charset.forName(options.charset)))
   private var currentStartTag: String = _
   private var buffer = new StringBuilder()
   private val startTag = s"<${options.rowTag}>"

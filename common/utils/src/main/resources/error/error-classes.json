@@ -1242,6 +1242,12 @@
     ],
     "sqlState" : "22018"
   },
+  "FAILED_READ_FILE" : {
+    "message" : [
+      "Encountered error while reading file <path>."
+    ],
+    "sqlState" : "KD001"
+  },
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
     "message" : [
       "Failed to register classes with Kryo."
@@ -3447,6 +3453,12 @@
   "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD" : {
     "message" : [
       "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias <aliasName>; please remove this alias and then try the query again."
+    ],
+    "sqlState" : "42802"
+  },
+  "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression (<expression>) that does not include a corresponding alias; please update the UDTF to specify an alias there and then try the query again."
     ],
     "sqlState" : "42802"
   },
@@ -5852,11 +5864,6 @@
   "_LEGACY_ERROR_TEMP_2063" : {
     "message" : [
       "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2064" : {
-    "message" : [
-      "Encountered error while reading file <path>. Details:"
     ]
   },
   "_LEGACY_ERROR_TEMP_2065" : {

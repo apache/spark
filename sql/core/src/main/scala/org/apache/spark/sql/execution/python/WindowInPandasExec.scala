@@ -88,7 +88,7 @@ case class WindowInPandasExec(
         child.output,
         longMetric("spillSize"),
         pythonMetrics,
-        None) // TODO(SPARK-46691): Support profiling on WindowInPandasExec
+        conf.pythonUDFProfiler)
 
     // Start processing.
     if (conf.usePartitionEvaluator) {
