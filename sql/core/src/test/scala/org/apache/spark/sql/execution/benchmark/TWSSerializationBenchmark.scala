@@ -27,7 +27,8 @@ import org.apache.spark.sql.streaming.{SerializationType, StateEncoder}
 
 object TWSSerializationDataType extends Enumeration {
   type TWSSerializationDataType = Value
-  val PRIMITIVE, CASE_CLASS, POJO = Value
+  val PRIMITIVE_STRING, PRIMITIVE_INT, PRIMITIVE_LONG, PRIMITIVE_DOUBLE,
+      CASE_CLASS, POJO = Value
 }
 
 object TWSSerializationOpType extends Enumeration {
@@ -54,27 +55,29 @@ object TWSSerializationOpType extends Enumeration {
  */
 object TWSSerializationBenchmark extends SqlBasedBenchmark {
   private val NUM_OF_ROWS = 10000
-  private val ITERATIONS = 10
+  private val ITERATIONS = 100
 
   // Use random with static seed to generate value sizes
   private val randomNumGenerator = new scala.util.Random(100)
 
   // Construct Seq[obj, encodedObjToDecode], primitive string type
-  private def constructPrimitiveRandomizedTestData(
+  private def constructPrimitiveRandomizedTestDataBase[T](
       numRows: Int,
-      serializer: SerializationType.Value): Seq[(String, UnsafeRow)] = {
+      serializer: SerializationType.Value,
+      valEnc: Encoder[T],
+      generateRandomEntry: => T): Seq[(T, UnsafeRow)] = {
     (1 to numRows).map { idx =>
-      val valueStr = Random.alphanumeric.take(randomNumGenerator.nextInt(100)).mkString
+      val valEntry = generateRandomEntry
       val encodedVal = serializer match {
         case SerializationType.AVRO =>
-          StateEncoder.encodeValToAvro[String](valueStr, Encoders.STRING)
+          StateEncoder.encodeValToAvro[T](valEntry, valEnc)
         case SerializationType.SPARK_SQL =>
-          StateEncoder.encodeValSparkSQL[String](valueStr, Encoders.STRING)
+          StateEncoder.encodeValSparkSQL[T](valEntry, valEnc)
         case _ =>
-          StateEncoder.encodeValue[String](valueStr)
+          StateEncoder.encodeValue[T](valEntry)
       }
 
-      (valueStr, encodedVal)
+      (valEntry, encodedVal)
     }
   }
 
@@ -230,10 +233,13 @@ object TWSSerializationBenchmark extends SqlBasedBenchmark {
   }
 
   private def runBenchmarkWithOp(op: TWSSerializationOpType.Value): Unit = {
-    // primitive type
-    runBenchmarkWithDataType(TWSSerializationDataType.PRIMITIVE,
-      op.toString) { (serializer, benchmark) =>
-      val testData = constructPrimitiveRandomizedTestData(NUM_OF_ROWS, serializer)
+    // primitive type - String
+    runBenchmarkWithDataType(TWSSerializationDataType.PRIMITIVE_STRING, op.toString) {
+      (serializer, benchmark) =>
+      val testData = constructPrimitiveRandomizedTestDataBase[String](
+        NUM_OF_ROWS, serializer, Encoders.STRING,
+        Random.alphanumeric.take(randomNumGenerator.nextInt(100)).mkString
+      )
       op match {
         case TWSSerializationOpType.ENCODE =>
           executeEncoding[String](benchmark, serializer, testData.map(_._1), Encoders.STRING)
@@ -242,6 +248,58 @@ object TWSSerializationBenchmark extends SqlBasedBenchmark {
         case TWSSerializationOpType.ROUND_TRIP =>
           executeRoundTrip[String](benchmark, serializer, testData.map(_._1), Encoders.STRING)
       }
+    }
+
+    // primitive type - Int
+    runBenchmarkWithDataType(TWSSerializationDataType.PRIMITIVE_INT, op.toString) {
+      (serializer, benchmark) =>
+      val testData = constructPrimitiveRandomizedTestDataBase[Int](
+        NUM_OF_ROWS, serializer, Encoders.scalaInt,
+        randomNumGenerator.nextInt(100)
+      )
+      op match {
+        case TWSSerializationOpType.ENCODE =>
+          executeEncoding[Int](benchmark, serializer, testData.map(_._1), Encoders.scalaInt)
+        case TWSSerializationOpType.DECODE =>
+          executeDecoding[Int](benchmark, serializer, testData.map(_._2), Encoders.scalaInt)
+        case TWSSerializationOpType.ROUND_TRIP =>
+          executeRoundTrip[Int](benchmark, serializer, testData.map(_._1), Encoders.scalaInt)
+      }
+    }
+
+    // primitive type - Long
+    runBenchmarkWithDataType(TWSSerializationDataType.PRIMITIVE_LONG, op.toString) {
+      (serializer, benchmark) =>
+        val testData = constructPrimitiveRandomizedTestDataBase[Long](
+          NUM_OF_ROWS, serializer, Encoders.scalaLong,
+          randomNumGenerator.nextLong(100L)
+        )
+        op match {
+          case TWSSerializationOpType.ENCODE =>
+            executeEncoding[Long](benchmark, serializer, testData.map(_._1), Encoders.scalaLong)
+          case TWSSerializationOpType.DECODE =>
+            executeDecoding[Long](benchmark, serializer, testData.map(_._2), Encoders.scalaLong)
+          case TWSSerializationOpType.ROUND_TRIP =>
+            executeRoundTrip[Long](benchmark, serializer, testData.map(_._1), Encoders.scalaLong)
+        }
+    }
+
+    // primitive type - Double
+    runBenchmarkWithDataType(TWSSerializationDataType.PRIMITIVE_DOUBLE, op.toString) {
+      (serializer, benchmark) =>
+        val testData = constructPrimitiveRandomizedTestDataBase[Double](
+          NUM_OF_ROWS, serializer, Encoders.scalaDouble,
+          randomNumGenerator.nextDouble()
+        )
+        op match {
+          case TWSSerializationOpType.ENCODE =>
+            executeEncoding[Double](benchmark, serializer, testData.map(_._1), Encoders.scalaDouble)
+          case TWSSerializationOpType.DECODE =>
+            executeDecoding[Double](benchmark, serializer, testData.map(_._2), Encoders.scalaDouble)
+          case TWSSerializationOpType.ROUND_TRIP =>
+            executeRoundTrip[Double](benchmark, serializer,
+              testData.map(_._1), Encoders.scalaDouble)
+        }
     }
 
     // case class

@@ -38,6 +38,8 @@ import org.apache.spark.sql.types.{BinaryType, StructType}
  * to Spark [[UnsafeRow]].
  */
 object StateEncoder {
+  private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
   def encodeGroupingKey(stateName: String, keyExprEnc: ExpressionEncoder[Any]): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
@@ -48,14 +50,12 @@ object StateEncoder {
     val keyByteArr = toRow
       .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
 
-    val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
     val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
     val keyRow = keyEncoder(InternalRow(keyByteArr))
     keyRow
   }
 
   def encodeValue[S](value: S): UnsafeRow = {
-    val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
     val valueEncoder = UnsafeProjection.create(schemaForValueRow)
     val valueRow = valueEncoder(InternalRow(valueByteArr))
@@ -73,15 +73,17 @@ object StateEncoder {
     val objToRowSerializer = rowExpressionEnc.createSerializer()
     val objRow: InternalRow = objToRowSerializer.apply(value)
 
-    val schemaForValRow: StructType = new StructType().add("value", BinaryType)
-    val valEncoder = UnsafeProjection.create(schemaForValRow)
-    val valRow = valEncoder(InternalRow(objRow.asInstanceOf[UnsafeRow].getBytes()))
+    val valEncoder = UnsafeProjection.create(schemaForValueRow)
+    val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
+    val valRow = valEncoder(InternalRow(bytes))
+    // println("Inside encodeValSparkSQL, row byte size: " + bytes.length)
     valRow
   }
 
   def decodeValSparkSQL[S](row: UnsafeRow, valEnc: Encoder[S]): S = {
     val bytes = row.getBinary(0)
     val numFieldsInRow: Int = valEnc.schema.fields.length
+    // TODO can we reuse row? We will need to get numField from valEnc
     val unsafeRow = new UnsafeRow(numFieldsInRow)
     unsafeRow.pointTo(bytes, bytes.length)
     val value = encoderFor(valEnc).resolveAndBind().createDeserializer().apply(unsafeRow)
@@ -96,7 +98,6 @@ object StateEncoder {
     // dataType -> avroType
     val avroType: Schema = SchemaConverters.toAvroType(valSchema)
     // init avro serializer
-    // TODO: nullable?
     val avroSerializer = new AvroSerializer(valSchema, avroType, nullable = false)
     val rowExpressionEnc = encoderFor(valEnc)
     val objToRowSerializer = rowExpressionEnc.createSerializer()
@@ -113,8 +114,7 @@ object StateEncoder {
     val binary: Array[Byte] = out.toByteArray
 
     // bytes -> InternalRow
-    val schemaForValRow: StructType = new StructType().add("value", BinaryType)
-    val valEncoder = UnsafeProjection.create(schemaForValRow)
+    val valEncoder = UnsafeProjection.create(schemaForValueRow)
     valEncoder(InternalRow(binary))
   }
 
