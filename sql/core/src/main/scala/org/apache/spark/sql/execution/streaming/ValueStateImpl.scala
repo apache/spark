@@ -74,14 +74,13 @@ class ValueStateImpl[S](
       val ttlByteArr = SerializationUtils.serialize(ttlForVal)
       val valueEncoder = UnsafeProjection.create(schemaForValueRow)
       val valueRow = valueEncoder(InternalRow(valueByteArr, ttlByteArr))
-      logError(s"###Num fields: ${valueRow.numFields()}")
       valueRow
 
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
-    getImpl() != null
+    get() != null
   }
 
   /** Function to return Option of value if exists and None otherwise */
@@ -118,7 +117,6 @@ class ValueStateImpl[S](
   override def get(): S = {
     val retRow = getImpl()
     if (retRow != null) {
-      logError(s"###Num fields: ${retRow.numFields()}")
       ttlMode match {
         case NoTTL =>
           val resState = SerializationUtils

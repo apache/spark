@@ -56,6 +56,7 @@ class ValueStateSuite extends SharedSparkSession
   val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
 
   val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+    .add("ttl", BinaryType)
 
   private def newStoreProviderWithValueState(useColumnFamilies: Boolean):
     RocksDBStateStoreProvider = {
@@ -157,7 +158,7 @@ class ValueStateSuite extends SharedSparkSession
     }
   }
 
-  test("Value state TTL operations for single instance") {
+  test("Value state TTL - Immediate expiration") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -167,20 +168,7 @@ class ValueStateSuite extends SharedSparkSession
         ProcessingTimeTTL, Duration.Zero)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
-      assert(testState.get() === 123)
-      testState.remove()
       assert(!testState.exists())
-      assert(testState.get() === null)
-
-      testState.update(456)
-      assert(testState.get() === 456)
-      assert(testState.get() === 456)
-      testState.update(123)
-      assert(testState.get() === 123)
-
-      testState.remove()
-      assert(!testState.exists())
-      assert(testState.get() === null)
     }
   }
 
