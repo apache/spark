@@ -440,7 +440,7 @@ pyspark_core = Module(
         "pyspark.profiler",
         "pyspark.shuffle",
         "pyspark.taskcontext",
-        "pyspark.core.util",
+        "pyspark.util",
         # unittests
         "pyspark.tests.test_appsubmit",
         "pyspark.tests.test_broadcast",
