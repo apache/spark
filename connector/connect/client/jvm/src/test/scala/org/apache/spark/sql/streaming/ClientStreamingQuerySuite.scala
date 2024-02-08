@@ -214,7 +214,7 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
         q.processAllAvailable()
         eventually(timeout(30.seconds)) {
           val file = new File(outputPath)
-          assert(file.listFiles().length > 0)
+          assert(file.listFiles().exists(!_.getName.startsWith("_")))
         }
       } finally {
         q.stop()
