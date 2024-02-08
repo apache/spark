@@ -386,6 +386,12 @@ For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-availa
 
 Cannot find a short name for the codec `<codecName>`.
 
+### COLLATION_INVALID_NAME
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
+
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
@@ -719,6 +725,12 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Failed parsing struct: `<raw>`.
+
+### FAILED_READ_FILE
+
+SQLSTATE: KD001
+
+Encountered error while reading file `<path>`.
 
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
@@ -2202,6 +2214,12 @@ Please ensure that the number of aliases provided matches the number of columns 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
+
+### UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression (`<expression>`) that does not include a corresponding alias; please update the UDTF to specify an alias there and then try the query again.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 

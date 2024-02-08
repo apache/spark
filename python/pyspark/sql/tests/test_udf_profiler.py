@@ -28,6 +28,7 @@ from typing import Iterator, cast
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf, udf
+from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -332,6 +333,66 @@ class UDFProfiler2TestsMixin:
             df.mapInPandas(filter_func, df.schema).show()
 
         self.assertEqual(0, len(self.profile_results), str(self.profile_results.keys()))
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_pandas_udf_window(self):
+        # WindowInPandasExec
+        import pandas as pd
+
+        @pandas_udf("double")
+        def mean_udf(v: pd.Series) -> float:
+            return v.mean()
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+        w = Window.partitionBy("id").orderBy("v").rowsBetween(-1, 0)
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df.withColumn("mean_v", mean_udf("v").over(w)).show()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"5.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_perf_profiler_aggregate_in_pandas(self):
+        # AggregateInPandasExec
+        import pandas as pd
+
+        @pandas_udf("double")
+        def min_udf(v: pd.Series) -> float:
+            return v.min()
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df = self.spark.createDataFrame(
+                [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")], ["age", "name"]
+            )
+            df.groupBy(df.name).agg(min_udf(df.age)).show()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            with self.trap_stdout() as io:
+                self.spark.showPerfProfiles(id)
+
+            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+            self.assertRegex(
+                io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
+            )
 
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
