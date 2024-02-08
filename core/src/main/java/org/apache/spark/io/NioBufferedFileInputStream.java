@@ -56,26 +56,24 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   /**
    * Checks whether data is left to be read from the input stream.
-   * @return true if data is left, false otherwise
+   * @return true if no data is left, false otherwise
    */
-  private boolean refill() throws IOException {
-    if (!byteBuffer.hasRemaining()) {
-      byteBuffer.clear();
-      int nRead = 0;
-      while (nRead == 0) {
-        nRead = fileChannel.read(byteBuffer);
-      }
-      byteBuffer.flip();
-      if (nRead < 0) {
-        return false;
-      }
+  private boolean isExhausted() throws IOException {
+    if (byteBuffer.hasRemaining()) {
+      return false;
     }
-    return true;
+    byteBuffer.clear();
+    int nRead = 0;
+    while (nRead == 0) {
+      nRead = fileChannel.read(byteBuffer);
+    }
+    byteBuffer.flip();
+    return nRead < 0;
   }
 
   @Override
   public synchronized int read() throws IOException {
-    if (!refill()) {
+    if (isExhausted()) {
       return -1;
     }
     return byteBuffer.get() & 0xFF;
@@ -86,7 +84,7 @@ public final class NioBufferedFileInputStream extends InputStream {
     if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
       throw new IndexOutOfBoundsException();
     }
-    if (!refill()) {
+    if (isExhausted()) {
       return -1;
     }
     len = Math.min(len, byteBuffer.remaining());
