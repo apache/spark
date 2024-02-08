@@ -305,6 +305,7 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     val set = new OpenHashSet[Double]()
     set.add(Double.NaN)
     set.add(Double.NaN)
+    assert(set.contains(Double.NaN))
     assert(set.size == 1)
   }
 }
