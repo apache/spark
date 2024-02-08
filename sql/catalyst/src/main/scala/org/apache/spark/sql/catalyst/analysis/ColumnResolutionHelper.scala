@@ -313,24 +313,20 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
-      if (e.resolved) return e
+      if (e.resolved || !e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) return e
       val resolved = e match {
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
             resolve(nameParts).getOrElse(u) match {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
-              // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
-              // can trim the top-level alias if it's safe to do so. Since we will call
-              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
               case Alias(child, _) if !isTopLevel => child
               case other => other
             }
           }
           result
 
-        // Re-resolves `TempResolvedColumn` if it has tried to be resolved with Aggregate
-        // but failed. If we still can't resolve it, we should keep it as `TempResolvedColumn`,
-        // so that it won't become a fresh `TempResolvedColumn` again.
+        // Re-resolves `TempResolvedColumn` as variable references if it has tried to be
+        // resolved with Aggregate but failed.
         case t: TempResolvedColumn if t.hasTried => withPosition(t) {
           resolve(t.nameParts).getOrElse(t) match {
             case _: UnresolvedAttribute => t
