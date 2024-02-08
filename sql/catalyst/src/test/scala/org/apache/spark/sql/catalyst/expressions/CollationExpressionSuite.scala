@@ -31,9 +31,6 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(collateExpr.dataType === StringType(collationId))
     collateExpr.dataType.asInstanceOf[StringType].collationId == 0
     checkEvaluation(collateExpr, "abc")
-
-    val collationExpr = Collation(Literal("abc"))
-    checkEvaluation(collationExpr, "UCS_BASIC")
   }
 
   test("collate against literal") {
@@ -69,11 +66,5 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(error.getErrorClass === "COLLATION_INVALID_NAME")
     assert(error.getMessageParameters.asScala ===
       Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
-  }
-
-  test("collation against literal") {
-    val collationId = CollationFactory.collationNameToId("UCS_BASIC_LCASE")
-    val collationExpr = Collation(Literal.create("abc", StringType(collationId)))
-    checkEvaluation(collationExpr, "UCS_BASIC_LCASE")
   }
 }

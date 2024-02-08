@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A function that marks a given expression with specified collation.
@@ -64,18 +63,12 @@ case class Collate(child: Expression, collationName: String)
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class Collation(child: Expression) extends UnaryExpression {
+case class Collation(child: Expression) extends UnaryExpression with RuntimeReplaceable {
   override def dataType: DataType = StringType
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
-
-  override def eval(row: InternalRow): Any = {
-    val collationId = child.dataType.asInstanceOf[StringType].collationId
-    UTF8String.fromString(CollationFactory.fetchCollation(collationId).collationName)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     val collationName = CollationFactory.fetchCollation(collationId).collationName
-    defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString("$collationName")""")
+    Literal.create(collationName, StringType)
   }
 }

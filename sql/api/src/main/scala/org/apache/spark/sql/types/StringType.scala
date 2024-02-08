@@ -31,7 +31,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   /**
    * Returns whether assigned collation is the default spark collation (UCS_BASIC).
    */
-  private def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
+  def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
 
   /**
    * Type name that is shown to the customer.
