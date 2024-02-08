@@ -31,8 +31,8 @@ import org.apache.spark.sql.types._
   usage = "expr _FUNC_ collationName",
   examples = """
     Examples:
-      > SELECT 'Spark SQL' COLLATE 'UCS_BASIC_LCASE';
-       Spark SQL
+      > SELECT COLLATION('Spark SQL' _FUNC_ 'UCS_BASIC_LCASE');
+       UCS_BASIC_LCASE
   """,
   since = "4.0.0",
   group = "string_funcs")
