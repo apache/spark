@@ -330,7 +330,10 @@ class DataSourceStreamReader(ABC):
 
     def initialOffset(self) -> dict:
         """
-        The initial offset of the streaming data source.
+        Return the initial offset of the streaming data source.
+        A new streaming query starts reading data from the initial offset.
+        If Spark is restarting an existing query, it will restart from the check-pointed offset
+        rather than the initial one.
 
         Returns
         -------
@@ -341,7 +344,7 @@ class DataSourceStreamReader(ABC):
 
     def latestOffset(self) -> dict:
         """
-        Seek the latest offset of the streaming data source.
+        Returns the most recent offset available.
 
         Returns
         -------
@@ -352,7 +355,8 @@ class DataSourceStreamReader(ABC):
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
         """
-        Plan the read partitions given the start and end offset.
+        Returns a list of InputPartition  given the start and end offsets. Each InputPartition
+        represents a data split that can be processed by one Spark task.
 
         Parameters
         ----------
@@ -374,9 +378,11 @@ class DataSourceStreamReader(ABC):
         Generates data for a given partition and returns an iterator of tuples or rows.
 
         This method is invoked once per partition to read the data. Implementing
-        this method is required for readable data sources. You can initialize any
+        this method is required for stream reader. You can initialize any
         non-serializable resources required for reading data from the data source
         within this method.
+        This method is static and stateless. You shouldn't access mutable class member
+        or keep in memory state between different invocations of read().
 
         Parameters
         ----------
@@ -394,8 +400,8 @@ class DataSourceStreamReader(ABC):
 
     def commit(self, end: dict):
         """
-        Invoked when the streaming query have finished processing data up to a specific offset.
-        User can safely delete all the data before "end" in the data source.
+        Informs the source that Spark has completed processing all data for offsets less than or
+        equal to `end` and will only request offsets greater than `end` in the future.
 
         Parameters
         ----------
@@ -406,8 +412,8 @@ class DataSourceStreamReader(ABC):
 
     def stop(self):
         """
-        Invoked when the streaming query terminated. Can be used to clean up resources hold
-        by the stream reader.
+        Stop this source and free any resources it has allocated.
+        Invoked when the streaming query terminated.
         """
         ...
 
