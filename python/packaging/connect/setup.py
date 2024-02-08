@@ -34,9 +34,18 @@ except IOError:
     sys.exit(-1)
 VERSION = __version__  # noqa
 
+# Check and see if we are under the spark path in which case we need to build the symlink farm.
+# This is important because we only want to build the symlink farm while under Spark otherwise we
+# want to use the symlink farm. And if the symlink farm exists under while under Spark (e.g. a
+# partially built sdist) we should error and have the user sort it out.
+in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.scala") or (
+    os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1
+)
+
 try:
-    copyfile("packaging/connect/setup.py", "setup.py")
-    copyfile("packaging/connect/setup.cfg", "setup.cfg")
+    if in_spark:
+        copyfile("packaging/connect/setup.py", "setup.py")
+        copyfile("packaging/connect/setup.cfg", "setup.cfg")
 
     # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
     # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
@@ -128,5 +137,6 @@ try:
         ],
     )
 finally:
-    os.remove("setup.py")
-    os.remove("setup.cfg")
+    if in_spark:
+        os.remove("setup.py")
+        os.remove("setup.cfg")

@@ -182,11 +182,11 @@ try:
         # Don't worry if the directory already exists.
         pass
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
-    copyfile("packaging/classic/setup.py", "setup.py")
-    copyfile("packaging/classic/setup.cfg", "setup.cfg")
 
     if in_spark:
-        # Construct the symlink farm - this is necessary since we can't refer to the path above the
+        copyfile("packaging/classic/setup.py", "setup.py")
+        copyfile("packaging/classic/setup.cfg", "setup.cfg")
+        # Construct the symlink farm - this is nein_sparkcessary since we can't refer to the path above the
         # package root and we need to copy the jars and scripts which are up above the python root.
         if _supports_symlinks():
             os.symlink(JARS_PATH, JARS_TARGET)
@@ -355,6 +355,8 @@ finally:
     # We only cleanup the symlink farm if we were in Spark, otherwise we are installing rather than
     # packaging.
     if in_spark:
+        os.remove("setup.py")
+        os.remove("setup.cfg")
         # Depending on cleaning up the symlink farm or copied version
         if _supports_symlinks():
             os.remove(os.path.join(TEMP_PATH, "jars"))
@@ -371,5 +373,3 @@ finally:
             rmtree(os.path.join(TEMP_PATH, "data"))
             rmtree(os.path.join(TEMP_PATH, "licenses"))
         os.rmdir(TEMP_PATH)
-    os.remove("setup.py")
-    os.remove("setup.cfg")
