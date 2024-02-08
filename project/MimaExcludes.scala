@@ -76,7 +76,7 @@ object MimaExcludes {
 
     // SPARK-46410: Assign error classes/subclasses to JdbcUtils.classifyException
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcDialect.classifyException"),
-    // SPARK-46831: (false alert). Invalid rule for StringType extension.
+    // TODO(SPARK-46878): Invalid Mima report for StringType extension
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.StringType.this")
   )
 
