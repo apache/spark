@@ -3027,7 +3027,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def desc_nulls_first(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the descending order of the given
+    Sort Function: Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
 
     .. versionadded:: 2.4.0
@@ -3047,10 +3047,11 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df1 = spark.createDataFrame([(0, None),
-    ...                              (1, "Bob"),
-    ...                              (2, "Alice")], ["age", "name"])
-    >>> df1.sort(desc_nulls_first(df1.name)).show()
+    Example 1: Sorting a DataFrame with null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "Bob"), (0, None), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_first(df.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -3059,6 +3060,32 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     |  2|Alice|
     +---+-----+
 
+    Example 2: Sorting a DataFrame with multiple columns, null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [(1, "Bob", None), (0, None, "Z"), (2, "Alice", "Y")], ["age", "name", "grade"])
+    >>> df.sort(sf.desc_nulls_first(df.name), sf.desc_nulls_first(df.grade)).show()
+    +---+-----+-----+
+    |age| name|grade|
+    +---+-----+-----+
+    |  0| NULL|    Z|
+    |  1|  Bob| NULL|
+    |  2|Alice|    Y|
+    +---+-----+-----+
+
+    Example 3: Sorting a DataFrame with null values in descending order using column name string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "Bob"), (0, None), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_first("name")).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  0| NULL|
+    |  1|  Bob|
+    |  2|Alice|
+    +---+-----+
     """
     return (
         col.desc_nulls_first()
@@ -3070,7 +3097,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def desc_nulls_last(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the descending order of the given
+    Sort Function: Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
 
     .. versionadded:: 2.4.0
@@ -3090,10 +3117,11 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df1 = spark.createDataFrame([(0, None),
-    ...                              (1, "Bob"),
-    ...                              (2, "Alice")], ["age", "name"])
-    >>> df1.sort(desc_nulls_last(df1.name)).show()
+    Example 1: Sorting a DataFrame with null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(0, None), (1, "Bob"), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_last(df.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -3102,6 +3130,32 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     |  0| NULL|
     +---+-----+
 
+    Example 2: Sorting a DataFrame with multiple columns, null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [(0, None, "Z"), (1, "Bob", None), (2, "Alice", "Y")], ["age", "name", "grade"])
+    >>> df.sort(sf.desc_nulls_last(df.name), sf.desc_nulls_last(df.grade)).show()
+    +---+-----+-----+
+    |age| name|grade|
+    +---+-----+-----+
+    |  1|  Bob| NULL|
+    |  2|Alice|    Y|
+    |  0| NULL|    Z|
+    +---+-----+-----+
+
+    Example 3: Sorting a DataFrame with null values in descending order using column name string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(0, None), (1, "Bob"), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_last("name")).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  1|  Bob|
+    |  2|Alice|
+    |  0| NULL|
+    +---+-----+
     """
     return (
         col.desc_nulls_last()
