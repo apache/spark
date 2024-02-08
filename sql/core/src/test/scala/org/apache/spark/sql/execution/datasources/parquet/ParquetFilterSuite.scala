@@ -2210,10 +2210,16 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("disable filter pushdown for collated strings") {
+    def containsFilters(df: DataFrame, filterString: String): Unit = {
+      val explain = df.queryExecution.explainString(ExplainMode.fromString("extended"))
+      assert(explain.contains(filterString))
+    }
+
     withTempPath { path =>
       val collation = "'SR_CI_AI'"
       val df = sql(
-        s""" SELECT collate(c, $collation) as c
+        s""" SELECT collate(c, $collation) as c1,
+          |named_struct('f1', named_struct('f2', collate(c, $collation), 'f3', 1)) as ns
           |FROM VALUES ('aaa'), ('AAA'), ('bbb')
           |as data(c)
           |""".stripMargin)
@@ -2231,11 +2237,24 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
       filters.foreach { filter =>
         val readback = spark.read.parquet(path.getAbsolutePath)
-          .where(s"c ${filter._1} collate('aaa', $collation)")
-        val explain = readback.queryExecution.explainString(ExplainMode.fromString("extended"))
-        assert(explain.contains("PushedFilters: []"))
+          .where(s"c1 ${filter._1} collate('aaa', $collation)")
+          .where(s"ns.f1.f2 ${filter._1} collate('aaa', $collation)")
+          .where(s"ns ${filter._1} " +
+            s"named_struct('f1', named_struct('f2', collate('aaa', $collation), 'f3', 1))")
+          .select("c1")
+
+        containsFilters(readback,
+          "PushedFilters: [IsNotNull(c1), IsNotNull(ns.f1.f2), IsNotNull(ns)]")
         checkAnswer(readback, filter._2)
       }
+
+      // should still push down the filter for the nested column which is not collated
+      val readback = spark.read.parquet(path.getAbsolutePath)
+        .where(s"ns.f1.f3 == 1")
+        .select("c1")
+
+      containsFilters(readback, "PushedFilters: [IsNotNull(ns.f1.f3), EqualTo(ns.f1.f3,1)]")
+      checkAnswer(readback, Seq(Row("aaa"), Row("AAA"), Row("bbb")))
     }
   }
 }

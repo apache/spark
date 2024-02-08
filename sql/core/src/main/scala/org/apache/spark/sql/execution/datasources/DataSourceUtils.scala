@@ -28,7 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, IsNotNull, IsNull, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -287,18 +287,17 @@ object DataSourceUtils extends PredicateHelper {
    * @return A boolean indicating whether the filter should be pushed down or not.
    */
   def shouldPushFilter(expression: Expression): Boolean = {
-    def shouldPushFilterRecursive(expression: Expression): Boolean = expression match {
-      case attr: AttributeReference =>
-        attr.dataType match {
+    def checkRecursive(expression: Expression): Boolean = expression match {
+      case _: IsNull | _: IsNotNull => true
+      case _ =>
+        expression.dataType match {
           // don't push down filters for string columns with non-default collation
           // as it could lead to incorrect results
           case st: StringType => st.isDefaultCollation
-          case _ => true
+          case _ => expression.children.forall(checkRecursive)
         }
-
-      case _ => expression.children.forall(shouldPushFilterRecursive)
     }
 
-    expression.deterministic && shouldPushFilterRecursive(expression)
+    expression.deterministic && checkRecursive(expression)
   }
 }
