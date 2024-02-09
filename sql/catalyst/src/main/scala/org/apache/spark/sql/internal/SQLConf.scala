@@ -1561,11 +1561,11 @@ object SQLConf {
       .doc("Whether to forcibly enable some optimization rules that can change the output " +
         "partitioning of a cached query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "enabled by default. The optimization rules enabled by this configuration " +
-        s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
+        "disabled by default. The optimization rule enabled by this configuration " +
+        s"is ${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key}.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DEFAULT_CACHE_STORAGE_LEVEL = buildConf("spark.sql.defaultCacheStorageLevel")
     .doc("The default storage level of `dataset.cache()`, `catalog.cacheTable()` and " +
@@ -2339,7 +2339,8 @@ object SQLConf {
       .doc("When false, the `strfmt` in `format_string(strfmt, obj, ...)` and " +
         "`printf(strfmt, obj, ...)` will no longer support to use \"0$\" to specify the first " +
         "argument, the first argument should always reference by \"1$\" when use argument index " +
-        "to indicating the position of the argument in the argument list.")
+        "to indicating the position of the argument in the argument list. " +
+        "This config will be removed in the future releases.")
       .version("3.3")
       .booleanConf
       .createWithDefault(false)
@@ -4718,7 +4719,9 @@ object SQLConf {
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
-        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead.")
+        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
+      DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
+        "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\".")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)

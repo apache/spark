@@ -19,9 +19,8 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.internal.SQLConf
 
 object TransformWithStateSuiteUtils {
@@ -160,9 +159,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, "a"),
-        ExpectFailure[SparkException] {
-          (t: Throwable) => { assert(t.getCause
-            .getMessage.contains("Cannot create state variable")) }
+        ExpectFailure[SparkException] { t =>
+          assert(t.getCause.getMessage.contains("Cannot create state variable"))
         }
       )
     }
@@ -195,6 +193,18 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
     }
+  }
+
+  test("transformWithState - batch should succeed") {
+    val inputData = Seq("a", "b")
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Append())
+
+    val df = result.toDF()
+    checkAnswer(df, Seq(("a", "1"), ("b", "1")).toDF())
   }
 
   test("transformWithState - test deleteIfExists operator") {
@@ -334,22 +344,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   import testImplicits._
 
-  test("transformWithState - batch should fail") {
-    val ex = intercept[Exception] {
-      val df = Seq("a", "a", "b").toDS()
-        .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessor,
-          TimeoutMode.NoTimeouts(),
-          OutputMode.Append())
-        .write
-        .format("noop")
-        .mode(SaveMode.Append)
-        .save()
-    }
-    assert(ex.isInstanceOf[AnalysisException])
-    assert(ex.getMessage.contains("not supported"))
-  }
-
   test("transformWithState - streaming with hdfsStateStoreProvider should fail") {
     val inputData = MemoryStream[String]
     val result = inputData.toDS()
@@ -360,8 +354,8 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, "a"),
-      ExpectFailure[SparkException] {
-        (t: Throwable) => { assert(t.getCause.getMessage.contains("not supported")) }
+      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
+        assert(t.getMessage.contains("not supported"))
       }
     )
   }
