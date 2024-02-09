@@ -7615,6 +7615,16 @@
       "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
     ]
   },
+  "_LEGACY_ERROR_TEMP_3220" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to an array of <elementType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3221" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to a map type with key type (<keyType>) and value type (<valueType>)"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

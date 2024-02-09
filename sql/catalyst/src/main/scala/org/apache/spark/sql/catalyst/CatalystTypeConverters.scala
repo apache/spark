@@ -175,9 +175,12 @@ object CatalystTypeConverters {
             convertedIterable += elementConverter.toCatalyst(item)
           }
           new GenericArrayData(convertedIterable.toArray)
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + s"cannot be converted to an array of ${elementType.catalogString}")
+        case other => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3220",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "elementType" -> elementType.catalogString))
       }
     }
 
@@ -214,10 +217,13 @@ object CatalystTypeConverters {
       scalaValue match {
         case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
         case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + "cannot be converted to a map type with "
-            + s"key type (${keyType.catalogString}) and value type (${valueType.catalogString})")
+        case other => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3221",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "keyType" -> keyType.catalogString,
+            "valueType" -> valueType.catalogString))
       }
     }
 
