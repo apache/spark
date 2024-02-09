@@ -125,7 +125,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     echo "Run basic sanity check with import based"
     python3 "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
-    python3 "$FWDIR"/python/pyspark/context.py
+    python3 "$FWDIR"/python/pyspark/core/context.py
 
     cd "$FWDIR"
 

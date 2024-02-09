@@ -837,7 +837,7 @@ class DataFrameReader(OptionUtils):
 
         has_core = True
         try:
-            import pyspark.core  # noqa: F401
+            from pyspark.core.rdd import RDD  # noqa: F401
         except ImportError:
             has_core = False
 
@@ -967,7 +967,7 @@ class DataFrameReader(OptionUtils):
 
         has_core = True
         try:
-            import pyspark.core  # noqa: F401
+            from pyspark.core.rdd import RDD  # noqa: F401
         except ImportError:
             has_core = False
 
