@@ -7590,6 +7590,31 @@
       "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3215" : {
+    "message" : [
+      "Expected a Boolean type expression in replaceNullWithFalse, but got the type <dataType> in <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3216" : {
+    "message" : [
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3217" : {
+    "message" : [
+      "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3218" : {
+    "message" : [
+      "Must be 2 children: <others>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3219" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
