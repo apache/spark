@@ -22,8 +22,10 @@ import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.streaming.TimeoutMode
 import org.apache.spark.sql.types._
 
 /**
@@ -44,40 +46,48 @@ object TimerStateUtils {
  * Class that provides the implementation for storing timers
  * used within the `transformWithState` operator.
  * @param store - state store to be used for storing timer data
- * @param stateName - name of the timer state variable
+ * @param timeoutMode - mode of timeout (event time or processing time)
+ * @param keyExprEnc - encoder for key expression
  * @tparam S - type of timer value
  */
 class TimerStateImpl[S](
     store: StateStore,
-    stateName: String) extends Logging {
+    timeoutMode: TimeoutMode,
+    keyExprEnc: ExpressionEncoder[Any]) extends Logging {
 
-  private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  private val EMPTY_ROW =
+    UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
-  private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+  private val schemaForKeyRow: StructType = new StructType()
+    .add("key", BinaryType)
+    .add("expiryTimestampMs", LongType, nullable = false)
 
-//  protected val schemaForValueRow: StructType =
-//    StructType(Array(StructField("__dummy__", NullType)))
+  private val schemaForValueRow: StructType =
+    StructType(Array(StructField("__dummy__", NullType)))
 
-//  val keyToTsCFName = stateName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-//  store.createColFamilyIfAbsent(keyToTsCFName, true)
+  val timerCfName = if (timeoutMode == TimeoutMode.ProcessingTime) {
+    TimerStateUtils.PROC_TIMERS_STATE_NAME
+  } else {
+    TimerStateUtils.EVENT_TIMERS_STATE_NAME
+  }
 
-//  val tsToKeyCFName = stateName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
-//  store.createColFamilyIfAbsent(tsToKeyCFName, false)
-  store.createColFamilyIfAbsent(stateName,
+  val keyToTsCFName = timerCfName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+  store.createColFamilyIfAbsent(keyToTsCFName,
     schemaForKeyRow, numColsPrefixKey = 0, schemaForValueRow, true)
 
   private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
       throw new UnsupportedOperationException("Implicit key not found for operation on" +
-        s"stateName=$stateName")
+        s"stateName=$keyToTsCFName")
     }
 
-    val tsWithKey = TimerStateUtils.TimestampWithKey(keyOption.get, expiryTimestampMs)
-    val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-    val keyByteArr = SerializationUtils.serialize(tsWithKey.asInstanceOf[Serializable])
+    val toRow = keyExprEnc.createSerializer()
+    val keyByteArr = toRow
+      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
+
     val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
-    val keyRow = keyEncoder(InternalRow(keyByteArr))
+    val keyRow = keyEncoder(InternalRow(keyByteArr, expiryTimestampMs))
     keyRow
   }
 
@@ -99,7 +109,7 @@ class TimerStateImpl[S](
   }
 
   private def getImpl(expiryTimestampMs: Long): UnsafeRow = {
-    store.get(encodeKey(expiryTimestampMs), stateName)
+    store.get(encodeKey(expiryTimestampMs), keyToTsCFName)
   }
 
   /**
@@ -108,7 +118,7 @@ class TimerStateImpl[S](
    * @param newState = boolean value to be stored for the state value
    */
   def add(expiryTimestampMs: Long, newState: S): Unit = {
-    store.put(encodeKey(expiryTimestampMs), encodeValue(newState), stateName)
+    store.put(encodeKey(expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
   }
 
   /**
@@ -116,10 +126,19 @@ class TimerStateImpl[S](
    * @param expiryTimestampMs - expiry timestamp of the timer
    */
   def remove(expiryTimestampMs: Long): Unit = {
-    store.remove(encodeKey(expiryTimestampMs), stateName)
+    store.remove(encodeKey(expiryTimestampMs), keyToTsCFName)
   }
 
   def getExpiredTimers(): Iterator[UnsafeRowPair] = {
-    store.iterator(stateName)
+    store.iterator(keyToTsCFName)
+  }
+
+  def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
+    val bytes = keyRow.getBinary(0)
+    val retUnsafeRow = new UnsafeRow(1)
+    retUnsafeRow.pointTo(bytes, bytes.length)
+    val key = keyExprEnc.resolveAndBind().createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
+    val expiryTimestampMs = keyRow.getLong(1)
+    (key, expiryTimestampMs)
   }
 }

@@ -38,7 +38,6 @@ import org.apache.spark.{SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.TimerStateUtils
 import org.apache.spark.util.{NextIterator, Utils}
 
 /**
@@ -254,7 +253,7 @@ class RocksDB(
    * @return - true if the column family is for internal use, false otherwise
    */
   private def checkInternalColumnFamilies(cfName: String): Boolean = {
-    if (cfName == TimerStateUtils.PROC_TIMERS_STATE_NAME) {
+    if (cfName.charAt(0) == '_') {
       true
     } else {
       false

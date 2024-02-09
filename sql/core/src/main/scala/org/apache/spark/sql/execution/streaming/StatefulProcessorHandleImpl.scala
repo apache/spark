@@ -21,6 +21,7 @@ import java.util.UUID
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
@@ -123,12 +124,11 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  private def getTimerState[T](stateName: String): TimerStateImpl[T] = {
-    new TimerStateImpl[T](store, stateName)
+  private def getTimerState[T](): TimerStateImpl[T] = {
+    new TimerStateImpl[T](store, timeoutMode, keyEncoder)
   }
 
-  private lazy val procTimers =
-    getTimerState[Boolean](TimerStateUtils.PROC_TIMERS_STATE_NAME)
+  private val timerState = getTimerState[Boolean]()
 
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verify(timeoutMode == ProcessingTime || timeoutMode == EventTime,
@@ -137,11 +137,11 @@ class StatefulProcessorHandleImpl(
     s"Cannot register processing time timer with " +
       s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
 
-    if (procTimers.exists(expiryTimestampMs)) {
+    if (timerState.exists(expiryTimestampMs)) {
       logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
     } else {
       logInfo(s"Registering timer with expiryTimestampMs=$expiryTimestampMs")
-      procTimers.add(expiryTimestampMs, true)
+      timerState.add(expiryTimestampMs, true)
     }
   }
 
@@ -152,11 +152,11 @@ class StatefulProcessorHandleImpl(
     s"Cannot delete processing time timer with " +
       s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
 
-    if (!procTimers.exists(expiryTimestampMs)) {
+    if (!timerState.exists(expiryTimestampMs)) {
       logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")
     } else {
       logInfo(s"Removing timer with expiryTimestampMs=$expiryTimestampMs")
-      procTimers.remove(expiryTimestampMs)
+      timerState.remove(expiryTimestampMs)
     }
   }
 
@@ -172,7 +172,14 @@ class StatefulProcessorHandleImpl(
   }
 
   def getExpiredTimers(): Iterator[UnsafeRowPair] = {
-    procTimers.getExpiredTimers()
+    timerState.getExpiredTimers()
   }
 
+  def removeExpiredTimer(expiryTimestampMs: Long): Unit = {
+    timerState.remove(expiryTimestampMs)
+  }
+
+  def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
+    timerState.getTimerRow(keyRow)
+  }
 }

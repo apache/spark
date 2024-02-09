@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
-import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -77,6 +75,10 @@ case class TransformWithStateExec(
       // TODO: check if we can return true only if actual timers are registered
       case ProcessingTime =>
         true
+
+      case EventTime =>
+        eventTimeWatermarkForEviction.isDefined &&
+          newInputWatermark > eventTimeWatermarkForEviction.get
 
       case _ =>
         false
@@ -135,26 +137,23 @@ case class TransformWithStateExec(
   }
 
   private def handleTimerRows(
-      store: StateStore,
       keyRow: UnsafeRow,
-      currTimestampMs: Long): Iterator[InternalRow] = {
+      currTimestampMs: Long,
+      processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
-    val tsWithKey = SerializationUtils
-      .deserialize(keyRow.getBinary(0))
-      .asInstanceOf[TimerStateUtils.TimestampWithKey]
-
-    if (tsWithKey.expiryTimestampMs < currTimestampMs) {
-      ImplicitGroupingKeyTracker.setImplicitKey(tsWithKey.key)
+    val (keyObj, expiryTimestampMs) = processorHandle.getTimerRow(keyRow)
+    if (expiryTimestampMs < currTimestampMs) {
+      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
       val mappedIterator = statefulProcessor.handleInputRows(
-        tsWithKey.key,
+        keyObj,
         Iterator.empty,
         new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
-        new ExpiredTimerInfoImpl(true, Some(tsWithKey.expiryTimestampMs), timeoutMode)
+        new ExpiredTimerInfoImpl(true, Some(expiryTimestampMs), timeoutMode)
       ).map { obj =>
         getOutputRow(obj)
       }
+      processorHandle.removeExpiredTimer(expiryTimestampMs)
       ImplicitGroupingKeyTracker.removeImplicitKey()
-      store.remove(keyRow, TimerStateUtils.PROC_TIMERS_STATE_NAME)
       mappedIterator
     } else {
       Iterator.empty
@@ -162,7 +161,6 @@ case class TransformWithStateExec(
   }
 
   private def processTimers(
-      store: StateStore,
       timeoutMode: TimeoutMode,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     timeoutMode match {
@@ -170,7 +168,15 @@ case class TransformWithStateExec(
         assert(batchTimestampMs.isDefined)
         val procTimeIter = processorHandle.getExpiredTimers()
         procTimeIter.flatMap { case rowPair =>
-          handleTimerRows(store, rowPair.key, batchTimestampMs.get)
+          handleTimerRows(rowPair.key, batchTimestampMs.get, processorHandle)
+        }
+
+      case EventTime =>
+        assert(eventTimeWatermarkForEviction.isDefined)
+        val watermark = eventTimeWatermarkForEviction.get
+        val eventTimeIter = processorHandle.getExpiredTimers()
+        eventTimeIter.flatMap { case rowPair =>
+          handleTimerRows(rowPair.key, watermark, processorHandle)
         }
 
       case _ => Iterator.empty
@@ -216,7 +222,7 @@ case class TransformWithStateExec(
       override def next() = itr.next()
       private def getIterator(): Iterator[InternalRow] =
         CompletionIterator[InternalRow, Iterator[InternalRow]](
-          processTimers(store, timeoutMode, processorHandle), {
+          processTimers(timeoutMode, processorHandle), {
           // Note: `timeoutLatencyMs` also includes the time the parent operator took for
           // processing output returned through iterator.
           timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
@@ -251,6 +257,9 @@ case class TransformWithStateExec(
     timeoutMode match {
       case ProcessingTime =>
         require(batchTimestampMs.nonEmpty)
+
+      case EventTime =>
+        require(eventTimeWatermarkForEviction.nonEmpty)
 
       case _ =>
     }
