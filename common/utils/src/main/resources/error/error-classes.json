@@ -7670,6 +7670,11 @@
       "Field not found: <name>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3231" : {
+    "message" : [
+      "Intervals greater than a month is not supported (<interval>)."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
