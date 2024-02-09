@@ -7625,6 +7625,51 @@
       "The value (<other>) of the type (<otherClass>) cannot be converted to a map type with key type (<keyType>) and value type (<valueType>)"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3222" : {
+    "message" : [
+      "Only literals are allowed in the partition spec, but got <expr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3223" : {
+    "message" : [
+      "Cannot find field: <name> in <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3224" : {
+    "message" : [
+      "Cannot delete array element"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3225" : {
+    "message" : [
+      "Cannot delete map value"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3226" : {
+    "message" : [
+      "Cannot delete map key"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3227" : {
+    "message" : [
+      "Cannot find field: <fieldName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3228" : {
+    "message" : [
+      "AFTER column not found: <afterCol>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3229" : {
+    "message" : [
+      "Not a struct: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3230" : {
+    "message" : [
+      "Field not found: <name>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

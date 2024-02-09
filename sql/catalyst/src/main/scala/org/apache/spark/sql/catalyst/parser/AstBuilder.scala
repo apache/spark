@@ -30,7 +30,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -681,8 +681,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
         }
       case other =>
-        throw new IllegalArgumentException(s"Only literals are allowed in the " +
-          s"partition spec, but got ${other.sql}")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3222",
+          messageParameters = Map("expr" -> other.sql)
+        )
     }
   }
 
