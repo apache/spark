@@ -2708,7 +2708,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "availableCodecs" -> availableCodecs))
   }
 
-  def partitionNumMismatchError(numFields: Int, schemaLen: Int): IllegalArgumentException = {
+  def partitionNumMismatchError(numFields: Int, schemaLen: Int): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_3208",
       messageParameters = Map(
