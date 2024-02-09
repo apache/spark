@@ -163,17 +163,15 @@ case class TransformWithStateExec(
 
   private def processTimers(
       store: StateStore,
-      timeoutMode: TimeoutMode): Iterator[InternalRow] = {
+      timeoutMode: TimeoutMode,
+      processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     timeoutMode match {
-/*      case ProcessingTime =>
+      case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
-        store.createColFamilyIfAbsent(TimerStateUtils.PROC_TIMERS_STATE_NAME, true)
-
-        val procTimeIter = store
-          .iterator(TimerStateUtils.PROC_TIMERS_STATE_NAME)
+        val procTimeIter = processorHandle.getExpiredTimers()
         procTimeIter.flatMap { case rowPair =>
           handleTimerRows(store, rowPair.key, batchTimestampMs.get)
-        } */
+        }
 
       case _ => Iterator.empty
     }
@@ -218,7 +216,7 @@ case class TransformWithStateExec(
       override def next() = itr.next()
       private def getIterator(): Iterator[InternalRow] =
         CompletionIterator[InternalRow, Iterator[InternalRow]](
-          processTimers(store, timeoutMode), {
+          processTimers(store, timeoutMode, processorHandle), {
           // Note: `timeoutLatencyMs` also includes the time the parent operator took for
           // processing output returned through iterator.
           timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)

@@ -22,7 +22,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
 import org.apache.spark.util.Utils
 
@@ -170,4 +170,9 @@ class StatefulProcessorHandleImpl(
       "initialization is complete")
     store.removeColFamilyIfExists(stateName)
   }
+
+  def getExpiredTimers(): Iterator[UnsafeRowPair] = {
+    procTimers.getExpiredTimers()
+  }
+
 }

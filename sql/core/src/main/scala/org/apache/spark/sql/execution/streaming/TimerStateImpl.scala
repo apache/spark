@@ -23,7 +23,7 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.types._
 
 /**
@@ -51,6 +51,10 @@ class TimerStateImpl[S](
     store: StateStore,
     stateName: String) extends Logging {
 
+  private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+
+  private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
 //  protected val schemaForValueRow: StructType =
 //    StructType(Array(StructField("__dummy__", NullType)))
 
@@ -59,6 +63,8 @@ class TimerStateImpl[S](
 
 //  val tsToKeyCFName = stateName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
 //  store.createColFamilyIfAbsent(tsToKeyCFName, false)
+  store.createColFamilyIfAbsent(stateName,
+    schemaForKeyRow, numColsPrefixKey = 0, schemaForValueRow, true)
 
   private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
@@ -111,5 +117,9 @@ class TimerStateImpl[S](
    */
   def remove(expiryTimestampMs: Long): Unit = {
     store.remove(encodeKey(expiryTimestampMs), stateName)
+  }
+
+  def getExpiredTimers(): Iterator[UnsafeRowPair] = {
+    store.iterator(stateName)
   }
 }
