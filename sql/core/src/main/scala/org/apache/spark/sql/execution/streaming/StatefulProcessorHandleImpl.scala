@@ -125,7 +125,6 @@ class StatefulProcessorHandleImpl(
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
   private def getTimerState[T](stateName: String): TimerStateImpl[T] = {
-    store.createColFamilyIfAbsent(stateName, true)
     new TimerStateImpl[T](store, stateName)
   }
 
