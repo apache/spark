@@ -20,30 +20,37 @@ package org.apache.spark.sql.connector.read.streaming;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Interface representing limits on how much to read from a {@link MicroBatchStream} when it
- * implements {@link SupportsAdmissionControl}. There are several child interfaces representing
- * various kinds of limits.
+ * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan files which total
+ * size doesn't go beyond a given maximum total size. Always reads at least one file so a stream
+ * can make progress and not get stuck on a file larger than a given maximum.
  *
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
- * @see ReadAllAvailable
- * @see ReadMaxRows
- * @since 3.0.0
+ * @since 4.0.0
  */
 @Evolving
-public interface ReadLimit {
-  static ReadLimit minRows(long rows, long maxTriggerDelayMs) {
-    return new ReadMinRows(rows, maxTriggerDelayMs);
+public class ReadMaxBytes implements ReadLimit {
+  private long bytes;
+
+  ReadMaxBytes(long bytes) {
+    this.bytes = bytes;
   }
 
-  static ReadLimit maxRows(long rows) { return new ReadMaxRows(rows); }
+  /** Maximum total size of files to scan. */
+  public long maxBytes() { return this.bytes; }
 
-  static ReadLimit maxFiles(int files) { return new ReadMaxFiles(files); }
-
-  static ReadLimit maxBytes(long bytes) { return new ReadMaxBytes(bytes); }
-
-  static ReadLimit allAvailable() { return ReadAllAvailable.INSTANCE; }
-
-  static ReadLimit compositeLimit(ReadLimit[] readLimits) {
-    return new CompositeReadLimit(readLimits);
+  @Override
+  public String toString() {
+    return "MaxBytes: " + maxBytes();
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    ReadMaxBytes other = (ReadMaxBytes) o;
+    return other.maxBytes() == maxBytes();
+  }
+
+  @Override
+  public int hashCode() { return Long.hashCode(bytes); }
 }

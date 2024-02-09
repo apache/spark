@@ -50,11 +50,25 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
     }
   }
 
+  val maxBytesPerTrigger: Option[Long] = parameters.get("maxBytesPerTrigger").map { str =>
+    Try(str.toLong).toOption.filter(_ > 0).map(op =>
+      if (maxFilesPerTrigger.nonEmpty) {
+        throw new IllegalArgumentException(
+          "Options 'maxFilesPerTrigger' and 'maxBytesPerTrigger' " +
+            "can't be both set at the same time")
+      } else op
+    ).getOrElse {
+      throw new IllegalArgumentException(
+        s"Invalid value '$str' for option 'maxBytesPerTrigger', must be a positive integer")
+    }
+  }
+
   /**
    * Maximum age of a file that can be found in this directory, before it is ignored. For the
    * first batch all files will be considered valid. If `latestFirst` is set to `true` and
-   * `maxFilesPerTrigger` is set, then this parameter will be ignored, because old files that are
-   * valid, and should be processed, may be ignored. Please refer to SPARK-19813 for details.
+   * `maxFilesPerTrigger` or `maxBytesPerTrigger` is set, then this parameter will be ignored,
+   * because old files that are valid, and should be processed, may be ignored. Please refer to
+   * SPARK-19813 for details.
    *
    * The max age is specified with respect to the timestamp of the latest file, and not the
    * timestamp of the current system. That this means if the last file has timestamp 1000, and the
