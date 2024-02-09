@@ -190,6 +190,39 @@ class ProfilerCollector(ABC):
             for id in sorted(stats.keys()):
                 dump(path, id)
 
+    def dump_memory_profiles(self, path: str, id: Optional[int] = None) -> None:
+        """
+        Dump the memory profile results into directory `path`.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path: str
+            A directory in which to dump the memory profile.
+        id : int, optional
+            A UDF ID to be shown. If not specified, all the results will be shown.
+        """
+        with self._lock:
+            code_map = self._memory_profile_results
+
+        def dump(path: str, id: int) -> None:
+            cm = code_map.get(id)
+
+            if cm is not None:
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                p = os.path.join(path, "udf_%d_memory.txt" % id)
+
+                with open(p, "w+") as f:
+                    MemoryProfiler._show_results(cm, stream=f)
+
+        if id is not None:
+            dump(path, id)
+        else:
+            for id in sorted(code_map.keys()):
+                dump(path, id)
+
 
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:

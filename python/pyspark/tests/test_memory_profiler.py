@@ -232,6 +232,9 @@ class MemoryProfiler2TestsMixin:
         with self.trap_stdout() as io_all:
             self.spark.showMemoryProfiles()
 
+        d = tempfile.gettempdir()
+        self.spark.dumpMemoryProfiles(d)
+
         for id in self.profile_results:
             self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
 
@@ -242,6 +245,7 @@ class MemoryProfiler2TestsMixin:
             self.assertRegex(
                 io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
+            self.assertTrue("udf_%d_memory.txt" % id in os.listdir(d))
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
