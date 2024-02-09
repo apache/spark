@@ -58,6 +58,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.Utils
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
@@ -3873,12 +3874,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
-    withTempDir { dir =>
-      System.setProperty("ivy.home", dir.getAbsolutePath)
+    val targetCacheJarDir = new File(
+      System.getProperty("user.home") + File.separator + ".ivy2.5.2",
+      "/local/org.apache.spark/SPARK-33084/1.0/jars/")
+    try {
       val sourceJar = new File(Thread.currentThread().getContextClassLoader
         .getResource("SPARK-33084.jar").getFile)
-      val targetCacheJarDir = new File(dir.getAbsolutePath +
-        "/local/org.apache.spark/SPARK-33084/1.0/jars/")
       targetCacheJarDir.mkdir()
       // copy jar to local cache
       FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
@@ -3905,6 +3906,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
         }
       }
+    } finally {
+      Utils.deleteRecursively(targetCacheJarDir)
     }
   }
 

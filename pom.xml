@@ -146,11 +146,7 @@
     <jetty.version>10.0.19</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
-    <!--
-      SPARK-44968: don't upgrade Ivy to version 2.5.2 until the test aborted of
-      `HiveExternalCatalogVersionsSuite` in Java 11/17 daily tests is resolved.
-    -->
-    <ivy.version>2.5.1</ivy.version>
+    <ivy.version>2.5.2</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you change codahale.metrics.version, you also need to change
