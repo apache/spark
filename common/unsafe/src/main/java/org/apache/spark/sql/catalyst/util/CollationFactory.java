@@ -132,7 +132,6 @@ public final class CollationFactory {
       "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
 
-
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
       "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);

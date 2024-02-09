@@ -67,4 +67,14 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(error.getMessageParameters.asScala ===
       Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
   }
+
+  test("collation on non-explicit default collation") {
+    checkEvaluation(Collation(Literal("abc")).replacement, "UCS_BASIC")
+  }
+
+  test("collation on explicitly collated string") {
+    checkEvaluation(Collation(Literal.create("abc", StringType(1))).replacement, "UCS_BASIC_LCASE")
+    checkEvaluation(
+      Collation(Collate(Literal("abc"), "UCS_BASIC_LCASE")).replacement, "UCS_BASIC_LCASE")
+  }
 }

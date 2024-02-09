@@ -255,10 +255,7 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
     Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[columnar] final class StringColumnStats(collationId: Int) extends ColumnStats {
-  def this(dataType: StringType) = this(dataType.collationId)
-  def this() = this(StringType.DEFAULT_COLLATION_ID)
-
+private[columnar] final class StringColumnStats extends ColumnStats {
   protected var upper: UTF8String = null
   protected var lower: UTF8String = null
 
@@ -273,8 +270,8 @@ private[columnar] final class StringColumnStats(collationId: Int) extends Column
   }
 
   def gatherValueStats(value: UTF8String, size: Int): Unit = {
-    if (upper == null || value.semanticCompare(upper, collationId) > 0) upper = value.clone()
-    if (lower == null || value.semanticCompare(lower, collationId) < 0) lower = value.clone()
+    if (upper == null || value.binaryCompare(upper) > 0) upper = value.clone()
+    if (lower == null || value.binaryCompare(lower) < 0) lower = value.clone()
     sizeInBytes += size
     count += 1
   }
