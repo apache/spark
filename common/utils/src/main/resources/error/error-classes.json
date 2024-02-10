@@ -7685,6 +7685,41 @@
       "cannot generate code for unsupported type: <dataType>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3234" : {
+    "message" : [
+      "Unsupported input type <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3235" : {
+    "message" : [
+      "The numbers of zipped arrays and field names should be the same"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3236" : {
+    "message" : [
+      "Unsupported special character for delimiter: <str>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3237" : {
+    "message" : [
+      "Delimiter cannot be more than one character: <str>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3238" : {
+    "message" : [
+      "Failed to convert value <v> (class of <class>) in type <dt> to XML."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3239" : {
+    "message" : [
+      "Failed to parse data with unexpected event <e>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3240" : {
+    "message" : [
+      "Failed to parse a value for data type <dt> with event <e>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

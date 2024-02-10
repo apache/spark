@@ -33,7 +33,7 @@ import scala.xml.SAXException
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -245,8 +245,11 @@ class StaxXmlParser(
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
         value
       case (e: XMLEvent, dt: DataType) =>
-        throw new IllegalArgumentException(
-          s"Failed to parse a value for data type $dt with event ${e.toString}")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3240",
+          messageParameters = Map(
+            "dt" -> dt.toString,
+            "e" -> e.toString))
     }
   }
 

@@ -22,7 +22,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
@@ -302,8 +302,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
   }
 
   if (children.size != names.size) {
-    throw new IllegalArgumentException(
-      "The numbers of zipped arrays and field names should be the same")
+    throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3235")
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)

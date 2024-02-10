@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.csv
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkIllegalArgumentException
+
 object CSVExprUtils {
   /**
    * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).
@@ -81,9 +83,11 @@ object CSVExprUtils {
       case Seq('\\', '\\') => '\\'
       case _ if str == "\u0000" => '\u0000'
       case Seq('\\', _) =>
-        throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3236", messageParameters = Map("str" -> str))
       case _ =>
-        throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3237", messageParameters = Map("str" -> str))
     }
   }
 
