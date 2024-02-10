@@ -215,8 +215,8 @@
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>4.12.1</selenium.version>
-    <htmlunit-driver.version>4.12.0</htmlunit-driver.version>
-    <htmlunit.version>2.70.0</htmlunit.version>
+    <htmlunit3-driver.version>4.17.0</htmlunit3-driver.version>
+    <htmlunit.version>3.10.0</htmlunit.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.6.0</commons-cli.version>
@@ -710,19 +710,19 @@
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>htmlunit-driver</artifactId>
-        <version>${htmlunit-driver.version}</version>
+        <artifactId>htmlunit3-driver</artifactId>
+        <version>${htmlunit3-driver.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Update htmlunit dependency that selenium uses for better JS support -->
       <dependency>
-        <groupId>net.sourceforge.htmlunit</groupId>
+        <groupId>org.htmlunit</groupId>
         <artifactId>htmlunit</artifactId>
         <version>${htmlunit.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>net.sourceforge.htmlunit</groupId>
+        <groupId>org.htmlunit</groupId>
         <artifactId>htmlunit-core-js</artifactId>
         <version>${htmlunit.version}</version>
         <scope>test</scope>
