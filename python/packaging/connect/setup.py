@@ -19,10 +19,21 @@
 # cd python
 # python packaging/classic/setup.py sdist
 
+# cd python/packaging/classic
+# python setup.py sdist
+
 import sys
 from setuptools import setup
 import os
 from shutil import copyfile
+import glob
+
+if os.getcwd() == str(Path(__file__).parent.absolute()):
+    # For:
+    # 1. editable mode (i.e. setuptools "develop mode")
+    # 2. cd python/packaging/classic; python setup.py sdist
+    # Move to spark/python
+    os.chdir(Path(__file__).parent.parent.parent.absolute())
 
 try:
     exec(open("pyspark/version.py").read())

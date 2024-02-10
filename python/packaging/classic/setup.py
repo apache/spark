@@ -24,6 +24,14 @@ import ctypes
 from setuptools import setup
 from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
+from pathlib import Path
+
+if os.getcwd() == str(Path(__file__).parent.absolute()):
+    # For:
+    # 1. editable mode (i.e. setuptools "develop mode")
+    # 2. cd python/packaging/classic; python setup.py sdist
+    # Move to spark/python
+    os.chdir(Path(__file__).parent.parent.parent.absolute())
 
 try:
     exec(open("pyspark/version.py").read())
@@ -186,8 +194,9 @@ try:
     if in_spark:
         copyfile("packaging/classic/setup.py", "setup.py")
         copyfile("packaging/classic/setup.cfg", "setup.cfg")
-        # Construct the symlink farm - this is nein_sparkcessary since we can't refer to the path above the
-        # package root and we need to copy the jars and scripts which are up above the python root.
+        # Construct the symlink farm - this is nein_sparkcessary since we can't refer to
+        # the path above the package root and we need to copy the jars and scripts which
+        # are up above the python root.
         if _supports_symlinks():
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
