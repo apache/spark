@@ -30,14 +30,20 @@ import glob
 from pathlib import Path
 
 if (
+    # When we package, the parent diectory 'connect' dir
+    # (as we pip install -e python/packaging/connect)
     os.getcwd() == str(Path(__file__).parent.absolute())
-    # When we package, it's 'python' dir.
-    # When we run this in cleint, it's 'pyspark' dir.
-    and str(Path(__file__).parent.name) == "python"
+    and str(Path(__file__).parent.name) == "connect"
 ):
     # For:
-    # 1. editable mode (i.e. setuptools "develop mode")
-    # 2. cd python/packaging/classic; python setup.py sdist
+    # - pip install -e python/packaging/connect
+    #     It moves the current working directory to 'connect'
+    # - cd python/packaging/connect; python setup.py sdist
+    #
+    # For:
+    # - python packaging/connect/setup.py sdist, it does not
+    #     execute this branch.
+    #
     # Move to spark/python
     os.chdir(Path(__file__).parent.parent.parent.absolute())
 
