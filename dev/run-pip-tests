@@ -73,7 +73,7 @@ PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
-	      "pip install $PIP_OPTIONS -e python/")
+	      "pip install $PIP_OPTIONS -e python/packaging/classic")
 
 # Jenkins has PySpark installed under user sitepackages shared for some reasons.
 # In this test, explicitly exclude user sitepackages to prevent side effects
