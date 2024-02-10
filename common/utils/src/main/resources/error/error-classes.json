@@ -7680,6 +7680,11 @@
       "Unknown EvalMode value: <other>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3233" : {
+    "message" : [
+      "cannot generate code for unsupported type: <dataType>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
