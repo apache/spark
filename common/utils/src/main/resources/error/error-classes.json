@@ -7725,6 +7725,16 @@
       "<msg>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3242" : {
+    "message" : [
+      "sequence step must be an <intervalType> of day granularity if start and end values are dates"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3243" : {
+    "message" : [
+      "Illegal sequence boundaries: <start> to <stop> by <step>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

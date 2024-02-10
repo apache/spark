@@ -3352,8 +3352,9 @@ object Sequence {
       val (stepMonths, stepDays, stepMicros) = splitStep(input3)
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
-        throw new IllegalArgumentException(s"sequence step must be an ${intervalType.typeName}" +
-          " of day granularity if start and end values are dates")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3242",
+          messageParameters = Map("intervalType" -> intervalType.typeName))
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
@@ -3445,9 +3446,10 @@ object Sequence {
       val check = if (scale == MICROS_PER_DAY) {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
-           |  throw new IllegalArgumentException(
-           |    "sequence step must be an ${intervalType.typeName} " +
-           |    "of day granularity if start and end values are dates");
+           |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
+           |  params.put("intervalType", "${intervalType.typeName}");
+           |  throw new org.apache.spark.SparkIllegalArgumentException(
+           |    "_LEGACY_ERROR_TEMP_3242", params);
            |}
          """.stripMargin
         } else {
@@ -3538,8 +3540,12 @@ object Sequence {
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
        |  ($estimatedStep == 0 && $start == $stop))) {
-       |  throw new IllegalArgumentException(
-       |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
+       |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
+       |  params.put("start", $start);
+       |  params.put("stop", $stop);
+       |  params.put("step", $step);
+       |  throw new org.apache.spark.SparkIllegalArgumentException(
+       |    "_LEGACY_ERROR_TEMP_3243", params);
        |}
        |int $len = $calcFn((long) $start, (long) $stop, (long) $estimatedStep);
        """.stripMargin
