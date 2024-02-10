@@ -7720,6 +7720,11 @@
       "Failed to parse a value for data type <dt> with event <e>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3241" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
