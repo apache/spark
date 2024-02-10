@@ -134,7 +134,7 @@ class StatefulProcessorHandleImpl(
     verify(timeoutMode == ProcessingTime || timeoutMode == EventTime,
     s"Cannot register timers with incorrect TimeoutMode")
     verify(currState == INITIALIZED || currState == DATA_PROCESSED,
-    s"Cannot register processing time timer with " +
+    s"Cannot register timers with " +
       s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
 
     if (timerState.exists(expiryTimestampMs)) {
@@ -146,10 +146,10 @@ class StatefulProcessorHandleImpl(
   }
 
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
-    verify(timeoutMode == ProcessingTime, s"Cannot delete processing time " +
-      "timers with incorrect TimeoutMode")
+    verify(timeoutMode == ProcessingTime || timeoutMode == EventTime,
+    s"Cannot delete timers with incorrect TimeoutMode")
     verify(currState == INITIALIZED || currState == DATA_PROCESSED,
-    s"Cannot delete processing time timer with " +
+    s"Cannot delete timers with " +
       s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
 
     if (!timerState.exists(expiryTimestampMs)) {

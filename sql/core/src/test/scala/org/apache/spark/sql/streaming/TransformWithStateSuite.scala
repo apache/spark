@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
@@ -139,6 +140,48 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
         }
       }
       Iterator((key, count.toString))
+    }
+  }
+}
+
+class MaxEventTimeStatefulProcessor
+  extends StatefulProcessor[String, (String, Long), (String, Int)]
+  with Logging {
+  @transient var _maxEventTimeState: ValueState[Long] = _
+  @transient var _processorHandle: StatefulProcessorHandle = _
+  @transient var _timerState: ValueState[Long] = _
+
+  override def init(
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode): Unit = {
+    _processorHandle = handle
+    _maxEventTimeState = _processorHandle.getValueState[Long]("maxEventTimeState")
+    _timerState = _processorHandle.getValueState[Long]("timerState")
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
+    val timeoutDelaySec = 5
+    if (expiredTimerInfo.isValid()) {
+      _maxEventTimeState.remove()
+      Iterator((key, -1))
+    } else {
+      val valuesSeq = inputRows.toSeq
+      val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
+        _maxEventTimeState.getOption().getOrElse(0L))
+      val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
+      _maxEventTimeState.update(maxEventTimeSec)
+
+      val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+      if (registeredTimerMs < timeoutTimestampMs) {
+        _processorHandle.deleteTimer(registeredTimerMs)
+        _processorHandle.registerTimer(timeoutTimestampMs)
+        _timerState.update(timeoutTimestampMs)
+      }
+      Iterator((key, maxEventTimeSec.toInt))
     }
   }
 }
@@ -358,6 +401,40 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         StopStream
       )
     }
+  }
+
+  test("transformWithState - streaming with rocksdb and event time based timer") {
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS()
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Long)]
+        .groupByKey(_._1)
+        .transformWithState(
+          new MaxEventTimeStatefulProcessor(),
+          TimeoutMode.EventTime(),
+          OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      StartStream(),
+
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+      // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+      CheckNewAnswer(("a", 15)),  // Output = max event time of a
+
+      AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
+      CheckNewAnswer(),                   // No output as data should get filtered by watermark
+
+      AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)),          // Max event time is still the same
+      // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+      // Watermark is still 5 as max event time for all data is still 15.
+
+      AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
+      // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
+      CheckNewAnswer(("a", -1), ("b", 31))           // State for "a" should timeout and emit -1
+    )
   }
 
   test("transformWithState - batch should succeed") {
