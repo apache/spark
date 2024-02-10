@@ -7675,6 +7675,11 @@
       "Intervals greater than a month is not supported (<interval>)."
     ]
   },
+  "_LEGACY_ERROR_TEMP_3232" : {
+    "message" : [
+      "Unknown EvalMode value: <other>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
