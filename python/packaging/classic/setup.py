@@ -26,7 +26,12 @@ from setuptools.command.install import install
 from shutil import copyfile, copytree, rmtree
 from pathlib import Path
 
-if os.getcwd() == str(Path(__file__).parent.absolute()):
+if (
+    os.getcwd() == str(Path(__file__).parent.absolute())
+    # When we package, it's 'python' dir.
+    # When we run this in cleint, it's 'pyspark' dir.
+    and str(Path(__file__).parent.name) == "python"
+):
     # For:
     # 1. editable mode (i.e. setuptools "develop mode")
     # 2. cd python/packaging/classic; python setup.py sdist
