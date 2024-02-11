@@ -357,17 +357,6 @@
       <artifactId>htmlunit3-driver</artifactId>
       <scope>test</scope>
     </dependency>
-    <!-- Coerce sbt into honoring these dependency updates: -->
-    <dependency>
-      <groupId>org.htmlunit</groupId>
-      <artifactId>htmlunit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.htmlunit</groupId>
-      <artifactId>htmlunit-core-js</artifactId>
-      <scope>test</scope>
-    </dependency>
     <!-- at least just for tests, coerce SBT to use the updated httpcore/client version -->
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
