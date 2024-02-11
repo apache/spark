@@ -268,10 +268,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "errorClass" : "_LEGACY_ERROR_TEMP_3209",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "message" : "Illegal input for day of week: xx"
+    "string" : "xx"
   }
 }
 

@@ -92,6 +92,77 @@ class AbbreviateSuite extends SparkFunSuite {
     }
   }
 
+  test("truncate repeated strings") {
+    val sql = proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery("SELECT * FROM T"))
+      .build()
+    val names = Seq.range(0, 10).map(i => i.toString * 1024)
+    val drop = proto.Drop.newBuilder().setInput(sql).addAllColumnNames(names.asJava).build()
+
+    Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
+      val truncated = ProtoUtils.abbreviate(drop, threshold)
+      assert(drop.isInstanceOf[proto.Drop])
+
+      val truncatedNames = truncated.asInstanceOf[proto.Drop].getColumnNamesList.asScala.toSeq
+      assert(truncatedNames.length === 10)
+
+      if (threshold < 1024) {
+        truncatedNames.foreach { truncatedName =>
+          assert(truncatedName.indexOf("[truncated") === threshold)
+        }
+      } else {
+        truncatedNames.foreach { truncatedName =>
+          assert(truncatedName.indexOf("[truncated") === -1)
+          assert(truncatedName.length === 1024)
+        }
+      }
+
+    }
+  }
+
+  test("truncate repeated messages") {
+    val sql = proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery("SELECT * FROM T"))
+      .build()
+
+    val cols = Seq.range(0, 10).map { i =>
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedAttribute(
+          proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier(i.toString * 1024)
+            .build())
+        .build()
+    }
+    val drop = proto.Drop.newBuilder().setInput(sql).addAllColumns(cols.asJava).build()
+
+    Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
+      val truncated = ProtoUtils.abbreviate(drop, threshold)
+      assert(drop.isInstanceOf[proto.Drop])
+
+      val truncatedCols = truncated.asInstanceOf[proto.Drop].getColumnsList.asScala.toSeq
+      assert(truncatedCols.length === 10)
+
+      if (threshold < 1024) {
+        truncatedCols.foreach { truncatedCol =>
+          assert(truncatedCol.isInstanceOf[proto.Expression])
+          val truncatedName = truncatedCol.getUnresolvedAttribute.getUnparsedIdentifier
+          assert(truncatedName.indexOf("[truncated") === threshold)
+        }
+      } else {
+        truncatedCols.foreach { truncatedCol =>
+          assert(truncatedCol.isInstanceOf[proto.Expression])
+          val truncatedName = truncatedCol.getUnresolvedAttribute.getUnparsedIdentifier
+          assert(truncatedName.indexOf("[truncated") === -1)
+          assert(truncatedName.length === 1024)
+        }
+      }
+    }
+  }
+
   test("truncate bytes: simple python udf") {
     Seq(1, 8, 16, 64, 256).foreach { numBytes =>
       val bytes = Array.ofDim[Byte](numBytes)
