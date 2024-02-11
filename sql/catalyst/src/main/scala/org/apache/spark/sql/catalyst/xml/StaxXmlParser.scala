@@ -483,7 +483,9 @@ class StaxXmlParser(
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: StringType => UTF8String.fromString(datum)
-        case _ => throw new IllegalArgumentException(s"Unsupported type: ${castType.typeName}")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3244",
+          messageParameters = Map("castType" -> "castType.typeName"))
       }
     }
   }
@@ -492,7 +494,9 @@ class StaxXmlParser(
     s.toLowerCase(Locale.ROOT) match {
       case "true" | "1" => true
       case "false" | "0" => false
-      case _ => throw new IllegalArgumentException(s"For input string: $s")
+      case _ => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3245",
+        messageParameters = Map("s" -> s))
     }
   }
 
@@ -530,8 +534,9 @@ class StaxXmlParser(
         case ShortType => castTo(value, ShortType)
         case IntegerType => signSafeToInt(value)
         case dt: DecimalType => castTo(value, dt)
-        case _ => throw new IllegalArgumentException(
-          s"Failed to parse a value for data type $dataType.")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3246",
+          messageParameters = Map("dataType" -> dataType.toString))
       }
     }
   }
