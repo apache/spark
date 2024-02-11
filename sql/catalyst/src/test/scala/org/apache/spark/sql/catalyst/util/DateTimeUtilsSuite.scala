@@ -539,7 +539,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
     assert(dateAddInterval(input, new CalendarInterval(36, 47, 0)) === days(2000, 4, 15))
     assert(dateAddInterval(input, new CalendarInterval(-13, 0, 0)) === days(1996, 1, 28))
-    intercept[IllegalArgumentException](dateAddInterval(input, new CalendarInterval(36, 47, 1)))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](
+        dateAddInterval(input, new CalendarInterval(36, 47, 1))),
+      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      parameters = Map(
+        "message" -> "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
   test("timestamp add interval") {
