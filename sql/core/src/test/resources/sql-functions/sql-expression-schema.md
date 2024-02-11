@@ -301,6 +301,7 @@
 | org.apache.spark.sql.catalyst.expressions.Size | size | SELECT size(array('b', 'd', 'c', 'a')) | struct<size(array(b, d, c, a)):int> |
 | org.apache.spark.sql.catalyst.expressions.Slice | slice | SELECT slice(array(1, 2, 3, 4), 2, 2) | struct<slice(array(1, 2, 3, 4), 2, 2):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.SortArray | sort_array | SELECT sort_array(array('b', 'd', null, 'c', 'a'), true) | struct<sort_array(array(b, d, NULL, c, a), true):array<string>> |
+| org.apache.spark.sql.catalyst.expressions.SortMap | sort_map | SELECT sort_map(map(3, 'c', 1, 'a', 2, 'b'), true) | struct<sort_map(map(3, c, 1, a, 2, b), true):map<int,string>> |
 | org.apache.spark.sql.catalyst.expressions.SoundEx | soundex | SELECT soundex('Miller') | struct<soundex(Miller):string> |
 | org.apache.spark.sql.catalyst.expressions.SparkPartitionID | spark_partition_id | SELECT spark_partition_id() | struct<SPARK_PARTITION_ID():int> |
 | org.apache.spark.sql.catalyst.expressions.SparkVersion | version | SELECT version() | struct<version():string> |
