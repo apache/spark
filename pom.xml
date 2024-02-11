@@ -1146,6 +1146,12 @@
         <artifactId>selenium-4-9_${scala.binary.version}</artifactId>
         <version>3.2.16.0</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>htmlunit-driver</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
