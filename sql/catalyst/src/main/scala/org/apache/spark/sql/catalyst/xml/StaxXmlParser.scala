@@ -33,7 +33,7 @@ import scala.xml.SAXException
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -232,8 +232,11 @@ class StaxXmlParser(
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
         value
       case (e: XMLEvent, dt: DataType) =>
-        throw new IllegalArgumentException(
-          s"Failed to parse a value for data type $dt with event ${e.toString}")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3240",
+          messageParameters = Map(
+            "dt" -> dt.toString,
+            "e" -> e.toString))
     }
   }
 
@@ -467,7 +470,9 @@ class StaxXmlParser(
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: StringType => UTF8String.fromString(datum)
-        case _ => throw new IllegalArgumentException(s"Unsupported type: ${castType.typeName}")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3244",
+          messageParameters = Map("castType" -> "castType.typeName"))
       }
     }
   }
@@ -476,7 +481,9 @@ class StaxXmlParser(
     s.toLowerCase(Locale.ROOT) match {
       case "true" | "1" => true
       case "false" | "0" => false
-      case _ => throw new IllegalArgumentException(s"For input string: $s")
+      case _ => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3245",
+        messageParameters = Map("s" -> s))
     }
   }
 
@@ -514,8 +521,9 @@ class StaxXmlParser(
         case ShortType => castTo(value, ShortType)
         case IntegerType => signSafeToInt(value)
         case dt: DecimalType => castTo(value, dt)
-        case _ => throw new IllegalArgumentException(
-          s"Failed to parse a value for data type $dataType.")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3246",
+          messageParameters = Map("dataType" -> dataType.toString))
       }
     }
   }

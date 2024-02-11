@@ -7512,6 +7512,261 @@
       "Failed to create column family with reserved name=<colFamilyName>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3198" : {
+    "message" : [
+      "Cannot grow BufferHolder by size <neededSize> because the size is negative"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3199" : {
+    "message" : [
+      "Cannot grow BufferHolder by size <neededSize> because the size after growing exceeds size limitation <arrayMax>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3200" : {
+    "message" : [
+      "Read-ahead limit < 0"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3201" : {
+    "message" : [
+      "'note' is malformed in the expression [<exprName>]. It should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<note>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3202" : {
+    "message" : [
+      "'group' is malformed in the expression [<exprName>]. It should be a value in <validGroups>; however, got <group>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3203" : {
+    "message" : [
+      "'source' is malformed in the expression [<exprName>]. It should be a value in <validSources>; however, got [<source>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3204" : {
+    "message" : [
+      "'since' is malformed in the expression [<exprName>]. It should not start with a negative number; however, got [<since>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3205" : {
+    "message" : [
+      "'deprecated' is malformed in the expression [<exprName>]. It should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<deprecated>]."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3206" : {
+    "message" : [
+      "<value> is not a boolean string."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3207" : {
+    "message" : [
+      "Unexpected V2 expression: <expr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3208" : {
+    "message" : [
+      "The number of fields (<numFields>) in the partition identifier is not equal to the partition schema length (<schemaLen>). The identifier might not refer to one partition."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3209" : {
+    "message" : [
+      "Illegal input for day of week: <string>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3210" : {
+    "message" : [
+      "Interval string does not match second-nano format of ss.nnnnnnnnn"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3211" : {
+    "message" : [
+      "Error parsing interval day-time string: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3212" : {
+    "message" : [
+      "Cannot support (interval '<input>' <from> to <to>) expression"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3213" : {
+    "message" : [
+      "Error parsing interval <interval> string: <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3214" : {
+    "message" : [
+      "Interval string does not match <intervalStr> format of <supportedFormat> when cast to <typeName>: <input><fallBackNotice>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3215" : {
+    "message" : [
+      "Expected a Boolean type expression in replaceNullWithFalse, but got the type <dataType> in <expr>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3216" : {
+    "message" : [
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3217" : {
+    "message" : [
+      "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3218" : {
+    "message" : [
+      "Must be 2 children: <others>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3219" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3220" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to an array of <elementType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3221" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to a map type with key type (<keyType>) and value type (<valueType>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3222" : {
+    "message" : [
+      "Only literals are allowed in the partition spec, but got <expr>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3223" : {
+    "message" : [
+      "Cannot find field: <name> in <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3224" : {
+    "message" : [
+      "Cannot delete array element"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3225" : {
+    "message" : [
+      "Cannot delete map value"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3226" : {
+    "message" : [
+      "Cannot delete map key"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3227" : {
+    "message" : [
+      "Cannot find field: <fieldName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3228" : {
+    "message" : [
+      "AFTER column not found: <afterCol>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3229" : {
+    "message" : [
+      "Not a struct: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3230" : {
+    "message" : [
+      "Field not found: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3231" : {
+    "message" : [
+      "Intervals greater than a month is not supported (<interval>)."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3232" : {
+    "message" : [
+      "Unknown EvalMode value: <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3233" : {
+    "message" : [
+      "cannot generate code for unsupported type: <dataType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3234" : {
+    "message" : [
+      "Unsupported input type <other>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3235" : {
+    "message" : [
+      "The numbers of zipped arrays and field names should be the same"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3236" : {
+    "message" : [
+      "Unsupported special character for delimiter: <str>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3237" : {
+    "message" : [
+      "Delimiter cannot be more than one character: <str>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3238" : {
+    "message" : [
+      "Failed to convert value <v> (class of <class>) in type <dt> to XML."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3239" : {
+    "message" : [
+      "Failed to parse data with unexpected event <e>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3240" : {
+    "message" : [
+      "Failed to parse a value for data type <dt> with event <e>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3241" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3242" : {
+    "message" : [
+      "sequence step must be an <intervalType> of day granularity if start and end values are dates"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3243" : {
+    "message" : [
+      "Illegal sequence boundaries: <start> to <stop> by <step>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3244" : {
+    "message" : [
+      "Unsupported type: <castType>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3245" : {
+    "message" : [
+      "For input string: <s>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3246" : {
+    "message" : [
+      "Failed to parse a value for data type <dataType>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3247" : {
+    "message" : [
+      "Delimiter cannot be empty string"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3248" : {
+    "message" : [
+      "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

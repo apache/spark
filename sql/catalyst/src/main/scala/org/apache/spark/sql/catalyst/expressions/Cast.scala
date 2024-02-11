@@ -21,7 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.{QueryContext, SparkArithmeticException}
+import org.apache.spark.{QueryContext, SparkArithmeticException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -507,7 +507,9 @@ case class Cast(
       case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
       case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
       case EvalMode.TRY => Cast.canTryCast(child.dataType, dataType)
-      case other => throw new IllegalArgumentException(s"Unknown EvalMode value: $other")
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3232",
+        messageParameters = Map("other" -> other.toString))
     }
     if (canCast) {
       TypeCheckResult.TypeCheckSuccess
