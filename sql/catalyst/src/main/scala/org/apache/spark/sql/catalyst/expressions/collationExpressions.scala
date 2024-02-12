@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 @ExpressionDescription(
   usage = "_FUNC_(expr, collationName)",
@@ -37,10 +36,10 @@ import org.apache.spark.unsafe.types.UTF8String
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     expressions match {
-      case Seq(e: Expression, Literal(collationName: UTF8String, StringType)) =>
-        Collate(e, collationName.toString)
+      case Seq(e: Expression, collationExpr: Expression) if collationExpr.foldable =>
+        Collate(e, collationExpr.eval().toString)
       case Seq(_: Expression, _: Expression) =>
-        throw QueryCompilationErrors.collationNameIsNotStringLiteralError(funcName)
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "collationName", StringType)
       case s => throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), s.length)
     }
   }

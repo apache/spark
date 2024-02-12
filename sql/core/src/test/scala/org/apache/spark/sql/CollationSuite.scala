@@ -54,17 +54,6 @@ class CollationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("collate function syntax invalid args") {
-    checkError(
-      exception = intercept[AnalysisException] { sql("select collate('aaa', 'ucs_' || 'basic')") },
-      errorClass = "COLLATION_NAME_NOT_STRING_LITERAL",
-      sqlState = "42704",
-      parameters = Map("functionName" -> "collate"),
-      context = ExpectedContext(
-        fragment = "collate('aaa', 'ucs_' || 'basic')",
-        start = 7,
-        stop = 7 + "collate('aaa', 'ucs_' || 'basic')".length - 1)
-    )
-
     Seq("'aaa','a','b'", "'aaa'").foreach(args => {
       checkError(
         exception = intercept[AnalysisException] {
