@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -193,11 +194,12 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
       StructField("name", StringType) ::
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
-    val exception = intercept[UnsupportedOperationException] {
-      spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
-    }
-    assert(exception.getMessage.contains(
-      "TextSocketSourceProvider source does not support user-specified schema"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2242",
+      parameters = Map("provider" -> "TextSocketSourceProvider"))
   }
 
   test("input row metrics") {

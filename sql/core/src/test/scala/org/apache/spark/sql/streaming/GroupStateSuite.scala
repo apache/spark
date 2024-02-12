@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.sql.Date
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
@@ -297,20 +297,19 @@ class GroupStateSuite extends SparkFunSuite {
     assert(illegalArgument.getMessage.contains("batchProcessingTimeMs must be 0 or positive"))
 
     // hasTimedOut cannot be true if there's no timeout configured
-    var unsupportedOperation = intercept[UnsupportedOperationException] {
-      TestGroupState.create[Int](
-        Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
-    }
-    assert(
-      unsupportedOperation
-        .getMessage.contains("hasTimedOut is true however there's no timeout configured"))
-    unsupportedOperation = intercept[UnsupportedOperationException] {
-      GroupStateImpl.createForStreaming[Int](
-        Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
-    }
-    assert(
-      unsupportedOperation
-        .getMessage.contains("hasTimedOut is true however there's no timeout configured"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        TestGroupState.create[Int](
+          Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3168",
+      parameters = Map.empty)
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        GroupStateImpl.createForStreaming[Int](Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3168",
+      parameters = Map.empty)
   }
 
   test("GroupState - hasTimedOut") {
@@ -348,9 +347,10 @@ class GroupStateSuite extends SparkFunSuite {
     }
 
     def assertWrongTimeoutError(test: => Unit): Unit = {
-      val e = intercept[UnsupportedOperationException] { test }
-      assert(e.getMessage.contains(
-        "Cannot get event time watermark timestamp without setting watermark"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] { test },
+        errorClass = "_LEGACY_ERROR_TEMP_2204",
+        parameters = Map.empty)
     }
 
     for (timeoutConf <- Seq(NoTimeout, EventTimeTimeout, ProcessingTimeTimeout)) {
