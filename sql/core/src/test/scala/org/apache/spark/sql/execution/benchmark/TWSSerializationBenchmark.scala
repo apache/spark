@@ -54,8 +54,8 @@ object TWSSerializationOpType extends Enumeration {
  * }}}
  */
 object TWSSerializationBenchmark extends SqlBasedBenchmark {
-  private val NUM_OF_ROWS = 10000
-  private val ITERATIONS = 100
+  private val NUM_OF_ROWS = 1000000
+  private val ITERATIONS = 1
 
   // Use random with static seed to generate value sizes
   private val randomNumGenerator = new scala.util.Random(100)
