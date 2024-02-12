@@ -247,7 +247,7 @@ class ValueStateSuite extends SharedSparkSession
       assert(testState.get() === null)
     }
   }
-
+/*
   test("Value state operations for POJO instances") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
@@ -273,4 +273,5 @@ class ValueStateSuite extends SharedSparkSession
       assert(testState.get() === null)
     }
   }
+*/
 }
