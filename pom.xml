@@ -713,12 +713,6 @@
         <version>${htmlunit3-driver.version}</version>
         <scope>test</scope>
       </dependency>
-      <!-- Added for selenium only, and should match its dependent version: -->
-      <dependency>
-        <groupId>xml-apis</groupId>
-        <artifactId>xml-apis</artifactId>
-        <version>1.4.01</version>
-      </dependency>
 
       <!-- log4j -->
       <dependency>
