@@ -394,7 +394,6 @@ class DefaultChannelBuilder(ChannelBuilder):
         """
         The hostname where this client intends to connect.
         """
-
         return self._host
 
     @property
