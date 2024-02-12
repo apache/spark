@@ -2373,6 +2373,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = Some(e))
   }
 
+  def collationNameIsNotStringLiteralError(function: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_NAME_NOT_STRING_LITERAL",
+      messageParameters = Map("functionName" -> function))
+  }
+
   def nonPartitionPruningPredicatesNotExpectedError(
       nonPartitionPruningPredicates: Seq[Expression]): Throwable = {
     new AnalysisException(

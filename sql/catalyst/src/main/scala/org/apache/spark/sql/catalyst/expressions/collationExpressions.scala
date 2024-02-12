@@ -18,17 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
-/**
- * An expression that marks a given expression with specified collation.
- * This function is pass-through, it will not modify the input data.
- * Only type metadata will be updated.
- */
 @ExpressionDescription(
-  usage = "expr _FUNC_ collationName",
+  usage = "_FUNC_(expr, collationName)",
   examples = """
     Examples:
       > SELECT COLLATION('Spark SQL' _FUNC_ 'UCS_BASIC_LCASE');
@@ -36,6 +34,23 @@ import org.apache.spark.sql.types._
   """,
   since = "4.0.0",
   group = "string_funcs")
+object CollateExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions match {
+      case Seq(e: Expression, Literal(collationName: UTF8String, StringType)) =>
+        Collate(e, collationName.toString)
+      case Seq(_: Expression, _: Expression) =>
+        throw QueryCompilationErrors.collationNameIsNotStringLiteralError(funcName)
+      case s => throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), s.length)
+    }
+  }
+}
+
+/**
+ * An expression that marks a given expression with specified collation.
+ * This function is pass-through, it will not modify the input data.
+ * Only type metadata will be updated.
+ */
 case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
   private val collationId = CollationFactory.collationNameToId(collationName)

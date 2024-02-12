@@ -469,6 +469,12 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_NAME_NOT_STRING_LITERAL" : {
+    "message" : [
+      "<functionName> requires collation name to be passed as a string literal."
+    ],
+    "sqlState" : "42704"
+  },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"

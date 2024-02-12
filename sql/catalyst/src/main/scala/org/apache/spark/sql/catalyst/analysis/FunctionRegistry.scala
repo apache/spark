@@ -520,7 +520,7 @@ object FunctionRegistry {
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
-    expression[Collate]("collate"),
+    expressionBuilder("collate", CollateExpressionBuilder),
     expression[Collation]("collation"),
     expressionBuilder("contains", ContainsExpressionBuilder),
     expressionBuilder("startswith", StartsWithExpressionBuilder),

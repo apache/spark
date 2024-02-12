@@ -48,6 +48,43 @@ class CollationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("collate function syntax") {
+    assert(sql(s"select collate('aaa', 'ucs_basic')").schema(0).dataType == StringType(0))
+    assert(sql(s"select collate('aaa', 'ucs_basic_lcase')").schema(0).dataType == StringType(1))
+  }
+
+  test("collate function syntax invalid args") {
+    checkError(
+      exception = intercept[AnalysisException] { sql("select collate('aaa', 'ucs_' || 'basic')") },
+      errorClass = "COLLATION_NAME_NOT_STRING_LITERAL",
+      sqlState = "42704",
+      parameters = Map("functionName" -> "collate"),
+      context = ExpectedContext(
+        fragment = "collate('aaa', 'ucs_' || 'basic')",
+        start = 7,
+        stop = 7 + "collate('aaa', 'ucs_' || 'basic')".length - 1)
+    )
+
+    Seq("'aaa','a','b'", "'aaa'").foreach(args => {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select collate($args)")
+        },
+        errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        sqlState = "42605",
+        parameters = Map(
+          "functionName" -> "`collate`",
+          "expectedNum" -> "2",
+          "actualNum" -> args.split(',').length.toString,
+          "docroot" -> "https://spark.apache.org/docs/latest"),
+        context = ExpectedContext(
+          fragment = s"collate($args)",
+          start = 7,
+          stop = 15 + args.length)
+      )
+    })
+  }
+
   test("collation expression returns default collation") {
     checkAnswer(sql(s"select collation('aaa')"), Row("UCS_BASIC"))
   }
@@ -77,6 +114,9 @@ class CollationSuite extends QueryTest with SharedSparkSession {
         checkAnswer(
           sql(s"select '$left' collate '$collationName' = '$right' collate '$collationName'"),
           Row(expected))
+        checkAnswer(
+          sql(s"select collate('$left', '$collationName') = collate('$right', '$collationName')"),
+          Row(expected))
     }
   }
 
@@ -95,9 +135,13 @@ class CollationSuite extends QueryTest with SharedSparkSession {
       ("unicode_CI", "aaa", "AAA", false),
       ("unicode_CI", "aaa", "bbb", true)
     ).foreach {
-      case (collationName, left, right, expected) => checkAnswer(
-        sql(s"select '$left' collate '$collationName' < '$right' collate '$collationName'"),
-        Row(expected))
+      case (collationName, left, right, expected) =>
+        checkAnswer(
+          sql(s"select '$left' collate '$collationName' < '$right' collate '$collationName'"),
+          Row(expected))
+        checkAnswer(
+          sql(s"select collate('$left', '$collationName') < collate('$right', '$collationName')"),
+          Row(expected))
     }
   }
 }
