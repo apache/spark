@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 
 /**
- * A function that marks a given expression with specified collation.
+ * An expression that marks a given expression with specified collation.
  * This function is pass-through, it will not modify the input data.
  * Only type metadata will be updated.
  */
@@ -52,7 +52,7 @@ case class Collate(child: Expression, collationName: String)
 }
 
 /**
- * A function that returns the collation name of a given expression.
+ * An expression that returns the collation name of a given expression.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr)",

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.jdk.CollectionConverters.MapHasAsScala
-
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
@@ -60,12 +58,11 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("collate on non existing collation") {
-    val error = intercept[SparkException] {
-      Collate(Literal("abc"), "UCS_BASIS")
-    }
-    assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-    assert(error.getMessageParameters.asScala ===
-      Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
+    checkError(
+      exception = intercept[SparkException] { Collate(Literal("abc"), "UCS_BASIS") },
+      errorClass = "COLLATION_INVALID_NAME",
+      sqlState = "42704",
+      parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
   }
 
   test("collation on non-explicit default collation") {
