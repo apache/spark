@@ -390,6 +390,7 @@ class DefaultChannelBuilder(ChannelBuilder):
             or self.token is not None
         )
 
+    @property
     def host(self) -> str:
         """
         The hostname where this client intends to connect.
