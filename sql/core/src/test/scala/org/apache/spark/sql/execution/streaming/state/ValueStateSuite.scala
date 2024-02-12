@@ -29,7 +29,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.ValueState
+import org.apache.spark.sql.streaming.{SerializationType, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -229,7 +229,7 @@ class ValueStateSuite extends SharedSparkSession
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
-        Encoders.product[TestClass])
+        Encoders.product[TestClass], SerializationType.AVRO)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(TestClass(1, "testcase1"))
       assert(testState.get().equals(new TestClass(1, "testcase1")))
@@ -247,7 +247,7 @@ class ValueStateSuite extends SharedSparkSession
       assert(testState.get() === null)
     }
   }
-/*
+
   test("Value state operations for POJO instances") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
@@ -255,7 +255,7 @@ class ValueStateSuite extends SharedSparkSession
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val testState: ValueState[Person] = handle.getValueState[Person]("testState",
-        Encoders.bean(classOf[Person]))
+        Encoders.bean(classOf[Person]), SerializationType.AVRO)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(new Person("testcase1", 1))
       assert(testState.get().equals(new Person("testcase1", 1)))
@@ -273,5 +273,4 @@ class ValueStateSuite extends SharedSparkSession
       assert(testState.get() === null)
     }
   }
-*/
 }

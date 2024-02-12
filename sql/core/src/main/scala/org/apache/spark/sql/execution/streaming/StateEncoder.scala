@@ -50,6 +50,23 @@ class StateEncoder[S](valEnc: Encoder[S]) {
 
   /** Variables reused for conversions between spark sql and avro */
   private val reuseRow = new UnsafeRow(valEnc.schema.fields.length)
+  private var encoder: BinaryEncoder = _
+  private val out = new ByteArrayOutputStream
+  private var decoder: BinaryDecoder = _
+  private var result: Any = _
+  val valSchema: StructType = valEnc.schema
+  // dataType -> avroType
+  val avroType: Schema = SchemaConverters.toAvroType(valSchema)
+  /** Serializer */
+  val avroSerializer = new AvroSerializer(valSchema, avroType, nullable = false)
+  encoder = EncoderFactory.get().directBinaryEncoder(out, encoder)
+  val writer = new GenericDatumWriter[Any](avroType)
+  /** Deserializer */
+  val avroOptions = AvroOptions(Map.empty)
+  val avroDeserializer = new AvroDeserializer(avroType, valSchema,
+    avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
+    avroOptions.stableIdPrefixForUnionType)
+  val reader = new GenericDatumReader[Any](avroType)
 
   def encodeGroupingKey(stateName: String, keyExprEnc: ExpressionEncoder[Any]): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
@@ -92,23 +109,11 @@ class StateEncoder[S](valEnc: Encoder[S]) {
     value
   }
 
-  private var encoder: BinaryEncoder = _
-  private val out = new ByteArrayOutputStream
   def encodeValToAvro(value: S): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
 
     /** The following parts are avro specific */
-    // case class -> dataType
-    val valSchema: StructType = valEnc.schema
-    // dataType -> avroType
-    val avroType: Schema = SchemaConverters.toAvroType(valSchema)
-    // init avro serializer
-    val avroSerializer = new AvroSerializer(valSchema, avroType, nullable = false)
-
     out.reset()
-    encoder = EncoderFactory.get().directBinaryEncoder(out, encoder)
-    val writer =
-      new GenericDatumWriter[Any](avroType)
     val avroData = avroSerializer.serialize(objRow)
     writer.write(avroData, encoder)
     encoder.flush()
@@ -120,26 +125,14 @@ class StateEncoder[S](valEnc: Encoder[S]) {
     valueRowEncoder(InternalRow(binary))
   }
 
-  private var decoder: BinaryDecoder = _
-  private var result: Any = _
   def decodeAvroToValue(row: UnsafeRow): S = {
     // InternalRow -> bytes
     val avroBytes = row.getBinary(0)
 
     /** The following parts are avro specific */
-    // case class -> dataType
-    val valSchema: StructType = valEnc.schema
-    // dataType -> avroType
-    val avroType: Schema = SchemaConverters.toAvroType(valSchema)
-    val avroOptions = AvroOptions(Map.empty)
-    val avroDeserializer = new AvroDeserializer(avroType, valSchema,
-      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
-      avroOptions.stableIdPrefixForUnionType)
-    val reader = new GenericDatumReader[Any](avroType)
     decoder = DecoderFactory.get().binaryDecoder(avroBytes, 0, avroBytes.length, decoder)
     result = reader.read(result, decoder)
     val deserialized = avroDeserializer.deserialize(result)
-
     val deserializedRow = deserialized.get.asInstanceOf[SpecificInternalRow]
     /** Avro specific parts end here */
 
