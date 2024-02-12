@@ -21,7 +21,7 @@ import java.util
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 
 class CaseInsensitiveStringMapSuite extends SparkFunSuite {
 
@@ -63,9 +63,12 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     assert(options.getBoolean("isBar", true))
     assert(!options.getBoolean("isBar", false))
 
-    intercept[IllegalArgumentException] {
-      options.getBoolean("FOO", true)
-    }
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        options.getBoolean("FOO", true)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3206",
+      parameters = Map("value" -> "bar"))
   }
 
   test("getLong") {

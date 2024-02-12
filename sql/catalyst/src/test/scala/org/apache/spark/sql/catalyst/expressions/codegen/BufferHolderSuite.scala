@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
 class BufferHolderSuite extends SparkFunSuite {
@@ -33,8 +33,13 @@ class BufferHolderSuite extends SparkFunSuite {
     val holder = new BufferHolder(new UnsafeRow(1000))
     holder.reset()
     holder.grow(1000)
-    assert(intercept[IllegalArgumentException] {
-      holder.grow(Integer.MAX_VALUE)
-    }.getMessage.contains("exceeds size limitation"))
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        holder.grow(Integer.MAX_VALUE)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3199",
+      parameters = Map("neededSize" -> "2147483647", "arrayMax" -> "2147483632")
+    )
   }
 }

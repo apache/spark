@@ -18,10 +18,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ExprUtils, NullIntolerant, TimeZoneAwareExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
@@ -283,8 +283,9 @@ case class StructsToXml(
   @transient
   lazy val inputSchema: StructType = child.dataType match {
     case st: StructType => st
-    case other =>
-      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3234",
+      messageParameters = Map("other" -> other.catalogString))
   }
 
   @transient
