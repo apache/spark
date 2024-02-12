@@ -185,20 +185,20 @@ class UDFProfiler2TestsMixin:
         with self.trap_stdout() as io_all:
             self.spark.showPerfProfiles()
 
-        d = tempfile.gettempdir()
-        self.spark.dumpPerfProfiles(d)
+        with tempfile.TemporaryDirectory() as d:
+            self.spark.dumpPerfProfiles(d)
 
-        for id in self.profile_results:
-            self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
+            for id in self.profile_results:
+                self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
 
-            with self.trap_stdout() as io:
-                self.spark.showPerfProfiles(id)
+                with self.trap_stdout() as io:
+                    self.spark.showPerfProfiles(id)
 
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
-            self.assertTrue("udf_%d.pstats" % id in os.listdir(d))
+                self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
+                self.assertRegex(
+                    io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
+                )
+                self.assertTrue("udf_%d.pstats" % id in os.listdir(d))
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
