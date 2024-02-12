@@ -106,9 +106,9 @@ class MemoryProfilerTests(PySparkTestCase):
             self.sc.show_profiles()
         self.assertTrue("plus_one" in fake_out.getvalue())
 
-        d = tempfile.gettempdir()
-        self.sc.dump_profiles(d)
-        self.assertTrue("udf_%d_memory.txt" % id in os.listdir(d))
+        with tempfile.TemporaryDirectory() as d:
+            self.sc.dump_profiles(d)
+            self.assertTrue("udf_%d_memory.txt" % id in os.listdir(d))
 
     def test_profile_pandas_udf(self):
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
