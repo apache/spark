@@ -28,6 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -768,21 +769,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(b int) using parquet")
+
         val outOfRangeValue1 = (Int.MaxValue + 1L).toString
+        val e1 = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue1)")
+        }
+        assert(e1.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values($outOfRangeValue1)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e1.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"BIGINT\"",
             "targetType" -> "\"INT\"",
             "columnName" -> "`b`"))
+
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
+        val e2 = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue2)")
+        }
+        assert(e2.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values($outOfRangeValue2)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e2.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"BIGINT\"",
@@ -797,21 +804,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(b long) using parquet")
+
         val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
+        val e1 = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue1}D)")
+        }
+        assert(e1.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values(${outOfRangeValue1}D)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e1.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
             "targetType" -> "\"BIGINT\"",
             "columnName" -> "`b`"))
+
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
+        val e2 = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue2}D)")
+        }
+        assert(e2.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values(${outOfRangeValue2}D)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e2.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
@@ -827,10 +840,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(b decimal(3,2)) using parquet")
         val outOfRangeValue = "123.45"
+        val ex = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue)")
+        }
+        assert(ex.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values($outOfRangeValue)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = ex.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DECIMAL(5,2)\"",
@@ -1150,7 +1165,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
-    // The default value fails to analyze.
+    // The default value references columns.
     withTable("t") {
       checkError(
         exception = intercept[AnalysisException] {
@@ -1161,6 +1176,39 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",
           "defaultValue" -> "badvalue"))
+    }
+    try {
+      // The default value references session variables.
+      sql("DECLARE test_var INT")
+      withTable("t") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("create table t(i boolean, s int default test_var) using parquet")
+          },
+          // V1 command still use the fake Analyzer which can't resolve session variables and we
+          // can only report UNRESOLVED_EXPRESSION error.
+          errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`s`",
+            "defaultValue" -> "test_var")
+        )
+        val v2Source = classOf[FakeV2Provider].getName
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"create table t(i int, j int default test_var) using $v2Source")
+          },
+          // V2 command uses the actual analyzer and can resolve session variables. We can report
+          // a more accurate NOT_CONSTANT error.
+          errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`j`",
+            "defaultValue" -> "test_var")
+        )
+      }
+    } finally {
+      sql("DROP TEMPORARY VARIABLE test_var")
     }
     // The default value analyzes to a table not in the catalog.
     withTable("t") {
@@ -2323,7 +2371,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               "org.apache.hadoop.fs.FileAlreadyExistsException"))
           } else {
             checkError(
-              exception = err.getCause.asInstanceOf[SparkException],
+              exception = err,
               errorClass = "TASK_WRITE_FAILED",
               parameters = Map("path" -> s".*$tableName"),
               matchPVals = true

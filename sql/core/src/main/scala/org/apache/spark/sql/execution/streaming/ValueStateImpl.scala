@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.Serializable
-
 import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.internal.Logging

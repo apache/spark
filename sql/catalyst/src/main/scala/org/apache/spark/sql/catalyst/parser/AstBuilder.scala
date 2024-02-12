@@ -30,7 +30,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -74,17 +74,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
   }
 
-  protected def withIdentClause(
-      ctx: IdentifierReferenceContext,
-      builder: Seq[String] => Expression): Expression = {
-    val exprCtx = ctx.expression
-    if (exprCtx != null) {
-      ExpressionWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
-    } else {
-      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier))
-    }
-  }
-
   protected def withFuncIdentClause(
       ctx: FunctionNameContext,
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
@@ -98,12 +87,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   protected def withFuncIdentClause(
       ctx: FunctionNameContext,
-      builder: Seq[String] => Expression): Expression = {
+      otherExprs: Seq[Expression],
+      builder: (Seq[String], Seq[Expression]) => Expression): Expression = {
     val exprCtx = ctx.expression
     if (exprCtx != null) {
-      ExpressionWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
+      ExpressionWithUnresolvedIdentifier(
+        withOrigin(exprCtx) { expression(exprCtx) },
+        otherExprs,
+        builder)
     } else {
-      builder.apply(getFunctionMultiparts(ctx))
+      builder.apply(getFunctionMultiparts(ctx), otherExprs)
     }
   }
 
@@ -681,8 +674,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
         }
       case other =>
-        throw new IllegalArgumentException(s"Only literals are allowed in the " +
-          s"partition spec, but got ${other.sql}")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3222",
+          messageParameters = Map("expr" -> other.sql)
+        )
     }
   }
 
@@ -2336,13 +2331,23 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx.where == null &&
       ctx.nullsOption == null &&
       ctx.windowSpec == null) {
-      ExpressionWithUnresolvedIdentifier(arguments.head, UnresolvedAttribute(_))
+      new ExpressionWithUnresolvedIdentifier(arguments.head, UnresolvedAttribute(_))
     } else {
       // It's a function call
       val funcCtx = ctx.functionName
       val func = withFuncIdentClause(
         funcCtx,
-        ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls, order.toSeq)
+        arguments ++ filter ++ order.toSeq,
+        (ident, otherExprs) => {
+          val orderings = otherExprs.takeRight(order.size).asInstanceOf[Seq[SortOrder]]
+          val args = otherExprs.take(arguments.length)
+          val filterExpr = if (filter.isDefined) {
+            Some(otherExprs(args.length))
+          } else {
+            None
+          }
+          UnresolvedFunction(ident, args, isDistinct, filterExpr, ignoreNulls, orderings)
+        }
       )
 
       // Check if the function is evaluated in a windowed context.

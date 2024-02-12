@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
@@ -381,7 +381,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ).toDF("a", "b", "c")
       df.createTempView("v")
 
-      val e1 = intercept[SparkException] {
+      val e1 = intercept[AnalysisException] {
         val plan = createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -393,7 +393,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       }.getMessage
       assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
 
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[AnalysisException] {
         val plan = createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -417,7 +417,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ).toDF("a", "b", "c")
       df.createTempView("v")
 
-      val e1 = intercept[SparkException] {
+      val e1 = intercept[AnalysisException] {
         sql(
           """
             |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
@@ -426,7 +426,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       }.getMessage
       assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
 
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[AnalysisException] {
         sql(
           """
             |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)

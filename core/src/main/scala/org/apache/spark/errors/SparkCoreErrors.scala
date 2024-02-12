@@ -24,7 +24,9 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskNotSerializableException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, TaskNotSerializableException}
+import org.apache.spark.internal.config.IO_COMPRESSION_CODEC
+import org.apache.spark.io.CompressionCodec.FALLBACK_COMPRESSION_CODEC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
@@ -488,6 +490,15 @@ private[spark] object SparkCoreErrors {
       errorClass = "UNSUPPORTED_ADD_FILE.DIRECTORY",
       messageParameters = Map("path" -> path.toString),
       cause = null)
+  }
+
+  def codecNotAvailableError(codecName: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "CODEC_NOT_AVAILABLE.WITH_CONF_SUGGESTION",
+      messageParameters = Map(
+        "codecName" -> codecName,
+        "configKey" -> toConf(IO_COMPRESSION_CODEC.key),
+        "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC)))
   }
 
   private def quoteByDefault(elem: String): String = {

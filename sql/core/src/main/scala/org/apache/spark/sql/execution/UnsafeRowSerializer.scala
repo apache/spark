@@ -37,7 +37,7 @@ import org.apache.spark.unsafe.Platform
  * instance that is backed by an on-heap byte array.
  *
  * Note that this serializer implements only the [[Serializer]] methods that are used during
- * shuffle, so certain [[SerializerInstance]] methods will throw UnsupportedOperationException.
+ * shuffle, so certain [[SerializerInstance]] methods will throw SparkUnsupportedOperationException.
  *
  * @param numFields the number of fields in the row being serialized.
  */

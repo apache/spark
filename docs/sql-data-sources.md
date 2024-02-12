@@ -36,7 +36,7 @@ goes into specific options that are available for the built-in data sources.
 * [Generic File Source Options](sql-data-sources-generic-options.html)
   * [Ignore Corrupt Files](sql-data-sources-generic-options.html#ignore-corrupt-files)
   * [Ignore Missing Files](sql-data-sources-generic-options.html#ignore-missing-files)
-  * [Path Global Filter](sql-data-sources-generic-options.html#path-global-filter)
+  * [Path Glob Filter](sql-data-sources-generic-options.html#path-glob-filter)
   * [Recursive File Lookup](sql-data-sources-generic-options.html#recursive-file-lookup)
 * [Parquet Files](sql-data-sources-parquet.html)
   * [Loading Data Programmatically](sql-data-sources-parquet.html#loading-data-programmatically)
