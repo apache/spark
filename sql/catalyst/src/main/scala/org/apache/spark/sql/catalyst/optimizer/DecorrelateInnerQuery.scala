@@ -673,20 +673,28 @@ object DecorrelateInnerQuery extends PredicateHelper {
               decorrelate(child, parentOuterReferences, aggregated = true, underSetOp)
             val collectedChildOuterReferences = collectOuterReferencesInPlanTree(child)
             // Add outer references to the PARTITION BY clause
-            val partitionFields = collectedChildOuterReferences.map(outerReferenceMap(_)).toSeq
-            val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
+            val partitionFields = collectedChildOuterReferences
+              .filter(outerReferenceMap.contains(_))
+              .map(outerReferenceMap(_)).toSeq
+            if (partitionFields.isEmpty) {
+              // Underlying subquery has no predicates connecting inner and outer query.
+              // In this case, limit can be computed over the inner query directly.
+              (Limit(limit, newChild), joinCond, outerReferenceMap)
+            } else {
+              val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
 
-            val rowNumber = WindowExpression(RowNumber(),
-              WindowSpecDefinition(partitionFields, orderByFields,
-                SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-            val rowNumberAlias = Alias(rowNumber, "rn")()
-            // Window function computes row_number() when partitioning by correlated references,
-            // and projects all the other fields from the input.
-            val window = Window(Seq(rowNumberAlias),
-              partitionFields, orderByFields, newChild)
-            val filter = Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
-            val project = Project(newChild.output, filter)
-            (project, joinCond, outerReferenceMap)
+              val rowNumber = WindowExpression(RowNumber(),
+                WindowSpecDefinition(partitionFields, orderByFields,
+                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+              val rowNumberAlias = Alias(rowNumber, "rn")()
+              // Window function computes row_number() when partitioning by correlated references,
+              // and projects all the other fields from the input.
+              val window = Window(Seq(rowNumberAlias),
+                partitionFields, orderByFields, newChild)
+              val filter = Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
+              val project = Project(newChild.output, filter)
+              (project, joinCond, outerReferenceMap)
+            }
 
           case w @ Window(projectList, partitionSpec, orderSpec, child) =>
             val outerReferences = collectOuterReferences(w.expressions)

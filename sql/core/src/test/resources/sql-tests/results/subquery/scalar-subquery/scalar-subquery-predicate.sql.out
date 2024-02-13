@@ -589,6 +589,46 @@ val1d	NULL
 
 
 -- !query
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY t2c LIMIT 1)
+-- !query schema
+struct<t1a:string,t1b:smallint>
+-- !query output
+val1a	16
+
+
+-- !query
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT MAX(t2c)
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY min(t2c) LIMIT 1)
+-- !query schema
+struct<t1a:string,t1b:smallint>
+-- !query output
+val1b	8
+val1c	8
+
+
+-- !query
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT DISTINCT t2c
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY t2c LIMIT 1)
+-- !query schema
+struct<t1a:string,t1b:smallint>
+-- !query output
+val1a	16
+
+
+-- !query
 CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0)
 -- !query schema
 struct<>

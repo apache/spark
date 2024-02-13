@@ -38,6 +38,7 @@ license: |
   - `spark.sql.avro.datetimeRebaseModeInRead` instead of `spark.sql.legacy.avro.datetimeRebaseModeInRead`
 - Since Spark 4.0, the default value of `spark.sql.orc.compression.codec` is changed from `snappy` to `zstd`. To restore the previous behavior, set `spark.sql.orc.compression.codec` to `snappy`.
 - Since Spark 4.0, `SELECT (*)` is equivalent to `SELECT struct(*)` instead of `SELECT *`. To restore the previous behavior, set `spark.sql.legacy.ignoreParenthesesAroundStar` to `true`.
+- Since Spark 4.0, the SQL config `spark.sql.legacy.allowZeroIndexInFormatString` is deprecated. Consider to change `strfmt` of the `format_string` function to use 1-based indexes. The first argument must be referenced by "1$", the second by "2$", etc.
 
 ## Upgrading from Spark SQL 3.4 to 3.5
 

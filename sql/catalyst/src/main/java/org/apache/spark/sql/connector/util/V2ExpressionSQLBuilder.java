@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
@@ -305,7 +306,8 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
-    throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+    throw new SparkIllegalArgumentException(
+      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
   }
 
   protected String visitOverlay(String[] inputs) {

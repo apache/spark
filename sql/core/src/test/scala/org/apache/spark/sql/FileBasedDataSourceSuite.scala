@@ -251,9 +251,9 @@ class FileBasedDataSourceSuite extends QueryTest
               case _ => "_LEGACY_ERROR_TEMP_2055"
             }
             checkErrorMatchPVals(
-              exception = intercept[SparkException] {
+              exception = intercept[SparkFileNotFoundException] {
                 testIgnoreMissingFiles(options)
-              }.getCause.asInstanceOf[SparkFileNotFoundException],
+              },
               errorClass = errorClass,
               parameters = Map("message" -> ".*does not exist")
             )
