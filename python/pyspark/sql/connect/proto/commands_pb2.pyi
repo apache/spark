@@ -986,7 +986,7 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
     name: builtins.str
     """An optional query name."""
     query_started_event: builtins.str
-    """Optional query started event if there is any listener registered on the lient side."""
+    """Optional query started event if there is any listener registered on the client side."""
     def __init__(
         self,
         *,
