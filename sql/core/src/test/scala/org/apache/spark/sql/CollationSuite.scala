@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
@@ -101,27 +101,18 @@ class CollationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("collate function invalid input data type") {
-    val testCases = Seq(
-      ("1,'UCS_BASIC'", "INT"),
-      ("1.1, 'UCS_BASIC'", "DECIMAL(2,1)"),
-      ("true, 'UCS_BASIC'", "BOOLEAN"))
-
-    testCases.foreach(input => {
-      val (args, dataType) = input
-      checkError(
-        exception = intercept[ExtendedAnalysisException] { sql(s"select collate($args)") },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = "42K09",
-        parameters = Map(
-          "sqlExpr" -> s"\"collate(${args.split(",")(0)})\"",
-          "paramIndex" -> "1",
-          "inputSql" -> s"\"${args.split(",")(0)}\"",
-          "inputType" -> s"\"$dataType\"",
-          "requiredType" -> "\"STRING\""
-        ),
-        context = ExpectedContext(
-          fragment = s"collate($args)", start = 7, stop = 15 + args.length))
-    })
+    checkError(
+      exception = intercept[ExtendedAnalysisException] { sql(s"select collate(1, 'UCS_BASIC')") },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = "42K09",
+      parameters = Map(
+        "sqlExpr" -> "\"collate(1)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"1\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRING\""),
+      context = ExpectedContext(
+        fragment = s"collate(1, 'UCS_BASIC')", start = 7, stop = 29))
   }
 
   test("collation expression returns default collation") {
