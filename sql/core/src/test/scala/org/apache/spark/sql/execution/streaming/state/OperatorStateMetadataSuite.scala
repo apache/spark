@@ -20,14 +20,17 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
+import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.streaming.OutputMode.{Complete, Update}
-import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSparkSession
 
-
 class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
+
   import testImplicits._
 
   private lazy val hadoopConf = spark.sessionState.newHadoopConf()
@@ -44,7 +47,6 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     assert(operatorMetadata.operatorInfo == expectedMetadata.operatorInfo &&
       operatorMetadata.stateStoreInfo.sameElements(expectedMetadata.stateStoreInfo))
   }
-/*
   test("Serialize and deserialize stateful operator metadata") {
     withTempDir { checkpointDir =>
       val statePath = new Path(checkpointDir.toString, "state/0")
@@ -213,7 +215,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     }
     checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
       Map("optionName" -> StateSourceOptions.PATH))
-  } */
+  }
 
   test("Operator metadata path non-existence should not fail query") {
     withTempDir { checkpointDir =>
@@ -252,65 +254,79 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       val inputData = MemoryStream[Int]
       val stream = inputData.toDF().withColumn("eventTime", timestamp_seconds($"value"))
 
-      testStream(stream.dropDuplicates().groupBy("value").count(), Update)(
+      testStream(stream.dropDuplicates())(
         StartStream(checkpointLocation = checkpointDir.toString),
         AddData(inputData, 1),
         ProcessAllAvailable(),
         StopStream
       )
 
-      def checkOpChangeError(subClass: String, opId: Long, opName: String,
-           hint: String, ex: Throwable): Unit = {
+      def checkOpChangeError(OpsInMetadataSeq: Seq[String],
+         OpsInCurBatchSeq: Seq[String],
+         ex: Throwable): Unit = {
         checkError(ex.asInstanceOf[SparkRuntimeException],
-          s"STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA.$subClass",
-          "42K03",
-          Map("operatorId" -> opId.toString,
-            "operatorName" -> opName,
-            "hint" -> hint)
+          "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA", "42K03",
+          Map("OpsInMetadataSeq" -> OpsInMetadataSeq.mkString(", "),
+            "OpsInCurBatchSeq" -> OpsInCurBatchSeq.mkString(", "))
         )
       }
 
-      // replace operator
-      /*
-      testStream(stream
-        .withWatermark("eventTime", "10 seconds")
-        .dropDuplicatesWithinWatermark()
-        .groupBy("value").count(), Update)(
+      // replace dropDuplicates with dropDuplicatesWithinWatermark
+      testStream(stream.withWatermark("eventTime", "10 seconds")
+        .dropDuplicatesWithinWatermark(), Append)(
         StartStream(checkpointLocation = checkpointDir.toString),
         AddData(inputData, 2),
         ExpectFailure[SparkRuntimeException] {
           (t: Throwable) => {
-            checkOpChangeError("NAME_NOT_MATCH", 1L, "dedupeWithinWatermark", "dedupe", t)
+            checkOpChangeError(Seq("dedupe"), Seq("dedupeWithinWatermark"), t)
           }
         }
       )
 
-
-      // Add an operator
-      testStream(stream
-        .dropDuplicates()
-        .groupBy("value").count()
-        .dropDuplicates()
-        , Complete)(
-        StartStream(checkpointLocation = checkpointDir.toString),
-        AddData(inputData, 3),
-        ExpectFailure[SparkRuntimeException] {
-          (t: Throwable) => {
-            checkOpChangeError("MISS_IN_METADATA", 1L, "dedupe", "", t)
-          }
-        }
-      ) */
-
-      // remove an operator
+      // replace operator
       testStream(stream.groupBy("value").count(), Update)(
         StartStream(checkpointLocation = checkpointDir.toString),
         AddData(inputData, 3),
         ExpectFailure[SparkRuntimeException] {
           (t: Throwable) => {
-            checkOpChangeError("MISS_IN_CURRENT_BATCH", 1L, "stateStoreSave", "", t)
+            checkOpChangeError(Seq("dedupe"), Seq("stateStoreSave"), t)
           }
         }
       )
+
+      // add operator
+      testStream(stream.dropDuplicates()
+        .groupBy("value").count(), Update)(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 3),
+        ExpectFailure[SparkRuntimeException] {
+          (t: Throwable) => {
+            checkOpChangeError(Seq("dedupe"), Seq("stateStoreSave", "dedupe"), t)
+          }
+        }
+      )
+
+      // remove operator
+      withTempDir { newCheckpointDir =>
+        val inputData = MemoryStream[Int]
+        val stream = inputData.toDF().withColumn("eventTime", timestamp_seconds($"value"))
+
+        testStream(stream.dropDuplicates().groupBy("value").count(), Update)(
+          StartStream(checkpointLocation = newCheckpointDir.toString),
+          AddData(inputData, 1),
+          ProcessAllAvailable(),
+          StopStream
+        )
+        testStream(stream.dropDuplicates(), Update)(
+          StartStream(checkpointLocation = newCheckpointDir.toString),
+          AddData(inputData, 3),
+          ExpectFailure[SparkRuntimeException] {
+            (t: Throwable) => {
+              checkOpChangeError(Seq("stateStoreSave", "dedupe"), Seq("dedupe"), t)
+            }
+          }
+        )
+      }
     }
   }
 }

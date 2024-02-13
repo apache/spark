@@ -219,6 +219,15 @@ class IncrementalExecution(
     }
   }
 
+  object getOpInCurBatchRule extends SparkPlanPartialRule {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
+        opMapInPhysicalPlan = opMapInPhysicalPlan ++
+          Map(stateStoreWriter.getStateInfo.operatorId -> stateStoreWriter.shortName)
+        stateStoreWriter
+    }
+  }
+
   object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case stateStoreWriter: StateStoreWriter if isFirstBatch =>
@@ -424,42 +433,32 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
-    private def compareOperatorInMetadata(): Unit = {
+    private def checkOperatorValidWithMetadata(): Unit = {
      (opMapInMetadata.keySet ++ opMapInPhysicalPlan.keySet).foreach { opId =>
        val opInMetadata = opMapInMetadata.getOrElse(opId, "not found")
        val opInCurBatch = opMapInPhysicalPlan.getOrElse(opId, "not found")
-       println("opInCurBatch: " + opMapInPhysicalPlan)
-       println("opInMetadata: " + opMapInMetadata)
        if (opInMetadata != opInCurBatch) {
-         if (opInMetadata == "not found") {
-           throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
-             "MISS_IN_METADATA", opId, opInCurBatch, ""
-           )
-           return
-         } else if (opInCurBatch == "not found") {
-           throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
-             "MISS_IN_CURRENT_BATCH", opId, opInMetadata, ""
-           )
-           return
-         } else {
-           throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
-             "NAME_NOT_MATCH", opId, opInCurBatch, opInMetadata
-           )
-           return
-         }
+         throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
+           opMapInMetadata.values.toSeq,
+           opMapInPhysicalPlan.values.toSeq
+         )
        }
-     }
+      }
     }
 
     override def apply(plan: SparkPlan): SparkPlan = {
       val planWithStateOpId = plan transform composedRule
+      // get stateful operators for current batch
+      planWithStateOpId transform getOpInCurBatchRule.rule
+      // Need to check before write to metadata because we need to detect add operator
+      // Only check when streaming is restarting and is first batch,
+      // also metadata path is not empty
+      if (isFirstBatch && currentBatchId != 0 && !opMapInMetadata.isEmpty) {
+        checkOperatorValidWithMetadata()
+      }
       // The rule doesn't change the plan but cause the side effect that metadata is written
       // in the checkpoint directory of stateful operator.
       planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
-      if (isFirstBatch) {
-        // Do operator check only for the first batch, after metadata is written
-        compareOperatorInMetadata()
-      }
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule
     }
